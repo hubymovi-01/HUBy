@@ -1,205 +1,267 @@
-/**
- * ============================================================================
- * HUBy - Controlador do Aplicativo do Cliente (js/modules/app-cliente.js)
- * ============================================================================
- */
-
-import { CATEGORIAS_HUBY, calcularOrcamentoViagem } from '../config/tarifas.js';
-import { MapaService } from '../services/mapa-service.js';
-import { ApiClient } from '../services/api-client.js';
-
-const estadoPedido = {
-  grupoAtual: 'carro',
-  categoriaId: 'passageiro_carro',
-  distanciaKm: 3.5,
-  duracaoMin: 8,
-  qtdAjudantes: 0,
-  temEscada: false,
-  paradasExtras: 0,
-  orcamentoAtual: null
-};
-
-const mapa = new MapaService('mapaCliente');
+// ./js/modules/app-cliente.js
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Registar Service Worker para PWA
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  // 1. Inicialização do Mapa Leaflet
+  const mapElement = document.getElementById('mapaCliente');
+  if (!mapElement) return;
+
+  // Centro padrão inicial (Piauí / Brasil)
+  const defaultCoords = [-7.7735, -42.2472];
+  const map = L.map('mapaCliente', {
+    zoomControl: false
+  }).setView(defaultCoords, 14);
+
+  // Botões de zoom reposicionados
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+  // Camada Dark Mode sem marca d'água / sem exigência de API Key paga
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    subdomains: 'abcd',
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  }).addTo(map);
+
+  // Marcadores de rota
+  let marcadorOrigem = null;
+  let marcadorDestino = null;
+  let linhaRota = null;
+
+  let rotaAtual = {
+    distanciaKm: 3.5,
+    duracaoMin: 8,
+    grupo: 'carro',
+    subTipo: 'carro',
+    ajudantes: 0,
+    escada: false,
+    paradaExtra: false
+  };
+
+  // 2. Configurações de Tarifas
+  const subCategorias = {
+    carro: [
+      { id: 'carro', label: '🚗 HUBy Carro', base: 6.0, km: 2.2, min: 0.3 },
+      { id: 'moto', label: '🏍️ HUBy Moto', base: 4.0, km: 1.4, min: 0.2 }
+    ],
+    flash: [
+      { id: 'flash_moto', label: '🛵 Flash Moto', base: 4.5, km: 1.5, min: 0.25 },
+      { id: 'flash_carro', label: '🚗 Flash Carro', base: 7.0, km: 2.3, min: 0.35 }
+    ],
+    cargo: [
+      { id: 'cargo_vuc', label: '🚚 HUBy Cargo (VUC / Caminhão)', base: 80.0, km: 6.5, min: 0.8 }
+    ]
+  };
+
+  // Elementos da Interface
+  const containerSubVeiculos = document.getElementById('containerSubVeiculos');
+  const linhaAjudante = document.getElementById('linhaAjudante');
+  const linhaEscada = document.getElementById('linhaEscada');
+  const chkEscada = document.getElementById('chkEscada');
+  const chkParadaExtra = document.getElementById('chkParadaExtra');
+  const txtQtdAjudantes = document.getElementById('txtQtdAjudantes');
+  const txtDistKm = document.getElementById('txtDistKm');
+  const txtDuracaoMin = document.getElementById('txtDuracaoMin');
+  const txtValorAdicionais = document.getElementById('txtValorAdicionais');
+  const txtPrecoFinal = document.getElementById('txtPrecoFinal');
+  const txtBotaoAcao = document.getElementById('txtBotaoAcao');
+  const bannerStatus = document.getElementById('bannerStatusCorrida');
+  const btnSolicitarHuby = document.getElementById('btnSolicitarHuby');
+
+  // 3. Renderização de Subcategorias
+  function renderSubCategorias() {
+    containerSubVeiculos.innerHTML = '';
+    const lista = subCategorias[rotaAtual.grupo] || [];
+
+    lista.forEach((item, index) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `btn-sub-veiculo ${index === 0 ? 'active' : ''}`;
+      btn.textContent = item.label;
+      btn.style.cssText = `
+        padding: 8px 14px;
+        background: ${index === 0 ? '#10B981' : '#1E293B'};
+        color: #FFFFFF;
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s;
+      `;
+
+      btn.addEventListener('click', () => {
+        containerSubVeiculos.querySelectorAll('button').forEach(b => {
+          b.style.background = '#1E293B';
+        });
+        btn.style.background = '#10B981';
+        rotaAtual.subTipo = item.id;
+        atualizarCalculos();
+      });
+
+      containerSubVeiculos.appendChild(btn);
+    });
+
+    rotaAtual.subTipo = lista[0]?.id || 'carro';
   }
 
-  // Inicializar Mapa Interativo
-  mapa.inicializarMapa((rotaCalculada) => {
-    estadoPedido.distanciaKm = rotaCalculada.distanciaKm;
-    estadoPedido.duracaoMin = rotaCalculada.duracaoMin;
-    document.getElementById('inputDestino').value = 'Ponto selecionado no mapa';
-    atualizarInterfaceOrcamento();
-  });
+  // 4. Alternância dos Grupos Principais
+  document.querySelectorAll('.tab-card').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab-card').forEach(t => t.classList.remove('active-carro'));
+      tab.classList.add('active-carro');
 
-  configurarEventosUI();
-  renderizarSubVeiculos('carro');
-  atualizarInterfaceOrcamento();
-});
+      rotaAtual.grupo = tab.getAttribute('data-grupo');
 
-function configurarEventosUI() {
-  // Alternar entre Abas (Viagem | Flash | Cargo)
-  document.querySelectorAll('.tab-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      const grupo = card.dataset.grupo;
-      estadoPedido.grupoAtual = grupo;
-
-      document.querySelectorAll('.tab-card').forEach((c) => {
-        c.className = 'tab-card';
-      });
-      card.classList.add(`active-${grupo}`);
-
-      // Mostrar opções de ajudante/escada apenas para Cargo e Utilitários
-      const mostrarOpcoesPesadas = grupo === 'cargo';
-      document.getElementById('linhaAjudante').style.display = mostrarOpcoesPesadas ? 'flex' : 'none';
-      document.getElementById('linhaEscada').style.display = mostrarOpcoesPesadas ? 'flex' : 'none';
-
-      if (!mostrarOpcoesPesadas) {
-        estadoPedido.qtdAjudantes = 0;
-        estadoPedido.temEscada = false;
-        document.getElementById('txtQtdAjudantes').innerText = '0';
-        document.getElementById('chkEscada').checked = false;
+      if (rotaAtual.grupo === 'cargo') {
+        linhaAjudante.style.display = 'flex';
+        linhaEscada.style.display = 'flex';
+      } else {
+        linhaAjudante.style.display = 'none';
+        linhaEscada.style.display = 'none';
+        rotaAtual.ajudantes = 0;
+        txtQtdAjudantes.textContent = '0';
+        chkEscada.checked = false;
+        rotaAtual.escada = false;
       }
 
-      renderizarSubVeiculos(grupo);
-      atualizarInterfaceOrcamento();
+      renderSubCategorias();
+      atualizarCalculos();
     });
   });
 
-  // Botão GPS Atual
-  document.getElementById('btnLocalizarGPS').addEventListener('click', () => {
-    mapa.obterGPSAtual(() => {
-      document.getElementById('inputOrigem').value = 'GPS: Localização exata ativa';
-    });
+  // 5. Controles de Adicionais
+  document.getElementById('btnMaisAjudante')?.addEventListener('click', () => {
+    rotaAtual.ajudantes++;
+    txtQtdAjudantes.textContent = rotaAtual.ajudantes;
+    atualizarCalculos();
   });
 
-  // Buscar endereço digitado
-  document.getElementById('btnBuscarEndereco').addEventListener('click', async () => {
-    const texto = document.getElementById('inputDestino').value.trim();
-    if (!texto) return;
+  document.getElementById('btnMenosAjudante')?.addEventListener('click', () => {
+    if (rotaAtual.ajudantes > 0) {
+      rotaAtual.ajudantes--;
+      txtQtdAjudantes.textContent = rotaAtual.ajudantes;
+      atualizarCalculos();
+    }
+  });
 
-    const btn = document.getElementById('btnBuscarEndereco');
-    btn.innerText = '...';
-    const resultado = await mapa.buscarEnderecoNominatim(texto);
-    btn.innerText = 'Ir';
+  chkEscada?.addEventListener('change', (e) => {
+    rotaAtual.escada = e.target.checked;
+    atualizarCalculos();
+  });
 
-    if (resultado) {
-      mapa.definirMarcadorDestino(resultado.lat, resultado.lng);
-      const cat = CATEGORIAS_HUBY[estadoPedido.categoriaId];
-      const rota = await mapa.calcularRotaOSRM(mapa.coordsOrigem, resultado, cat.corHex);
-      estadoPedido.distanciaKm = rota.distanciaKm;
-      estadoPedido.duracaoMin = rota.duracaoMin;
-      atualizarInterfaceOrcamento();
+  chkParadaExtra?.addEventListener('change', (e) => {
+    rotaAtual.paradaExtra = e.target.checked;
+    atualizarCalculos();
+  });
+
+  // 6. Cálculo em Tempo Real
+  function atualizarCalculos() {
+    let tarifa = null;
+    const lista = subCategorias[rotaAtual.grupo] || [];
+    tarifa = lista.find(s => s.id === rotaAtual.subTipo) || lista[0];
+
+    const km = rotaAtual.distanciaKm;
+    const min = rotaAtual.duracaoMin;
+
+    let valorBase = tarifa.base + (km * tarifa.km) + (min * tarifa.min);
+
+    let adicionais = 0;
+    if (rotaAtual.ajudantes > 0) adicionais += (rotaAtual.ajudantes * 50);
+    if (rotaAtual.escada) adicionais += 20;
+    if (rotaAtual.paradaExtra) adicionais += 6;
+
+    const total = valorBase + adicionais;
+
+    txtDistKm.textContent = `${km.toFixed(1)} km`;
+    txtDuracaoMin.textContent = `${min}`;
+    txtValorAdicionais.textContent = `R$ ${adicionais.toFixed(2).replace('.', ',')}`;
+    txtPrecoFinal.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
+    txtBotaoAcao.textContent = `Chamar ${tarifa.label.replace(/^[^\s]+ /, '')}`;
+  }
+
+  // 7. Geolocalização (GPS)
+  const btnLocalizarGPS = document.getElementById('btnLocalizarGPS');
+  btnLocalizarGPS?.addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      alert('Geolocalização não é suportada pelo seu navegador.');
+      return;
+    }
+
+    btnLocalizarGPS.textContent = 'Buscando...';
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        const coords = [latitude, longitude];
+
+        map.setView(coords, 16);
+
+        if (!marcadorOrigem) {
+          marcadorOrigem = L.circleMarker(coords, {
+            radius: 8,
+            color: '#10B981',
+            fillColor: '#10B981',
+            fillOpacity: 1
+          }).addTo(map);
+        } else {
+          marcadorOrigem.setLatLng(coords);
+        }
+
+        btnLocalizarGPS.textContent = '📍 Meu GPS';
+        document.getElementById('inputOrigem').value = 'GPS: Localização exata ativa';
+      },
+      () => {
+        alert('Não foi possível obter o sinal de GPS.');
+        btnLocalizarGPS.textContent = '📍 Meu GPS';
+      },
+      { enableHighAccuracy: true }
+    );
+  });
+
+  // 8. Clique no Mapa para Definir Destino
+  map.on('click', (e) => {
+    const coords = e.latlng;
+
+    if (!marcadorDestino) {
+      marcadorDestino = L.marker(coords).addTo(map);
     } else {
-      alert('Endereço não encontrado. Também pode tocar diretamente no mapa!');
+      marcadorDestino.setLatLng(coords);
     }
+
+    document.getElementById('inputDestino').value = 'Ponto selecionado no mapa';
+
+    const origem = marcadorOrigem ? marcadorOrigem.getLatLng() : L.latLng(defaultCoords);
+    const distanciaMetros = map.distance(origem, coords);
+    
+    rotaAtual.distanciaKm = Math.max(1, distanciaMetros / 1000);
+    rotaAtual.duracaoMin = Math.round(rotaAtual.distanciaKm * 2.2);
+
+    if (linhaRota) map.removeLayer(linhaRota);
+    linhaRota = L.polyline([origem, coords], {
+      color: '#10B981',
+      weight: 4,
+      dashArray: '8, 8'
+    }).addTo(map);
+
+    atualizarCalculos();
   });
 
-  // Controlos de Ajudante (+ e -)
-  document.getElementById('btnMaisAjudante').addEventListener('click', () => {
-    if (estadoPedido.qtdAjudantes < 4) {
-      estadoPedido.qtdAjudantes++;
-      document.getElementById('txtQtdAjudantes').innerText = estadoPedido.qtdAjudantes;
-      atualizarInterfaceOrcamento();
-    }
+  // 9. Envio do Pedido
+  btnSolicitarHuby?.addEventListener('click', () => {
+    const idPedido = Math.random().toString(36).substring(2, 7);
+    bannerStatus.style.display = 'block';
+    bannerStatus.innerHTML = `
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 13px; text-align: center;">
+        ✅ Pedido <strong>#${idPedido}</strong> enviado!<br>
+        A procurar motorista parceiro HUBy...
+      </div>
+    `;
+
+    setTimeout(() => {
+      bannerStatus.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   });
 
-  document.getElementById('btnMenosAjudante').addEventListener('click', () => {
-    if (estadoPedido.qtdAjudantes > 0) {
-      estadoPedido.qtdAjudantes--;
-      document.getElementById('txtQtdAjudantes').innerText = estadoPedido.qtdAjudantes;
-      atualizarInterfaceOrcamento();
-    }
-  });
-
-  // Checkboxes Escada e Parada Extra
-  document.getElementById('chkEscada').addEventListener('change', (e) => {
-    estadoPedido.temEscada = e.target.checked;
-    atualizarInterfaceOrcamento();
-  });
-
-  document.getElementById('chkParadaExtra').addEventListener('change', (e) => {
-    estadoPedido.paradasExtras = e.target.checked ? 1 : 0;
-    atualizarInterfaceOrcamento();
-  });
-
-  // Disparar Pedido HUBy
-  document.getElementById('btnSolicitarHuby').addEventListener('click', enviarPedidoViagem);
-}
-
-function renderizarSubVeiculos(grupo) {
-  const container = document.getElementById('containerSubVeiculos');
-  container.innerHTML = '';
-
-  const listaCategorias = Object.values(CATEGORIAS_HUBY).filter((c) => c.grupo === grupo);
-  estadoPedido.categoriaId = listaCategorias[0].id;
-
-  listaCategorias.forEach((cat, idx) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `vehicle-pill ${idx === 0 ? 'selected' : ''}`;
-    btn.innerText = `${cat.icone} ${cat.nome}`;
-    btn.addEventListener('click', () => {
-      container.querySelectorAll('.vehicle-pill').forEach((b) => b.classList.remove('selected'));
-      btn.classList.add('selected');
-      estadoPedido.categoriaId = cat.id;
-      atualizarInterfaceOrcamento();
-    });
-    container.appendChild(btn);
-  });
-}
-
-function atualizarInterfaceOrcamento() {
-  const orcamento = calcularOrcamentoViagem(
-    estadoPedido.categoriaId,
-    estadoPedido.distanciaKm,
-    estadoPedido.duracaoMin,
-    {
-      qtdAjudantes: estadoPedido.qtdAjudantes,
-      temEscada: estadoPedido.temEscada,
-      paradasExtras: estadoPedido.paradasExtras
-    }
-  );
-
-  estadoPedido.orcamentoAtual = orcamento;
-
-  document.getElementById('txtDistKm').innerText = `${orcamento.distanciaKm} km`;
-  document.getElementById('txtDuracaoMin').innerText = orcamento.duracaoMin;
-  document.getElementById('txtValorAdicionais').innerText = formatarMoeda(orcamento.valorAdicionais);
-  document.getElementById('txtBotaoAcao').innerText = `Chamar ${orcamento.categoria}`;
-  document.getElementById('txtPrecoFinal').innerText = formatarMoeda(orcamento.valorTotalCliente);
-  document.getElementById('btnSolicitarHuby').style.backgroundColor = orcamento.corHex;
-}
-
-async function enviarPedidoViagem() {
-  const metodoPagamento = document.getElementById('selectMetodoPgto').value;
-  const destinoTexto = document.getElementById('inputDestino').value || 'Destino selecionado no mapa';
-
-  const pedido = await ApiClient.solicitarViagem({
-    categoriaId: estadoPedido.categoriaId,
-    origemEndereco: document.getElementById('inputOrigem').value,
-    destinoEndereco: destinoTexto,
-    formaPagamento: metodoPagamento,
-    detalhesExtras: {
-      qtdAjudantes: estadoPedido.qtdAjudantes,
-      temEscada: estadoPedido.temEscada,
-      paradasExtras: estadoPedido.paradasExtras
-    },
-    orcamento: estadoPedido.orcamentoAtual
-  });
-
-  const banner = document.getElementById('bannerStatusCorrida');
-  banner.style.display = 'block';
-  banner.innerHTML = `
-    ✅ <strong>Pedido #${pedido.id.slice(0, 6)} enviado!</strong><br>
-    A procurar motorista <strong>${estadoPedido.orcamentoAtual.categoria}</strong>...
-    <br><a href="/motorista.html" style="color:#10B981;font-weight:900;">[Abrir Painel do Motorista para Aceitar]</a>
-  `;
-}
-
-function formatarMoeda(valor) {
-  return 'R$ ' + Number(valor).toFixed(2).replace('.', ',');
-}
+  // Inicialização inicial dos dados
+  renderSubCategorias();
+  atualizarCalculos();
+});
