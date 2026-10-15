@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HUBy - Mobilidade, Entregas e Fretes</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#090D16">
+
+  <!-- CSS do Mapa Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Estilos Globais e do Cliente (com caminho relativo seguro ./) -->
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/cliente.css">
+</head>
+<body>
+
+  <div class="app-layout">
+    <!-- Cabeçalho Oficial HUBy -->
+    <header class="huby-header">
+      <a href="./index.html" class="brand-logo">
+        <span class="brand-hub">HUB</span>
+        <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
+      </a>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <a href="./motorista.html" class="badge-pill" style="text-decoration:none;">Modo Motorista ➔</a>
+      </div>
+    </header>
+
+    <!-- Mapa Interativo em Tempo Real -->
+    <div class="map-wrapper">
+      <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
+      <div id="mapaCliente"></div>
+      <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
+    </div>
+
+    <!-- Painel Inferior de Pedido -->
+    <section class="order-sheet">
+      <div class="status-banner" id="bannerStatusCorrida"></div>
+
+      <!-- 1. Grupos Principais -->
+      <div class="group-tabs">
+        <div class="tab-card active-carro" data-grupo="carro">
+          <div class="tab-icon">🚗</div>
+          <div class="tab-title">HUBy Viagem</div>
+          <div class="tab-sub">Carro & Moto</div>
+        </div>
+        <div class="tab-card" data-grupo="flash">
+          <div class="tab-icon">📦</div>
+          <div class="tab-title">HUBy Flash</div>
+          <div class="tab-sub">Entregas</div>
+        </div>
+        <div class="tab-card" data-grupo="cargo">
+          <div class="tab-icon">🚚</div>
+          <div class="tab-title">HUBy Cargo</div>
+          <div class="tab-sub">Caminhão/Frete</div>
+        </div>
+      </div>
+
+      <!-- 2. Subcategoria de Veículo -->
+      <div class="sub-vehicles" id="containerSubVeiculos"></div>
+
+      <!-- 3. Origem e Destino -->
+      <div class="addresses-box">
+        <div class="input-group">
+          <span style="color:var(--huby-emerald);">●</span>
+          <input type="text" id="inputOrigem" value="A minha localização atual" readonly>
+        </div>
+        <div class="address-row">
+          <div class="input-group" style="flex:1;">
+            <span style="color:var(--huby-cargo);">■</span>
+            <input type="text" id="inputDestino" placeholder="Para onde vamos levar? (ou toque no mapa)">
+          </div>
+          <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
+        </div>
+      </div>
+
+      <!-- 4. Adicionais (Ajudante, Escada e Parada Extra) -->
+      <div class="cargo-options-box">
+        <div class="option-line" id="linhaAjudante" style="display:none;">
+          <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
+          <div class="counter-control">
+            <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
+            <strong id="txtQtdAjudantes">0</strong>
+            <button type="button" class="btn-qty" id="btnMaisAjudante">+</button>
+          </div>
+        </div>
+
+        <div class="option-line" id="linhaEscada" style="display:none;">
+          <label for="chkEscada" style="cursor:pointer;">🏢 Escada sem elevador (+R$ 20)</label>
+          <input type="checkbox" id="chkEscada" style="width:16px;height:16px;accent-color:var(--huby-cargo);">
+        </div>
+
+        <div class="option-line">
+          <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no caminho (+R$ 6)</label>
+          <input type="checkbox" id="chkParadaExtra" style="width:16px;height:16px;accent-color:var(--huby-emerald);">
+        </div>
+      </div>
+
+      <!-- 5. Resumo de Distância, Tempo e Tarifas -->
+      <div class="trip-breakdown">
+        <span>📏 Rota: <strong id="txtDistKm" style="color:#fff;">3.5 km</strong> (<span id="txtDuracaoMin">8</span> min)</span>
+        <span>Adicionais: <strong id="txtValorAdicionais" style="color:var(--huby-flash);">R$ 0,00</strong></span>
+      </div>
+
+      <!-- 6. Método de Pagamento -->
+      <div class="payment-bar">
+        <span style="color:var(--text-muted);font-weight:700;">Forma de Pagamento:</span>
+        <select id="selectMetodoPgto">
+          <option value="pix_app">💠 Pix no App (Split Automático)</option>
+          <option value="dinheiro_presencial">💵 Dinheiro direto ao Motorista</option>
+          <option value="cartao_app">💳 Cartão de Crédito</option>
+        </select>
+      </div>
+
+      <!-- 7. Botão Principal de Solicitação -->
+      <button type="button" class="btn-primary" id="btnSolicitarHuby">
+        <span id="txtBotaoAcao">Chamar HUBy Carro</span>
+        <span class="price-box" id="txtPrecoFinal">R$ 16,20</span>
+      </button>
+    </section>
+  </div>
+
+  <!-- JS do Leaflet e Módulo Principal do Cliente -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./js/modules/app-cliente.js"></script>
+</body>
+</html>

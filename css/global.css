@@ -1,0 +1,161 @@
+/* ==========================================================================
+   HUBy - Design System & Estilos Globais (css/global.css)
+   ========================================================================== */
+
+:root {
+  /* Paleta Oficial HUBy */
+  --bg-deep: #090D16;          /* Fundo principal escuro */
+  --bg-card: #0F172A;          /* Fundo de painéis e cards */
+  --bg-surface: #1E293B;       /* Inputs, barras secundárias e hover */
+  --border-color: #334155;     /* Linhas divisórias sutis */
+
+  /* Cores das Modalidades */
+  --huby-emerald: #10B981;     /* Cor principal / Passageiros (Carro & Moto) */
+  --huby-emerald-dark: #065F46;
+  --huby-flash: #38BDF8;       /* Azul Ciano / Entregas Rápidas */
+  --huby-cargo: #FF6B00;       /* Laranja Elétrico / Caminhões e Fretes */
+
+  /* Cores de Status e Texto */
+  --text-white: #FFFFFF;
+  --text-light: #E2E8F0;
+  --text-muted: #94A3B8;
+  --danger: #EF4444;
+  --warning: #FBBF24;
+
+  /* Espaçamentos e Bordas */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 24px;
+  --shadow-lg: 0 15px 35px rgba(0, 0, 0, 0.55);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: var(--text-white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* Cabeçalho Padrão com a Marca HUBy */
+.huby-header {
+  background-color: var(--bg-deep);
+  padding: 14px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--bg-surface);
+  z-index: 100;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+  user-select: none;
+}
+
+.brand-hub {
+  font-size: 26px;
+  font-weight: 900;
+  color: var(--text-white);
+  letter-spacing: -1px;
+}
+
+.brand-y-badge {
+  background-color: var(--huby-emerald);
+  color: var(--bg-deep);
+  font-size: 19px;
+  font-weight: 900;
+  font-style: italic;
+  padding: 1px 8px 3px;
+  border-radius: 8px;
+  position: relative;
+  line-height: 1;
+}
+
+.brand-gps-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--huby-cargo);
+  border: 1.5px solid var(--text-white);
+  border-radius: 50%;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+}
+
+/* Badges e Pílulas de Status */
+.badge-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background-color: var(--bg-surface);
+  color: var(--text-light);
+}
+
+/* Botões Principais */
+.btn-primary {
+  width: 100%;
+  background-color: var(--huby-emerald);
+  color: var(--bg-deep);
+  border: none;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: transform 0.15s ease, opacity 0.2s ease;
+}
+
+.btn-primary:active {
+  transform: scale(0.98);
+}
+
+.btn-primary .price-box {
+  background-color: var(--bg-deep);
+  color: var(--text-white);
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+/* Inputs Padrão */
+.input-group {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.input-group input,
+.input-group select {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-white);
+  font-size: 14px;
+  outline: none;
+}
+
+.input-group input::placeholder {
+  color: var(--text-muted);
+}
