@@ -27,6 +27,15 @@
   z-index: 1;
 }
 
+/* Garante o mapa escuro limpo sem marcas de água */
+.leaflet-tile-pane {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}
+
+.leaflet-container {
+  background-color: var(--bg-deep) !important;
+}
+
 .map-hint-pill {
   position: absolute;
   top: 12px;
@@ -70,6 +79,7 @@
   border-top: 1px solid var(--bg-surface);
   max-height: 68vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* Abas Principais (Viagem | Entregas | Fretes) */
@@ -126,6 +136,8 @@
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
 }
 
 .vehicle-pill {
@@ -139,6 +151,7 @@
   font-weight: 700;
   cursor: pointer;
   text-align: center;
+  white-space: nowrap;
 }
 
 .vehicle-pill.selected {
@@ -228,6 +241,7 @@
   align-items: center;
   margin-bottom: 12px;
   font-size: 12px;
+  gap: 8px;
 }
 
 .payment-bar select {
@@ -238,6 +252,7 @@
   border-radius: 8px;
   font-size: 12px;
   font-weight: 700;
+  max-width: 60%;
 }
 
 .status-banner {

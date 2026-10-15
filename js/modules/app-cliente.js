@@ -14,11 +14,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Botões de zoom reposicionados
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  // Camada Dark Mode sem marca d'água / sem exigência de API Key paga
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  // Camada gratuita oficial OpenStreetMap (sem exigência de API Key e sem marcas d'água)
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    subdomains: 'abcd',
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+    attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
   // Marcadores de rota

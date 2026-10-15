@@ -159,3 +159,12 @@ body {
 .input-group input::placeholder {
   color: var(--text-muted);
 }
+
+/* Filtro Dark Mode para os Tiles do OpenStreetMap em todas as telas */
+.leaflet-tile-pane {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+}
+
+.leaflet-container {
+  background-color: var(--bg-deep) !important;
+}
