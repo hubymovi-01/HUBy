@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Bem-vindo ao HUBy</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#080C14">
+
+  <!-- Estilos Globais e da Tela de Entrada -->
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/welcome.css">
+</head>
+<body>
+
+  <div class="welcome-container">
+    <!-- Fundo Decorativo com Efeito Glow -->
+    <div class="glow-bg top-glow"></div>
+    <div class="glow-bg bottom-glow"></div>
+
+    <!-- Cabeçalho / Logotipo Central -->
+    <header class="welcome-header">
+      <div class="brand-hero">
+        <span class="brand-hub-hero">HUB</span>
+        <span class="brand-y-badge-hero">y<span class="brand-gps-dot-hero"></span></span>
+      </div>
+      <p class="tagline">Mobilidade, entregas rápidas e fretes na palma da mão.</p>
+    </header>
+
+    <!-- Apresentação dos Pilares de Serviços -->
+    <div class="pillars-container">
+      <div class="pillar-card active" data-slide="0">
+        <div class="pillar-icon">🚗</div>
+        <div class="pillar-content">
+          <h4>HUBy Viagem</h4>
+          <p>Carro e moto com preço justo e resposta rápida.</p>
+        </div>
+      </div>
+
+      <div class="pillar-card" data-slide="1">
+        <div class="pillar-icon">📦</div>
+        <div class="pillar-content">
+          <h4>HUBy Flash</h4>
+          <p>Envie e receba pacotes e documentos sem complicação.</p>
+        </div>
+      </div>
+
+      <div class="pillar-card" data-slide="2">
+        <div class="pillar-icon">🚚</div>
+        <div class="pillar-content">
+          <h4>HUBy Cargo</h4>
+          <p>Fretes, mudanças e cargas com ajudantes opcionais.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicadores de Slide -->
+    <div class="slide-dots">
+      <span class="dot active"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+    <!-- Ações de Entrada -->
+    <footer class="welcome-actions">
+      <a href="./index.html" class="btn-welcome-primary">
+        <span>Começar a Usar</span>
+        <span class="btn-arrow">➔</span>
+      </a>
+
+      <div class="driver-cta-box">
+        <span>Quer trabalhar connosco?</span>
+        <a href="./motorista.html" class="driver-link">Aceder como Motorista</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    // Rotação subtil dos cartões em ecrãs móveis
+    const cards = document.querySelectorAll('.pillar-card');
+    const dots = document.querySelectorAll('.slide-dots .dot');
+    let currentIndex = 0;
+
+    setInterval(() => {
+      currentIndex = (currentIndex + 1) % cards.length;
+      cards.forEach((card, idx) => {
+        card.classList.toggle('active', idx === currentIndex);
+      });
+      dots.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === currentIndex);
+      });
+    }, 3500);
+  </script>
+</body>
+</html>
