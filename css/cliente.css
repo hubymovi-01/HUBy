@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBy - Estilos da Interface do Passageiro / Cliente (css/cliente.css)
+   HUBy - Interface Moderna Estilo Superapp (css/cliente.css)
    ========================================================================== */
 
 .app-layout {
@@ -11,156 +11,180 @@
   width: 100%;
   background-color: var(--bg-deep);
   position: relative;
-  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+  overflow: hidden;
 }
 
+/* Área de Visualização com Abas */
+.tabs-viewport {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 64px; /* Espaço para a barra inferior */
+}
+
+.tab-view {
+  display: none;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tab-view.active-view {
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Conteúdo interno com espaçamento padronizado */
+.view-content {
+  padding: 20px 18px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.view-header-title h2 {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text-white);
+  letter-spacing: -0.5px;
+}
+
+.view-header-title p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* --- ABA 1: MAPA & PAINEL DE PEDIDO --- */
 .map-wrapper {
   flex: 1;
-  min-height: 250px;
+  min-height: 220px;
   position: relative;
-  background-color: #131b2e;
 }
 
 #mapaCliente {
   width: 100%;
   height: 100%;
-  z-index: 1;
-}
-
-/* Garante o mapa escuro limpo sem marcas de água */
-.leaflet-tile-pane {
-  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
-}
-
-.leaflet-container {
-  background-color: var(--bg-deep) !important;
 }
 
 .map-hint-pill {
   position: absolute;
-  top: 12px;
+  top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 10;
-  background: rgba(9, 13, 22, 0.88);
-  border: 1px solid var(--border-color);
-  color: var(--text-light);
-  padding: 6px 14px;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 6px 16px;
   border-radius: 20px;
   font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  pointer-events: none;
+  font-weight: 600;
 }
 
 .btn-meu-gps {
   position: absolute;
-  bottom: 16px;
-  right: 16px;
+  bottom: 20px;
+  right: 18px;
   z-index: 10;
-  background: var(--bg-card);
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(8px);
   color: var(--huby-emerald);
-  border: 1px solid var(--huby-emerald);
-  padding: 8px 12px;
-  border-radius: 20px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  padding: 8px 14px;
+  border-radius: 24px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.4);
 }
 
-/* Painel Inferior de Pedido */
 .order-sheet {
-  background-color: var(--bg-card);
-  border-radius: 26px 26px 0 0;
-  padding: 18px 18px 22px;
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  border-radius: 24px 24px 0 0;
+  padding: 10px 18px 20px;
   z-index: 20;
-  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
-  border-top: 1px solid var(--bg-surface);
-  max-height: 68vh;
+  box-shadow: var(--shadow-sheet);
+  border-top: 1px solid var(--border-subtle);
+  max-height: 60vh;
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
-/* Abas Principais (Viagem | Entregas | Fretes) */
+.sheet-drag-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.2);
+  margin: 0 auto 12px auto;
+}
+
+/* Abas de Modalidade */
 .group-tabs {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .tab-card {
-  background-color: var(--bg-surface);
-  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 10px 6px;
+  padding: 10px 4px;
   text-align: center;
   cursor: pointer;
-  transition: 0.2s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tab-card .tab-icon {
-  font-size: 22px;
+  font-size: 20px;
   margin-bottom: 2px;
 }
 
 .tab-card .tab-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--text-white);
 }
 
 .tab-card .tab-sub {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--text-muted);
 }
 
 .tab-card.active-carro {
-  border-color: var(--huby-emerald);
-  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.6);
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .tab-card.active-flash {
-  border-color: var(--huby-flash);
-  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(14, 165, 233, 0.6);
+  background: rgba(14, 165, 233, 0.1);
 }
 
 .tab-card.active-cargo {
-  border-color: var(--huby-cargo);
-  background: rgba(255, 107, 0, 0.12);
+  border-color: rgba(249, 115, 22, 0.6);
+  background: rgba(249, 115, 22, 0.1);
 }
 
-/* Sub-seletor de veículo */
 .sub-vehicles {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
   overflow-x: auto;
-  padding-bottom: 4px;
 }
 
-.vehicle-pill {
-  flex: 1;
-  background: var(--bg-deep);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  padding: 8px 10px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.vehicle-pill.selected {
-  border-color: var(--text-white);
-  color: var(--text-white);
-  background: var(--bg-surface);
-}
-
-/* Caixa de Endereços */
+/* Inputs de Origem/Destino */
 .addresses-box {
   display: flex;
   flex-direction: column;
@@ -173,22 +197,32 @@
   gap: 8px;
 }
 
+.dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-indicator.green { background-color: var(--huby-emerald); }
+.dot-indicator.orange { background-color: var(--huby-cargo); }
+
 .btn-search-dest {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-subtle);
   color: var(--text-white);
-  padding: 0 14px;
-  border-radius: var(--radius-md);
-  font-weight: 800;
+  padding: 0 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
   font-size: 12px;
   cursor: pointer;
 }
 
-/* Painel de Adicionais de Frete e Entregas */
+/* Opções de Carga */
 .cargo-options-box {
-  background: var(--bg-deep);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
   padding: 10px 14px;
   margin-bottom: 12px;
   display: flex;
@@ -207,29 +241,34 @@
 .counter-control {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .btn-qty {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-white);
-  font-weight: 900;
+  font-weight: 700;
   cursor: pointer;
 }
 
-/* Resumo de Rota e Pagamento */
+.huby-check {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--huby-emerald);
+}
+
 .trip-breakdown {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: var(--bg-deep);
-  border: 1px dashed var(--border-color);
-  border-radius: 10px;
-  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
   margin-bottom: 12px;
   font-size: 11px;
   color: var(--text-muted);
@@ -239,30 +278,349 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
   font-size: 12px;
-  gap: 8px;
+}
+
+.payment-label {
+  color: var(--text-muted);
+  font-weight: 700;
 }
 
 .payment-bar select {
-  background: var(--bg-surface);
-  color: var(--text-white);
-  border: 1px solid var(--border-color);
-  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-light);
+  border: 1px solid var(--border-subtle);
+  padding: 8px 12px;
   border-radius: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  max-width: 60%;
+  font-size: 11px;
+  outline: none;
 }
 
-.status-banner {
-  display: none;
-  background: rgba(16, 185, 129, 0.15);
-  border: 1px solid var(--huby-emerald);
+/* --- ABA 2: GRID DE SERVIÇOS / OPÇÕES --- */
+.services-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.service-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: 16px;
+  position: relative;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.service-card:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.service-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 9px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.service-badge.promo { background: #EF4444; color: #FFF; }
+.service-badge.novo { background: #0EA5E9; color: #FFF; }
+.service-badge.cargo { background: #F97316; color: #FFF; }
+.service-badge.b2b { background: #8B5CF6; color: #FFF; }
+
+.service-icon {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.service-card h3 {
+  font-size: 15px;
+  font-weight: 800;
   color: var(--text-white);
-  padding: 12px;
+  margin-bottom: 2px;
+}
+
+.service-card p {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.promo-banner {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(15, 23, 42, 0.8));
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 18px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.promo-text h4 {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-white);
+}
+
+.promo-text p {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  max-width: 250px;
+}
+
+.promo-shield {
+  font-size: 30px;
+}
+
+/* --- ABA 3: ATIVIDADES / HISTÓRICO --- */
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.activity-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.activity-icon-box {
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
-  margin-bottom: 12px;
+  background: rgba(16, 185, 129, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.activity-icon-box.orange {
+  background: rgba(249, 115, 22, 0.15);
+}
+
+.activity-info {
+  flex: 1;
+}
+
+.activity-info h4 {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-white);
+}
+
+.activity-info span {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+}
+
+.activity-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+
+.activity-badge.concluido {
+  background: rgba(16, 185, 129, 0.2);
+  color: var(--huby-emerald);
+}
+
+.activity-price {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-white);
+}
+
+/* --- ABA 4: CONTA / PERFIL --- */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 0;
+}
+
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--huby-emerald), #059669);
+  color: #042F2E;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.profile-details h2 {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-white);
+}
+
+.profile-rating {
   font-size: 12px;
+  color: #FBBF24;
+  margin-top: 2px;
+}
+
+.profile-rating span {
+  color: var(--text-muted);
+}
+
+.profile-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.shortcut-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px 6px;
   text-align: center;
+  cursor: pointer;
+}
+
+.shortcut-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.shortcut-item span {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-light);
+}
+
+.profile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.menu-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.menu-item.highlight {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.menu-item-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.menu-icon {
+  font-size: 20px;
+}
+
+.menu-item-left strong {
+  font-size: 13px;
+  color: var(--text-white);
+  display: block;
+}
+
+.menu-item-left p {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.menu-arrow {
+  color: var(--text-muted);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.menu-tag {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--huby-emerald);
+}
+
+/* --- BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM NAV) --- */
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 64px;
+  background: rgba(9, 13, 22, 0.92);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  z-index: 100;
+}
+
+.nav-item {
+  background: transparent;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+}
+
+.nav-item .nav-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.nav-item .nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.nav-item.active {
+  color: var(--huby-emerald);
+}
+
+.nav-item.active .nav-icon {
+  transform: translateY(-2px);
+}
+
+.wallet-pill {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--huby-emerald);
+  cursor: pointer;
 }

@@ -3,181 +3,145 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy - Painel do Motorista & Parceiro</title>
-  <style>
-    /* ==========================================================================
-       HUBy - Design System Embutido para Painel do Motorista
-       ========================================================================== */
-    :root {
-      --bg-deep: #090D16;
-      --bg-card: #0F172A;
-      --bg-surface: #1E293B;
-      --border-color: #334155;
-      --huby-emerald: #10B981;
-      --huby-flash: #38BDF8;
-      --huby-cargo: #FF6B00;
-      --text-white: #FFFFFF;
-      --text-light: #E2E8F0;
-      --text-muted: #94A3B8;
-      --danger: #EF4444;
-      --warning: #FBBF24;
-      --radius-md: 14px;
-      --shadow-lg: 0 15px 35px rgba(0, 0, 0, 0.55);
-    }
+  <title>HUBy Motorista & Parceiro</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#080C14">
 
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
-    body { background-color: var(--bg-deep); color: var(--text-white); min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
-
-    .driver-layout { display: flex; flex-direction: column; height: 100vh; max-width: 480px; margin: 0 auto; width: 100%; background-color: var(--bg-deep); position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
-
-    .huby-header { background-color: var(--bg-deep); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--bg-surface); z-index: 100; }
-    .brand-logo { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
-    .brand-hub { font-size: 26px; font-weight: 900; color: var(--text-white); letter-spacing: -1px; }
-    .brand-y-badge { background-color: var(--huby-emerald); color: var(--bg-deep); font-size: 19px; font-weight: 900; font-style: italic; padding: 1px 8px 3px; border-radius: 8px; position: relative; line-height: 1; }
-    .brand-gps-dot { width: 8px; height: 8px; background-color: var(--huby-cargo); border: 1.5px solid var(--text-white); border-radius: 50%; position: absolute; top: -4px; right: -4px; }
-    .badge-pill { font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px; background-color: var(--bg-surface); color: var(--text-light); text-decoration: none; }
-
-    .wallet-bar { background-color: var(--bg-surface); padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; border-bottom: 1px solid var(--border-color); }
-    .limit-tag { background: var(--bg-deep); color: var(--text-light); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
-
-    .driver-main { flex: 1; background: #111827; padding: 16px; display: flex; flex-direction: column; justify-content: center; position: relative; overflow-y: auto; }
-
-    .radar-waiting { text-align: center; color: var(--text-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
-    .radar-pulse { width: 60px; height: 60px; border-radius: 50%; background: rgba(16,185,129,0.2); border: 2px solid var(--huby-emerald); animation: pulseRadar 2s infinite; }
-    @keyframes pulseRadar {
-      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
-      70% { transform: scale(1.1); box-shadow: 0 0 0 15px rgba(16,185,129,0); }
-      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16,185,129,0); }
-    }
-
-    .call-card { background: var(--bg-card); border: 2px solid var(--huby-emerald); border-radius: 20px; padding: 16px; box-shadow: var(--shadow-lg); display: none; }
-    .call-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .category-tag { background: var(--huby-emerald); color: var(--bg-deep); font-weight: 900; font-size: 11px; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; }
-    .payment-type { font-size: 12px; color: var(--warning); font-weight: 700; }
-
-    .earnings-box { background: var(--bg-surface); border-radius: 12px; padding: 12px; margin-bottom: 12px; }
-    .net-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; }
-    .net-value { font-size: 26px; font-weight: 900; color: var(--huby-emerald); margin: 2px 0 6px; }
-    .breakdown { border-top: 1px dashed var(--border-color); padding-top: 6px; font-size: 11px; color: var(--text-light); display: flex; flex-direction: column; gap: 3px; }
-    .breakdown-row { display: flex; justify-content: space-between; }
-
-    .route-details { font-size: 12px; color: var(--text-light); margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
-    .route-item { background: var(--bg-deep); padding: 8px 10px; border-radius: 8px; }
-
-    .actions-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
-    .btn-decline { background: var(--bg-surface); color: var(--danger); border: 1px solid var(--danger); border-radius: 12px; padding: 14px; font-weight: 800; font-size: 12px; cursor: pointer; }
-    .btn-accept { background: var(--huby-emerald); color: var(--bg-deep); border: none; border-radius: 12px; padding: 14px; font-weight: 900; font-size: 14px; cursor: pointer; }
-  </style>
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Estilos Globais e do Motorista -->
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/motorista.css">
 </head>
 <body>
 
   <div class="driver-layout">
-    <header class="huby-header">
-      <a href="./motorista.html" class="brand-logo">
-        <span class="brand-hub">HUB</span>
-        <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
-      </a>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <span class="badge-pill" style="background:#065F46; color:#34D399; border:1px solid #10B981;">🟢 ONLINE</span>
-        <a href="./index.html" class="badge-pill">⬅ Cliente</a>
+    <!-- Cabeçalho Superior com Saldo e Toggle Online/Offline -->
+    <header class="driver-header">
+      <div class="driver-profile-pill">
+        <div class="driver-avatar">TC</div>
+        <div class="driver-name-box">
+          <span class="driver-name">Tarcyo Carvalho</span>
+          <span class="driver-rating">⭐ 4.98</span>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <button type="button" class="btn-status-toggle status-online" id="btnToggleStatus">
+          <span class="pulse-status-dot"></span>
+          <span id="txtStatusMotorista">ONLINE</span>
+        </button>
+        <a href="./index.html" class="badge-pill">Modo Cliente ➔</a>
       </div>
     </header>
 
-    <div class="wallet-bar">
-      <div>Saldo da Carteira: <strong id="txtSaldoCarteira" style="color:#F87171;">-R$ 15,00</strong></div>
-      <div class="limit-tag">Limite: R$ 135,00</div>
+    <!-- Barra de Ganhos Rápidos -->
+    <div class="earnings-ticker">
+      <div class="earning-item">
+        <span class="ticker-label">Ganhos de Hoje</span>
+        <strong class="ticker-value highlight">R$ 184,50</strong>
+      </div>
+      <div class="earning-item">
+        <span class="ticker-label">Viagens</span>
+        <strong class="ticker-value">7</strong>
+      </div>
+      <div class="earning-item">
+        <span class="ticker-label">Saldo na Carteira</span>
+        <strong class="ticker-value" style="color:var(--huby-flash);">R$ 412,00</strong>
+      </div>
     </div>
 
-    <main class="driver-main">
-      <div class="radar-waiting" id="radarAviso">
-        <div class="radar-pulse"></div>
-        <p>A procurar chamadas e fretes próximos na região...</p>
+    <!-- Mapa de Cobertura e Despacho -->
+    <div class="driver-map-wrapper">
+      <div id="mapaMotorista"></div>
+      <div class="map-overlay-badge" id="badgeRadarStatus">
+        <span class="radar-dot"></span> A rastrear corridas e fretes em Paes Landim...
+      </div>
+    </div>
+
+    <!-- Painel Inferior de Chamadas Recebidas -->
+    <section class="driver-sheet">
+      <div class="sheet-drag-handle"></div>
+
+      <!-- Filtros Rápidos de Modalidades -->
+      <div class="driver-filters">
+        <button type="button" class="filter-pill active" data-filter="todos">Todos</button>
+        <button type="button" class="filter-pill" data-filter="carro">🚗 Viagem</button>
+        <button type="button" class="filter-pill" data-filter="flash">📦 Flash</button>
+        <button type="button" class="filter-pill" data-filter="cargo">🚚 Cargo</button>
       </div>
 
-      <div class="call-card" id="cardChamadaAtiva">
-        <div class="call-header">
-          <span class="category-tag" id="lblCatChamada">HUBy Cargo</span>
-          <span class="payment-type" id="lblPgtoChamada">Dinheiro / Pix</span>
-        </div>
+      <!-- Feed Dinâmico de Solicitações -->
+      <div class="requests-stream" id="feedChamadas">
 
-        <div class="earnings-box">
-          <div class="net-label">Seu Ganho Líquido Estimado</div>
-          <div class="net-value" id="lblGanhoLiquido">R$ 0,00</div>
-          <div class="breakdown">
-            <div class="breakdown-row">
-              <span>Frete Base:</span>
-              <span id="lblValorBase">R$ 0,00</span>
+        <!-- Card de Exemplo: HUBy Cargo -->
+        <div class="job-card cargo-job">
+          <div class="job-top">
+            <div class="job-badge cargo">🚚 HUBy Cargo (VUC)</div>
+            <div class="job-distance">📍 1.8 km até ao local</div>
+          </div>
+
+          <div class="job-body">
+            <div class="job-route-line">
+              <div class="route-point">
+                <span class="dot-indicator green"></span>
+                <p>Av. Central, 420 • Retirada</p>
+              </div>
+              <div class="route-point">
+                <span class="dot-indicator orange"></span>
+                <p>Bairro Primavera • Entrega c/ Escada</p>
+              </div>
             </div>
-            <div class="breakdown-row" style="color:#38bdf8;">
-              <span id="lblTextoExtras">+ Adicionais (0% taxa):</span>
-              <span id="lblValorExtras">+ R$ 0,00</span>
+
+            <div class="job-pricing">
+              <span class="price-tag">R$ 142,00</span>
+              <span class="split-info">Pix Direto (Taxa app: R$ 14,20)</span>
             </div>
-            <div class="breakdown-row" style="color:#F87171;">
-              <span id="lblTextoComissao">Comissão HUBy:</span>
-              <span id="lblValorComissao">- R$ 0,00</span>
-            </div>
+          </div>
+
+          <div class="job-actions">
+            <button type="button" class="btn-job-reject">Recusar</button>
+            <button type="button" class="btn-job-accept cargo-btn">Aceitar Frete</button>
           </div>
         </div>
 
-        <div class="route-details">
-          <div class="route-item">📍 <strong>Coleta:</strong> <span id="lblOrigemCorrida">Sua localização</span></div>
-          <div class="route-item">🏁 <strong>Destino:</strong> <span id="lblDestinoCorrida">Destino do cliente</span></div>
+        <!-- Card de Exemplo: HUBy Viagem -->
+        <div class="job-card viagem-job">
+          <div class="job-top">
+            <div class="job-badge viagem">🚗 HUBy Viagem</div>
+            <div class="job-distance">📍 800m até ao passageiro</div>
+          </div>
+
+          <div class="job-body">
+            <div class="job-route-line">
+              <div class="route-point">
+                <span class="dot-indicator green"></span>
+                <p>Praça da Matriz • Embarque</p>
+              </div>
+              <div class="route-point">
+                <span class="dot-indicator orange"></span>
+                <p>Terminal Rodoviário • Desembarque</p>
+              </div>
+            </div>
+
+            <div class="job-pricing">
+              <span class="price-tag">R$ 18,50</span>
+              <span class="split-info">Cartão no App</span>
+            </div>
+          </div>
+
+          <div class="job-actions">
+            <button type="button" class="btn-job-reject">Recusar</button>
+            <button type="button" class="btn-job-accept emerald-btn">Aceitar Corrida</button>
+          </div>
         </div>
 
-        <div class="actions-grid">
-          <button type="button" class="btn-decline" id="btnRecusar">✕ Recusar</button>
-          <button type="button" class="btn-accept" id="btnAceitar">ACEITAR CHAMADA</button>
-        </div>
       </div>
-    </main>
+    </section>
   </div>
 
-  <script>
-    const STORAGE_CORRIDA_ATIVA = 'huby_corrida_ativa';
-
-    function verificarChamadasPendentes() {
-      const raw = localStorage.getItem(STORAGE_CORRIDA_ATIVA);
-      const corrida = raw ? JSON.parse(raw) : null;
-      
-      const card = document.getElementById('cardChamadaAtiva');
-      const radar = document.getElementById('radarAviso');
-
-      if (corrida && corrida.status === 'buscando_motorista') {
-        radar.style.display = 'none';
-        card.style.display = 'block';
-
-        const orc = corrida.orcamento;
-        document.getElementById('lblCatChamada').innerText = orc.categoria;
-        document.getElementById('lblPgtoChamada').innerText = corrida.formaPagamento === 'dinheiro_presencial' ? '💵 Dinheiro' : '💠 Pix App';
-        document.getElementById('lblGanhoLiquido').innerText = 'R$ ' + orc.ganhoLiquidoMotorista.toFixed(2).replace('.', ',');
-        document.getElementById('lblValorBase').innerText = 'R$ ' + orc.valorBase.toFixed(2).replace('.', ',');
-        document.getElementById('lblValorExtras').innerText = '+ R$ ' + orc.valorAdicionais.toFixed(2).replace('.', ',');
-        document.getElementById('lblTextoComissao').innerText = `Comissão (${orc.comissaoPercentual}%):`;
-        document.getElementById('lblValorComissao').innerText = '- R$ ' + orc.valorComissaoPlataforma.toFixed(2).replace('.', ',');
-        document.getElementById('lblOrigemCorrida').innerText = corrida.origemEndereco;
-        document.getElementById('lblDestinoCorrida').innerText = corrida.destinoEndereco;
-      }
-    }
-
-    document.getElementById('btnAceitar').onclick = () => {
-      const raw = localStorage.getItem(STORAGE_CORRIDA_ATIVA);
-      if (raw) {
-        const corrida = JSON.parse(raw);
-        corrida.status = 'motorista_a_caminho';
-        localStorage.setItem(STORAGE_CORRIDA_ATIVA, JSON.stringify(corrida));
-        alert('✅ Corrida aceite com sucesso!');
-        window.location.href = './index.html';
-      }
-    };
-
-    document.getElementById('btnRecusar').onclick = () => {
-      localStorage.removeItem(STORAGE_CORRIDA_ATIVA);
-      document.getElementById('cardChamadaAtiva').style.display = 'none';
-      document.getElementById('radarAviso').style.display = 'flex';
-    };
-
-    setInterval(verificarChamadasPendentes, 1500);
-    verificarChamadasPendentes();
-  </script>
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./js/modules/app-motorista.js"></script>
 </body>
 </html>

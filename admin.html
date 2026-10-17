@@ -3,106 +3,128 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy Admin - Gestão de Frotas e Comissões</title>
-  <style>
-    :root {
-      --bg-deep: #090D16; --bg-card: #0F172A; --bg-surface: #1E293B; --border-color: #334155;
-      --huby-emerald: #10B981; --huby-flash: #38BDF8; --huby-cargo: #FF6B00;
-      --text-white: #FFFFFF; --text-light: #E2E8F0; --text-muted: #94A3B8; --danger: #EF4444; --radius-md: 14px;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
-    body { background-color: var(--bg-deep); color: var(--text-white); min-height: 100vh; display: flex; flex-direction: column; }
-    .admin-layout { display: flex; flex-direction: column; height: 100vh; max-width: 480px; margin: 0 auto; width: 100%; background-color: var(--bg-deep); position: relative; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
-    .huby-header { background-color: var(--bg-deep); padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--bg-surface); }
-    .brand-logo { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
-    .brand-hub { font-size: 26px; font-weight: 900; color: var(--text-white); letter-spacing: -1px; }
-    .brand-y-badge { background-color: var(--huby-cargo); color: var(--bg-deep); font-size: 19px; font-weight: 900; font-style: italic; padding: 1px 8px 3px; border-radius: 8px; position: relative; }
-    .badge-pill { font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px; background-color: var(--bg-surface); color: var(--text-light); text-decoration: none; }
-    
-    .admin-main { flex: 1; background: #111827; padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-    .card-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; }
-    .card-title { font-size: 14px; font-weight: 800; color: var(--huby-cargo); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-    
-    .financial-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-    .fin-box { background: var(--bg-surface); padding: 10px 6px; border-radius: 10px; text-align: center; }
-    .fin-val { font-size: 14px; font-weight: 900; color: var(--huby-emerald); margin-top: 4px; }
-    
-    .driver-row { display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 10px; border-radius: 10px; margin-bottom: 8px; font-size: 12px; }
-    .btn-approve { background: var(--huby-emerald); color: var(--bg-deep); border: none; padding: 6px 12px; border-radius: 6px; font-weight: 900; cursor: pointer; }
-    .btn-block { background: var(--danger); color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-weight: 900; cursor: pointer; }
-  </style>
+  <title>HUBy - Painel de Controlo & Despacho</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#080C14">
+
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Estilos Globais e do Admin -->
+  <link rel="stylesheet" href="./css/global.css">
+  <link rel="stylesheet" href="./css/admin.css">
 </head>
 <body>
 
   <div class="admin-layout">
-    <header class="huby-header">
-      <a href="./admin.html" class="brand-logo">
-        <span class="brand-hub">HUB</span>
-        <span class="brand-y-badge">y</span>
-      </a>
-      <a href="./index.html" class="badge-pill">⬅ Voltar ao App</a>
+    <!-- Cabeçalho Executivo do Admin -->
+    <header class="admin-header">
+      <div class="admin-brand">
+        <a href="./index.html" class="brand-logo">
+          <span class="brand-hub">HUB</span>
+          <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
+        </a>
+        <span class="admin-tag">Central de Operações</span>
+      </div>
+
+      <div class="admin-header-actions">
+        <div class="live-pulse-badge">
+          <span class="pulse-dot"></span> 3 Motoristas Online
+        </div>
+        <a href="./index.html" class="badge-pill">Ver App Cliente ➔</a>
+      </div>
     </header>
 
-    <main class="admin-main">
-      <div class="card-box">
-        <div class="card-title">📊 Faturamento & Comissões (Hoje)</div>
-        <div class="financial-grid">
-          <div class="fin-box">
-            <div style="font-size:10px; color:var(--text-muted);">Corridas</div>
-            <div class="fin-val">128</div>
-          </div>
-          <div class="fin-box">
-            <div style="font-size:10px; color:var(--text-muted);">Bruto</div>
-            <div class="fin-val">R$ 4.620</div>
-          </div>
-          <div class="fin-box">
-            <div style="font-size:10px; color:var(--text-muted);">Comissão (15%)</div>
-            <div class="fin-val" style="color:var(--huby-cargo);">R$ 693</div>
-          </div>
+    <!-- Indicadores Financeiros e Operacionais (KPIs) -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <span class="kpi-label">Faturação Diária</span>
+        <strong class="kpi-value text-emerald">R$ 1.840,00</strong>
+        <span class="kpi-sub">+18% face a ontem</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Corridas & Fretes</span>
+        <strong class="kpi-value">46</strong>
+        <span class="kpi-sub">3 em andamento</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">Comissão HUBy (10%)</span>
+        <strong class="kpi-value text-flash">R$ 184,00</strong>
+        <span class="kpi-sub">Split automático ativo</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-label">HUBy Cargo Ativo</span>
+        <strong class="kpi-value text-cargo">5 Fretes</strong>
+        <span class="kpi-sub">VUCs e Caminhões</span>
+      </div>
+    </section>
+
+    <!-- Área Principal: Mapa de Calor + Tabela de Despacho -->
+    <main class="admin-main-grid">
+      <!-- Mapa Global da Frota -->
+      <div class="admin-map-container">
+        <div class="panel-header">
+          <h3>📍 Radar de Veículos em Tempo Real</h3>
+          <span class="badge-sub">Região: Paes Landim - PI</span>
         </div>
+        <div id="mapaAdmin"></div>
       </div>
 
-      <div class="card-box">
-        <div class="card-title">👥 Aprovação de Motoristas & Frotas</div>
-        <div id="listaAprovacao">
-          <div class="driver-row" id="cad1">
-            <div>
-              <strong>Carlos Eduardo</strong><br>
-              <span style="color:var(--text-muted);">HUBy Cargo (Caminhão VUC)</span>
-            </div>
-            <button type="button" class="btn-approve" onclick="aprovarMotorista('cad1')">Aprovar</button>
-          </div>
-          <div class="driver-row" id="cad2">
-            <div>
-              <strong>Mariana Souza</strong><br>
-              <span style="color:var(--text-muted);">HUBy Moto (Entregas Flash)</span>
-            </div>
-            <button type="button" class="btn-approve" onclick="aprovarMotorista('cad2')">Aprovar</button>
-          </div>
+      <!-- Fila de Pedidos e Monitorização -->
+      <div class="admin-feed-container">
+        <div class="panel-header">
+          <h3>⚡ Fila de Atendimentos</h3>
+          <span class="badge-sub">Tempo real</span>
         </div>
-      </div>
 
-      <div class="card-box">
-        <div class="card-title">⚙️ Controlo de Inadimplência</div>
-        <div class="driver-row">
-          <div>
-            <strong>Roberto F. (Moto)</strong><br>
-            <span style="color:var(--danger);">Dívida de comissão: R$ 58,00</span>
+        <div class="admin-orders-list" id="listaPedidosAdmin">
+          <!-- Card de Corrida em Curso -->
+          <div class="admin-order-row">
+            <div class="order-type-icon emerald">🚗</div>
+            <div class="order-meta">
+              <strong>#HB-9021 • HUBy Viagem</strong>
+              <span>Passageiro: Maria S. • Motorista: Tarcyo C.</span>
+              <small>Praça Matriz ➔ Terminal Rodoviário</small>
+            </div>
+            <div class="order-status-box">
+              <span class="status-pill em-rota">Em Rota</span>
+              <strong>R$ 18,50</strong>
+            </div>
           </div>
-          <button type="button" class="btn-block">Bloquear</button>
+
+          <!-- Card de Frete em Curso -->
+          <div class="admin-order-row">
+            <div class="order-type-icon cargo">🚚</div>
+            <div class="order-meta">
+              <strong>#HB-8842 • HUBy Cargo (VUC)</strong>
+              <span>Cliente: Móveis Silva • Ajudante: Sim</span>
+              <small>Av. Central ➔ Bairro Primavera</small>
+            </div>
+            <div class="order-status-box">
+              <span class="status-pill aguardando">Coleta</span>
+              <strong>R$ 142,00</strong>
+            </div>
+          </div>
+
+          <!-- Card de Entrega Flash Concluída -->
+          <div class="admin-order-row">
+            <div class="order-type-icon flash">📦</div>
+            <div class="order-meta">
+              <strong>#HB-8710 • HUBy Flash</strong>
+              <span>Entrega de Documentos</span>
+              <small>Centro ➔ Fórum Municipal</small>
+            </div>
+            <div class="order-status-box">
+              <span class="status-pill finalizado">Finalizado</span>
+              <strong>R$ 12,00</strong>
+            </div>
+          </div>
         </div>
       </div>
     </main>
   </div>
 
-  <script>
-    function aprovarMotorista(id) {
-      const el = document.getElementById(id);
-      el.style.opacity = '0.5';
-      el.querySelector('button').innerText = 'Aprovado ✔';
-      el.querySelector('button').style.background = '#38BDF8';
-      alert('Parceiro verificado e liberado para operar na frota HUBy!');
-    }
-  </script>
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./js/modules/app-admin.js"></script>
 </body>
 </html>

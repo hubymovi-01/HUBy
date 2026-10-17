@@ -1,0 +1,355 @@
+/* ==========================================================================
+   HUBy - Interface do Motorista e Parceiro de Cargas (css/motorista.css)
+   ========================================================================== */
+
+.driver-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+  background-color: var(--bg-deep);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Header */
+.driver-header {
+  background: rgba(8, 12, 20, 0.9);
+  backdrop-filter: blur(14px);
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  z-index: 100;
+}
+
+.driver-profile-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.driver-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--huby-emerald), #047857);
+  color: #042F2E;
+  font-size: 13px;
+  font-weight: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.driver-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-white);
+  display: block;
+}
+
+.driver-rating {
+  font-size: 11px;
+  color: #FBBF24;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-status-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: none;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-status-toggle.status-online {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid var(--huby-emerald);
+  color: var(--huby-emerald);
+}
+
+.btn-status-toggle.status-offline {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid #EF4444;
+  color: #EF4444;
+}
+
+.pulse-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--huby-emerald);
+  box-shadow: 0 0 8px var(--huby-emerald);
+}
+
+/* Faixa de Ganhos / Ticker */
+.earnings-ticker {
+  background: rgba(15, 23, 42, 0.7);
+  border-bottom: 1px solid var(--border-subtle);
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr 1.2fr;
+  padding: 10px 18px;
+  text-align: center;
+  z-index: 10;
+}
+
+.earning-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.ticker-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ticker-value {
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--text-white);
+  margin-top: 2px;
+}
+
+.ticker-value.highlight {
+  color: var(--huby-emerald);
+}
+
+/* Mapa do Motorista */
+.driver-map-wrapper {
+  flex: 1;
+  min-height: 200px;
+  position: relative;
+}
+
+#mapaMotorista {
+  width: 100%;
+  height: 100%;
+}
+
+.map-overlay-badge {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-light);
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.radar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--huby-emerald);
+  animation: blink 1.2s infinite ease-in-out;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 0.3; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Painel de Chamadas */
+.driver-sheet {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  border-radius: 24px 24px 0 0;
+  padding: 12px 18px 24px;
+  z-index: 20;
+  box-shadow: var(--shadow-sheet);
+  border-top: 1px solid var(--border-subtle);
+  max-height: 52vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheet-drag-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.2);
+  margin: 0 auto 12px auto;
+}
+
+.driver-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+}
+
+.filter-pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.filter-pill.active {
+  background: var(--bg-surface);
+  color: var(--text-white);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.requests-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Cards de Solicitações */
+.job-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.15s ease;
+}
+
+.job-card:active {
+  transform: scale(0.99);
+}
+
+.job-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.job-badge {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 8px;
+}
+
+.job-badge.cargo {
+  background: rgba(249, 115, 22, 0.15);
+  color: var(--huby-cargo);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.job-badge.viagem {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--huby-emerald);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.job-distance {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.job-route-line {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.route-point {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.route-point p {
+  font-size: 12px;
+  color: var(--text-light);
+  font-weight: 600;
+}
+
+.job-pricing {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+.price-tag {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--text-white);
+}
+
+.split-info {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.job-actions {
+  display: grid;
+  grid-template-columns: 0.8fr 1.6fr;
+  gap: 10px;
+}
+
+.btn-job-reject {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-job-accept {
+  border: none;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.btn-job-accept.cargo-btn {
+  background: var(--huby-cargo);
+  color: #431407;
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+}
+
+.btn-job-accept.emerald-btn {
+  background: var(--huby-emerald);
+  color: #042F2E;
+  box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+}
