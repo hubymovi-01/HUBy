@@ -3,125 +3,282 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy - Mobilidade, Entregas e Fretes</title>
+  <title>HUBy - Mobilidade, Flash e Fretes</title>
   <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#090D16">
+  <meta name="theme-color" content="#080C14">
 
-  <!-- CSS do Mapa Leaflet -->
+  <!-- CSS do Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Estilos Globais e do Cliente (com caminho relativo seguro ./) -->
+  <!-- Estilos Globais e do Cliente -->
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/cliente.css">
 </head>
 <body>
 
   <div class="app-layout">
-    <!-- Cabeçalho Oficial HUBy -->
+    <!-- Cabeçalho HUBy com Glassmorphism -->
     <header class="huby-header">
       <a href="./index.html" class="brand-logo">
         <span class="brand-hub">HUB</span>
         <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
       </a>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <a href="./motorista.html" class="badge-pill" style="text-decoration:none;">Modo Motorista ➔</a>
+      <div class="header-right">
+        <span class="wallet-pill" id="btnIrCarteira">🪙 <strong>R$ 0,00</strong></span>
+        <a href="./motorista.html" class="badge-pill">Modo Motorista ➔</a>
       </div>
     </header>
 
-    <!-- Mapa Interativo em Tempo Real -->
-    <div class="map-wrapper">
-      <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
-      <div id="mapaCliente"></div>
-      <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
-    </div>
-
-    <!-- Painel Inferior de Pedido -->
-    <section class="order-sheet">
-      <div class="status-banner" id="bannerStatusCorrida"></div>
-
-      <!-- 1. Grupos Principais -->
-      <div class="group-tabs">
-        <div class="tab-card active-carro" data-grupo="carro">
-          <div class="tab-icon">🚗</div>
-          <div class="tab-title">HUBy Viagem</div>
-          <div class="tab-sub">Carro & Moto</div>
+    <!-- CONTAINER DAS TELAS DINÂMICAS -->
+    <main class="tabs-viewport">
+      
+      <!-- ABA 1: INÍCIO (MAPA + CHAMADA RÁPIDA) -->
+      <section class="tab-view active-view" id="viewInicio">
+        <div class="map-wrapper">
+          <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
+          <div id="mapaCliente"></div>
+          <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
         </div>
-        <div class="tab-card" data-grupo="flash">
-          <div class="tab-icon">📦</div>
-          <div class="tab-title">HUBy Flash</div>
-          <div class="tab-sub">Entregas</div>
-        </div>
-        <div class="tab-card" data-grupo="cargo">
-          <div class="tab-icon">🚚</div>
-          <div class="tab-title">HUBy Cargo</div>
-          <div class="tab-sub">Caminhão/Frete</div>
-        </div>
-      </div>
 
-      <!-- 2. Subcategoria de Veículo -->
-      <div class="sub-vehicles" id="containerSubVeiculos"></div>
+        <div class="order-sheet">
+          <div class="sheet-drag-handle"></div>
+          <div class="status-banner" id="bannerStatusCorrida"></div>
 
-      <!-- 3. Origem e Destino -->
-      <div class="addresses-box">
-        <div class="input-group">
-          <span style="color:var(--huby-emerald);">●</span>
-          <input type="text" id="inputOrigem" value="A minha localização atual" readonly>
-        </div>
-        <div class="address-row">
-          <div class="input-group" style="flex:1;">
-            <span style="color:var(--huby-cargo);">■</span>
-            <input type="text" id="inputDestino" placeholder="Para onde vamos levar? (ou toque no mapa)">
+          <!-- Seletor de Modalidades Principais -->
+          <div class="group-tabs">
+            <div class="tab-card active-carro" data-grupo="carro">
+              <div class="tab-icon">🚗</div>
+              <div class="tab-title">HUBy Viagem</div>
+              <div class="tab-sub">Carro & Moto</div>
+            </div>
+            <div class="tab-card" data-grupo="flash">
+              <div class="tab-icon">📦</div>
+              <div class="tab-title">HUBy Flash</div>
+              <div class="tab-sub">Entregas</div>
+            </div>
+            <div class="tab-card" data-grupo="cargo">
+              <div class="tab-icon">🚚</div>
+              <div class="tab-title">HUBy Cargo</div>
+              <div class="tab-sub">Caminhão/Frete</div>
+            </div>
           </div>
-          <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
-        </div>
-      </div>
 
-      <!-- 4. Adicionais (Ajudante, Escada e Parada Extra) -->
-      <div class="cargo-options-box">
-        <div class="option-line" id="linhaAjudante" style="display:none;">
-          <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
-          <div class="counter-control">
-            <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
-            <strong id="txtQtdAjudantes">0</strong>
-            <button type="button" class="btn-qty" id="btnMaisAjudante">+</button>
+          <!-- Sub-veículos Dinâmicos -->
+          <div class="sub-vehicles" id="containerSubVeiculos"></div>
+
+          <!-- Campos de Origem e Destino -->
+          <div class="addresses-box">
+            <div class="input-group">
+              <span class="dot-indicator green"></span>
+              <input type="text" id="inputOrigem" value="A minha localização atual" readonly>
+            </div>
+            <div class="address-row">
+              <div class="input-group" style="flex:1;">
+                <span class="dot-indicator orange"></span>
+                <input type="text" id="inputDestino" placeholder="Para onde vamos levar? (ou toque no mapa)">
+              </div>
+              <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
+            </div>
+          </div>
+
+          <!-- Adicionais para Cargo / Flash -->
+          <div class="cargo-options-box">
+            <div class="option-line" id="linhaAjudante" style="display:none;">
+              <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
+              <div class="counter-control">
+                <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
+                <strong id="txtQtdAjudantes">0</strong>
+                <button type="button" class="btn-qty" id="btnMaisAjudante">+</button>
+              </div>
+            </div>
+
+            <div class="option-line" id="linhaEscada" style="display:none;">
+              <label for="chkEscada" style="cursor:pointer;">🏢 Escada sem elevador (+R$ 20)</label>
+              <input type="checkbox" id="chkEscada" class="huby-check">
+            </div>
+
+            <div class="option-line">
+              <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no percurso (+R$ 6)</label>
+              <input type="checkbox" id="chkParadaExtra" class="huby-check">
+            </div>
+          </div>
+
+          <!-- Resumo de Rota -->
+          <div class="trip-breakdown">
+            <span>📏 Rota: <strong id="txtDistKm">3.5 km</strong> (<span id="txtDuracaoMin">8</span> min)</span>
+            <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
+          </div>
+
+          <!-- Pagamento -->
+          <div class="payment-bar">
+            <span class="payment-label">Pagamento:</span>
+            <select id="selectMetodoPgto">
+              <option value="pix_app">💠 Pix no App (Split Automático)</option>
+              <option value="dinheiro_presencial">💵 Dinheiro ao Motorista</option>
+              <option value="cartao_app">💳 Cartão de Crédito</option>
+            </select>
+          </div>
+
+          <!-- Botão Principal -->
+          <button type="button" class="btn-primary" id="btnSolicitarHuby">
+            <span id="txtBotaoAcao">Chamar HUBy Carro</span>
+            <span class="price-box" id="txtPrecoFinal">R$ 16,10</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ABA 2: OPÇÕES / SERVIÇOS (HUB COMPLETO) -->
+      <section class="tab-view" id="viewOpcoes">
+        <!-- Grid de Serviços Focado em Cliente Individual -->
+          <div class="services-grid">
+            <div class="service-card action-solicitar" data-target-group="carro">
+              <div class="service-badge promo">-20% OFF</div>
+              <div class="service-icon">🚗</div>
+              <h3>Viagem</h3>
+              <p>Carro e moto particular</p>
+            </div>
+
+            <div class="service-card action-solicitar" data-target-group="flash">
+              <div class="service-badge novo">Rápido</div>
+              <div class="service-icon">📦</div>
+              <h3>HUBy Flash</h3>
+              <p>Envio de pacotes e encomendas</p>
+            </div>
+
+            <div class="service-card action-solicitar" data-target-group="cargo" style="grid-column: span 2;">
+              <div class="service-badge cargo">Fretes & Mudanças</div>
+              <div class="service-icon">🚚</div>
+              <h3>HUBy Cargo</h3>
+              <p>VUCs, vans, caminhonetes e ajudantes sob demanda</p>
+            </div>
+          </div>
+      </section>
+
+      <!-- ABA 3: ATIVIDADE (HISTÓRICO) -->
+      <section class="tab-view" id="viewAtividade">
+        <div class="view-content">
+          <div class="view-header-title">
+            <h2>Atividade</h2>
+            <p>Histórico recente de viagens e fretes</p>
+          </div>
+
+          <div class="activity-list" id="activityList">
+            <div class="activity-card">
+              <div class="activity-icon-box">🚗</div>
+              <div class="activity-info">
+                <h4>HUBy Carro</h4>
+                <span>Hoje, 17:40 • Centro ➔ Aeroporto</span>
+                <div class="activity-badge concluido">Concluído</div>
+              </div>
+              <div class="activity-price">R$ 24,50</div>
+            </div>
+
+            <div class="activity-card">
+              <div class="activity-icon-box orange">🚚</div>
+              <div class="activity-info">
+                <h4>HUBy Cargo (VUC)</h4>
+                <span>Ontem, 14:15 • Frete residencial</span>
+                <div class="activity-badge concluido">Concluído</div>
+              </div>
+              <div class="activity-price">R$ 142,00</div>
+            </div>
           </div>
         </div>
+      </section>
 
-        <div class="option-line" id="linhaEscada" style="display:none;">
-          <label for="chkEscada" style="cursor:pointer;">🏢 Escada sem elevador (+R$ 20)</label>
-          <input type="checkbox" id="chkEscada" style="width:16px;height:16px;accent-color:var(--huby-cargo);">
+      <!-- ABA 4: CONTA (PERFIL DO USUÁRIO) -->
+      <section class="tab-view" id="viewConta">
+        <div class="view-content">
+          <!-- Cabeçalho de Perfil -->
+          <div class="profile-header">
+            <div class="profile-avatar">TC</div>
+            <div class="profile-details">
+              <h2>Tarcyo Carvalho</h2>
+              <div class="profile-rating">⭐ 5.0 <span>• Passageiro VIP</span></div>
+            </div>
+          </div>
+
+          <!-- Ações Rápidas -->
+          <div class="profile-shortcuts">
+            <div class="shortcut-item">
+              <div class="shortcut-icon">👛</div>
+              <span>Carteira</span>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-icon">🛡️</div>
+              <span>Segurança</span>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-icon">💬</div>
+              <span>Mensagens</span>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-icon">🎧</div>
+              <span>Ajuda</span>
+            </div>
+          </div>
+
+          <!-- Lista de Opções da Conta -->
+          <div class="profile-menu">
+            <a href="./motorista.html" class="menu-item highlight">
+              <div class="menu-item-left">
+                <span class="menu-icon">🚘</span>
+                <div>
+                  <strong>Modo Motorista</strong>
+                  <p>Ganhe dinheiro dirigindo ou fazendo fretes</p>
+                </div>
+              </div>
+              <span class="menu-arrow">➔</span>
+            </a>
+
+            <div class="menu-item">
+              <div class="menu-item-left">
+                <span class="menu-icon">⚙️</span>
+                <div>
+                  <strong>Configurações</strong>
+                  <p>Preferências da conta e privacidade</p>
+                </div>
+              </div>
+              <span class="menu-arrow">›</span>
+            </div>
+
+            <div class="menu-item">
+              <div class="menu-item-left">
+                <span class="menu-icon">🌱</span>
+                <div>
+                  <strong>Pegada de Carbono</strong>
+                  <p>Compensação de emissões das viagens</p>
+                </div>
+              </div>
+              <span class="menu-tag">0g CO₂</span>
+            </div>
+          </div>
         </div>
+      </section>
 
-        <div class="option-line">
-          <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no caminho (+R$ 6)</label>
-          <input type="checkbox" id="chkParadaExtra" style="width:16px;height:16px;accent-color:var(--huby-emerald);">
-        </div>
-      </div>
+    </main>
 
-      <!-- 5. Resumo de Distância, Tempo e Tarifas -->
-      <div class="trip-breakdown">
-        <span>📏 Rota: <strong id="txtDistKm" style="color:#fff;">3.5 km</strong> (<span id="txtDuracaoMin">8</span> min)</span>
-        <span>Adicionais: <strong id="txtValorAdicionais" style="color:var(--huby-flash);">R$ 0,00</strong></span>
-      </div>
-
-      <!-- 6. Método de Pagamento -->
-      <div class="payment-bar">
-        <span style="color:var(--text-muted);font-weight:700;">Forma de Pagamento:</span>
-        <select id="selectMetodoPgto">
-          <option value="pix_app">💠 Pix no App (Split Automático)</option>
-          <option value="dinheiro_presencial">💵 Dinheiro direto ao Motorista</option>
-          <option value="cartao_app">💳 Cartão de Crédito</option>
-        </select>
-      </div>
-
-      <!-- 7. Botão Principal de Solicitação -->
-      <button type="button" class="btn-primary" id="btnSolicitarHuby">
-        <span id="txtBotaoAcao">Chamar HUBy Carro</span>
-        <span class="price-box" id="txtPrecoFinal">R$ 16,20</span>
+    <!-- BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM NAV) -->
+    <nav class="bottom-nav">
+      <button type="button" class="nav-item active" data-tab="viewInicio">
+        <span class="nav-icon">📍</span>
+        <span class="nav-label">Início</span>
       </button>
-    </section>
+      <button type="button" class="nav-item" data-tab="viewOpcoes">
+        <span class="nav-icon">⊞</span>
+        <span class="nav-label">Opções</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="viewAtividade">
+        <span class="nav-icon">📄</span>
+        <span class="nav-label">Atividade</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="viewConta">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Conta</span>
+      </button>
+    </nav>
   </div>
 
-  <!-- JS do Leaflet e Módulo Principal do Cliente -->
+  <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
 </body>
