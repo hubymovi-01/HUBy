@@ -25,12 +25,20 @@
       <div class="glow-bg top-glow"></div>
       <div class="glow-bg bottom-glow"></div>
 
+      <!-- Logótipo Vertical com Contraste: Pequeno no topo e Grande embaixo -->
       <header class="welcome-header">
-        <div class="brand-hero">
-          <span class="brand-hub-hero">HUB</span>
-          <span class="brand-y-badge-hero">y<span class="brand-gps-dot-hero"></span></span>
-          <span class="brand-hub-hero" style="margin-left: 8px;">HUB</span>
-          <span class="brand-y-badge-hero">y<span class="brand-gps-dot-hero"></span></span>
+        <div class="brand-hero-stacked">
+          <!-- Versão compacta / selo superior -->
+          <div class="brand-row brand-row-small">
+            <span class="brand-hub-small">HUB</span>
+            <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
+          </div>
+
+          <!-- Versão principal em destaque -->
+          <div class="brand-row brand-row-large">
+            <span class="brand-hub-large">HUB</span>
+            <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
+          </div>
         </div>
         <p class="tagline">Mobilidade urbana, entregas rápidas e fretes na palma da mão.</p>
       </header>
@@ -83,22 +91,16 @@
       </footer>
     </div>
 
-    <!-- Logótipo Vertical com Contraste: Pequeno no topo e Grande embaixo -->
-    <header class="welcome-header">
-      <div class="brand-hero-stacked">
-        <!-- Versão compacta / selo superior -->
-        <div class="brand-row brand-row-small">
-          <span class="brand-hub-small">HUB</span>
-          <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
-        </div>
-
-        <!-- Versão principal de destaque -->
-        <div class="brand-row brand-row-large">
-          <span class="brand-hub-large">HUB</span>
-          <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
-        </div>
+    <!-- CABEÇALHO DO APLICATIVO (BARRA SUPERIOR) -->
+    <header class="huby-header">
+      <a href="./index.html" class="brand-logo-compact">
+        <span class="brand-hub-nav">HUB</span><span class="brand-y-nav">y</span>
+        <span class="brand-sub-nav">HUBy</span>
+      </a>
+      <div class="header-right">
+        <span class="wallet-pill" id="btnIrCarteira">🪙 <strong>R$ 0,00</strong></span>
+        <a href="./motorista.html" class="badge-pill">Modo Motorista ➔</a>
       </div>
-      <p class="tagline">Mobilidade urbana, entregas rápidas e fretes na palma da mão.</p>
     </header>
 
     <!-- CONTAINER DAS TELAS DINÂMICAS -->
