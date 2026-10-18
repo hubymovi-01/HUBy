@@ -318,14 +318,42 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarCalculos();
   });
 
-  // 8. Solicitar Corrida
+  // Canal de comunicação em tempo real local entre abas
+  const hubyChannel = new BroadcastChannel('huby_orders_channel');
+
+  // 8. Solicitar Corrida / Frete
   btnSolicitarHuby?.addEventListener('click', () => {
-    const idPedido = Math.random().toString(36).substring(2, 7);
+    const idPedido = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const tarifa = (subCategorias[rotaAtual.grupo] || []).find(s => s.id === rotaAtual.subTipo) || { label: 'HUBy Carro' };
+    
+    // Objeto do pedido gerado
+    const novoPedido = {
+      id: idPedido,
+      tipo: rotaAtual.grupo, // carro, flash, cargo
+      subTipoLabel: tarifa.label,
+      origem: document.getElementById('inputOrigem').value || 'Paes Landim - Centro',
+      destino: document.getElementById('inputDestino').value || 'Destino no Mapa',
+      distancia: `${rotaAtual.distanciaKm.toFixed(1)} km`,
+      preco: txtPrecoFinal.textContent,
+      metodoPgto: document.getElementById('selectMetodoPgto').value,
+      horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      status: 'pendente'
+    };
+
+    // 1. Guarda na lista de histórico local
+    const historicoAtual = JSON.parse(localStorage.getItem('huby_pedidos_ativos') || '[]');
+    historicoAtual.unshift(novoPedido);
+    localStorage.setItem('huby_pedidos_ativos', JSON.stringify(historicoAtual));
+
+    // 2. Notifica o painel do motorista e admin em tempo real
+    hubyChannel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
+
+    // 3. Atualiza o ecrã do passageiro
     bannerStatus.style.display = 'block';
     bannerStatus.innerHTML = `
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 13px; text-align: center;">
-        ✅ Pedido <strong>#${idPedido}</strong> enviado!<br>
-        A procurar motorista parceiro HUBy...
+        ✅ Pedido <strong>#${idPedido}</strong> enviado com sucesso!<br>
+        A aguardar confirmação de um motorista nas proximidades...
       </div>
     `;
 

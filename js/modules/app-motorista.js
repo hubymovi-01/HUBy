@@ -63,4 +63,63 @@ document.addEventListener('DOMContentLoaded', () => {
       card.remove();
     });
   });
+  // Canal de escuta de pedidos em tempo real
+  const hubyChannel = new BroadcastChannel('huby_orders_channel');
+  const feedChamadas = document.getElementById('feedChamadas');
+
+  hubyChannel.onmessage = (event) => {
+    if (event.data?.tipo === 'NOVO_PEDIDO' && isOnline) {
+      const p = event.data.pedido;
+      inserirCardCorrida(p);
+    }
+  };
+
+  function inserirCardCorrida(p) {
+    if (!feedChamadas) return;
+
+    const badgeClasse = p.tipo === 'cargo' ? 'cargo' : (p.tipo === 'flash' ? 'flash' : 'viagem');
+    const btnClasse = p.tipo === 'cargo' ? 'cargo-btn' : 'emerald-btn';
+
+    const cardHtml = `
+      <div class="job-card" id="card-${p.id}">
+        <div class="job-top">
+          <div class="job-badge ${badgeClasse}">${p.subTipoLabel} • #${p.id}</div>
+          <div class="job-distance">📍 Novo Pedido • ${p.horario}</div>
+        </div>
+
+        <div class="job-body">
+          <div class="job-route-line">
+            <div class="route-point">
+              <span class="dot-indicator green"></span>
+              <p>${p.origem}</p>
+            </div>
+            <div class="route-point">
+              <span class="dot-indicator orange"></span>
+              <p>${p.destino} (${p.distancia})</p>
+            </div>
+          </div>
+
+          <div class="job-pricing">
+            <span class="price-tag">${p.preco}</span>
+            <span class="split-info">${p.metodoPgto.toUpperCase()}</span>
+          </div>
+        </div>
+
+        <div class="job-actions">
+          <button type="button" class="btn-job-reject" onclick="document.getElementById('card-${p.id}').remove()">Recusar</button>
+          <button type="button" class="btn-job-accept ${btnClasse}" onclick="aceitarPedidoLocal('${p.id}')">Aceitar</button>
+        </div>
+      </div>
+    `;
+
+    feedChamadas.insertAdjacentHTML('afterbegin', cardHtml);
+  }
+
+  window.aceitarPedidoLocal = (id) => {
+    const card = document.getElementById(`card-${id}`);
+    if (card) {
+      card.innerHTML = `<div style="text-align:center; padding:10px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceite! A iniciar navegação...</div>`;
+      setTimeout(() => card.remove(), 2000);
+    }
+  };
 });
