@@ -11,21 +11,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  // Azulejos do OpenStreetMap com filtro Dark Mode do global.css
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Marcador da posição atual do motorista
-  const driverMarker = L.circleMarker(defaultCoords, {
+  L.circleMarker(defaultCoords, {
     radius: 9,
     color: '#10B981',
     fillColor: '#10B981',
     fillOpacity: 1
   }).addTo(map);
 
-  // Toggle Online/Offline
+  // Alternância Online / Offline
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
@@ -33,11 +31,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnToggleStatus?.addEventListener('click', () => {
     isOnline = !isOnline;
-
     if (isOnline) {
       btnToggleStatus.className = 'btn-status-toggle status-online';
       txtStatusMotorista.textContent = 'ONLINE';
       badgeRadar.innerHTML = '<span class="radar-dot"></span> A rastrear corridas e fretes em Paes Landim...';
+      carregarFilaDePedidos();
     } else {
       btnToggleStatus.className = 'btn-status-toggle status-offline';
       txtStatusMotorista.textContent = 'OFFLINE';
@@ -45,46 +43,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Ações nos cards de corrida
-  document.querySelectorAll('.btn-job-accept').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const card = e.target.closest('.job-card');
-      btn.textContent = 'Rota Aceita! 🚀';
-      btn.style.opacity = '0.8';
-      setTimeout(() => {
-        card.style.display = 'none';
-      }, 1000);
-    });
-  });
-
-  document.querySelectorAll('.btn-job-reject').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const card = e.target.closest('.job-card');
-      card.remove();
-    });
-  });
-  // Canal de escuta de pedidos em tempo real
-  const hubyChannel = new BroadcastChannel('huby_orders_channel');
   const feedChamadas = document.getElementById('feedChamadas');
 
-  hubyChannel.onmessage = (event) => {
-    if (event.data?.tipo === 'NOVO_PEDIDO' && isOnline) {
-      const p = event.data.pedido;
-      inserirCardCorrida(p);
-    }
-  };
+  // Construtor do card HTML da chamada
+  function gerarCardHtml(p) {
+    const isCargo = p.tipo === 'cargo';
+    const isFlash = p.tipo === 'flash';
+    const badgeClasse = isCargo ? 'cargo' : (isFlash ? 'flash' : 'viagem');
+    const btnClasse = isCargo ? 'cargo-btn' : 'emerald-btn';
 
-  function inserirCardCorrida(p) {
-    if (!feedChamadas) return;
-
-    const badgeClasse = p.tipo === 'cargo' ? 'cargo' : (p.tipo === 'flash' ? 'flash' : 'viagem');
-    const btnClasse = p.tipo === 'cargo' ? 'cargo-btn' : 'emerald-btn';
-
-    const cardHtml = `
+    return `
       <div class="job-card" id="card-${p.id}">
         <div class="job-top">
-          <div class="job-badge ${badgeClasse}">${p.subTipoLabel} • #${p.id}</div>
-          <div class="job-distance">📍 Novo Pedido • ${p.horario}</div>
+          <div class="job-badge ${badgeClasse}">${p.subTipoLabel || 'HUBy'} • #${p.id}</div>
+          <div class="job-distance">📍 ${p.horario || 'Agora'}</div>
         </div>
 
         <div class="job-body">
@@ -101,25 +73,68 @@ document.addEventListener('DOMContentLoaded', () => {
 
           <div class="job-pricing">
             <span class="price-tag">${p.preco}</span>
-            <span class="split-info">${p.metodoPgto.toUpperCase()}</span>
+            <span class="split-info">${(p.metodoPgto || 'Pix').toUpperCase()}</span>
           </div>
         </div>
 
         <div class="job-actions">
-          <button type="button" class="btn-job-reject" onclick="document.getElementById('card-${p.id}').remove()">Recusar</button>
-          <button type="button" class="btn-job-accept ${btnClasse}" onclick="aceitarPedidoLocal('${p.id}')">Aceitar</button>
+          <button type="button" class="btn-job-reject" onclick="rejeitarPedido('${p.id}')">Recusar</button>
+          <button type="button" class="btn-job-accept ${btnClasse}" onclick="aceitarPedido('${p.id}')">Aceitar Corrida</button>
         </div>
       </div>
     `;
-
-    feedChamadas.insertAdjacentHTML('afterbegin', cardHtml);
   }
 
-  window.aceitarPedidoLocal = (id) => {
+  // Carrega e desenha os pedidos guardados no localStorage
+  function carregarFilaDePedidos() {
+    if (!feedChamadas) return;
+    const pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+
+    if (pedidos.length === 0) {
+      feedChamadas.innerHTML = `
+        <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
+          Nenhum pedido pendente de momento.<br>Aguardando novas solicitações de passageiros...
+        </div>
+      `;
+      return;
+    }
+
+    feedChamadas.innerHTML = pedidos.map(p => gerarCardHtml(p)).join('');
+  }
+
+  // Ações de aceite e recusa
+  window.aceitarPedido = (id) => {
+    let pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    pedidos = pedidos.filter(p => p.id !== id);
+    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidos));
+
     const card = document.getElementById(`card-${id}`);
     if (card) {
-      card.innerHTML = `<div style="text-align:center; padding:10px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceite! A iniciar navegação...</div>`;
-      setTimeout(() => card.remove(), 2000);
+      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceite! A rota foi enviada para o seu GPS.</div>`;
+      setTimeout(() => card.remove(), 2500);
     }
   };
+
+  window.rejeitarPedido = (id) => {
+    let pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    pedidos = pedidos.filter(p => p.id !== id);
+    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidos));
+
+    const card = document.getElementById(`card-${id}`);
+    if (card) card.remove();
+  };
+
+  // Escuta canal em tempo real se o motorista estiver com a aba aberta
+  try {
+    const hubyChannel = new BroadcastChannel('huby_orders_channel');
+    hubyChannel.onmessage = (event) => {
+      if (event.data?.tipo === 'NOVO_PEDIDO' && isOnline) {
+        carregarFilaDePedidos();
+      }
+    };
+  } catch (e) {
+    console.warn('BroadcastChannel não disponível.', e);
+  }
+
+  carregarFilaDePedidos();
 });
