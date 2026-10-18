@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-PT">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -14,6 +15,7 @@
   <link rel="stylesheet" href="./css/cliente.css">
   <link rel="stylesheet" href="./css/welcome.css">
 </head>
+
 <body>
 
   <div class="app-layout">
@@ -81,23 +83,27 @@
       </footer>
     </div>
 
-    <!-- Cabeçalho Oficial HUBy HUBy -->
-    <header class="huby-header">
-      <a href="./index.html" class="brand-logo">
-        <span class="brand-hub">HUB</span>
-        <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
-        <span class="brand-hub" style="margin-left: 6px;">HUB</span>
-        <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
-      </a>
-      <div class="header-right" style="display:flex; align-items:center; gap:8px;">
-        <span class="wallet-pill" id="btnIrCarteira">🪙 <strong>R$ 0,00</strong></span>
-        <a href="./motorista.html" class="badge-pill">Modo Motorista ➔</a>
+    <!-- Logótipo Vertical com Contraste: Pequeno no topo e Grande embaixo -->
+    <header class="welcome-header">
+      <div class="brand-hero-stacked">
+        <!-- Versão compacta / selo superior -->
+        <div class="brand-row brand-row-small">
+          <span class="brand-hub-small">HUB</span>
+          <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
+        </div>
+
+        <!-- Versão principal de destaque -->
+        <div class="brand-row brand-row-large">
+          <span class="brand-hub-large">HUB</span>
+          <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
+        </div>
       </div>
+      <p class="tagline">Mobilidade urbana, entregas rápidas e fretes na palma da mão.</p>
     </header>
 
     <!-- CONTAINER DAS TELAS DINÂMICAS -->
     <main class="tabs-viewport">
-      
+
       <!-- ABA 1: INÍCIO (MAPA + CHAMADA RÁPIDA) -->
       <section class="tab-view active-view" id="viewInicio">
         <div class="map-wrapper">
@@ -364,4 +370,5 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
 </body>
+
 </html>
