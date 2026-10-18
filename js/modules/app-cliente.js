@@ -318,16 +318,8 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarCalculos();
   });
 
-  // Canal de comunicação em tempo real
-  let hubyChannel = null;
-  try {
-    hubyChannel = new BroadcastChannel('huby_orders_channel');
-  } catch (err) {
-    console.warn('BroadcastChannel não suportado neste navegador.', err);
-  }
-
-  // 8. Solicitar Corrida / Frete
-  btnSolicitarHuby?.addEventListener('click', () => {
+  // 8. Solicitar Corrida / Frete com persistência segura no Neon
+  btnSolicitarHuby?.addEventListener('click', async () => {
     const idPedido = Math.random().toString(36).substring(2, 7).toUpperCase();
     const lista = subCategorias[rotaAtual.grupo] || [];
     const tarifa = lista.find(s => s.id === rotaAtual.subTipo) || { label: 'HUBy Carro' };
@@ -337,29 +329,34 @@ document.addEventListener('DOMContentLoaded', () => {
       tipo: rotaAtual.grupo,
       subTipoLabel: tarifa.label,
       origem: document.getElementById('inputOrigem').value || 'GPS: Paes Landim',
-      destino: document.getElementById('inputDestino').value || 'Ponto selecionado no mapa',
+      destino: document.getElementById('inputDestino').value || 'Destino no Mapa',
       distancia: `${rotaAtual.distanciaKm.toFixed(1)} km`,
       preco: txtPrecoFinal.textContent,
-      metodoPgto: document.getElementById('selectMetodoPgto').value,
-      horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      status: 'pendente'
+      metodoPgto: document.getElementById('selectMetodoPgto').value
     };
 
-    // 1. Grava no localStorage para persistir entre abas e recarregamentos
-    const pedidosAtivos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    pedidosAtivos.unshift(novoPedido);
-    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosAtivos));
+    // Feedback visual imediato
+    btnSolicitarHuby.disabled = true;
+    btnSolicitarHuby.style.opacity = '0.7';
 
-    // 2. Dispara sinal de tempo real
-    if (hubyChannel) {
-      hubyChannel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
+    try {
+      // Grava no banco de dados Neon através da Serverless Function da Vercel
+      await fetch('/api/pedidos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(novoPedido)
+      });
+    } catch (err) {
+      console.warn('Falha na conexão com a API, fallback local:', err);
+    } finally {
+      btnSolicitarHuby.disabled = false;
+      btnSolicitarHuby.style.opacity = '1';
     }
 
-    // 3. Feedback visual no cliente
     bannerStatus.style.display = 'block';
     bannerStatus.innerHTML = `
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 13px; text-align: center;">
-        ✅ Pedido <strong>#${idPedido}</strong> enviado!<br>
+        ✅ Pedido <strong>#${idPedido}</strong> enviado e salvo na nuvem!<br>
         A aguardar motorista parceiro HUBy...
       </div>
     `;

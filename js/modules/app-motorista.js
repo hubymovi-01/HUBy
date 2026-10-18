@@ -11,11 +11,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
+  // Azulejos do OpenStreetMap com filtro Dark Mode do global.css
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
+  // Marcador da posição atual do motorista
   L.circleMarker(defaultCoords, {
     radius: 9,
     color: '#10B981',
@@ -23,14 +25,16 @@ document.addEventListener('DOMContentLoaded', () => {
     fillOpacity: 1
   }).addTo(map);
 
-  // Alternância Online / Offline
+  // Toggle Online/Offline
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
+  const feedChamadas = document.getElementById('feedChamadas');
   let isOnline = true;
 
   btnToggleStatus?.addEventListener('click', () => {
     isOnline = !isOnline;
+
     if (isOnline) {
       btnToggleStatus.className = 'btn-status-toggle status-online';
       txtStatusMotorista.textContent = 'ONLINE';
@@ -42,8 +46,6 @@ document.addEventListener('DOMContentLoaded', () => {
       badgeRadar.innerHTML = '⏸️ Modo pausa ativo. Fique online para receber pedidos.';
     }
   });
-
-  const feedChamadas = document.getElementById('feedChamadas');
 
   // Construtor do card HTML da chamada
   function gerarCardHtml(p) {
@@ -85,12 +87,36 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
-  // Carrega e desenha os pedidos guardados no localStorage
-  function carregarFilaDePedidos() {
+  // Carrega e desenha os pedidos (tenta via API segura do Neon na Vercel; fallback para localStorage)
+  async function carregarFilaDePedidos() {
     if (!feedChamadas) return;
-    const pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
 
-    if (pedidos.length === 0) {
+    try {
+      const resposta = await fetch('/api/pedidos?status=pendente');
+      if (resposta.ok) {
+        const pedidosApi = await resposta.json();
+        if (pedidosApi && pedidosApi.length > 0) {
+          feedChamadas.innerHTML = pedidosApi.map(p => gerarCardHtml({
+            id: p.id,
+            tipo: p.tipo,
+            subTipoLabel: p.sub_tipo_label,
+            origem: p.origem,
+            destino: p.destino,
+            distancia: p.distancia,
+            preco: p.preco,
+            metodoPgto: p.metodo_pgto,
+            horario: new Date(p.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          })).join('');
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn('API /api/pedidos indisponível no momento, buscando do cache local.', e);
+    }
+
+    // Leitura local
+    const pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    if (pedidosLocais.length === 0) {
       feedChamadas.innerHTML = `
         <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
           Nenhum pedido pendente de momento.<br>Aguardando novas solicitações de passageiros...
@@ -99,32 +125,44 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    feedChamadas.innerHTML = pedidos.map(p => gerarCardHtml(p)).join('');
+    feedChamadas.innerHTML = pedidosLocais.map(p => gerarCardHtml(p)).join('');
   }
 
-  // Ações de aceite e recusa
-  window.aceitarPedido = (id) => {
-    let pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    pedidos = pedidos.filter(p => p.id !== id);
-    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidos));
+  // Ações de aceite e recusa globais
+  window.aceitarPedido = async (id) => {
+    // 1. Tenta atualizar status no banco Neon
+    try {
+      await fetch('/api/pedidos', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, novoStatus: 'em_andamento' })
+      });
+    } catch (e) {
+      console.warn('Não foi possível persistir status na API.', e);
+    }
+
+    // 2. Remove do cache local
+    let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    pedidosLocais = pedidosLocais.filter(p => p.id !== id);
+    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
     const card = document.getElementById(`card-${id}`);
     if (card) {
-      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceite! A rota foi enviada para o seu GPS.</div>`;
+      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceita! A rota foi enviada para o seu GPS.</div>`;
       setTimeout(() => card.remove(), 2500);
     }
   };
 
-  window.rejeitarPedido = (id) => {
-    let pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    pedidos = pedidos.filter(p => p.id !== id);
-    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidos));
+  window.rejeitarPedido = async (id) => {
+    let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    pedidosLocais = pedidosLocais.filter(p => p.id !== id);
+    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
     const card = document.getElementById(`card-${id}`);
     if (card) card.remove();
   };
 
-  // Escuta canal em tempo real se o motorista estiver com a aba aberta
+  // Canal de escuta em tempo real (para quando as abas estiverem abertas simultaneamente)
   try {
     const hubyChannel = new BroadcastChannel('huby_orders_channel');
     hubyChannel.onmessage = (event) => {
@@ -132,9 +170,10 @@ document.addEventListener('DOMContentLoaded', () => {
         carregarFilaDePedidos();
       }
     };
-  } catch (e) {
-    console.warn('BroadcastChannel não disponível.', e);
+  } catch (err) {
+    console.warn('BroadcastChannel não suportado neste navegador.', err);
   }
 
+  // Carrega ao abrir
   carregarFilaDePedidos();
 });
