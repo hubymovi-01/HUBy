@@ -1,6 +1,34 @@
 // ./js/modules/app-cliente.js
 
 document.addEventListener('DOMContentLoaded', () => {
+  // 0. Gestão da Tela de Entrada (Splash Screen / Onboarding)
+  const splash = document.getElementById('splashScreen');
+  const btnEntrar = document.getElementById('btnEntrarApp');
+
+  btnEntrar?.addEventListener('click', () => {
+    splash?.classList.add('fechado');
+    if (window.hubyMap) {
+      setTimeout(() => window.hubyMap.invalidateSize(), 300);
+    }
+  });
+
+  // Rotação dos slides na tela de entrada
+  const pillarCards = document.querySelectorAll('.pillar-card');
+  const dots = document.querySelectorAll('.slide-dots .dot');
+  let currentPillar = 0;
+
+  if (pillarCards.length > 0) {
+    setInterval(() => {
+      currentPillar = (currentPillar + 1) % pillarCards.length;
+      pillarCards.forEach((card, idx) => {
+        card.classList.toggle('active', idx === currentPillar);
+      });
+      dots.forEach((dot, idx) => {
+        dot.classList.toggle('active', idx === currentPillar);
+      });
+    }, 3500);
+  }
+
   // 1. Alternância de Abas na Barra Inferior
   const navItems = document.querySelectorAll('.bottom-nav .nav-item');
   const tabViews = document.querySelectorAll('.tab-view');
@@ -15,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const activeNav = document.querySelector(`.bottom-nav .nav-item[data-tab="${targetId}"]`);
     if (activeNav) activeNav.classList.add('active');
 
-    // Se voltou para o mapa, recalcula tamanho para evitar distorções
     if (targetId === 'viewInicio' && window.hubyMap) {
       setTimeout(() => window.hubyMap.invalidateSize(), 150);
     }
@@ -44,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 2. Inicialização do Mapa Leaflet com OpenStreetMap (Dark Filter)
-  const defaultCoords = [-7.7735, -42.2472]; // Piauí
+  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim - PI
   const map = L.map('mapaCliente', {
     zoomControl: false
   }).setView(defaultCoords, 14);
@@ -146,7 +173,7 @@ document.addEventListener('DOMContentLoaded', () => {
     rotaAtual.subTipo = lista[0]?.id || 'carro';
   }
 
-  // 3. Clique nas Tabs do Painel de Pedido
+  // 3. Alternância dos Grupos Principais
   document.querySelectorAll('.tab-card').forEach(tab => {
     tab.addEventListener('click', () => {
       document.querySelectorAll('.tab-card').forEach(t => {
@@ -203,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarCalculos();
   });
 
-  // 5. Atualização de Valores
+  // 5. Cálculo Dinâmico de Valores
   function atualizarCalculos() {
     let tarifa = null;
     const lista = subCategorias[rotaAtual.grupo] || [];
@@ -228,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
     txtBotaoAcao.textContent = `Chamar ${tarifa.label.replace(/^[^\s]+ /, '')}`;
   }
 
-  // 6. Geolocalização
+  // 6. Geolocalização (GPS)
   const btnLocalizarGPS = document.getElementById('btnLocalizarGPS');
   btnLocalizarGPS?.addEventListener('click', () => {
     if (!navigator.geolocation) return;
@@ -263,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   });
 
-  // 7. Clique no Mapa
+  // 7. Clique no Mapa para Seleção de Destino
   map.on('click', (e) => {
     const coords = e.latlng;
 
