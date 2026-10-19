@@ -25,7 +25,7 @@
       <div class="glow-bg top-glow"></div>
       <div class="glow-bg bottom-glow"></div>
 
-      <!-- Logótipo Vertical com Contraste: Pequeno no topo e Grande embaixo -->
+      <!-- Logótipo Vertical com Contraste -->
       <header class="welcome-header">
         <div class="brand-hero-stacked">
           <!-- Versão compacta / selo superior -->
@@ -283,7 +283,7 @@
             <div class="profile-avatar">TC</div>
             <div class="profile-details">
               <h2>Tarcyo Carvalho</h2>
-              <div class="profile-rating">⭐ 5.0 <span>• Passageiro VIP</span></div>
+              <div class="profile-rating">⭐ 5.0 <span>Passageiro VIP</span></div>
             </div>
           </div>
 
@@ -374,7 +374,11 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/HUBy/service-worker.js')
+        const swPath = window.location.pathname.includes('/HUBy')
+          ? '/HUBy/service-worker.js'
+          : './service-worker.js';
+
+        navigator.serviceWorker.register(swPath)
           .then(reg => console.log('Service Worker HUBy registrado:', reg.scope))
           .catch(err => console.warn('Erro ao registrar Service Worker:', err));
       });
