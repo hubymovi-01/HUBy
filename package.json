@@ -2,6 +2,7 @@
   "name": "huby-huby",
   "version": "1.0.0",
   "description": "HUBy HUBy - Superapp de Mobilidade, Entregas Flash e Fretes Cargo",
+  "type": "module",
   "main": "index.html",
   "scripts": {
     "start": "serve ."
