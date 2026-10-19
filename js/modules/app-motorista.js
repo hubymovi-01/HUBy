@@ -1,6 +1,7 @@
 // ./js/modules/app-motorista.js
 
 document.addEventListener('DOMContentLoaded', () => {
+  const API_URL = 'https://huby.onrender.com';
   const mapElement = document.getElementById('mapaMotorista');
   if (!mapElement) return;
 
@@ -11,13 +12,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  // Azulejos do OpenStreetMap com filtro Dark Mode
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Marcador da posição atual do motorista
   L.circleMarker(defaultCoords, {
     radius: 9,
     color: '#10B981',
@@ -25,7 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fillOpacity: 1
   }).addTo(map);
 
-  // Controle de Status Online / Offline
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
@@ -59,7 +57,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Filtros de Categoria (Todos, Carro, Flash, Cargo)
   document.querySelectorAll('.tab-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       document.querySelectorAll('.tab-chip').forEach(c => c.classList.remove('active'));
@@ -69,7 +66,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Construtor do card HTML da chamada (Corrigido)
   function gerarCardHtml(p) {
     const isCargo = p.tipo === 'cargo';
     const isFlash = p.tipo === 'flash';
@@ -109,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
-  // Componente de Estado Vazio Profissional
   function renderEmptyState() {
     return `
       <div class="empty-jobs-state">
@@ -120,15 +115,14 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
-  // Carrega e desenha os pedidos (API Neon na Vercel + Fallback LocalStorage)
   async function carregarFilaDePedidos() {
     if (!feedChamadas || !isOnline) return;
 
     let listaPedidos = [];
 
-    // 1. Tenta buscar da API na nuvem (Vercel/Neon)
+    // 1. Consulta remota no Neon via Render
     try {
-      const resposta = await fetch('/api/pedidos?status=pendente');
+      const resposta = await fetch(`${API_URL}/api/pedidos?status=pendente`);
       if (resposta.ok) {
         const pedidosApi = await resposta.json();
         if (Array.isArray(pedidosApi) && pedidosApi.length > 0) {
@@ -146,23 +140,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     } catch (e) {
-      console.warn('API /api/pedidos em modo estático local.', e);
+      console.warn('Falha na ligação com Render, usando cache local.', e);
     }
 
-    // 2. Se a API estiver vazia ou offline, busca da fila persistente do localStorage
+    // 2. Fallback de contingência local
     if (listaPedidos.length === 0) {
       listaPedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     }
 
-    // 3. Aplica o filtro de abas (todos, viagem/carro, flash, cargo)
+    // 3. Filtragem de abas
     if (filtroAtual !== 'todos') {
       listaPedidos = listaPedidos.filter(p => {
         if (filtroAtual === 'carro') return p.tipo === 'carro' || p.tipo === 'viagem';
-        return p.tipo === 'flash' ? p.tipo === 'flash' : p.tipo === 'cargo';
+        return p.tipo === filtroAtual;
       });
     }
 
-    // 4. Renderiza
     if (listaPedidos.length === 0) {
       feedChamadas.innerHTML = renderEmptyState();
       return;
@@ -171,16 +164,15 @@ document.addEventListener('DOMContentLoaded', () => {
     feedChamadas.innerHTML = listaPedidos.map(p => gerarCardHtml(p)).join('');
   }
 
-  // Ações de aceite e recusa globais
   window.aceitarPedido = async (id) => {
     try {
-      await fetch('/api/pedidos', {
+      await fetch(`${API_URL}/api/pedidos`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, novoStatus: 'em_andamento' })
       });
     } catch (e) {
-      console.warn('API indisponível para PATCH.', e);
+      console.warn('Erro ao atualizar no Render:', e);
     }
 
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
@@ -189,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const card = document.getElementById(`card-${id}`);
     if (card) {
-      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceita! Iniciando rota no GPS...</div>`;
+      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceite! Iniciando rota no GPS...</div>`;
       setTimeout(() => {
         card.remove();
         carregarFilaDePedidos();
@@ -209,7 +201,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Canal de escuta em tempo real
+  // Atualização periódica automática (polling a cada 8 segundos)
+  setInterval(() => {
+    if (isOnline) carregarFilaDePedidos();
+  }, 8000);
+
+  // Escuta instantânea entre abas abertas no mesmo navegador
   try {
     const hubyChannel = new BroadcastChannel('huby_orders_channel');
     hubyChannel.onmessage = (event) => {
@@ -217,10 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
         carregarFilaDePedidos();
       }
     };
-  } catch (err) {
-    console.warn('BroadcastChannel não suportado.', err);
-  }
+  } catch (err) {}
 
-  // Carregamento inicial
   carregarFilaDePedidos();
 });
