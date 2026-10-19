@@ -1,49 +1,53 @@
 /* ==========================================================================
-   HUBy HUBy - Painel do Motorista Ultra-Clean & Alinhado
+   HUBy - Painel do Motorista (100% Fullscreen Mobile)
    ========================================================================== */
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
 
 html, body {
   width: 100%;
   height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow: hidden;
-  background-color: var(--bg-deep, #080C14);
+  background-color: #080C14;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #FFFFFF;
 }
 
+/* Container de Tela Cheia Real */
 .driver-layout {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100vh;
   height: 100dvh;
-  width: 100%;
-  max-width: 480px;
-  margin: 0 auto;
   position: relative;
   overflow: hidden;
 }
 
-/* 1. CABEÇALHO COMPACTO */
+/* CABEÇALHO FLUTUANTE COMPACTO */
 .driver-header {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  right: 10px;
+  top: 12px;
+  left: 12px;
+  right: 12px;
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(13, 20, 36, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(13, 20, 36, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  padding: 8px 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  padding: 10px 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
 }
 
 .header-left {
@@ -53,17 +57,17 @@ html, body {
 }
 
 .driver-avatar {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: linear-gradient(135deg, #10B981, #059669);
   color: #03251e;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 900;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
 }
 
 .driver-meta {
@@ -79,17 +83,17 @@ html, body {
 }
 
 .d-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 800;
   color: #FFFFFF;
 }
 
 .d-badge {
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 800;
   color: #FBBF24;
-  background: rgba(251, 191, 36, 0.12);
-  padding: 1px 5px;
+  background: rgba(251, 191, 36, 0.15);
+  padding: 1px 6px;
   border-radius: 6px;
 }
 
@@ -111,7 +115,7 @@ html, body {
 .btn-toggle-online {
   border: none;
   border-radius: 20px;
-  padding: 6px 12px;
+  padding: 7px 13px;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.5px;
@@ -125,13 +129,13 @@ html, body {
 .btn-toggle-online.status-online {
   background: rgba(16, 185, 129, 0.2);
   color: #10B981;
-  border: 1px solid rgba(16, 185, 129, 0.4);
+  border: 1px solid rgba(16, 185, 129, 0.45);
 }
 
 .btn-toggle-online.status-offline {
   background: rgba(239, 68, 68, 0.2);
   color: #EF4444;
-  border: 1px solid rgba(239, 68, 68, 0.4);
+  border: 1px solid rgba(239, 68, 68, 0.45);
 }
 
 .pulse-indicator {
@@ -149,21 +153,28 @@ html, body {
 }
 
 .btn-mode-icon {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #FFFFFF;
   text-decoration: none;
-  padding: 6px 8px;
-  border-radius: 10px;
-  font-size: 12px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* 2. ÁREA DO MAPA E ELEMENTOS FLUTUANTES */
+/* ÁREA TOTAL DO MAPA */
 .driver-map-wrapper {
-  flex: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
-  position: relative;
+  z-index: 1;
 }
 
 #mapaMotorista {
@@ -172,17 +183,17 @@ html, body {
   background: #080C14;
 }
 
-/* Pílula do radar posicionada sem colidir com o cabeçalho */
+/* Pílula do radar (Abaixo do cabeçalho sem colidir) */
 .radar-status-badge {
   position: absolute;
-  top: 78px;
+  top: 80px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 999;
   background: rgba(13, 20, 36, 0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(16, 185, 129, 0.35);
+  border: 1px solid rgba(16, 185, 129, 0.4);
   border-radius: 20px;
   padding: 6px 14px;
   display: flex;
@@ -191,7 +202,7 @@ html, body {
   font-size: 11px;
   font-weight: 700;
   color: #E2E8F0;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
   white-space: nowrap;
 }
 
@@ -200,8 +211,8 @@ html, body {
   height: 8px;
   border-radius: 50%;
   background: #10B981;
-  position: relative;
   box-shadow: 0 0 8px #10B981;
+  position: relative;
 }
 
 .radar-ring-pulse::after {
@@ -218,11 +229,11 @@ html, body {
   100% { transform: scale(2.4); opacity: 0; }
 }
 
-/* Botão flutuante de GPS */
+/* Botão de Recentralizar GPS */
 .btn-recenter-gps {
   position: absolute;
-  right: 14px;
-  bottom: 230px;
+  right: 16px;
+  bottom: 275px;
   z-index: 999;
   width: 44px;
   height: 44px;
@@ -235,7 +246,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
   transition: transform 0.15s ease;
 }
 
@@ -243,41 +254,44 @@ html, body {
   transform: scale(0.92);
 }
 
-/* Reposicionar os controlos de zoom do Leaflet para não sobrepor o dock */
 .leaflet-bottom.leaflet-right {
-  bottom: 210px !important;
-  right: 14px !important;
+  bottom: 270px !important;
+  right: 16px !important;
 }
 
-/* 3. PAINEL INFERIOR (DOCK) */
+/* PAINEL INFERIOR (BOTTOM SHEET) */
 .driver-bottom-dock {
-  position: relative;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
   z-index: 1000;
-  background: rgba(10, 16, 30, 0.98);
+  background: rgba(10, 16, 30, 0.97);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-radius: 20px 20px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 8px 12px 20px;
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.6);
-  max-height: 42vh;
+  border-radius: 24px 24px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 14px 24px;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.65);
+  max-height: 46vh;
   display: flex;
   flex-direction: column;
 }
 
 .dock-grabber {
-  width: 36px;
+  width: 38px;
   height: 4px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 0 auto 8px;
+  background: rgba(255, 255, 255, 0.25);
+  margin: 0 auto 10px;
 }
 
 .dock-filters {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding-bottom: 6px;
   margin-bottom: 8px;
   scrollbar-width: none;
 }
@@ -287,10 +301,10 @@ html, body {
 }
 
 .filter-pill {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #94A3B8;
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 700;
@@ -299,7 +313,7 @@ html, body {
 }
 
 .filter-pill.active {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.18);
   border-color: #10B981;
   color: #10B981;
 }
@@ -310,18 +324,18 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
 }
 
-/* 4. CARTÃO DE CHAMADA */
+/* CARD DE CORRIDA */
 .job-card {
-  background: rgba(18, 27, 47, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 10px;
+  background: rgba(18, 27, 47, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .job-top {
@@ -376,13 +390,13 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.35);
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 7px 10px;
 }
 
 .price-tag {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 900;
   color: #10B981;
 }
@@ -403,7 +417,7 @@ html, body {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #94A3B8;
-  padding: 8px;
+  padding: 9px;
   border-radius: 8px;
   font-weight: 700;
   font-size: 12px;
@@ -413,7 +427,7 @@ html, body {
 .btn-job-accept {
   border: none;
   border-radius: 8px;
-  padding: 8px;
+  padding: 9px;
   font-weight: 900;
   font-size: 12px;
   cursor: pointer;
@@ -429,18 +443,18 @@ html, body {
   color: #FFFFFF;
 }
 
-/* 5. ESTADO VAZIO */
+/* ESTADO VAZIO */
 .empty-jobs-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px 8px;
+  padding: 18px 10px;
   text-align: center;
   gap: 4px;
 }
 
 .empty-radar-icon {
-  font-size: 22px;
+  font-size: 24px;
   margin-bottom: 4px;
 }
 
@@ -453,5 +467,5 @@ html, body {
 .empty-sub {
   font-size: 11px;
   color: #64748B;
-  max-width: 260px;
+  max-width: 280px;
 }
