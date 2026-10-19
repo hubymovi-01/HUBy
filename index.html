@@ -371,6 +371,15 @@
   <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/HUBy/service-worker.js')
+          .then(reg => console.log('Service Worker HUBy registrado:', reg.scope))
+          .catch(err => console.warn('Erro ao registrar Service Worker:', err));
+      });
+    }
+  </script>
 </body>
 
 </html>
