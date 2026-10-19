@@ -5,11 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const mapElement = document.getElementById('mapaMotorista');
   if (!mapElement) return;
 
-  // Coordenadas de contingência (caso o usuário negue o GPS)
-  const defaultCoords = [-7.7735, -42.2472];
+  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback)
   let motoristaCoords = [...defaultCoords];
 
-  // Inicia o mapa inicialmente nas coordenadas padrão
   const map = L.map('mapaMotorista', {
     zoomControl: false
   }).setView(defaultCoords, 15);
@@ -21,7 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Ícone/marcador de posição do motorista
+  // Marcador do Motorista
   const markerMotorista = L.circleMarker(defaultCoords, {
     radius: 10,
     color: '#10B981',
@@ -30,15 +28,12 @@ document.addEventListener('DOMContentLoaded', () => {
     weight: 3
   }).addTo(map);
 
-  // Invalidação imediata do mapa para evitar blocos cinzas
+  // Recalcular dimensões do mapa imediatamente e em intervalos para eliminar áreas cinzentas
   map.invalidateSize();
   setTimeout(() => map.invalidateSize(), 250);
   setTimeout(() => map.invalidateSize(), 600);
   window.addEventListener('resize', () => map.invalidateSize());
 
-  // =========================================================================
-  // GEOLOCALIZAÇÃO IMEDIATA E CONTÍNUA (SEMPRE NA POSIÇÃO REAL DO MOTORISTA)
-  // =========================================================================
   function focarNoGPS(latitude, longitude, zoom = 16) {
     motoristaCoords = [latitude, longitude];
     markerMotorista.setLatLng(motoristaCoords);
@@ -46,8 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
     map.invalidateSize();
   }
 
+  // 1. Localização em tempo real imediata ao abrir o ecrã
   if ('geolocation' in navigator) {
-    // 1. Captura imediata ao entrar na página
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
@@ -63,7 +58,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     );
 
-    // 2. Rastreamento ativo: se o motorista se mover, atualiza a posição
     navigator.geolocation.watchPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
@@ -83,9 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     focarNoGPS(motoristaCoords[0], motoristaCoords[1], 16);
   });
 
-  // =========================================================================
-  // GESTÃO DO RADAR E DOS PEDIDOS
-  // =========================================================================
+  // Gestão de Status Online / Offline
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
@@ -119,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Filtros
   document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
