@@ -1,15 +1,16 @@
 {
-  "name": "HUBy - Mobilidade, Entregas e Fretes",
+  "name": "HUBy HUBy",
   "short_name": "HUBy",
-  "start_url": "/index.html",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#090D16",
-  "theme_color": "#10B981",
+  "background_color": "#080C14",
+  "theme_color": "#080C14",
   "icons": [
     {
-      "src": "./assets/img/icone_app_huby.png",
+      "src": "./icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
