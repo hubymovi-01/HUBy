@@ -1,6 +1,9 @@
 // ./js/modules/app-cliente.js
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Constante da API de Produção no Render
+  const API_URL = 'https://huby.onrender.com';
+
   // 0. Gestão da Tela de Entrada (Splash Screen / Onboarding)
   const splash = document.getElementById('splashScreen');
   const btnEntrar = document.getElementById('btnEntrarApp');
@@ -318,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarCalculos();
   });
 
-  // 8. Solicitar Corrida / Frete (Híbrido: Local + API Neon)
+  // 8. Solicitar Corrida / Frete (Híbrido: LocalStorage + API Neon no Render)
   btnSolicitarHuby?.addEventListener('click', async () => {
     const idPedido = Math.random().toString(36).substring(2, 7).toUpperCase();
     const lista = subCategorias[rotaAtual.grupo] || [];
@@ -342,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pedidosLocais.unshift(novoPedido);
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
-    // 2. Disparo via BroadcastChannel para abas abertas
+    // 2. Disparo via BroadcastChannel para abas abertas simultâneas
     try {
       const hubyChannel = new BroadcastChannel('huby_orders_channel');
       hubyChannel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
@@ -350,20 +353,23 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('BroadcastChannel não suportado:', e);
     }
 
-    // 3. Envio assíncrono para a API (quando hospedado na Vercel)
+    // 3. Envio para a API ativa no Render com gravação no Neon
     try {
-      fetch('/api/pedidos', {
+      fetch(`${API_URL}/api/pedidos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(novoPedido)
-      }).catch(err => console.log('Ambiente estático (GitHub Pages), usando fila local.'));
+      })
+      .then(res => res.json())
+      .then(dados => console.log('✅ Pedido gravado no Neon via Render:', dados))
+      .catch(err => console.warn('Aviso: Falha ao sincronizar com Render, mantido localmente.', err));
     } catch (e) {}
 
     // 4. Feedback no ecrã
     bannerStatus.style.display = 'block';
     bannerStatus.innerHTML = `
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 13px; text-align: center;">
-        ✅ Pedido <strong>#${idPedido}</strong> enviado!<br>
+        ✅ Pedido <strong>#${idPedido}</strong> enviado com sucesso!<br>
         A aguardar motorista parceiro HUBy...
       </div>
     `;
