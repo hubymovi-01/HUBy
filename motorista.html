@@ -4,13 +4,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy HUby - Painel do Motorista</title>
+  <title>HUBy Motorista - Radar em Tempo Real</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Estilos Globais e do Motorista -->
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/motorista.css">
 </head>
@@ -18,70 +17,59 @@
 <body>
   <div class="driver-layout">
 
-    <!-- BARRA SUPERIOR DO MOTORISTA (GLASS FLUTUANTE) -->
-    <header class="driver-topbar">
-      <div class="driver-profile-pill">
-        <div class="avatar-circle">TC</div>
-        <div class="profile-info">
-          <span class="driver-name">Tarcyo C.</span>
-          <span class="driver-rating">⭐ 4.98</span>
+    <!-- CABEÇALHO UNIFICADO E COMPACTO -->
+    <header class="driver-header">
+      <div class="header-left">
+        <div class="driver-avatar">TC</div>
+        <div class="driver-meta">
+          <div class="meta-row">
+            <span class="d-name">Tarcyo</span>
+            <span class="d-badge">⭐ 4.98</span>
+          </div>
+          <span class="d-earnings" id="statGanhosHoje">Hoje: <strong>R$ 184,50</strong> (7 corridas)</span>
         </div>
       </div>
 
-      <div class="topbar-actions">
-        <button type="button" id="btnToggleStatus" class="btn-status-toggle status-online">
-          <span class="status-pulse-dot"></span>
-          <strong id="txtStatusMotorista">ONLINE</strong>
+      <div class="header-right">
+        <button type="button" id="btnToggleStatus" class="btn-toggle-online status-online">
+          <span class="pulse-indicator"></span>
+          <span id="txtStatusMotorista">ONLINE</span>
         </button>
-        <a href="./index.html" class="btn-mode-switch">Modo Passageiro ➔</a>
+        <a href="./index.html" class="btn-mode-icon" title="Voltar para Modo Passageiro">🔄</a>
       </div>
     </header>
 
-    <!-- CARDS DE METRICAS FLUTUANTES -->
-    <section class="driver-stats-bar">
-      <div class="stat-card">
-        <span class="stat-label">Ganhos Hoje</span>
-        <strong class="stat-val highlight" id="statGanhosHoje">R$ 184,50</strong>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-card">
-        <span class="stat-label">Corridas</span>
-        <strong class="stat-val" id="statCorridasHoje">7</strong>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat-card">
-        <span class="stat-label">Carteira</span>
-        <strong class="stat-val" id="statSaldoCarteira">R$ 412,00</strong>
-      </div>
-    </section>
-
-    <!-- MAPA DO MOTORISTA -->
-    <main class="driver-map-viewport">
+    <!-- ÁREA TOTAL DO MAPA -->
+    <main class="driver-map-wrapper">
       <div id="mapaMotorista"></div>
 
-      <!-- Pílula Flutuante de Radar de Satélite -->
-      <div class="radar-pill" id="badgeRadarStatus">
-        <span class="radar-ring"></span>
-        <span class="radar-center"></span>
-        <span id="txtRadarStatus">Radar ativo • A procurar corridas e fretes...</span>
+      <!-- Pílula de Radar Discreta -->
+      <div class="radar-status-badge" id="badgeRadarStatus">
+        <span class="radar-ring-pulse"></span>
+        <span id="txtRadarStatus">A rastrear chamadas...</span>
       </div>
+
+      <!-- Botão Flutuante de Recentralizar GPS -->
+      <button type="button" id="btnRecenterGPS" class="btn-recenter-gps" aria-label="Recentralizar GPS">
+        📍
+      </button>
     </main>
 
-    <!-- BOTTOM SHEET DE CHAMADAS / RADAR -->
-    <section class="driver-sheet">
-      <div class="sheet-handle"></div>
+    <!-- PAINEL DESLIZANTE INFERIOR (FEED DE CHAMADAS) -->
+    <section class="driver-bottom-dock">
+      <div class="dock-grabber"></div>
 
-      <!-- Filtro Rápido de Categorias -->
-      <div class="driver-filter-tabs">
-        <button type="button" class="tab-chip active" data-filter="todos">Todos</button>
-        <button type="button" class="tab-chip" data-filter="carro">🚗 Viagem</button>
-        <button type="button" class="tab-chip" data-filter="flash">📦 Flash</button>
-        <button type="button" class="tab-chip" data-filter="cargo">🚚 Cargo</button>
+      <!-- Filtros em Pílulas -->
+      <div class="dock-filters">
+        <button type="button" class="filter-pill active" data-filter="todos">Todos</button>
+        <button type="button" class="filter-pill" data-filter="carro">🚗 Viagem</button>
+        <button type="button" class="filter-pill" data-filter="flash">📦 Flash</button>
+        <button type="button" class="filter-pill" data-filter="cargo">🚚 Cargo</button>
       </div>
 
-      <!-- Feed Dinâmico de Pedidos -->
-      <div class="jobs-stream" id="feedChamadas">
-        <!-- Injetado dinamicamente via JS -->
+      <!-- Lista de Chamadas / Estado Vazio -->
+      <div class="driver-feed" id="feedChamadas">
+        <!-- Renderizado dinamicamente via JS -->
       </div>
     </section>
 

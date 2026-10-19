@@ -6,6 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!mapElement) return;
 
   const defaultCoords = [-7.7735, -42.2472]; // Paes Landim
+  let motoristaCoords = [...defaultCoords];
+
   const map = L.map('mapaMotorista', {
     zoomControl: false
   }).setView(defaultCoords, 14);
@@ -17,13 +19,36 @@ document.addEventListener('DOMContentLoaded', () => {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  L.circleMarker(defaultCoords, {
+  // Marcador de posição
+  const markerMotorista = L.circleMarker(defaultCoords, {
     radius: 9,
     color: '#10B981',
     fillColor: '#10B981',
     fillOpacity: 1
   }).addTo(map);
 
+  // CORREÇÃO CRÍTICA DO MAPA CINZA: Recalcula o tamanho após a renderização
+  setTimeout(() => {
+    map.invalidateSize();
+  }, 250);
+
+  // Obter GPS real se disponível
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((pos) => {
+      motoristaCoords = [pos.coords.latitude, pos.coords.longitude];
+      markerMotorista.setLatLng(motoristaCoords);
+      map.setView(motoristaCoords, 15);
+      map.invalidateSize();
+    }, () => {}, { enableHighAccuracy: true });
+  }
+
+  // Botão de recentralizar GPS
+  document.getElementById('btnRecenterGPS')?.addEventListener('click', () => {
+    map.setView(motoristaCoords, 15, { animate: true });
+    map.invalidateSize();
+  });
+
+  // Toggle Online/Offline
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
@@ -36,32 +61,33 @@ document.addEventListener('DOMContentLoaded', () => {
     isOnline = !isOnline;
 
     if (isOnline) {
-      btnToggleStatus.className = 'btn-status-toggle status-online';
+      btnToggleStatus.className = 'btn-toggle-online status-online';
       txtStatusMotorista.textContent = 'ONLINE';
-      if (txtRadarStatus) txtRadarStatus.textContent = 'Radar ativo • A procurar corridas e fretes...';
+      if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas...';
       if (badgeRadar) badgeRadar.style.display = 'flex';
       carregarFilaDePedidos();
     } else {
-      btnToggleStatus.className = 'btn-status-toggle status-offline';
+      btnToggleStatus.className = 'btn-toggle-online status-offline';
       txtStatusMotorista.textContent = 'OFFLINE';
-      if (txtRadarStatus) txtRadarStatus.textContent = '⏸️ Modo pausa ativo. Fique online para receber pedidos.';
+      if (txtRadarStatus) txtRadarStatus.textContent = '⏸️ Modo pausa ativo';
       if (feedChamadas) {
         feedChamadas.innerHTML = `
           <div class="empty-jobs-state">
-            <div class="empty-radar-icon" style="border-color: rgba(239, 68, 68, 0.3); color: #EF4444;">⏸️</div>
+            <div class="empty-radar-icon">⏸️</div>
             <div class="empty-title">Modo Offline Ativo</div>
-            <div class="empty-sub">Ative o botão ONLINE no topo para voltar a receber solicitações.</div>
+            <div class="empty-sub">Fique online para voltar a receber corridas e fretes.</div>
           </div>
         `;
       }
     }
   });
 
-  document.querySelectorAll('.tab-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      document.querySelectorAll('.tab-chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      filtroAtual = chip.getAttribute('data-filter') || 'todos';
+  // Filtros em abas
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      filtroAtual = pill.getAttribute('data-filter') || 'todos';
       carregarFilaDePedidos();
     });
   });
@@ -120,7 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let listaPedidos = [];
 
-    // 1. Consulta remota no Neon via Render
+    // 1. Consulta Render / Neon
     try {
       const resposta = await fetch(`${API_URL}/api/pedidos?status=pendente`);
       if (resposta.ok) {
@@ -140,15 +166,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     } catch (e) {
-      console.warn('Falha na ligação com Render, usando cache local.', e);
+      console.warn('Usando armazenamento local.', e);
     }
 
-    // 2. Fallback de contingência local
+    // 2. Fallback Local
     if (listaPedidos.length === 0) {
       listaPedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     }
 
-    // 3. Filtragem de abas
+    // 3. Filtro
     if (filtroAtual !== 'todos') {
       listaPedidos = listaPedidos.filter(p => {
         if (filtroAtual === 'carro') return p.tipo === 'carro' || p.tipo === 'viagem';
@@ -171,9 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, novoStatus: 'em_andamento' })
       });
-    } catch (e) {
-      console.warn('Erro ao atualizar no Render:', e);
-    }
+    } catch (e) {}
 
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     pedidosLocais = pedidosLocais.filter(p => p.id !== id);
@@ -181,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const card = document.getElementById(`card-${id}`);
     if (card) {
-      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceite! Iniciando rota no GPS...</div>`;
+      card.innerHTML = `<div style="text-align:center; padding:14px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceita! Iniciando rota...</div>`;
       setTimeout(() => {
         card.remove();
         carregarFilaDePedidos();
@@ -201,12 +225,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Atualização periódica automática (polling a cada 8 segundos)
+  // Polling automático a cada 6 segundos
   setInterval(() => {
     if (isOnline) carregarFilaDePedidos();
-  }, 8000);
+  }, 6000);
 
-  // Escuta instantânea entre abas abertas no mesmo navegador
+  // BroadcastChannel
   try {
     const hubyChannel = new BroadcastChannel('huby_orders_channel');
     hubyChannel.onmessage = (event) => {
