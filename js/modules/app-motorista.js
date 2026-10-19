@@ -5,12 +5,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const mapElement = document.getElementById('mapaMotorista');
   if (!mapElement) return;
 
-  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim
+  // Coordenadas de contingência (caso o usuário negue o GPS)
+  const defaultCoords = [-7.7735, -42.2472];
   let motoristaCoords = [...defaultCoords];
 
+  // Inicia o mapa inicialmente nas coordenadas padrão
   const map = L.map('mapaMotorista', {
     zoomControl: false
-  }).setView(defaultCoords, 14);
+  }).setView(defaultCoords, 15);
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -19,37 +21,71 @@ document.addEventListener('DOMContentLoaded', () => {
     attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Marcador de posição
+  // Ícone/marcador de posição do motorista
   const markerMotorista = L.circleMarker(defaultCoords, {
-    radius: 9,
+    radius: 10,
     color: '#10B981',
     fillColor: '#10B981',
-    fillOpacity: 1
+    fillOpacity: 1,
+    weight: 3
   }).addTo(map);
 
-  // CORREÇÃO CRÍTICA DO MAPA CINZA: Recalcula o tamanho de imediato e ao redimensionar
+  // Invalidação imediata do mapa para evitar blocos cinzas
   map.invalidateSize();
   setTimeout(() => map.invalidateSize(), 250);
   setTimeout(() => map.invalidateSize(), 600);
   window.addEventListener('resize', () => map.invalidateSize());
 
-  // Obter GPS real se disponível
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition((pos) => {
-      motoristaCoords = [pos.coords.latitude, pos.coords.longitude];
-      markerMotorista.setLatLng(motoristaCoords);
-      map.setView(motoristaCoords, 15);
-      map.invalidateSize();
-    }, () => {}, { enableHighAccuracy: true });
+  // =========================================================================
+  // GEOLOCALIZAÇÃO IMEDIATA E CONTÍNUA (SEMPRE NA POSIÇÃO REAL DO MOTORISTA)
+  // =========================================================================
+  function focarNoGPS(latitude, longitude, zoom = 16) {
+    motoristaCoords = [latitude, longitude];
+    markerMotorista.setLatLng(motoristaCoords);
+    map.setView(motoristaCoords, zoom, { animate: true });
+    map.invalidateSize();
   }
 
-  // Botão de recentralizar GPS
+  if ('geolocation' in navigator) {
+    // 1. Captura imediata ao entrar na página
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        focarNoGPS(latitude, longitude, 16);
+      },
+      (err) => {
+        console.warn('GPS não autorizado ou indisponível:', err.message);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+
+    // 2. Rastreamento ativo: se o motorista se mover, atualiza a posição
+    navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        motoristaCoords = [latitude, longitude];
+        markerMotorista.setLatLng(motoristaCoords);
+      },
+      (err) => console.warn('Erro ao seguir GPS:', err),
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000
+      }
+    );
+  }
+
+  // Botão flutuante de recentralizar GPS
   document.getElementById('btnRecenterGPS')?.addEventListener('click', () => {
-    map.setView(motoristaCoords, 15, { animate: true });
-    map.invalidateSize();
+    focarNoGPS(motoristaCoords[0], motoristaCoords[1], 16);
   });
 
-  // Toggle Online/Offline
+  // =========================================================================
+  // GESTÃO DO RADAR E DOS PEDIDOS
+  // =========================================================================
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
@@ -83,7 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Filtros em abas
   document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
@@ -170,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('Usando armazenamento local.', e);
     }
 
-    // 2. Fallback Local
+    // 2. Fallback local
     if (listaPedidos.length === 0) {
       listaPedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     }
@@ -226,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Polling automático a cada 6 segundos
+  // Polling a cada 6s
   setInterval(() => {
     if (isOnline) carregarFilaDePedidos();
   }, 6000);
