@@ -1,13 +1,14 @@
 {
   "name": "HUBy HUBy",
   "short_name": "HUBy",
-  "start_url": "./index.html",
+  "start_url": "/HUBy/",
+  "scope": "/HUBy/",
   "display": "standalone",
   "background_color": "#080C14",
   "theme_color": "#080C14",
   "icons": [
     {
-      "src": "./icon-512.png",
+      "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
