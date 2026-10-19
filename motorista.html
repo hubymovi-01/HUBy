@@ -1,147 +1,95 @@
 <!DOCTYPE html>
 <html lang="pt-PT">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy Motorista & Parceiro</title>
+  <title>HUBy HUby - Painel do Motorista</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- Leaflet Map CSS -->
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <!-- Estilos Globais e do Motorista -->
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/motorista.css">
 </head>
-<body>
 
+<body>
   <div class="driver-layout">
-    <!-- Cabeçalho Superior com Saldo e Toggle Online/Offline -->
-    <header class="driver-header">
+
+    <!-- BARRA SUPERIOR DO MOTORISTA (GLASS FLUTUANTE) -->
+    <header class="driver-topbar">
       <div class="driver-profile-pill">
-        <div class="driver-avatar">TC</div>
-        <div class="driver-name-box">
-          <span class="driver-name">Tarcyo Carvalho</span>
+        <div class="avatar-circle">TC</div>
+        <div class="profile-info">
+          <span class="driver-name">Tarcyo C.</span>
           <span class="driver-rating">⭐ 4.98</span>
         </div>
       </div>
 
-      <div class="header-controls">
-        <button type="button" class="btn-status-toggle status-online" id="btnToggleStatus">
-          <span class="pulse-status-dot"></span>
-          <span id="txtStatusMotorista">ONLINE</span>
+      <div class="topbar-actions">
+        <button type="button" id="btnToggleStatus" class="btn-status-toggle status-online">
+          <span class="status-pulse-dot"></span>
+          <strong id="txtStatusMotorista">ONLINE</strong>
         </button>
-        <a href="./index.html" class="badge-pill">Modo Cliente ➔</a>
+        <a href="./index.html" class="btn-mode-switch">Modo Passageiro ➔</a>
       </div>
     </header>
 
-    <!-- Barra de Ganhos Rápidos -->
-    <div class="earnings-ticker">
-      <div class="earning-item">
-        <span class="ticker-label">Ganhos de Hoje</span>
-        <strong class="ticker-value highlight">R$ 184,50</strong>
+    <!-- CARDS DE METRICAS FLUTUANTES -->
+    <section class="driver-stats-bar">
+      <div class="stat-card">
+        <span class="stat-label">Ganhos Hoje</span>
+        <strong class="stat-val highlight" id="statGanhosHoje">R$ 184,50</strong>
       </div>
-      <div class="earning-item">
-        <span class="ticker-label">Viagens</span>
-        <strong class="ticker-value">7</strong>
+      <div class="stat-divider"></div>
+      <div class="stat-card">
+        <span class="stat-label">Corridas</span>
+        <strong class="stat-val" id="statCorridasHoje">7</strong>
       </div>
-      <div class="earning-item">
-        <span class="ticker-label">Saldo na Carteira</span>
-        <strong class="ticker-value" style="color:var(--huby-flash);">R$ 412,00</strong>
-      </div>
-    </div>
-
-    <!-- Mapa de Cobertura e Despacho -->
-    <div class="driver-map-wrapper">
-      <div id="mapaMotorista"></div>
-      <div class="map-overlay-badge" id="badgeRadarStatus">
-        <span class="radar-dot"></span> A rastrear corridas e fretes em Paes Landim...
-      </div>
-    </div>
-
-    <!-- Painel Inferior de Chamadas Recebidas -->
-    <section class="driver-sheet">
-      <div class="sheet-drag-handle"></div>
-
-      <!-- Filtros Rápidos de Modalidades -->
-      <div class="driver-filters">
-        <button type="button" class="filter-pill active" data-filter="todos">Todos</button>
-        <button type="button" class="filter-pill" data-filter="carro">🚗 Viagem</button>
-        <button type="button" class="filter-pill" data-filter="flash">📦 Flash</button>
-        <button type="button" class="filter-pill" data-filter="cargo">🚚 Cargo</button>
-      </div>
-
-      <!-- Feed Dinâmico de Solicitações -->
-      <div class="requests-stream" id="feedChamadas">
-
-        <!-- Card de Exemplo: HUBy Cargo -->
-        <div class="job-card cargo-job">
-          <div class="job-top">
-            <div class="job-badge cargo">🚚 HUBy Cargo (VUC)</div>
-            <div class="job-distance">📍 1.8 km até ao local</div>
-          </div>
-
-          <div class="job-body">
-            <div class="job-route-line">
-              <div class="route-point">
-                <span class="dot-indicator green"></span>
-                <p>Av. Central, 420 • Retirada</p>
-              </div>
-              <div class="route-point">
-                <span class="dot-indicator orange"></span>
-                <p>Bairro Primavera • Entrega c/ Escada</p>
-              </div>
-            </div>
-
-            <div class="job-pricing">
-              <span class="price-tag">R$ 142,00</span>
-              <span class="split-info">Pix Direto (Taxa app: R$ 14,20)</span>
-            </div>
-          </div>
-
-          <div class="job-actions">
-            <button type="button" class="btn-job-reject">Recusar</button>
-            <button type="button" class="btn-job-accept cargo-btn">Aceitar Frete</button>
-          </div>
-        </div>
-
-        <!-- Card de Exemplo: HUBy Viagem -->
-        <div class="job-card viagem-job">
-          <div class="job-top">
-            <div class="job-badge viagem">🚗 HUBy Viagem</div>
-            <div class="job-distance">📍 800m até ao passageiro</div>
-          </div>
-
-          <div class="job-body">
-            <div class="job-route-line">
-              <div class="route-point">
-                <span class="dot-indicator green"></span>
-                <p>Praça da Matriz • Embarque</p>
-              </div>
-              <div class="route-point">
-                <span class="dot-indicator orange"></span>
-                <p>Terminal Rodoviário • Desembarque</p>
-              </div>
-            </div>
-
-            <div class="job-pricing">
-              <span class="price-tag">R$ 18,50</span>
-              <span class="split-info">Cartão no App</span>
-            </div>
-          </div>
-
-          <div class="job-actions">
-            <button type="button" class="btn-job-reject">Recusar</button>
-            <button type="button" class="btn-job-accept emerald-btn">Aceitar Corrida</button>
-          </div>
-        </div>
-
+      <div class="stat-divider"></div>
+      <div class="stat-card">
+        <span class="stat-label">Carteira</span>
+        <strong class="stat-val" id="statSaldoCarteira">R$ 412,00</strong>
       </div>
     </section>
+
+    <!-- MAPA DO MOTORISTA -->
+    <main class="driver-map-viewport">
+      <div id="mapaMotorista"></div>
+
+      <!-- Pílula Flutuante de Radar de Satélite -->
+      <div class="radar-pill" id="badgeRadarStatus">
+        <span class="radar-ring"></span>
+        <span class="radar-center"></span>
+        <span id="txtRadarStatus">Radar ativo • A procurar corridas e fretes...</span>
+      </div>
+    </main>
+
+    <!-- BOTTOM SHEET DE CHAMADAS / RADAR -->
+    <section class="driver-sheet">
+      <div class="sheet-handle"></div>
+
+      <!-- Filtro Rápido de Categorias -->
+      <div class="driver-filter-tabs">
+        <button type="button" class="tab-chip active" data-filter="todos">Todos</button>
+        <button type="button" class="tab-chip" data-filter="carro">🚗 Viagem</button>
+        <button type="button" class="tab-chip" data-filter="flash">📦 Flash</button>
+        <button type="button" class="tab-chip" data-filter="cargo">🚚 Cargo</button>
+      </div>
+
+      <!-- Feed Dinâmico de Pedidos -->
+      <div class="jobs-stream" id="feedChamadas">
+        <!-- Injetado dinamicamente via JS -->
+      </div>
+    </section>
+
   </div>
 
   <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-motorista.js"></script>
 </body>
+
 </html>

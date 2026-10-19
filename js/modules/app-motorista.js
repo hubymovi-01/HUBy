@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-  // Azulejos do OpenStreetMap com filtro Dark Mode do global.css
+  // Azulejos do OpenStreetMap com filtro Dark Mode
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; OpenStreetMap contributors'
@@ -25,12 +25,14 @@ document.addEventListener('DOMContentLoaded', () => {
     fillOpacity: 1
   }).addTo(map);
 
-  // Toggle Online/Offline
+  // Controle de Status Online / Offline
   const btnToggleStatus = document.getElementById('btnToggleStatus');
   const txtStatusMotorista = document.getElementById('txtStatusMotorista');
   const badgeRadar = document.getElementById('badgeRadarStatus');
+  const txtRadarStatus = document.getElementById('txtRadarStatus');
   const feedChamadas = document.getElementById('feedChamadas');
   let isOnline = true;
+  let filtroAtual = 'todos';
 
   btnToggleStatus?.addEventListener('click', () => {
     isOnline = !isOnline;
@@ -38,16 +40,36 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isOnline) {
       btnToggleStatus.className = 'btn-status-toggle status-online';
       txtStatusMotorista.textContent = 'ONLINE';
-      badgeRadar.innerHTML = '<span class="radar-dot"></span> A rastrear corridas e fretes em Paes Landim...';
+      if (txtRadarStatus) txtRadarStatus.textContent = 'Radar ativo • A procurar corridas e fretes...';
+      if (badgeRadar) badgeRadar.style.display = 'flex';
       carregarFilaDePedidos();
     } else {
       btnToggleStatus.className = 'btn-status-toggle status-offline';
       txtStatusMotorista.textContent = 'OFFLINE';
-      badgeRadar.innerHTML = '⏸️ Modo pausa ativo. Fique online para receber pedidos.';
+      if (txtRadarStatus) txtRadarStatus.textContent = '⏸️ Modo pausa ativo. Fique online para receber pedidos.';
+      if (feedChamadas) {
+        feedChamadas.innerHTML = `
+          <div class="empty-jobs-state">
+            <div class="empty-radar-icon" style="border-color: rgba(239, 68, 68, 0.3); color: #EF4444;">⏸️</div>
+            <div class="empty-title">Modo Offline Ativo</div>
+            <div class="empty-sub">Ative o botão ONLINE no topo para voltar a receber solicitações.</div>
+          </div>
+        `;
+      }
     }
   });
 
-  // Construtor do card HTML da chamada
+  // Filtros de Categoria (Todos, Carro, Flash, Cargo)
+  document.querySelectorAll('.tab-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.tab-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      filtroAtual = chip.getAttribute('data-filter') || 'todos';
+      carregarFilaDePedidos();
+    });
+  });
+
+  // Construtor do card HTML da chamada (Corrigido)
   function gerarCardHtml(p) {
     const isCargo = p.tipo === 'cargo';
     const isFlash = p.tipo === 'flash';
@@ -87,16 +109,30 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
-  // Carrega e desenha os pedidos (tenta via API segura do Neon na Vercel; fallback para localStorage)
-  async function carregarFilaDePedidos() {
-    if (!feedChamadas) return;
+  // Componente de Estado Vazio Profissional
+  function renderEmptyState() {
+    return `
+      <div class="empty-jobs-state">
+        <div class="empty-radar-icon">📡</div>
+        <div class="empty-title">Radar de Chamadas Ativo</div>
+        <div class="empty-sub">Aguardando novas solicitações de passageiros e fretes nas proximidades...</div>
+      </div>
+    `;
+  }
 
+  // Carrega e desenha os pedidos (API Neon na Vercel + Fallback LocalStorage)
+  async function carregarFilaDePedidos() {
+    if (!feedChamadas || !isOnline) return;
+
+    let listaPedidos = [];
+
+    // 1. Tenta buscar da API na nuvem (Vercel/Neon)
     try {
       const resposta = await fetch('/api/pedidos?status=pendente');
       if (resposta.ok) {
         const pedidosApi = await resposta.json();
-        if (pedidosApi && pedidosApi.length > 0) {
-          feedChamadas.innerHTML = pedidosApi.map(p => gerarCardHtml({
+        if (Array.isArray(pedidosApi) && pedidosApi.length > 0) {
+          listaPedidos = pedidosApi.map(p => ({
             id: p.id,
             tipo: p.tipo,
             subTipoLabel: p.sub_tipo_label,
@@ -106,31 +142,37 @@ document.addEventListener('DOMContentLoaded', () => {
             preco: p.preco,
             metodoPgto: p.metodo_pgto,
             horario: new Date(p.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-          })).join('');
-          return;
+          }));
         }
       }
     } catch (e) {
-      console.warn('API /api/pedidos indisponível no momento, buscando do cache local.', e);
+      console.warn('API /api/pedidos em modo estático local.', e);
     }
 
-    // Leitura local
-    const pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    if (pedidosLocais.length === 0) {
-      feedChamadas.innerHTML = `
-        <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
-          Nenhum pedido pendente de momento.<br>Aguardando novas solicitações de passageiros...
-        </div>
-      `;
+    // 2. Se a API estiver vazia ou offline, busca da fila persistente do localStorage
+    if (listaPedidos.length === 0) {
+      listaPedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    }
+
+    // 3. Aplica o filtro de abas (todos, viagem/carro, flash, cargo)
+    if (filtroAtual !== 'todos') {
+      listaPedidos = listaPedidos.filter(p => {
+        if (filtroAtual === 'carro') return p.tipo === 'carro' || p.tipo === 'viagem';
+        return p.tipo === 'flash' ? p.tipo === 'flash' : p.tipo === 'cargo';
+      });
+    }
+
+    // 4. Renderiza
+    if (listaPedidos.length === 0) {
+      feedChamadas.innerHTML = renderEmptyState();
       return;
     }
 
-    feedChamadas.innerHTML = pedidosLocais.map(p => gerarCardHtml(p)).join('');
+    feedChamadas.innerHTML = listaPedidos.map(p => gerarCardHtml(p)).join('');
   }
 
   // Ações de aceite e recusa globais
   window.aceitarPedido = async (id) => {
-    // 1. Tenta atualizar status no banco Neon
     try {
       await fetch('/api/pedidos', {
         method: 'PATCH',
@@ -138,18 +180,20 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ id, novoStatus: 'em_andamento' })
       });
     } catch (e) {
-      console.warn('Não foi possível persistir status na API.', e);
+      console.warn('API indisponível para PATCH.', e);
     }
 
-    // 2. Remove do cache local
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     pedidosLocais = pedidosLocais.filter(p => p.id !== id);
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
     const card = document.getElementById(`card-${id}`);
     if (card) {
-      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceita! A rota foi enviada para o seu GPS.</div>`;
-      setTimeout(() => card.remove(), 2500);
+      card.innerHTML = `<div style="text-align:center; padding:16px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceita! Iniciando rota no GPS...</div>`;
+      setTimeout(() => {
+        card.remove();
+        carregarFilaDePedidos();
+      }, 2000);
     }
   };
 
@@ -159,10 +203,13 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
     const card = document.getElementById(`card-${id}`);
-    if (card) card.remove();
+    if (card) {
+      card.remove();
+      carregarFilaDePedidos();
+    }
   };
 
-  // Canal de escuta em tempo real (para quando as abas estiverem abertas simultaneamente)
+  // Canal de escuta em tempo real
   try {
     const hubyChannel = new BroadcastChannel('huby_orders_channel');
     hubyChannel.onmessage = (event) => {
@@ -171,9 +218,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     };
   } catch (err) {
-    console.warn('BroadcastChannel não suportado neste navegador.', err);
+    console.warn('BroadcastChannel não suportado.', err);
   }
 
-  // Carrega ao abrir
+  // Carregamento inicial
   carregarFilaDePedidos();
 });
