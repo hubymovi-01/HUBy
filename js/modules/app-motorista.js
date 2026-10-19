@@ -27,10 +27,11 @@ document.addEventListener('DOMContentLoaded', () => {
     fillOpacity: 1
   }).addTo(map);
 
-  // CORREÇÃO CRÍTICA DO MAPA CINZA: Recalcula o tamanho após a renderização
-  setTimeout(() => {
-    map.invalidateSize();
-  }, 250);
+  // CORREÇÃO CRÍTICA DO MAPA CINZA: Recalcula o tamanho de imediato e ao redimensionar
+  map.invalidateSize();
+  setTimeout(() => map.invalidateSize(), 250);
+  setTimeout(() => map.invalidateSize(), 600);
+  window.addEventListener('resize', () => map.invalidateSize());
 
   // Obter GPS real se disponível
   if (navigator.geolocation) {
