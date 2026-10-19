@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarCalculos();
   });
 
-  // 8. Solicitar Corrida / Frete com persistência segura no Neon
+  // 8. Solicitar Corrida / Frete (Híbrido: Local + API Neon)
   btnSolicitarHuby?.addEventListener('click', async () => {
     const idPedido = Math.random().toString(36).substring(2, 7).toUpperCase();
     const lista = subCategorias[rotaAtual.grupo] || [];
@@ -332,31 +332,38 @@ document.addEventListener('DOMContentLoaded', () => {
       destino: document.getElementById('inputDestino').value || 'Destino no Mapa',
       distancia: `${rotaAtual.distanciaKm.toFixed(1)} km`,
       preco: txtPrecoFinal.textContent,
-      metodoPgto: document.getElementById('selectMetodoPgto').value
+      metodoPgto: document.getElementById('selectMetodoPgto').value,
+      horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      criado_em: new Date().toISOString()
     };
 
-    // Feedback visual imediato
-    btnSolicitarHuby.disabled = true;
-    btnSolicitarHuby.style.opacity = '0.7';
+    // 1. Persistência imediata no dispositivo
+    const pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    pedidosLocais.unshift(novoPedido);
+    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
+    // 2. Disparo via BroadcastChannel para abas abertas
     try {
-      // Grava no banco de dados Neon através da Serverless Function da Vercel
-      await fetch('/api/pedidos', {
+      const hubyChannel = new BroadcastChannel('huby_orders_channel');
+      hubyChannel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
+    } catch (e) {
+      console.warn('BroadcastChannel não suportado:', e);
+    }
+
+    // 3. Envio assíncrono para a API (quando hospedado na Vercel)
+    try {
+      fetch('/api/pedidos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(novoPedido)
-      });
-    } catch (err) {
-      console.warn('Falha na conexão com a API, fallback local:', err);
-    } finally {
-      btnSolicitarHuby.disabled = false;
-      btnSolicitarHuby.style.opacity = '1';
-    }
+      }).catch(err => console.log('Ambiente estático (GitHub Pages), usando fila local.'));
+    } catch (e) {}
 
+    // 4. Feedback no ecrã
     bannerStatus.style.display = 'block';
     bannerStatus.innerHTML = `
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 13px; text-align: center;">
-        ✅ Pedido <strong>#${idPedido}</strong> enviado e salvo na nuvem!<br>
+        ✅ Pedido <strong>#${idPedido}</strong> enviado!<br>
         A aguardar motorista parceiro HUBy...
       </div>
     `;
