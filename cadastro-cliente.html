@@ -4,52 +4,93 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Cadastro de Passageiro</title>
+  <title>HUBy - Cadastro Completo de Passageiro</title>
   <link rel="stylesheet" href="./css/global.css">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       background-color: #080C14;
       color: #FFFFFF;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       min-height: 100vh;
-      padding: 16px;
+      padding: 16px 16px 40px 16px;
     }
     .top-bar {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       margin-bottom: 20px;
     }
     .btn-back {
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.1);
       color: #FFFFFF;
-      width: 36px;
-      height: 36px;
+      width: 38px;
+      height: 38px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
       text-decoration: none;
+      font-size: 16px;
+    }
+    .top-bar h2 {
+      font-size: 18px;
+      font-weight: 800;
     }
     .form-container {
-      max-width: 440px;
+      max-width: 480px;
       margin: 0 auto;
     }
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(13, 20, 36, 0.6));
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .hero-icon {
+      font-size: 28px;
+      background: rgba(16, 185, 129, 0.2);
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .hero-text h3 {
+      font-size: 15px;
+      font-weight: 800;
+      color: #10B981;
+    }
+    .hero-text p {
+      font-size: 11px;
+      color: #94A3B8;
+      margin-top: 2px;
+      line-height: 1.4;
+    }
     .form-card {
-      background: rgba(18, 27, 47, 0.7);
+      background: rgba(18, 27, 47, 0.65);
       border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 16px;
-      padding: 18px;
-      margin-bottom: 16px;
+      padding: 16px;
+      margin-bottom: 14px;
     }
     .card-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       color: #10B981;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
       margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
     .field-group {
       display: flex;
@@ -57,22 +98,66 @@
       gap: 6px;
       margin-bottom: 12px;
     }
+    .field-group:last-child { margin-bottom: 0; }
     .field-group label {
       font-size: 11px;
       font-weight: 700;
       color: #94A3B8;
+    }
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .input-icon {
+      position: absolute;
+      left: 12px;
+      font-size: 14px;
+      color: #64748B;
+      pointer-events: none;
     }
     .form-input {
       width: 100%;
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 12px;
-      padding: 12px;
+      padding: 11px 12px 11px 36px;
       color: #FFFFFF;
       font-size: 13px;
+      font-weight: 600;
       outline: none;
+      transition: all 0.2s;
     }
-    .form-input:focus { border-color: #10B981; }
+    .form-input:focus {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+    select.form-input {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .terms-box {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 16px 0;
+      font-size: 11px;
+      color: #94A3B8;
+      line-height: 1.4;
+    }
+    .terms-box input {
+      margin-top: 2px;
+      accent-color: #10B981;
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
     .btn-submit {
       width: 100%;
       background: linear-gradient(135deg, #10B981, #059669);
@@ -83,8 +168,10 @@
       font-size: 14px;
       font-weight: 900;
       cursor: pointer;
-      margin-top: 10px;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+      transition: transform 0.15s ease;
     }
+    .btn-submit:active { transform: scale(0.98); }
   </style>
 </head>
 
@@ -92,69 +179,195 @@
   <div class="form-container">
     <header class="top-bar">
       <a href="./index.html" class="btn-back">←</a>
-      <h2>Criar Conta de Passageiro</h2>
+      <h2>Registo de Passageiro</h2>
     </header>
 
-    <form id="formCadastroCliente">
-      <div class="form-card">
-        <div class="card-title">👤 Informações Pessoais</div>
+    <div class="hero-banner">
+      <div class="hero-icon">📱</div>
+      <div class="hero-text">
+        <h3>Segurança e Conforto</h3>
+        <p>Preencha os seus dados para aceder a viagens verificadas, entregas flash e fretes.</p>
+      </div>
+    </div>
+
+    <form id="formCadastroClienteCompleto">
+      <!-- 1. DADOS PESSOAIS -->
+      <section class="form-card">
+        <div class="card-title">👤 1. Identificação Pessoal</div>
 
         <div class="field-group">
           <label>Nome Completo</label>
-          <input type="text" id="cliNome" class="form-input" placeholder="Ex: Maria Silva" required>
+          <div class="input-wrapper">
+            <span class="input-icon">📝</span>
+            <input type="text" id="cliNome" class="form-input" placeholder="Ex: Maria da Silva" required>
+          </div>
         </div>
+
+        <div class="row-2">
+          <div class="field-group">
+            <label>CPF</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🪪</span>
+              <input type="text" id="cliCpf" class="form-input" placeholder="000.000.000-00" maxlength="14" required>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Data de Nascimento</label>
+            <div class="input-wrapper">
+              <span class="input-icon">📅</span>
+              <input type="date" id="cliNascimento" class="form-input" required>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. CONTACTOS E ACESSO -->
+      <section class="form-card">
+        <div class="card-title">🔐 2. Contactos & Credenciais</div>
 
         <div class="field-group">
           <label>Telemóvel / WhatsApp</label>
-          <input type="tel" id="cliTelefone" class="form-input" placeholder="(89) 99999-9999" required>
+          <div class="input-wrapper">
+            <span class="input-icon">📞</span>
+            <input type="tel" id="cliTelefone" class="form-input" placeholder="(89) 99999-9999" maxlength="15" required>
+          </div>
         </div>
 
         <div class="field-group">
-          <label>CPF</label>
-          <input type="text" id="cliCpf" class="form-input" placeholder="000.000.000-00" required>
+          <label>E-mail de Acesso</label>
+          <div class="input-wrapper">
+            <span class="input-icon">✉️</span>
+            <input type="email" id="cliEmail" class="form-input" placeholder="exemplo@email.com" required>
+          </div>
         </div>
 
-        <div class="field-group">
-          <label>Idade</label>
-          <input type="number" id="cliIdade" class="form-input" placeholder="Ex: 25" min="12" max="120" required>
+        <div class="row-2">
+          <div class="field-group">
+            <label>Palavra-passe</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🔒</span>
+              <input type="password" id="cliSenha" class="form-input" placeholder="Mínimo 6 dígitos" minlength="6" required>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Género (Opcional)</label>
+            <div class="input-wrapper">
+              <span class="input-icon">👤</span>
+              <select id="cliGenero" class="form-input">
+                <option value="nao_informar">Prefiro não dizer</option>
+                <option value="feminino">Feminino</option>
+                <option value="masculino">Masculino</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+          </div>
         </div>
+      </section>
+
+      <!-- 3. CONTACTO DE EMERGÊNCIA -->
+      <section class="form-card">
+        <div class="card-title">🚨 3. Segurança (Contacto de Emergência)</div>
+        
+        <div class="row-2">
+          <div class="field-group">
+            <label>Nome do Familiar/Amigo</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🤝</span>
+              <input type="text" id="cliEmergenciaNome" class="form-input" placeholder="Ex: João Silva">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label>Telemóvel de Emergência</label>
+            <div class="input-wrapper">
+              <span class="input-icon">📱</span>
+              <input type="tel" id="cliEmergenciaTel" class="form-input" placeholder="(89) 98888-8888">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="terms-box">
+        <input type="checkbox" id="chkTermos" required>
+        <label for="chkTermos">Concordo com os <strong style="color: #10B981;">Termos de Serviço</strong> e a <strong style="color: #10B981;">Política de Privacidade</strong> do HUBy, autorizando o tratamento de dados para fins de segurança e geolocalização.</label>
       </div>
 
-      <button type="submit" class="btn-submit" id="btnSalvarCliente">Avançar para o HUBy</button>
+      <button type="submit" class="btn-submit" id="btnSalvarCliente">
+        <span>Criar Conta e Começar a Usar</span>
+      </button>
     </form>
   </div>
 
   <script>
     const API_URL = 'https://huby.onrender.com';
 
-    document.getElementById('formCadastroCliente').addEventListener('submit', async (e) => {
+    // Máscara de CPF
+    const inputCpf = document.getElementById('cliCpf');
+    inputCpf.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length > 11) v = v.substring(0, 11);
+      v = v.replace(/(\d{3})(\d)/, '$1.$2');
+      v = v.replace(/(\d{3})(\d)/, '$1.$2');
+      v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      e.target.value = v;
+    });
+
+    // Máscara de Telefone
+    const inputTel = document.getElementById('cliTelefone');
+    inputTel.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length > 11) v = v.substring(0, 11);
+      if (v.length > 6) {
+        e.target.value = `(${v.substring(0,2)}) ${v.substring(2,7)}-${v.substring(7)}`;
+      } else if (v.length > 2) {
+        e.target.value = `(${v.substring(0,2)}) ${v.substring(2)}`;
+      } else {
+        e.target.value = v;
+      }
+    });
+
+    // Envio do formulário
+    document.getElementById('formCadastroClienteCompleto').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('btnSalvarCliente');
-      btn.textContent = 'A guardar...';
+      btn.innerHTML = '<span>A processar registo...</span>';
       btn.disabled = true;
+
+      // Calcula a idade com base na data de nascimento
+      const nascimento = new Date(document.getElementById('cliNascimento').value);
+      const hoje = new Date();
+      let idade = hoje.getFullYear() - nascimento.getFullYear();
+      const m = hoje.getMonth() - nascimento.getMonth();
+      if (m < 0 || (m === 0 && hoje.getDate() < nascimento.getDate())) {
+        idade--;
+      }
 
       const payload = {
         nome: document.getElementById('cliNome').value.trim(),
         telefone: document.getElementById('cliTelefone').value.trim(),
         cpf: document.getElementById('cliCpf').value.trim(),
-        idade: parseInt(document.getElementById('cliIdade').value) || 18
+        email: document.getElementById('cliEmail').value.trim(),
+        idade: idade > 0 ? idade : 18,
+        genero: document.getElementById('cliGenero').value,
+        emergenciaNome: document.getElementById('cliEmergenciaNome').value.trim(),
+        emergenciaTel: document.getElementById('cliEmergenciaTel').value.trim()
       };
 
       try {
-        // Envia para o banco de dados Neon/Render
         await fetch(`${API_URL}/api/clientes/cadastro`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
       } catch (err) {
-        console.warn('Modo offline / erro na API, registando localmente.');
+        console.warn('Servidor offline, registado localmente.');
       }
 
-      // Salva sessão local do cliente e redireciona para o mapa
       localStorage.setItem('huby_user_role', 'cliente');
       localStorage.setItem('huby_cliente_nome', payload.nome);
-      window.location.href = './index.html?logado=1';
+      window.location.href = './index.html';
     });
   </script>
 </body>
