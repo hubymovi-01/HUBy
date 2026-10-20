@@ -1,130 +1,91 @@
-<!DOCTYPE html>
-<html lang="pt-PT">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy - Painel de Controlo & Despacho</title>
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#080C14">
+// ./js/modules/app-admin.js
 
-  <!-- Leaflet Map CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Estilos Globais e do Admin -->
-  <link rel="stylesheet" href="./css/global.css">
-  <link rel="stylesheet" href="./css/admin.css">
-</head>
-<body>
+document.addEventListener('DOMContentLoaded', () => {
+  const API_URL = 'https://huby.onrender.com';
+  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim - PI
 
-  <div class="admin-layout">
-    <!-- Cabeçalho Executivo do Admin -->
-    <header class="admin-header">
-      <div class="admin-brand">
-        <a href="./index.html" class="brand-logo">
-          <span class="brand-hub">HUB</span>
-          <span class="brand-y-badge">y<span class="brand-gps-dot"></span></span>
-        </a>
-        <span class="admin-tag">Central de Operações</span>
-      </div>
+  // 1. Inicializar Mapa Administrativo
+  const mapElement = document.getElementById('mapaAdmin');
+  let map = null;
 
-      <div class="admin-header-actions">
-        <div class="live-pulse-badge">
-          <span class="pulse-dot"></span> 3 Motoristas Online
+  if (mapElement) {
+    map = L.map('mapaAdmin', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView(defaultCoords, 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    // Marcador simulado da frota ativa em campo
+    L.circleMarker(defaultCoords, {
+      radius: 10,
+      color: '#10B981',
+      fillColor: '#10B981',
+      fillOpacity: 1,
+      weight: 3
+    }).addTo(map).bindPopup('<b>Tarcyo Carvalho</b><br>Status: Online (HUBy Carro)');
+
+    setTimeout(() => map.invalidateSize(), 300);
+    window.addEventListener('resize', () => map.invalidateSize());
+  }
+
+  // 2. Sincronizar Fila de Pedidos Ativos com a API e localStorage
+  async function carregarFilaAdmin() {
+    const listaContainer = document.getElementById('listaPedidosAdmin');
+    if (!listaContainer) return;
+
+    let pedidos = [];
+
+    // Tenta buscar no Render
+    try {
+      const resp = await fetch(`${API_URL}/api/pedidos`);
+      if (resp.ok) {
+        pedidos = await resp.json();
+      }
+    } catch (e) {
+      console.warn('API Admin offline, a carregar dados locais.');
+    }
+
+    // Fallback local se a API estiver vazia
+    if (!pedidos || pedidos.length === 0) {
+      pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    }
+
+    if (pedidos.length === 0) {
+      listaContainer.innerHTML = `
+        <div style="text-align: center; padding: 24px; color: #64748B; font-size: 12px;">
+          Nenhum pedido ou frete ativo no momento.
         </div>
-        <a href="./index.html" class="badge-pill">Ver App Cliente ➔</a>
-      </div>
-    </header>
+      `;
+      return;
+    }
 
-    <!-- Indicadores Financeiros e Operacionais (KPIs) -->
-    <section class="kpi-grid">
-      <div class="kpi-card">
-        <span class="kpi-label">Faturação Diária</span>
-        <strong class="kpi-value text-emerald">R$ 1.840,00</strong>
-        <span class="kpi-sub">+18% face a ontem</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Corridas & Fretes</span>
-        <strong class="kpi-value">46</strong>
-        <span class="kpi-sub">3 em andamento</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">Comissão HUBy (10%)</span>
-        <strong class="kpi-value text-flash">R$ 184,00</strong>
-        <span class="kpi-sub">Split automático ativo</span>
-      </div>
-      <div class="kpi-card">
-        <span class="kpi-label">HUBy Cargo Ativo</span>
-        <strong class="kpi-value text-cargo">5 Fretes</strong>
-        <span class="kpi-sub">VUCs e Caminhões</span>
-      </div>
-    </section>
+    listaContainer.innerHTML = pedidos.map(p => {
+      const isCargo = p.tipo === 'cargo';
+      const isFlash = p.tipo === 'flash';
+      const iconeClasse = isCargo ? 'cargo' : (isFlash ? 'flash' : 'emerald');
+      const emoji = isCargo ? '🚚' : (isFlash ? '📦' : '🚗');
 
-    <!-- Área Principal: Mapa de Calor + Tabela de Despacho -->
-    <main class="admin-main-grid">
-      <!-- Mapa Global da Frota -->
-      <div class="admin-map-container">
-        <div class="panel-header">
-          <h3>📍 Radar de Veículos em Tempo Real</h3>
-          <span class="badge-sub">Região: Paes Landim - PI</span>
-        </div>
-        <div id="mapaAdmin"></div>
-      </div>
-
-      <!-- Fila de Pedidos e Monitorização -->
-      <div class="admin-feed-container">
-        <div class="panel-header">
-          <h3>⚡ Fila de Atendimentos</h3>
-          <span class="badge-sub">Tempo real</span>
-        </div>
-
-        <div class="admin-orders-list" id="listaPedidosAdmin">
-          <!-- Card de Corrida em Curso -->
-          <div class="admin-order-row">
-            <div class="order-type-icon emerald">🚗</div>
-            <div class="order-meta">
-              <strong>#HB-9021 • HUBy Viagem</strong>
-              <span>Passageiro: Maria S. • Motorista: Tarcyo C.</span>
-              <small>Praça Matriz ➔ Terminal Rodoviário</small>
-            </div>
-            <div class="order-status-box">
-              <span class="status-pill em-rota">Em Rota</span>
-              <strong>R$ 18,50</strong>
-            </div>
+      return `
+        <div class="admin-order-row">
+          <div class="order-type-icon ${iconeClasse}">${emoji}</div>
+          <div class="order-meta">
+            <strong>#${p.id} • ${p.subTipoLabel || 'HUBy Viagem'}</strong>
+            <span>Origem: ${p.origem}</span>
+            <small>Destino: ${p.destino} (${p.distancia || '1.0 km'})</small>
           </div>
-
-          <!-- Card de Frete em Curso -->
-          <div class="admin-order-row">
-            <div class="order-type-icon cargo">🚚</div>
-            <div class="order-meta">
-              <strong>#HB-8842 • HUBy Cargo (VUC)</strong>
-              <span>Cliente: Móveis Silva • Ajudante: Sim</span>
-              <small>Av. Central ➔ Bairro Primavera</small>
-            </div>
-            <div class="order-status-box">
-              <span class="status-pill aguardando">Coleta</span>
-              <strong>R$ 142,00</strong>
-            </div>
-          </div>
-
-          <!-- Card de Entrega Flash Concluída -->
-          <div class="admin-order-row">
-            <div class="order-type-icon flash">📦</div>
-            <div class="order-meta">
-              <strong>#HB-8710 • HUBy Flash</strong>
-              <span>Entrega de Documentos</span>
-              <small>Centro ➔ Fórum Municipal</small>
-            </div>
-            <div class="order-status-box">
-              <span class="status-pill finalizado">Finalizado</span>
-              <strong>R$ 12,00</strong>
-            </div>
+          <div class="order-status-box">
+            <span class="status-pill em-rota">${p.status || 'Pendente'}</span>
+            <strong>${p.preco}</strong>
           </div>
         </div>
-      </div>
-    </main>
-  </div>
+      `;
+    }).join('');
+  }
 
-  <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="./js/modules/app-admin.js"></script>
-</body>
-</html>
+  // Atualiza a cada 5 segundos
+  setInterval(carregarFilaAdmin, 5000);
+  carregarFilaAdmin();
+});

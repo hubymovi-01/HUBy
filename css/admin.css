@@ -1,26 +1,38 @@
 /* ==========================================================================
-   HUBy - Painel de Administração & Dispatcher (css/admin.css)
+   HUBy - Estilos do Painel Administrativo
    ========================================================================== */
 
-.admin-layout {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
-  background-color: var(--bg-deep);
-  padding: 0 16px 30px;
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
 
-/* Header */
+body {
+  background-color: #080C14;
+  color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  padding: 16px;
+}
+
+.admin-layout {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* CABEÇALHO */
 .admin-header {
+  background: rgba(13, 20, 36, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 14px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 20px;
 }
 
 .admin-brand {
@@ -29,15 +41,31 @@
   gap: 14px;
 }
 
+.brand-logo {
+  text-decoration: none;
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.brand-hub { color: #FFFFFF; }
+.brand-y-badge { color: #10B981; position: relative; }
+.brand-gps-dot {
+  position: absolute;
+  top: -2px;
+  right: -5px;
+  width: 6px;
+  height: 6px;
+  background: #EF4444;
+  border-radius: 50%;
+}
+
 .admin-tag {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
   font-size: 11px;
-  font-weight: 700;
-  padding: 4px 10px;
+  font-weight: 800;
+  padding: 3px 10px;
   border-radius: 8px;
-  text-transform: uppercase;
 }
 
 .admin-header-actions {
@@ -49,200 +77,183 @@
 .live-pulse-badge {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--huby-emerald);
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  padding: 6px 14px;
+  color: #10B981;
+  background: rgba(16, 185, 129, 0.1);
+  padding: 6px 12px;
   border-radius: 20px;
 }
 
 .pulse-dot {
   width: 8px;
   height: 8px;
+  background: #10B981;
   border-radius: 50%;
-  background: var(--huby-emerald);
-  box-shadow: 0 0 8px var(--huby-emerald);
+  box-shadow: 0 0 8px #10B981;
 }
 
-/* KPIs */
+/* KPIS (INDICADORES) */
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 14px;
-  margin-bottom: 22px;
+  gap: 12px;
 }
 
 .kpi-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 16px 20px;
+  background: rgba(18, 27, 47, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
+  gap: 4px;
 }
 
 .kpi-label {
-  font-size: 12px;
-  color: var(--text-muted);
+  font-size: 11px;
   font-weight: 700;
+  color: #94A3B8;
 }
 
 .kpi-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 900;
-  color: var(--text-white);
-  margin: 6px 0 2px;
 }
 
-.kpi-value.text-emerald { color: var(--huby-emerald); }
-.kpi-value.text-flash { color: var(--huby-flash); }
-.kpi-value.text-cargo { color: var(--huby-cargo); }
+.text-emerald { color: #10B981; }
+.text-flash { color: #0EA5E9; }
+.text-cargo { color: #F97316; }
 
 .kpi-sub {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 10px;
+  color: #64748B;
 }
 
-/* Grade Principal */
+/* ÁREA PRINCIPAL (MAPA + FEED) */
 .admin-main-grid {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
-  gap: 20px;
+  gap: 16px;
 }
 
-@media (max-width: 900px) {
+@media(max-width: 900px) {
   .admin-main-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.admin-map-container,
-.admin-feed-container {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 18px;
+.admin-map-container, .admin-feed-container {
+  background: rgba(13, 20, 36, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
+  gap: 12px;
 }
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
 }
 
 .panel-header h3 {
   font-size: 14px;
   font-weight: 800;
-  color: var(--text-white);
 }
 
 .badge-sub {
   font-size: 11px;
-  color: var(--text-muted);
+  color: #94A3B8;
 }
 
 #mapaAdmin {
   width: 100%;
-  height: 440px;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+  height: 380px;
+  border-radius: 12px;
+  background: #080C14;
 }
 
-/* Fila de Atendimentos */
+/* Filtro de tema escuro idêntico aos apps de passageiro e motorista */
+.leaflet-tile {
+  filter: brightness(0.65) invert(1) contrast(3.2) hue-rotate(200deg) saturate(0.3) !important;
+}
+
+/* FILA DE PEDIDOS */
 .admin-orders-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  max-height: 440px;
+  gap: 10px;
+  max-height: 380px;
   overflow-y: auto;
 }
 
 .admin-order-row {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 10px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .order-type-icon {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 18px;
+  flex-shrink: 0;
 }
 
 .order-type-icon.emerald { background: rgba(16, 185, 129, 0.15); }
-.order-type-icon.flash { background: rgba(56, 189, 248, 0.15); }
-.order-type-icon.cargo { background: rgba(255, 107, 0, 0.15); }
+.order-type-icon.flash { background: rgba(14, 165, 233, 0.15); }
+.order-type-icon.cargo { background: rgba(249, 115, 22, 0.15); }
 
 .order-meta {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .order-meta strong {
-  display: block;
-  font-size: 13px;
-  color: var(--text-white);
+  font-size: 12px;
+  color: #FFFFFF;
 }
 
-.order-meta span {
-  display: block;
+.order-meta span, .order-meta small {
   font-size: 11px;
-  color: var(--text-muted);
-  margin-top: 1px;
-}
-
-.order-meta small {
-  display: block;
-  font-size: 10px;
-  color: var(--text-light);
-  margin-top: 2px;
+  color: #94A3B8;
 }
 
 .order-status-box {
   text-align: right;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
   gap: 4px;
-}
-
-.order-status-box strong {
-  font-size: 13px;
-  color: var(--text-white);
 }
 
 .status-pill {
   font-size: 9px;
   font-weight: 800;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 6px;
+  display: inline-block;
   text-transform: uppercase;
 }
 
-.status-pill.em-rota {
-  background: rgba(16, 185, 129, 0.2);
-  color: var(--huby-emerald);
-}
+.status-pill.em-rota { background: rgba(16, 185, 129, 0.2); color: #10B981; }
+.status-pill.aguardando { background: rgba(249, 115, 22, 0.2); color: #F97316; }
+.status-pill.finalizado { background: rgba(14, 165, 233, 0.2); color: #0EA5E9; }
 
-.status-pill.aguardando {
-  background: rgba(255, 107, 0, 0.2);
-  color: var(--huby-cargo);
-}
-
-.status-pill.finalizado {
-  background: rgba(148, 163, 184, 0.15);
-  color: var(--text-muted);
+.order-status-box strong {
+  font-size: 13px;
+  color: #10B981;
 }
