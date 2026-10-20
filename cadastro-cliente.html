@@ -314,9 +314,23 @@
       e.target.value = v;
     });
 
-    // Máscara de Telefone
+    // Máscara de Telefone Principal
     const inputTel = document.getElementById('cliTelefone');
     inputTel.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length > 11) v = v.substring(0, 11);
+      if (v.length > 6) {
+        e.target.value = `(${v.substring(0,2)}) ${v.substring(2,7)}-${v.substring(7)}`;
+      } else if (v.length > 2) {
+        e.target.value = `(${v.substring(0,2)}) ${v.substring(2)}`;
+      } else {
+        e.target.value = v;
+      }
+    });
+
+    // Máscara de Telefone de Emergência
+    const inputEmerg = document.getElementById('cliEmergenciaTel');
+    inputEmerg.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
       if (v.length > 11) v = v.substring(0, 11);
       if (v.length > 6) {
@@ -345,6 +359,7 @@
       }
 
       const payload = {
+        id: Math.random().toString(36).substring(2, 9),
         nome: document.getElementById('cliNome').value.trim(),
         telefone: document.getElementById('cliTelefone').value.trim(),
         cpf: document.getElementById('cliCpf').value.trim(),
@@ -365,9 +380,13 @@
         console.warn('Servidor offline, registado localmente.');
       }
 
+      // Grava a sessão e força o bypass do splash screen
       localStorage.setItem('huby_user_role', 'cliente');
+      localStorage.setItem('huby_ja_entrou', '1');
       localStorage.setItem('huby_cliente_nome', payload.nome);
-      window.location.href = './index.html';
+
+      // Redireciona diretamente para o mapa principal sem reexibir a introdução
+      window.location.replace('./index.html?autenticado=1');
     });
   </script>
 </body>

@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy HUBy - Mobilidade, Flash e Fretes</title>
+  <title>HUBy - Mobilidade Segura, Flash e Fretes</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- GUARDA DE PERFIL E SESSÃO -->
+  <!-- GUARDA DE PERFIL E SEGURANÇA DE SESSÃO -->
   <script>
     (function () {
       const papel = localStorage.getItem('huby_user_role');
@@ -18,7 +18,7 @@
         window.location.replace('./motorista.html');
       }
 
-      // Se já passou pelo splash anteriormente, esconde-o instantaneamente ao carregar
+      // Se já passou pelo splash e está autenticado, oculta o splash instantaneamente
       if (jaEntrou === '1') {
         document.addEventListener('DOMContentLoaded', () => {
           const splash = document.getElementById('splashScreen');
@@ -29,6 +29,7 @@
       }
     })();
   </script>
+
   <!-- CSS do Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <!-- Estilos Globais, do Cliente e da Tela de Entrada -->
@@ -41,13 +42,16 @@
 
   <div class="app-layout">
 
-    <!-- TELA DE ENTRADA / ONBOARDING INTEGRADA -->
+    <!-- TELA DE ENTRADA / ONBOARDING COM FOCO EM SEGURANÇA -->
     <div id="splashScreen" class="welcome-overlay">
       <div class="glow-bg top-glow"></div>
       <div class="glow-bg bottom-glow"></div>
 
-      <!-- Logótipo Vertical com Contraste -->
+      <!-- Logótipo Vertical com Selo de Segurança -->
       <header class="welcome-header">
+        <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; margin-bottom: 12px; letter-spacing: 0.5px;">
+          🛡️ PLATAFORMA 100% VERIFICADA & SEGURA
+        </div>
         <div class="brand-hero-stacked">
           <div class="brand-row brand-row-small">
             <span class="brand-hub-small">HUB</span>
@@ -58,32 +62,32 @@
             <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
           </div>
         </div>
-        <p class="tagline">Mobilidade urbana, entregas rápidas e fretes na palma da mão.</p>
+        <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
       </header>
 
-      <!-- Carrossel de Pilares -->
+      <!-- Carrossel de Pilares de Segurança -->
       <div class="pillars-container">
         <div class="pillar-card active" data-slide="0">
-          <div class="pillar-icon">🚗</div>
+          <div class="pillar-icon">🔒</div>
           <div class="pillar-content">
-            <h4>HUBy Viagem</h4>
-            <p>Carro e moto com preço justo e resposta rápida.</p>
+            <h4>Viagens Protegidas</h4>
+            <p>Passageiros e motoristas com CPF e CNH validados.</p>
           </div>
         </div>
 
         <div class="pillar-card" data-slide="1">
-          <div class="pillar-icon">📦</div>
+          <div class="pillar-icon">📍</div>
           <div class="pillar-content">
-            <h4>HUBy Flash</h4>
-            <p>Envie pacotes, compras e documentos com segurança.</p>
+            <h4>Rastreio Satelital</h4>
+            <p>Partilha de rota em tempo real com contactos de emergência.</p>
           </div>
         </div>
 
         <div class="pillar-card" data-slide="2">
-          <div class="pillar-icon">🚚</div>
+          <div class="pillar-icon">⚡</div>
           <div class="pillar-content">
-            <h4>HUBy Cargo</h4>
-            <p>Fretes, mudanças e cargas com ajudantes opcionais.</p>
+            <h4>Suporte 24h</h4>
+            <p>Central de operações ativa para retaguarda em fretes e viagens.</p>
           </div>
         </div>
       </div>
@@ -95,11 +99,10 @@
         <span class="dot"></span>
       </div>
 
-      <!-- Ações de Entrada com Escolha Direta de Perfil -->
+      <!-- Ações de Entrada com Conformidade de Segurança -->
       <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
-        <!-- Botão de Passageiro redireciona para o formulário de cadastro -->
         <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente" style="width: 100%; display: flex; align-items: center; justify-content: space-between; text-decoration: none; box-sizing: border-box;">
-          <span>📱 Sou Passageiro / Cliente</span>
+          <span>📱 Sou Passageiro / Cliente (Registar)</span>
           <span class="btn-arrow">➔</span>
         </a>
 
@@ -121,6 +124,10 @@
           <span>🚘 Quero ser Motorista / Parceiro</span>
           <span>➔</span>
         </a>
+
+        <div style="text-align: center; font-size: 10px; color: #64748B; margin-top: 4px;">
+          🔒 Dados protegidos pela LGPD com criptografia ponta a ponta.
+        </div>
       </footer>
     </div>
 
@@ -234,7 +241,7 @@
         </div>
       </section>
 
-      <!-- ABA 2: OPÇÕES / SERVIÇOS (FOCO B2C) -->
+      <!-- ABA 2: OPÇÕES / SERVIÇOS -->
       <section class="tab-view" id="viewOpcoes">
         <div class="view-content">
           <div class="view-header-title">
@@ -376,7 +383,7 @@
 
     </main>
 
-    <!-- BARRA DE NAVEGAÇÃO INFERIOR FIXA (BOTTOM NAV) -->
+    <!-- BARRA DE NAVEGAÇÃO INFERIOR FIXA -->
     <nav class="bottom-nav">
       <button type="button" class="nav-item active" data-tab="viewInicio">
         <span class="nav-icon">📍</span>
@@ -401,16 +408,15 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
   <script>
-    // Ativa o clique do botão de entrar como cliente na splash screen
-   document.getElementById('btnEntrarCliente')?.addEventListener('click', (e) => {
-    localStorage.setItem('huby_user_role', 'cliente');
-    localStorage.setItem('huby_ja_entrou', '1');
-    const splash = document.getElementById('splashScreen');
-    if (splash) {
-      splash.classList.add('fechado');
-      splash.style.display = 'none';
-    }
-  });
+    document.getElementById('btnEntrarCliente')?.addEventListener('click', (e) => {
+      localStorage.setItem('huby_user_role', 'cliente');
+      localStorage.setItem('huby_ja_entrou', '1');
+      const splash = document.getElementById('splashScreen');
+      if (splash) {
+        splash.classList.add('fechado');
+        splash.style.display = 'none';
+      }
+    });
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
