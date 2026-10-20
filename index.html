@@ -8,18 +8,27 @@
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- GUARDA DE PERFIL: Se for motorista, manda direto para o app de motorista -->
+  <!-- GUARDA DE PERFIL E SESSÃO -->
   <script>
     (function () {
       const papel = localStorage.getItem('huby_user_role');
+      const jaEntrou = localStorage.getItem('huby_ja_entrou');
+
       if (papel === 'motorista') {
         window.location.replace('./motorista.html');
-      } else {
-        if (!papel) localStorage.setItem('huby_user_role', 'cliente');
+      }
+
+      // Se já passou pelo splash anteriormente, esconde-o instantaneamente ao carregar
+      if (jaEntrou === '1') {
+        document.addEventListener('DOMContentLoaded', () => {
+          const splash = document.getElementById('splashScreen');
+          if (splash) {
+            splash.style.display = 'none';
+          }
+        });
       }
     })();
   </script>
-
   <!-- CSS do Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <!-- Estilos Globais, do Cliente e da Tela de Entrada -->
@@ -393,14 +402,15 @@
   <script type="module" src="./js/modules/app-cliente.js"></script>
   <script>
     // Ativa o clique do botão de entrar como cliente na splash screen
-    document.getElementById('btnEntrarCliente')?.addEventListener('click', () => {
-      localStorage.setItem('huby_user_role', 'cliente');
-      const splash = document.getElementById('splashScreen');
-      if (splash) {
-        splash.classList.add('fechado');
-        splash.style.display = 'none';
-      }
-    });
+   document.getElementById('btnEntrarCliente')?.addEventListener('click', (e) => {
+    localStorage.setItem('huby_user_role', 'cliente');
+    localStorage.setItem('huby_ja_entrou', '1');
+    const splash = document.getElementById('splashScreen');
+    if (splash) {
+      splash.classList.add('fechado');
+      splash.style.display = 'none';
+    }
+  });
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
