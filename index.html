@@ -18,7 +18,6 @@
         window.location.replace('./motorista.html');
       }
 
-      // Se já passou pelo splash e está autenticado, oculta o splash instantaneamente
       if (jaEntrou === '1') {
         document.addEventListener('DOMContentLoaded', () => {
           const splash = document.getElementById('splashScreen');
@@ -36,13 +35,27 @@
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/cliente.css">
   <link rel="stylesheet" href="./css/welcome.css">
+  <style>
+    /* Estilo adicional para garantir a transição suave do carrossel */
+    .pillar-card {
+      transition: all 0.4s ease-in-out;
+      opacity: 0.4;
+      transform: scale(0.96);
+    }
+    .pillar-card.active {
+      opacity: 1;
+      transform: scale(1);
+      border-color: #10B981 !important;
+      background: rgba(16, 185, 129, 0.08) !important;
+    }
+  </style>
 </head>
 
 <body>
 
   <div class="app-layout">
 
-    <!-- TELA DE ENTRADA / ONBOARDING COM FOCO EM SEGURANÇA -->
+    <!-- TELA DE ENTRADA / ONBOARDING COM CARROSSEL AUTOMÁTICO -->
     <div id="splashScreen" class="welcome-overlay">
       <div class="glow-bg top-glow"></div>
       <div class="glow-bg bottom-glow"></div>
@@ -65,8 +78,8 @@
         <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
       </header>
 
-      <!-- Carrossel de Pilares de Segurança -->
-      <div class="pillars-container">
+      <!-- Carrossel de Pilares Dinâmico -->
+      <div class="pillars-container" id="pillarsContainer">
         <div class="pillar-card active" data-slide="0">
           <div class="pillar-icon">🔒</div>
           <div class="pillar-content">
@@ -92,14 +105,14 @@
         </div>
       </div>
 
-      <!-- Indicadores de Pontos -->
-      <div class="slide-dots">
+      <!-- Indicadores de Pontos (Dots) -->
+      <div class="slide-dots" id="slideDots">
         <span class="dot active"></span>
         <span class="dot"></span>
         <span class="dot"></span>
       </div>
 
-      <!-- Ações de Entrada com Conformidade de Segurança -->
+      <!-- Ações de Entrada -->
       <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
         <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente" style="width: 100%; display: flex; align-items: center; justify-content: space-between; text-decoration: none; box-sizing: border-box;">
           <span>📱 Sou Passageiro / Cliente (Registar)</span>
@@ -131,7 +144,7 @@
       </footer>
     </div>
 
-    <!-- CABEÇALHO DO APLICATIVO (BARRA SUPERIOR) -->
+    <!-- CABEÇALHO DO APLICATIVO -->
     <header class="huby-header">
       <a href="./index.html" class="brand-logo-compact">
         <span class="brand-hub-nav">HUB</span><span class="brand-y-nav">y</span>
@@ -158,7 +171,6 @@
           <div class="sheet-drag-handle"></div>
           <div class="status-banner" id="bannerStatusCorrida"></div>
 
-          <!-- Seletor de Modalidades Principais -->
           <div class="group-tabs">
             <div class="tab-card active-carro" data-grupo="carro">
               <div class="tab-icon">🚗</div>
@@ -177,10 +189,8 @@
             </div>
           </div>
 
-          <!-- Sub-veículos Dinâmicos -->
           <div class="sub-vehicles" id="containerSubVeiculos"></div>
 
-          <!-- Campos de Origem e Destino -->
           <div class="addresses-box">
             <div class="input-group">
               <span class="dot-indicator green"></span>
@@ -195,7 +205,6 @@
             </div>
           </div>
 
-          <!-- Adicionais para Cargo / Flash -->
           <div class="cargo-options-box">
             <div class="option-line" id="linhaAjudante" style="display:none;">
               <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
@@ -217,13 +226,11 @@
             </div>
           </div>
 
-          <!-- Resumo de Rota -->
           <div class="trip-breakdown">
             <span>📏 Rota: <strong id="txtDistKm">3.5 km</strong> (<span id="txtDuracaoMin">8</span> min)</span>
             <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
           </div>
 
-          <!-- Pagamento -->
           <div class="payment-bar">
             <span class="payment-label">Pagamento:</span>
             <select id="selectMetodoPgto">
@@ -233,7 +240,6 @@
             </select>
           </div>
 
-          <!-- Botão Principal -->
           <button type="button" class="btn-primary" id="btnSolicitarHuby">
             <span id="txtBotaoAcao">Chamar HUBy Carro</span>
             <span class="price-box" id="txtPrecoFinal">R$ 16,10</span>
@@ -282,7 +288,7 @@
         </div>
       </section>
 
-      <!-- ABA 3: ATIVIDADE (HISTÓRICO) -->
+      <!-- ABA 3: ATIVIDADE -->
       <section class="tab-view" id="viewAtividade">
         <div class="view-content">
           <div class="view-header-title">
@@ -314,7 +320,7 @@
         </div>
       </section>
 
-      <!-- ABA 4: CONTA (PERFIL DO USUÁRIO) -->
+      <!-- ABA 4: CONTA -->
       <section class="tab-view" id="viewConta">
         <div class="view-content">
           <div class="profile-header">
@@ -408,6 +414,30 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
   <script>
+    // Motor do Carrossel Automático da Tela Inicial
+    document.addEventListener('DOMContentLoaded', () => {
+      const cards = document.querySelectorAll('.pillar-card');
+      const dots = document.querySelectorAll('.slide-dots .dot');
+      let currentIndex = 0;
+
+      function trocarSlide() {
+        cards.forEach(c => c.classList.remove('active'));
+        dots.forEach(d => d.classList.remove('active'));
+
+        currentIndex = (currentIndex + 1) % cards.length;
+
+        cards[currentIndex].classList.add('active');
+        if (dots[currentIndex]) {
+          dots[currentIndex].classList.add('active');
+        }
+      }
+
+      // Roda automaticamente a cada 3.5 segundos
+      if (cards.length > 0) {
+        setInterval(trocarSlide, 3500);
+      }
+    });
+
     document.getElementById('btnEntrarCliente')?.addEventListener('click', (e) => {
       localStorage.setItem('huby_user_role', 'cliente');
       localStorage.setItem('huby_ja_entrou', '1');
