@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBy - Painel do Motorista (100% Fullscreen Dark Theme)
+   HUBy - Painel do Motorista (100% Fullscreen Dark Theme - Sem Marcas/Zoom)
    ========================================================================== */
 
 * {
@@ -161,7 +161,7 @@ html, body {
   font-size: 13px;
 }
 
-/* 2. ÁREA DO MAPA EM TEMA ESCURO NATIVO */
+/* 2. ÁREA DO MAPA EM MODO ESCURO */
 .driver-map-wrapper {
   position: absolute;
   top: 0;
@@ -179,12 +179,21 @@ html, body {
   background: #080C14;
 }
 
-/* Filtro escuro para as imagens do OpenStreetMap */
+/* Filtro de tema escuro para as imagens do mapa */
 .leaflet-tile {
   filter: brightness(0.65) invert(1) contrast(3.2) hue-rotate(200deg) saturate(0.3) !important;
 }
 
-/* Pílula do radar com distância adequada do cabeçalho */
+/* REMOVER BOTÕES DE ZOOM E ATRIBUIÇÃO/BANDEIRA DO LEAFLET */
+.leaflet-control-zoom,
+.leaflet-control-attribution {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Pílula do radar posicionada sem colidir com o cabeçalho */
 .radar-status-badge {
   position: absolute;
   top: 92px;
@@ -230,7 +239,7 @@ html, body {
   100% { transform: scale(2.4); opacity: 0; }
 }
 
-/* Botão Flutuante de GPS */
+/* Botão Flutuante de Recentralizar GPS */
 .btn-recenter-gps {
   position: absolute;
   right: 16px;
@@ -253,25 +262,6 @@ html, body {
 
 .btn-recenter-gps:active {
   transform: scale(0.92);
-}
-
-/* Posicionamento dos botões de zoom nativos */
-.leaflet-control-zoom {
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 10px !important;
-  overflow: hidden;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5) !important;
-}
-
-.leaflet-control-zoom a {
-  background-color: rgba(13, 20, 36, 0.92) !important;
-  color: #FFFFFF !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-.leaflet-bottom.leaflet-right {
-  bottom: 260px !important;
-  right: 16px !important;
 }
 
 /* 3. PAINEL INFERIOR (BOTTOM SHEET) */

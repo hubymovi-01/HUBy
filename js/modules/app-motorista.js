@@ -8,17 +8,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback inicial)
   let motoristaCoords = [...defaultCoords];
 
-  // Inicia o mapa com zoomControl desativado internamente para posicionar apenas no canto inferior direito
+  // Inicia o mapa sem controlo de zoom e sem atribuição do Leaflet
   const map = L.map('mapaMotorista', {
-    zoomControl: false
+    zoomControl: false,
+    attributionControl: false
   }).setView(defaultCoords, 15);
 
-  // Adiciona apenas uma instância do controlo de zoom
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
+    maxZoom: 19
   }).addTo(map);
 
   // Marcador do Motorista
