@@ -83,3 +83,34 @@ app.patch('/api/pedidos', async (req, res) => {
 app.listen(port, () => {
   console.log(`Servidor HUBy ativo na porta ${port}`);
 });
+// POST /api/motoristas/cadastro
+app.post('/api/motoristas/cadastro', async (req, res) => {
+  try {
+    const {
+      nome, telefone, cpf, cnhNumero,
+      categoria, veiculoModelo, veiculoPlaca, veiculoCor,
+      fotoCnhUrl, fotoVeiculoUrl
+    } = req.body;
+
+    const query = `
+      INSERT INTO motoristas (
+        nome, telefone, cpf, cnh_numero, categoria,
+        veiculo_modelo, veiculo_placa, veiculo_cor,
+        foto_cnh_url, foto_veiculo_url, status_online
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+      RETURNING id, nome, categoria, veiculo_modelo, status_aprovacao;
+    `;
+
+    const valores = [
+      nome, telefone, cpf, cnhNumero,
+      categoria, veiculoModelo, veiculoPlaca.toUpperCase(), veiculoCor,
+      fotoCnhUrl || '', fotoVeiculoUrl || ''
+    ];
+
+    const resultado = await pool.query(query, valores);
+    res.status(201).json({ sucesso: true, motorista: resultado.rows[0] });
+  } catch (err) {
+    console.error('Erro no cadastro de motorista:', err);
+    res.status(500).json({ erro: 'Falha ao realizar cadastro do motorista' });
+  }
+});

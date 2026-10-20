@@ -3,10 +3,23 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>HUBy HUBy - Mobilidade, Flash e Fretes</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
+
+  <!-- GUARDA DE PERFIL: Se for motorista, manda direto para o app de motorista -->
+  <script>
+    (function () {
+      const papel = localStorage.getItem('huby_user_role');
+      if (papel === 'motorista') {
+        window.location.replace('./motorista.html');
+      } else {
+        // Marca o usuário atual como cliente por padrão
+        if (!papel) localStorage.setItem('huby_user_role', 'cliente');
+      }
+    })();
+  </script>
 
   <!-- CSS do Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -86,7 +99,7 @@
 
         <div class="driver-cta-box">
           <span>Quer trabalhar connosco?</span>
-          <a href="./motorista.html" class="driver-link">Aceder como Motorista</a>
+          <a href="./cadastro-motorista.html" class="driver-link">Cadastrar como Motorista</a>
         </div>
       </footer>
     </div>
@@ -99,7 +112,7 @@
       </a>
       <div class="header-right">
         <span class="wallet-pill" id="btnIrCarteira">🪙 <strong>R$ 0,00</strong></span>
-        <a href="./motorista.html" class="badge-pill">Modo Motorista ➔</a>
+        <a href="./cadastro-motorista.html" class="badge-pill">Seja Parceiro ➔</a>
       </div>
     </header>
 
@@ -309,12 +322,12 @@
 
           <!-- Lista de Opções da Conta -->
           <div class="profile-menu">
-            <a href="./motorista.html" class="menu-item highlight">
+            <a href="./cadastro-motorista.html" class="menu-item highlight">
               <div class="menu-item-left">
                 <span class="menu-icon">🚘</span>
                 <div>
                   <strong>Modo Motorista</strong>
-                  <p>Ganhe dinheiro dirigindo ou fazendo fretes</p>
+                  <p>Cadastre seu veículo e ganhe dirigindo ou fazendo fretes</p>
                 </div>
               </div>
               <span class="menu-arrow">➔</span>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 
 <head>
   <meta charset="UTF-8">
@@ -8,26 +8,36 @@
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
+  <!-- GUARDA DE PERFIL: Impede acesso sem cadastro -->
+  <script>
+    (function () {
+      const papel = localStorage.getItem('huby_user_role');
+      if (papel !== 'motorista') {
+        window.location.replace('./cadastro-motorista.html');
+      }
+    })();
+  </script>
+
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
-  <!-- CSS Exclusivo e Otimizado do Motorista -->
+  <!-- CSS Exclusivo do Motorista -->
   <link rel="stylesheet" href="./css/motorista.css">
 </head>
 
 <body>
   <div class="driver-layout">
 
-    <!-- CABEÇALHO UNIFICADO E COMPACTO -->
+    <!-- CABEÇALHO UNIFICADO E DINÂMICO -->
     <header class="driver-header">
       <div class="header-left">
-        <div class="driver-avatar">TC</div>
+        <div class="driver-avatar" id="lblAvatarMotorista">TC</div>
         <div class="driver-meta">
           <div class="meta-row">
-            <span class="d-name">Tarcyo</span>
-            <span class="d-badge">⭐ 4.98</span>
+            <span class="d-name" id="lblNomeMotorista">Motorista</span>
+            <span class="d-badge">⭐ 5.0</span>
           </div>
-          <span class="d-earnings" id="statGanhosHoje">Hoje: <strong>R$ 184,50</strong> (7 corridas)</span>
+          <span class="d-earnings" id="statGanhosHoje">Hoje: <strong>R$ 0,00</strong> (0 corridas)</span>
         </div>
       </div>
 
@@ -36,7 +46,8 @@
           <span class="pulse-indicator"></span>
           <span id="txtStatusMotorista">ONLINE</span>
         </button>
-        <a href="./index.html" class="btn-mode-icon" title="Voltar para Modo Passageiro">🔄</a>
+        <!-- Botão para encerrar a sessão de motorista se necessário -->
+        <button type="button" class="btn-mode-icon" id="btnSairConta" title="Encerrar Sessão">🚪</button>
       </div>
     </header>
 
@@ -79,6 +90,37 @@
   <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-motorista.js"></script>
+
+  <!-- Script Inline para Carregar Dados do Cadastro e Logout -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const nomeSalvo = localStorage.getItem('huby_motorista_nome') || 'Motorista Parceiro';
+      const elNome = document.getElementById('lblNomeMotorista');
+      const elAvatar = document.getElementById('lblAvatarMotorista');
+
+      if (elNome) {
+        elNome.textContent = nomeSalvo.split(' ')[0]; // Exibe o primeiro nome
+      }
+
+      if (elAvatar) {
+        const partes = nomeSalvo.trim().split(' ');
+        const iniciais = partes.length > 1 
+          ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+          : partes[0].substring(0, 2).toUpperCase();
+        elAvatar.textContent = iniciais;
+      }
+
+      // Ação de Logout
+      document.getElementById('btnSairConta')?.addEventListener('click', () => {
+        if (confirm('Deseja realmente sair da sua conta de motorista?')) {
+          localStorage.removeItem('huby_user_role');
+          localStorage.removeItem('huby_motorista_id');
+          localStorage.removeItem('huby_motorista_nome');
+          window.location.href = './index.html';
+        }
+      });
+    });
+  </script>
 </body>
 
 </html>

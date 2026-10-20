@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>HUBy - Cadastro de Motorista Parceiro</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <style>
+    body {
+      background-color: #080C14;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 16px;
+    }
+    .form-container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding-bottom: 30px;
+    }
+    .brand-title {
+      font-size: 22px;
+      font-weight: 900;
+      color: #10B981;
+      margin-bottom: 4px;
+    }
+    .brand-sub {
+      font-size: 13px;
+      color: #94A3B8;
+      margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #CBD5E1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 18px 0 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 4px;
+    }
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 12px;
+    }
+    .field-group label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #94A3B8;
+    }
+    .field-group input, .field-group select {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      padding: 12px;
+      color: #FFFFFF;
+      font-size: 14px;
+      outline: none;
+    }
+    .field-group input:focus, .field-group select:focus {
+      border-color: #10B981;
+    }
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: #03251E;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 900;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <div class="brand-title">HUBy Parceiro 🚘</div>
+    <div class="brand-sub">Cadastre seus dados e comece a faturar com viagens, entregas e fretes.</div>
+
+    <form id="formCadastroMotorista">
+      <div class="section-title">1. Dados Pessoais & CNH</div>
+      <div class="field-group">
+        <label>Nome Completo</label>
+        <input type="text" id="cadNome" placeholder="Ex: Tarcyo Carvalho" required>
+      </div>
+      <div class="row-2">
+        <div class="field-group">
+          <label>Telefone / WhatsApp</label>
+          <input type="tel" id="cadTelefone" placeholder="(89) 99999-9999" required>
+        </div>
+        <div class="field-group">
+          <label>CPF</label>
+          <input type="text" id="cadCpf" placeholder="000.000.000-00" required>
+        </div>
+      </div>
+      <div class="field-group">
+        <label>Número de Registro da CNH</label>
+        <input type="text" id="cadCnh" placeholder="Ex: 01234567890" required>
+      </div>
+
+      <div class="section-title">2. Modalidade & Veículo</div>
+      <div class="field-group">
+        <label>Categoria Principal</label>
+        <select id="cadCategoria">
+          <option value="carro">🚗 HUBy Viagem (Carro Particular)</option>
+          <option value="moto">🛵 HUBy Moto (Passageiro)</option>
+          <option value="flash">📦 HUBy Flash (Entregas e Encomendas)</option>
+          <option value="cargo">🚚 HUBy Cargo (Furgão, Caminhonete ou VUC)</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label>Modelo do Veículo</label>
+        <input type="text" id="cadModelo" placeholder="Ex: Chevrolet Onix 1.0 ou Honda CG 160" required>
+      </div>
+      <div class="row-2">
+        <div class="field-group">
+          <label>Placa</label>
+          <input type="text" id="cadPlaca" placeholder="ABC1D23" required>
+        </div>
+        <div class="field-group">
+          <label>Cor</label>
+          <input type="text" id="cadCor" placeholder="Ex: Prata" required>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="btnSalvarCadastro">Concluir Cadastro e Ir ao Radar</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = 'https://huby.onrender.com';
+    const form = document.getElementById('formCadastroMotorista');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btnSalvarCadastro');
+      btn.textContent = 'Gravando cadastro...';
+      btn.disabled = true;
+
+      const payload = {
+        nome: document.getElementById('cadNome').value.trim(),
+        telefone: document.getElementById('cadTelefone').value.trim(),
+        cpf: document.getElementById('cadCpf').value.trim(),
+        cnhNumero: document.getElementById('cadCnh').value.trim(),
+        categoria: document.getElementById('cadCategoria').value,
+        veiculoModelo: document.getElementById('cadModelo').value.trim(),
+        veiculoPlaca: document.getElementById('cadPlaca').value.trim(),
+        veiculoCor: document.getElementById('cadCor').value.trim()
+      };
+
+      try {
+        const resp = await fetch(`${API_URL}/api/motoristas/cadastro`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const dados = await resp.json();
+        if (resp.ok && dados.sucesso) {
+          // Salva a sessão do motorista no celular
+          localStorage.setItem('huby_user_role', 'motorista');
+          localStorage.setItem('huby_motorista_id', dados.motorista.id);
+          localStorage.setItem('huby_motorista_nome', dados.motorista.nome);
+          localStorage.setItem('huby_motorista_categoria', dados.motorista.categoria);
+
+          // Redireciona imediatamente para a tela restrita de motorista
+          window.location.href = './motorista.html';
+        } else {
+          alert('Erro ao cadastrar: ' + (dados.erro || 'Verifique as informações.'));
+          btn.textContent = 'Concluir Cadastro e Ir ao Radar';
+          btn.disabled = false;
+        }
+      } catch (err) {
+        // Fallback local caso o backend esteja em repouso
+        localStorage.setItem('huby_user_role', 'motorista');
+        localStorage.setItem('huby_motorista_nome', payload.nome);
+        localStorage.setItem('huby_motorista_categoria', payload.categoria);
+        window.location.href = './motorista.html';
+      }
+    });
+  </script>
+</body>
+</html>
