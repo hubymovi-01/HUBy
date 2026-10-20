@@ -2,11 +2,12 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   const API_URL = 'https://huby.onrender.com';
-  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback inicial)
+  const defaultCoords = [-8.3565, -42.2504]; // Posição padrão
   let clienteCoords = [...defaultCoords];
   let pontoDestinoCoords = null;
+  let linhaTracaoRota = null;
 
-  // 1. INICIALIZAR O MAPA SEM BOTÕES DE ZOOM E SEM CRÉDITOS DO LEAFLET
+  // 1. INICIALIZAR O MAPA DO PASSAGEIRO
   const mapElement = document.getElementById('mapaCliente');
   let map = null;
   let markerCliente = null;
@@ -16,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     map = L.map('mapaCliente', {
       zoomControl: false,
       attributionControl: false
-    }).setView(defaultCoords, 15);
+    }).setView(defaultCoords, 16);
 
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19
@@ -26,19 +27,20 @@ document.addEventListener('DOMContentLoaded', () => {
       radius: 9,
       color: '#10B981',
       fillColor: '#10B981',
-      fillOpacity: 1
+      fillOpacity: 1,
+      weight: 3
     }).addTo(map);
 
     setTimeout(() => map.invalidateSize(), 300);
     window.addEventListener('resize', () => map.invalidateSize());
 
-    // Obter GPS real do utilizador se autorizado
+    // Obter GPS real do passageiro
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           clienteCoords = [pos.coords.latitude, pos.coords.longitude];
           markerCliente.setLatLng(clienteCoords);
-          map.setView(clienteCoords, 15, { animate: true });
+          map.setView(clienteCoords, 16, { animate: true });
           map.invalidateSize();
         },
         () => {},
@@ -46,9 +48,13 @@ document.addEventListener('DOMContentLoaded', () => {
       );
     }
 
-    // Clique no mapa para definir destino manualmente
+    // Clique no mapa para definir destino
     map.on('click', (e) => {
-      definirDestinoNoMapa(e.latlng.lat, e.latlng.lng, `Ponto selecionado (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`);
+      definirDestinoNoMapa(
+        e.latlng.lat,
+        e.latlng.lng,
+        `Ponto selecionado (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`
+      );
     });
   }
 
@@ -66,25 +72,32 @@ document.addEventListener('DOMContentLoaded', () => {
       inputDestino.value = textoExibicao;
     }
 
-    // Enquadra a visão para mostrar a origem e o destino
+    // Traça linha visual do trajeto entre passageiro e destino
+    if (linhaTracaoRota) map.removeLayer(linhaTracaoRota);
+    linhaTracaoRota = L.polyline([clienteCoords, pontoDestinoCoords], {
+      color: '#10B981',
+      weight: 4,
+      dashArray: '6, 8',
+      opacity: 0.85
+    }).addTo(map);
+
+    // Ajusta a câmara para mostrar os dois pontos
     if (map) {
       const bounds = L.latLngBounds([clienteCoords, pontoDestinoCoords]);
-      map.fitBounds(bounds, { padding: [60, 60], animate: true });
+      map.fitBounds(bounds, { padding: [70, 70], animate: true });
     }
 
     recalcularValores();
   }
 
-  // =========================================================================
-  // 2. BUSCA DE ENDEREÇO / CIDADE (NOMINATIM / OPENSTREETMAP)
-  // =========================================================================
+  // 2. BUSCA DE ENDEREÇO VIA NOMINATIM
   const btnBuscarEndereco = document.getElementById('btnBuscarEndereco');
   const inputDestino = document.getElementById('inputDestino');
 
   async function executarBuscaDestino() {
     const texto = inputDestino?.value.trim();
     if (!texto) {
-      alert('Por favor, digite o nome de uma rua, bairro ou cidade.');
+      alert('Digite o nome de uma rua, bairro ou local.');
       return;
     }
 
@@ -94,7 +107,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      // Prioriza buscas no Brasil (countrycodes=br)
       const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(texto)}&countrycodes=br&limit=1`;
       const resposta = await fetch(url, {
         headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' }
@@ -105,14 +117,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const resultado = dados[0];
         const lat = parseFloat(resultado.lat);
         const lon = parseFloat(resultado.lon);
-
         definirDestinoNoMapa(lat, lon, resultado.display_name.split(',')[0]);
       } else {
-        alert('Endereço ou local não encontrado. Tente adicionar o estado ou toque diretamente no mapa.');
+        alert('Endereço não localizado. Toque diretamente no mapa.');
       }
     } catch (err) {
-      console.warn('Erro ao pesquisar morada:', err);
-      alert('Falha na conexão de pesquisa. Pode tocar diretamente no mapa para marcar o destino.');
+      console.warn('Erro ao pesquisar:', err);
     } finally {
       if (btnBuscarEndereco) {
         btnBuscarEndereco.textContent = 'Ir';
@@ -122,8 +132,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   btnBuscarEndereco?.addEventListener('click', executarBuscaDestino);
-
-  // Permite buscar ao apertar "Enter" no teclado do telemóvel
   inputDestino?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -139,10 +147,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 3. CONTROLO DO ONBOARDING / ENTRADA (SPLASH SCREEN)
+  // 3. TELA DE ENTRADA
   const splash = document.getElementById('splashScreen');
   const btnEntrar = document.getElementById('btnEntrarApp');
-
   btnEntrar?.addEventListener('click', () => {
     if (splash) {
       splash.classList.add('fechado');
@@ -151,27 +158,28 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => map?.invalidateSize(), 200);
   });
 
-  // 4. SELEÇÃO DE MODALIDADES E SUB-VEÍCULOS
+  // 4. CONFIGURAÇÃO DE TARIFAS POR QUILÓMETRO
   let grupoSelecionado = 'carro';
   let subVeiculoSelecionado = 'HUBy Carro';
-  let precoBase = 16.10;
+  let baseTarifa = 7.00;
+  let valorPorKm = 2.60;
   let qtdAjudantes = 0;
   let temEscada = false;
   let temParadaExtra = false;
 
   const configVeiculos = {
     carro: [
-      { id: 'carro', label: '🚗 HUBy Carro', base: 16.10 },
-      { id: 'moto', label: '🛵 HUBy Moto', base: 9.50 }
+      { id: 'carro', label: '🚗 HUBy Carro', base: 7.00, porKm: 2.60 },
+      { id: 'moto', label: '🛵 HUBy Moto', base: 4.50, porKm: 1.40 }
     ],
     flash: [
-      { id: 'flash_moto', label: '⚡ Flash Moto', base: 8.90 },
-      { id: 'flash_carro', label: '📦 Flash Utilitário', base: 19.00 }
+      { id: 'flash_moto', label: '⚡ Flash Moto', base: 5.00, porKm: 1.50 },
+      { id: 'flash_carro', label: '📦 Flash Utilitário', base: 9.00, porKm: 2.80 }
     ],
     cargo: [
-      { id: 'cargo_pickup', label: '🛻 Caminhonete/Picape', base: 55.00 },
-      { id: 'cargo_van', label: '🚐 Van de Carga', base: 85.00 },
-      { id: 'cargo_vuc', label: '🚚 Caminhão Pequeno (VUC)', base: 140.00 }
+      { id: 'cargo_pickup', label: '🛻 Caminhonete/Picape', base: 35.00, porKm: 5.00 },
+      { id: 'cargo_van', label: '🚐 Van de Carga', base: 50.00, porKm: 7.00 },
+      { id: 'cargo_vuc', label: '🚚 Caminhão Pequeno (VUC)', base: 80.00, porKm: 10.00 }
     ]
   };
 
@@ -183,20 +191,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!containerSub) return;
     const lista = configVeiculos[grupoSelecionado] || [];
     containerSub.innerHTML = lista.map((v, i) => `
-      <button type="button" class="sub-pill ${i === 0 ? 'active' : ''}" data-id="${v.id}" data-base="${v.base}" data-label="${v.label}">
+      <button type="button" class="sub-pill ${i === 0 ? 'active' : ''}" data-id="${v.id}" data-base="${v.base}" data-porkm="${v.porKm}" data-label="${v.label}">
         ${v.label}
       </button>
     `).join('');
 
     subVeiculoSelecionado = lista[0]?.label || 'HUBy Carro';
-    precoBase = lista[0]?.base || 16.10;
+    baseTarifa = lista[0]?.base || 7.00;
+    valorPorKm = lista[0]?.porKm || 2.60;
 
     containerSub.querySelectorAll('.sub-pill').forEach(btn => {
       btn.addEventListener('click', () => {
         containerSub.querySelectorAll('.sub-pill').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         subVeiculoSelecionado = btn.getAttribute('data-label');
-        precoBase = parseFloat(btn.getAttribute('data-base')) || 16.10;
+        baseTarifa = parseFloat(btn.getAttribute('data-base')) || 7.00;
+        valorPorKm = parseFloat(btn.getAttribute('data-porkm')) || 2.60;
         recalcularValores();
       });
     });
@@ -224,7 +234,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderizarSubVeiculos();
 
-  // 5. ADICIONAIS E CÁLCULO
+  // Adicionais
   const txtQtdAjudantes = document.getElementById('txtQtdAjudantes');
   document.getElementById('btnMenosAjudante')?.addEventListener('click', () => {
     if (qtdAjudantes > 0) {
@@ -252,7 +262,21 @@ document.addEventListener('DOMContentLoaded', () => {
     recalcularValores();
   });
 
+  // 5. CÁLCULO GEODÉSICO DA DISTÂNCIA E DO PREÇO DINÂMICO
+  let distanciaKmGlobal = 1.0;
+
   function recalcularValores() {
+    if (pontoDestinoCoords && map) {
+      // Cálculo de distância métrica real entre origem e destino
+      const metros = map.distance(L.latLng(clienteCoords), L.latLng(pontoDestinoCoords));
+      distanciaKmGlobal = Math.max(0.5, metros / 1000); // Mínimo 500m
+    } else {
+      distanciaKmGlobal = 1.2;
+    }
+
+    // Estima ~2.5 minutos por km urbano + 2 minutos base
+    const minutosEstimados = Math.max(3, Math.round(distanciaKmGlobal * 2.5 + 2));
+
     let adicionais = 0;
     if (grupoSelecionado === 'cargo') {
       adicionais += (qtdAjudantes * 50);
@@ -260,27 +284,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (temParadaExtra) adicionais += 6;
 
-    const totalFinal = precoBase + adicionais;
+    // Fórmula: Taxa Base + (Distância Real × Preço por Km) + Adicionais
+    const valorCorrida = baseTarifa + (distanciaKmGlobal * valorPorKm) + adicionais;
+
+    // Atualiza os elementos na interface
+    const txtDistKm = document.getElementById('txtDistKm');
+    if (txtDistKm) txtDistKm.textContent = `${distanciaKmGlobal.toFixed(1)} km`;
+
+    const txtDuracaoMin = document.getElementById('txtDuracaoMin');
+    if (txtDuracaoMin) txtDuracaoMin.textContent = minutosEstimados;
 
     const txtValorAdicionais = document.getElementById('txtValorAdicionais');
     if (txtValorAdicionais) txtValorAdicionais.textContent = `R$ ${adicionais.toFixed(2).replace('.', ',')}`;
 
     const txtPrecoFinal = document.getElementById('txtPrecoFinal');
-    if (txtPrecoFinal) txtPrecoFinal.textContent = `R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
+    if (txtPrecoFinal) txtPrecoFinal.textContent = `R$ ${valorCorrida.toFixed(2).replace('.', ',')}`;
 
     const txtBotaoAcao = document.getElementById('txtBotaoAcao');
     if (txtBotaoAcao) txtBotaoAcao.textContent = `Chamar ${subVeiculoSelecionado}`;
   }
 
-  // 6. ENVIAR PEDIDO AO RENDER/NEON
+  // 6. ENVIAR PEDIDO COM A DISTÂNCIA REAL E PREÇO DINÂMICO
   const btnSolicitar = document.getElementById('btnSolicitarHuby');
   const bannerStatus = document.getElementById('bannerStatusCorrida');
   let bannerTimer = null;
 
   btnSolicitar?.addEventListener('click', async () => {
-    const destinoTexto = inputDestino?.value.trim() || 'Ponto selecionado no mapa (1.0 km)';
+    const destinoTexto = inputDestino?.value.trim() || 'Ponto selecionado no mapa';
     const metodoPgto = document.getElementById('selectMetodoPgto')?.value || 'pix_app';
-    const precoTexto = document.getElementById('txtPrecoFinal')?.textContent || 'R$ 16,10';
+    const precoTexto = document.getElementById('txtPrecoFinal')?.textContent || 'R$ 10,00';
 
     const destinoFinalCoords = pontoDestinoCoords || [
       clienteCoords[0] + 0.007,
@@ -295,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
       destino: destinoTexto,
       coordsOrigem: clienteCoords,
       coordsDestino: destinoFinalCoords,
-      distancia: '1.0 km',
+      distancia: `${distanciaKmGlobal.toFixed(1)} km`,
       preco: precoTexto,
       metodoPgto: metodoPgto,
       criadoEm: new Date().toISOString()
@@ -324,7 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(novoPedido)
       });
     } catch (err) {
-      console.warn('Erro no Render, mantido localmente.', err);
+      console.warn('Erro ao comunicar com o servidor Render, mantido localmente.', err);
     }
 
     if (bannerStatus) {
@@ -336,7 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 7. NAVEGAÇÃO ENTRE AS ABAS INFERIORES
+  // 7. NAVEGAÇÃO ENTRE AS ABAS
   const botoesNav = document.querySelectorAll('.nav-item');
   const telas = document.querySelectorAll('.tab-view');
 
