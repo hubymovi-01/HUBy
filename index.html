@@ -15,7 +15,6 @@
       if (papel === 'motorista') {
         window.location.replace('./motorista.html');
       } else {
-        // Marca o usuário atual como cliente por padrão
         if (!papel) localStorage.setItem('huby_user_role', 'cliente');
       }
     })();
@@ -41,13 +40,10 @@
       <!-- Logótipo Vertical com Contraste -->
       <header class="welcome-header">
         <div class="brand-hero-stacked">
-          <!-- Versão compacta / selo superior -->
           <div class="brand-row brand-row-small">
             <span class="brand-hub-small">HUB</span>
             <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
           </div>
-
-          <!-- Versão principal em destaque -->
           <div class="brand-row brand-row-large">
             <span class="brand-hub-large">HUB</span>
             <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
@@ -90,17 +86,31 @@
         <span class="dot"></span>
       </div>
 
-      <!-- Ações de Entrada -->
-      <footer class="welcome-actions">
-        <button type="button" class="btn-welcome-primary" id="btnEntrarApp">
-          <span>Começar a Usar</span>
+      <!-- Ações de Entrada com Escolha Direta de Perfil -->
+      <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
+        <button type="button" class="btn-welcome-primary" id="btnEntrarCliente" style="width: 100%; display: flex; align-items: center; justify-content: space-between;">
+          <span>📱 Sou Passageiro / Cliente</span>
           <span class="btn-arrow">➔</span>
         </button>
 
-        <div class="driver-cta-box">
-          <span>Quer trabalhar connosco?</span>
-          <a href="./cadastro-motorista.html" class="driver-link">Cadastrar como Motorista</a>
-        </div>
+        <a href="./cadastro-motorista.html" class="btn-welcome-secondary" style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          background: rgba(16, 185, 129, 0.15);
+          border: 1.5px solid #10B981;
+          color: #10B981;
+          padding: 14px 20px;
+          border-radius: 14px;
+          font-weight: 800;
+          text-decoration: none;
+          font-size: 14px;
+          width: 100%;
+          box-sizing: border-box;
+        ">
+          <span>🚘 Quero ser Motorista / Parceiro</span>
+          <span>➔</span>
+        </a>
       </footer>
     </div>
 
@@ -245,7 +255,6 @@
             </div>
           </div>
 
-          <!-- Banner de Segurança e Garantia -->
           <div class="promo-banner">
             <div class="promo-text">
               <h4>Segurança em primeiro lugar</h4>
@@ -291,7 +300,6 @@
       <!-- ABA 4: CONTA (PERFIL DO USUÁRIO) -->
       <section class="tab-view" id="viewConta">
         <div class="view-content">
-          <!-- Cabeçalho de Perfil -->
           <div class="profile-header">
             <div class="profile-avatar">TC</div>
             <div class="profile-details">
@@ -300,7 +308,6 @@
             </div>
           </div>
 
-          <!-- Ações Rápidas -->
           <div class="profile-shortcuts">
             <div class="shortcut-item">
               <div class="shortcut-icon">👛</div>
@@ -320,7 +327,6 @@
             </div>
           </div>
 
-          <!-- Lista de Opções da Conta -->
           <div class="profile-menu">
             <a href="./cadastro-motorista.html" class="menu-item highlight">
               <div class="menu-item-left">
@@ -385,6 +391,16 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
   <script>
+    // Ativa o clique do botão de entrar como cliente na splash screen
+    document.getElementById('btnEntrarCliente')?.addEventListener('click', () => {
+      localStorage.setItem('huby_user_role', 'cliente');
+      const splash = document.getElementById('splashScreen');
+      if (splash) {
+        splash.classList.add('fechado');
+        splash.style.display = 'none';
+      }
+    });
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         const swPath = window.location.pathname.includes('/HUBy')
