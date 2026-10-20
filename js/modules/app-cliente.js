@@ -2,10 +2,20 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   const API_URL = 'https://huby.onrender.com';
-  const defaultCoords = [-8.3565, -42.2504]; // Posição padrão
+  const defaultCoords = [-8.3565, -42.2504]; // Paes Landim (fallback inicial)
   let clienteCoords = [...defaultCoords];
   let pontoDestinoCoords = null;
   let linhaTracaoRota = null;
+  
+  // Declaração antecipada das variáveis de estado para evitar erros
+  let distanciaKmGlobal = 1.5;
+  let grupoSelecionado = 'carro';
+  let subVeiculoSelecionado = 'HUBy Carro';
+  let baseTarifa = 7.00;
+  let valorPorKm = 2.60;
+  let qtdAjudantes = 0;
+  let temEscada = false;
+  let temParadaExtra = false;
 
   // 1. INICIALIZAR O MAPA DO PASSAGEIRO
   const mapElement = document.getElementById('mapaCliente');
@@ -42,6 +52,7 @@ document.addEventListener('DOMContentLoaded', () => {
           markerCliente.setLatLng(clienteCoords);
           map.setView(clienteCoords, 16, { animate: true });
           map.invalidateSize();
+          recalcularValores();
         },
         () => {},
         { enableHighAccuracy: true }
@@ -159,14 +170,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // 4. CONFIGURAÇÃO DE TARIFAS POR QUILÓMETRO
-  let grupoSelecionado = 'carro';
-  let subVeiculoSelecionado = 'HUBy Carro';
-  let baseTarifa = 7.00;
-  let valorPorKm = 2.60;
-  let qtdAjudantes = 0;
-  let temEscada = false;
-  let temParadaExtra = false;
-
   const configVeiculos = {
     carro: [
       { id: 'carro', label: '🚗 HUBy Carro', base: 7.00, porKm: 2.60 },
@@ -262,19 +265,15 @@ document.addEventListener('DOMContentLoaded', () => {
     recalcularValores();
   });
 
-  // 5. CÁLCULO GEODÉSICO DA DISTÂNCIA E DO PREÇO DINÂMICO
-  let distanciaKmGlobal = 1.0;
-
+  // 5. FUNÇÃO DE CÁLCULO DE DISTÂNCIA E PREÇO DINÂMICO
   function recalcularValores() {
     if (pontoDestinoCoords && map) {
-      // Cálculo de distância métrica real entre origem e destino
       const metros = map.distance(L.latLng(clienteCoords), L.latLng(pontoDestinoCoords));
-      distanciaKmGlobal = Math.max(0.5, metros / 1000); // Mínimo 500m
+      distanciaKmGlobal = Math.max(0.5, metros / 1000);
     } else {
-      distanciaKmGlobal = 1.2;
+      distanciaKmGlobal = 1.5;
     }
 
-    // Estima ~2.5 minutos por km urbano + 2 minutos base
     const minutosEstimados = Math.max(3, Math.round(distanciaKmGlobal * 2.5 + 2));
 
     let adicionais = 0;
@@ -284,10 +283,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (temParadaExtra) adicionais += 6;
 
-    // Fórmula: Taxa Base + (Distância Real × Preço por Km) + Adicionais
     const valorCorrida = baseTarifa + (distanciaKmGlobal * valorPorKm) + adicionais;
 
-    // Atualiza os elementos na interface
     const txtDistKm = document.getElementById('txtDistKm');
     if (txtDistKm) txtDistKm.textContent = `${distanciaKmGlobal.toFixed(1)} km`;
 
@@ -304,7 +301,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (txtBotaoAcao) txtBotaoAcao.textContent = `Chamar ${subVeiculoSelecionado}`;
   }
 
-  // 6. ENVIAR PEDIDO COM A DISTÂNCIA REAL E PREÇO DINÂMICO
+  // Executa o cálculo inicial
+  recalcularValores();
+
+  // 6. ENVIAR PEDIDO AO RENDER/NEON
   const btnSolicitar = document.getElementById('btnSolicitarHuby');
   const bannerStatus = document.getElementById('bannerStatusCorrida');
   let bannerTimer = null;
