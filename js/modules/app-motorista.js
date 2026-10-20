@@ -5,13 +5,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const mapElement = document.getElementById('mapaMotorista');
   if (!mapElement) return;
 
-  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback)
+  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback inicial)
   let motoristaCoords = [...defaultCoords];
 
+  // Inicia o mapa com zoomControl desativado internamente para posicionar apenas no canto inferior direito
   const map = L.map('mapaMotorista', {
     zoomControl: false
   }).setView(defaultCoords, 15);
 
+  // Adiciona apenas uma instância do controlo de zoom
   L.control.zoom({ position: 'bottomright' }).addTo(map);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -28,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     weight: 3
   }).addTo(map);
 
-  // Recalcular dimensões do mapa imediatamente e em intervalos para eliminar áreas cinzentas
+  // Recalcular dimensões do mapa para preencher 100% sem falhas de renderização
   map.invalidateSize();
   setTimeout(() => map.invalidateSize(), 250);
   setTimeout(() => map.invalidateSize(), 600);
@@ -254,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Polling a cada 6s
+  // Polling a cada 6 segundos
   setInterval(() => {
     if (isOnline) carregarFilaDePedidos();
   }, 6000);
