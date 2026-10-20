@@ -46,21 +46,90 @@ document.addEventListener('DOMContentLoaded', () => {
       );
     }
 
-    // Clique no mapa para definir destino
+    // Clique no mapa para definir destino manualmente
     map.on('click', (e) => {
-      pontoDestinoCoords = [e.latlng.lat, e.latlng.lng];
-      if (markerDestino) {
-        markerDestino.setLatLng(pontoDestinoCoords);
-      } else {
-        markerDestino = L.marker(pontoDestinoCoords).addTo(map);
-      }
-      const inputDestino = document.getElementById('inputDestino');
-      if (inputDestino) {
-        inputDestino.value = `Ponto selecionado no mapa (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`;
-      }
-      recalcularValores();
+      definirDestinoNoMapa(e.latlng.lat, e.latlng.lng, `Ponto selecionado (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`);
     });
   }
+
+  function definirDestinoNoMapa(lat, lng, textoExibicao = '') {
+    pontoDestinoCoords = [lat, lng];
+
+    if (markerDestino) {
+      markerDestino.setLatLng(pontoDestinoCoords);
+    } else {
+      markerDestino = L.marker(pontoDestinoCoords).addTo(map);
+    }
+
+    const inputDestino = document.getElementById('inputDestino');
+    if (inputDestino && textoExibicao) {
+      inputDestino.value = textoExibicao;
+    }
+
+    // Enquadra a visão para mostrar a origem e o destino
+    if (map) {
+      const bounds = L.latLngBounds([clienteCoords, pontoDestinoCoords]);
+      map.fitBounds(bounds, { padding: [60, 60], animate: true });
+    }
+
+    recalcularValores();
+  }
+
+  // =========================================================================
+  // 2. BUSCA DE ENDEREÇO / CIDADE (NOMINATIM / OPENSTREETMAP)
+  // =========================================================================
+  const btnBuscarEndereco = document.getElementById('btnBuscarEndereco');
+  const inputDestino = document.getElementById('inputDestino');
+
+  async function executarBuscaDestino() {
+    const texto = inputDestino?.value.trim();
+    if (!texto) {
+      alert('Por favor, digite o nome de uma rua, bairro ou cidade.');
+      return;
+    }
+
+    if (btnBuscarEndereco) {
+      btnBuscarEndereco.textContent = '⏳';
+      btnBuscarEndereco.disabled = true;
+    }
+
+    try {
+      // Prioriza buscas no Brasil (countrycodes=br)
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(texto)}&countrycodes=br&limit=1`;
+      const resposta = await fetch(url, {
+        headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' }
+      });
+      const dados = await resposta.json();
+
+      if (dados && dados.length > 0) {
+        const resultado = dados[0];
+        const lat = parseFloat(resultado.lat);
+        const lon = parseFloat(resultado.lon);
+
+        definirDestinoNoMapa(lat, lon, resultado.display_name.split(',')[0]);
+      } else {
+        alert('Endereço ou local não encontrado. Tente adicionar o estado ou toque diretamente no mapa.');
+      }
+    } catch (err) {
+      console.warn('Erro ao pesquisar morada:', err);
+      alert('Falha na conexão de pesquisa. Pode tocar diretamente no mapa para marcar o destino.');
+    } finally {
+      if (btnBuscarEndereco) {
+        btnBuscarEndereco.textContent = 'Ir';
+        btnBuscarEndereco.disabled = false;
+      }
+    }
+  }
+
+  btnBuscarEndereco?.addEventListener('click', executarBuscaDestino);
+
+  // Permite buscar ao apertar "Enter" no teclado do telemóvel
+  inputDestino?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      executarBuscaDestino();
+    }
+  });
 
   // Botão Meu GPS
   document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
@@ -70,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 2. CONTROLO DO ONBOARDING / ENTRADA (SPLASH SCREEN)
+  // 3. CONTROLO DO ONBOARDING / ENTRADA (SPLASH SCREEN)
   const splash = document.getElementById('splashScreen');
   const btnEntrar = document.getElementById('btnEntrarApp');
 
@@ -82,7 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => map?.invalidateSize(), 200);
   });
 
-  // 3. SELEÇÃO DE MODALIDADES E SUB-VEÍCULOS
+  // 4. SELEÇÃO DE MODALIDADES E SUB-VEÍCULOS
   let grupoSelecionado = 'carro';
   let subVeiculoSelecionado = 'HUBy Carro';
   let precoBase = 16.10;
@@ -155,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderizarSubVeiculos();
 
-  // 4. ADICIONAIS E CÁLCULO
+  // 5. ADICIONAIS E CÁLCULO
   const txtQtdAjudantes = document.getElementById('txtQtdAjudantes');
   document.getElementById('btnMenosAjudante')?.addEventListener('click', () => {
     if (qtdAjudantes > 0) {
@@ -203,18 +272,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (txtBotaoAcao) txtBotaoAcao.textContent = `Chamar ${subVeiculoSelecionado}`;
   }
 
-  // 5. ENVIAR PEDIDO AO RENDER/NEON
+  // 6. ENVIAR PEDIDO AO RENDER/NEON
   const btnSolicitar = document.getElementById('btnSolicitarHuby');
   const bannerStatus = document.getElementById('bannerStatusCorrida');
   let bannerTimer = null;
 
   btnSolicitar?.addEventListener('click', async () => {
-    const inputDestino = document.getElementById('inputDestino');
     const destinoTexto = inputDestino?.value.trim() || 'Ponto selecionado no mapa (1.0 km)';
     const metodoPgto = document.getElementById('selectMetodoPgto')?.value || 'pix_app';
     const precoTexto = document.getElementById('txtPrecoFinal')?.textContent || 'R$ 16,10';
 
-    // Se o cliente não tiver clicado no mapa, cria um ponto de destino a ~900m
     const destinoFinalCoords = pontoDestinoCoords || [
       clienteCoords[0] + 0.007,
       clienteCoords[1] + 0.007
@@ -241,18 +308,15 @@ document.addEventListener('DOMContentLoaded', () => {
       bannerStatus.innerHTML = `⏳ A enviar solicitação #${novoPedido.id}...`;
     }
 
-    // Grava localmente de imediato
     const pedidosAtuais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     pedidosAtuais.unshift(novoPedido);
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosAtuais));
 
-    // Notifica o canal do motorista
     try {
       const channel = new BroadcastChannel('huby_orders_channel');
       channel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
     } catch (e) {}
 
-    // Envia para o Render / Neon
     try {
       await fetch(`${API_URL}/api/pedidos`, {
         method: 'POST',
@@ -260,12 +324,11 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(novoPedido)
       });
     } catch (err) {
-      console.warn('Erro ao ligar ao servidor Render, mantido localmente.', err);
+      console.warn('Erro no Render, mantido localmente.', err);
     }
 
     if (bannerStatus) {
       bannerStatus.innerHTML = `✅ Pedido <strong>#${novoPedido.id}</strong> enviado com sucesso!<br><small>A aguardar motorista parceiro HUBy...</small>`;
-      // Oculta automaticamente após 5 segundos para liberar o visual
       bannerTimer = setTimeout(() => {
         bannerStatus.classList.remove('ativo');
         bannerStatus.style.display = 'none';
@@ -273,7 +336,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 6. NAVEGAÇÃO ENTRE AS ABAS INFERIORES
+  // 7. NAVEGAÇÃO ENTRE AS ABAS INFERIORES
   const botoesNav = document.querySelectorAll('.nav-item');
   const telas = document.querySelectorAll('.tab-view');
 
