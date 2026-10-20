@@ -7,8 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback inicial)
   let motoristaCoords = [...defaultCoords];
+  let linhaRotaAtiva = null;
+  let marcadorDestinoAtivo = null;
 
-  // Inicia o mapa sem controlo de zoom e sem atribuição do Leaflet
+  // Inicia o mapa sem controlo de zoom e sem atribuição
   const map = L.map('mapaMotorista', {
     zoomControl: false,
     attributionControl: false
@@ -20,14 +22,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Marcador do Motorista
   const markerMotorista = L.circleMarker(defaultCoords, {
-    radius: 10,
+    radius: 11,
     color: '#10B981',
     fillColor: '#10B981',
     fillOpacity: 1,
     weight: 3
   }).addTo(map);
 
-  // Recalcular dimensões do mapa para preencher 100% sem falhas de renderização
   map.invalidateSize();
   setTimeout(() => map.invalidateSize(), 250);
   setTimeout(() => map.invalidateSize(), 600);
@@ -40,21 +41,15 @@ document.addEventListener('DOMContentLoaded', () => {
     map.invalidateSize();
   }
 
-  // 1. Localização em tempo real imediata ao abrir o ecrã
+  // 1. GPS em tempo real do motorista
   if ('geolocation' in navigator) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
         focarNoGPS(latitude, longitude, 16);
       },
-      (err) => {
-        console.warn('GPS não autorizado ou indisponível:', err.message);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
+      (err) => console.warn('GPS não autorizado:', err.message),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
 
     navigator.geolocation.watchPosition(
@@ -62,16 +57,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const { latitude, longitude } = pos.coords;
         motoristaCoords = [latitude, longitude];
         markerMotorista.setLatLng(motoristaCoords);
+        if (linhaRotaAtiva) {
+          // Atualiza o início da rota conforme o motorista anda
+          const pontosAtuais = linhaRotaAtiva.getLatLngs();
+          if (pontosAtuais.length > 0) {
+            pontosAtuais[0] = L.latLng(motoristaCoords);
+            linhaRotaAtiva.setLatLngs(pontosAtuais);
+          }
+        }
       },
-      (err) => console.warn('Erro ao seguir GPS:', err),
-      {
-        enableHighAccuracy: true,
-        maximumAge: 5000
-      }
+      (err) => console.warn('Erro watchPosition:', err),
+      { enableHighAccuracy: true, maximumAge: 5000 }
     );
   }
 
-  // Botão flutuante de recentralizar GPS
   document.getElementById('btnRecenterGPS')?.addEventListener('click', () => {
     focarNoGPS(motoristaCoords[0], motoristaCoords[1], 16);
   });
@@ -87,7 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnToggleStatus?.addEventListener('click', () => {
     isOnline = !isOnline;
-
     if (isOnline) {
       btnToggleStatus.className = 'btn-toggle-online status-online';
       txtStatusMotorista.textContent = 'ONLINE';
@@ -110,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Filtros
   document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
@@ -141,7 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
             <div class="route-point">
               <span class="dot-indicator orange"></span>
-              <p>${p.destino} (${p.distancia})</p>
+              <p>${p.destino} (${p.distancia || '1.0 km'})</p>
             </div>
           </div>
 
@@ -169,12 +166,13 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 
+  let listaPedidosCache = [];
+
   async function carregarFilaDePedidos() {
     if (!feedChamadas || !isOnline) return;
 
     let listaPedidos = [];
 
-    // 1. Consulta Render / Neon
     try {
       const resposta = await fetch(`${API_URL}/api/pedidos?status=pendente`);
       if (resposta.ok) {
@@ -186,6 +184,8 @@ document.addEventListener('DOMContentLoaded', () => {
             subTipoLabel: p.sub_tipo_label,
             origem: p.origem,
             destino: p.destino,
+            coordsOrigem: p.coords_origem,
+            coordsDestino: p.coords_destino,
             distancia: p.distancia,
             preco: p.preco,
             metodoPgto: p.metodo_pgto,
@@ -197,12 +197,12 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('Usando armazenamento local.', e);
     }
 
-    // 2. Fallback local
     if (listaPedidos.length === 0) {
       listaPedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     }
 
-    // 3. Filtro
+    listaPedidosCache = [...listaPedidos];
+
     if (filtroAtual !== 'todos') {
       listaPedidos = listaPedidos.filter(p => {
         if (filtroAtual === 'carro') return p.tipo === 'carro' || p.tipo === 'viagem';
@@ -218,7 +218,62 @@ document.addEventListener('DOMContentLoaded', () => {
     feedChamadas.innerHTML = listaPedidos.map(p => gerarCardHtml(p)).join('');
   }
 
+  // =========================================================================
+  // TRAÇAR A ROTA NO MAPA AO ACEITAR A CORRIDA
+  // =========================================================================
   window.aceitarPedido = async (id) => {
+    const pedido = listaPedidosCache.find(p => String(p.id) === String(id));
+
+    // Determinar as coordenadas de destino
+    let pontoDest = null;
+    if (pedido?.coordsDestino && Array.isArray(pedido.coordsDestino)) {
+      pontoDest = pedido.coordsDestino;
+    } else if (pedido?.destino && pedido.destino.includes('(')) {
+      // Extrai coordenadas do formato "Ponto selecionado (-8.3586, -42.2467)"
+      const partes = pedido.destino.split('(')[1]?.replace(')', '').split(',');
+      if (partes && partes.length === 2) {
+        pontoDest = [parseFloat(partes[0].trim()), parseFloat(partes[1].trim())];
+      }
+    }
+
+    // Fallback se não encontrar o destino: 800m à frente
+    if (!pontoDest || isNaN(pontoDest[0])) {
+      pontoDest = [motoristaCoords[0] + 0.007, motoristaCoords[1] + 0.007];
+    }
+
+    // 1. Limpar trajeto anterior se existir
+    if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
+    if (marcadorDestinoAtivo) map.removeLayer(marcadorDestinoAtivo);
+
+    // 2. Criar marcador de destino (Bandeira / Ponto Laranja)
+    marcadorDestinoAtivo = L.circleMarker(pontoDest, {
+      radius: 12,
+      color: '#F97316',
+      fillColor: '#F97316',
+      fillOpacity: 1,
+      weight: 3
+    }).addTo(map);
+
+    // 3. Traçar linha da rota em verde néon / esmeralda
+    const pontosRota = [
+      L.latLng(motoristaCoords[0], motoristaCoords[1]),
+      L.latLng(pontoDest[0], pontoDest[1])
+    ];
+
+    linhaRotaAtiva = L.polyline(pontosRota, {
+      color: '#10B981',
+      weight: 6,
+      opacity: 0.9,
+      lineCap: 'round',
+      lineJoin: 'round',
+      dashArray: '8, 8'
+    }).addTo(map);
+
+    // 4. Enquadrar o mapa automaticamente mostrando o motorista e o passageiro
+    const bounds = L.latLngBounds([motoristaCoords, pontoDest]);
+    map.fitBounds(bounds, { padding: [70, 70], animate: true });
+
+    // Atualizar status no servidor
     try {
       await fetch(`${API_URL}/api/pedidos`, {
         method: 'PATCH',
@@ -228,22 +283,42 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {}
 
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    pedidosLocais = pedidosLocais.filter(p => p.id !== id);
+    pedidosLocais = pedidosLocais.filter(p => String(p.id) !== String(id));
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
+
+    // Notificar no painel que a navegação está ativa
+    if (badgeRadar) {
+      badgeRadar.style.borderColor = '#10B981';
+      if (txtRadarStatus) txtRadarStatus.textContent = `Em rota para entrega #${id}`;
+    }
 
     const card = document.getElementById(`card-${id}`);
     if (card) {
-      card.innerHTML = `<div style="text-align:center; padding:14px; font-weight:800; color:#10B981;">🚀 Corrida #${id} Aceita! Iniciando rota...</div>`;
-      setTimeout(() => {
-        card.remove();
-        carregarFilaDePedidos();
-      }, 2000);
+      card.innerHTML = `
+        <div style="text-align:center; padding:16px 10px;">
+          <div style="font-size:20px; margin-bottom:4px;">🧭</div>
+          <strong style="color:#10B981; font-size:14px;">Rota #${id} Ativa no Mapa!</strong>
+          <p style="font-size:11px; color:#94A3B8; margin-top:4px;">Siga o trajeto traçado até o ponto de embarque/entrega.</p>
+          <button type="button" onclick="finalizarCorrida('${id}')" style="margin-top:12px; width:100%; background:linear-gradient(135deg, #10B981, #059669); color:#03251E; border:none; border-radius:10px; padding:10px; font-weight:900; font-size:13px; cursor:pointer;">Concluir Entrega</button>
+        </div>
+      `;
     }
+  };
+
+  window.finalizarCorrida = (id) => {
+    if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
+    if (marcadorDestinoAtivo) map.removeLayer(marcadorDestinoAtivo);
+    linhaRotaAtiva = null;
+    marcadorDestinoAtivo = null;
+
+    if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas...';
+    map.setView(motoristaCoords, 16, { animate: true });
+    carregarFilaDePedidos();
   };
 
   window.rejeitarPedido = async (id) => {
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    pedidosLocais = pedidosLocais.filter(p => p.id !== id);
+    pedidosLocais = pedidosLocais.filter(p => String(p.id) !== String(id));
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
     const card = document.getElementById(`card-${id}`);
@@ -253,16 +328,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // Polling a cada 6 segundos
   setInterval(() => {
-    if (isOnline) carregarFilaDePedidos();
+    if (isOnline && !linhaRotaAtiva) carregarFilaDePedidos();
   }, 6000);
 
-  // BroadcastChannel
   try {
     const hubyChannel = new BroadcastChannel('huby_orders_channel');
     hubyChannel.onmessage = (event) => {
-      if (event.data?.tipo === 'NOVO_PEDIDO' && isOnline) {
+      if (event.data?.tipo === 'NOVO_PEDIDO' && isOnline && !linhaRotaAtiva) {
         carregarFilaDePedidos();
       }
     };

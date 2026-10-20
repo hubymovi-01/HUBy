@@ -213,12 +213,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const metodoPgto = document.getElementById('selectMetodoPgto')?.value || 'pix_app';
     const precoTexto = document.getElementById('txtPrecoFinal')?.textContent || 'R$ 16,10';
 
+    // Se o cliente não tiver clicado no mapa, cria um ponto de destino a ~900m
+    const destinoFinalCoords = pontoDestinoCoords || [
+      clienteCoords[0] + 0.007,
+      clienteCoords[1] + 0.007
+    ];
+
     const novoPedido = {
       id: Math.random().toString(36).substring(2, 7).toUpperCase(),
       tipo: grupoSelecionado,
       subTipoLabel: subVeiculoSelecionado,
       origem: 'GPS: Localização exata ativa',
       destino: destinoTexto,
+      coordsOrigem: clienteCoords,
+      coordsDestino: destinoFinalCoords,
       distancia: '1.0 km',
       preco: precoTexto,
       metodoPgto: metodoPgto,
@@ -241,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
       channel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
     } catch (e) {}
 
-    // Envia para o Render / Neon[cite: 1]
+    // Envia para o Render / Neon
     try {
       await fetch(`${API_URL}/api/pedidos`, {
         method: 'POST',
