@@ -1,384 +1,279 @@
 // ./js/modules/app-cliente.js
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Constante da API de Produção no Render
   const API_URL = 'https://huby.onrender.com';
+  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback inicial)
+  let clienteCoords = [...defaultCoords];
+  let pontoDestinoCoords = null;
 
-  // 0. Gestão da Tela de Entrada (Splash Screen / Onboarding)
+  // 1. INICIALIZAR O MAPA SEM BOTÕES DE ZOOM E SEM CRÉDITOS DO LEAFLET
+  const mapElement = document.getElementById('mapaCliente');
+  let map = null;
+  let markerCliente = null;
+  let markerDestino = null;
+
+  if (mapElement) {
+    map = L.map('mapaCliente', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView(defaultCoords, 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
+
+    markerCliente = L.circleMarker(defaultCoords, {
+      radius: 9,
+      color: '#10B981',
+      fillColor: '#10B981',
+      fillOpacity: 1
+    }).addTo(map);
+
+    setTimeout(() => map.invalidateSize(), 300);
+    window.addEventListener('resize', () => map.invalidateSize());
+
+    // Obter GPS real do utilizador se autorizado
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clienteCoords = [pos.coords.latitude, pos.coords.longitude];
+          markerCliente.setLatLng(clienteCoords);
+          map.setView(clienteCoords, 15, { animate: true });
+          map.invalidateSize();
+        },
+        () => {},
+        { enableHighAccuracy: true }
+      );
+    }
+
+    // Clique no mapa para definir destino
+    map.on('click', (e) => {
+      pontoDestinoCoords = [e.latlng.lat, e.latlng.lng];
+      if (markerDestino) {
+        markerDestino.setLatLng(pontoDestinoCoords);
+      } else {
+        markerDestino = L.marker(pontoDestinoCoords).addTo(map);
+      }
+      const inputDestino = document.getElementById('inputDestino');
+      if (inputDestino) {
+        inputDestino.value = `Ponto selecionado no mapa (${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)})`;
+      }
+      recalcularValores();
+    });
+  }
+
+  // Botão Meu GPS
+  document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
+    if (map) {
+      map.setView(clienteCoords, 16, { animate: true });
+      map.invalidateSize();
+    }
+  });
+
+  // 2. CONTROLO DO ONBOARDING / ENTRADA (SPLASH SCREEN)
   const splash = document.getElementById('splashScreen');
   const btnEntrar = document.getElementById('btnEntrarApp');
 
   btnEntrar?.addEventListener('click', () => {
-    splash?.classList.add('fechado');
-    if (window.hubyMap) {
-      setTimeout(() => window.hubyMap.invalidateSize(), 300);
+    if (splash) {
+      splash.classList.add('fechado');
+      splash.style.display = 'none';
     }
+    setTimeout(() => map?.invalidateSize(), 200);
   });
 
-  // Rotação dos slides na tela de entrada
-  const pillarCards = document.querySelectorAll('.pillar-card');
-  const dots = document.querySelectorAll('.slide-dots .dot');
-  let currentPillar = 0;
+  // 3. SELEÇÃO DE MODALIDADES E SUB-VEÍCULOS
+  let grupoSelecionado = 'carro';
+  let subVeiculoSelecionado = 'HUBy Carro';
+  let precoBase = 16.10;
+  let qtdAjudantes = 0;
+  let temEscada = false;
+  let temParadaExtra = false;
 
-  if (pillarCards.length > 0) {
-    setInterval(() => {
-      currentPillar = (currentPillar + 1) % pillarCards.length;
-      pillarCards.forEach((card, idx) => {
-        card.classList.toggle('active', idx === currentPillar);
-      });
-      dots.forEach((dot, idx) => {
-        dot.classList.toggle('active', idx === currentPillar);
-      });
-    }, 3500);
-  }
-
-  // 1. Alternância de Abas na Barra Inferior
-  const navItems = document.querySelectorAll('.bottom-nav .nav-item');
-  const tabViews = document.querySelectorAll('.tab-view');
-
-  function trocarAba(targetId) {
-    tabViews.forEach(v => v.classList.remove('active-view'));
-    navItems.forEach(n => n.classList.remove('active'));
-
-    const activeView = document.getElementById(targetId);
-    if (activeView) activeView.classList.add('active-view');
-
-    const activeNav = document.querySelector(`.bottom-nav .nav-item[data-tab="${targetId}"]`);
-    if (activeNav) activeNav.classList.add('active');
-
-    if (targetId === 'viewInicio' && window.hubyMap) {
-      setTimeout(() => window.hubyMap.invalidateSize(), 150);
-    }
-  }
-
-  navItems.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tabTarget = btn.getAttribute('data-tab');
-      trocarAba(tabTarget);
-    });
-  });
-
-  // Atalho nos cards de serviços para abrir o fluxo de chamada no início
-  document.querySelectorAll('.action-solicitar').forEach(card => {
-    card.addEventListener('click', () => {
-      const grupo = card.getAttribute('data-target-group');
-      trocarAba('viewInicio');
-      
-      const tabGroup = document.querySelector(`.tab-card[data-grupo="${grupo}"]`);
-      if (tabGroup) tabGroup.click();
-    });
-  });
-
-  document.getElementById('btnIrCarteira')?.addEventListener('click', () => {
-    trocarAba('viewConta');
-  });
-
-  // 2. Inicialização do Mapa Leaflet com OpenStreetMap (Dark Filter)
-  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim - PI
-  const map = L.map('mapaCliente', {
-    zoomControl: false
-  }).setView(defaultCoords, 14);
-
-  window.hubyMap = map;
-
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
-
-  let marcadorOrigem = null;
-  let marcadorDestino = null;
-  let linhaRota = null;
-
-  let rotaAtual = {
-    distanciaKm: 3.5,
-    duracaoMin: 8,
-    grupo: 'carro',
-    subTipo: 'carro',
-    ajudantes: 0,
-    escada: false,
-    paradaExtra: false
-  };
-
-  const subCategorias = {
+  const configVeiculos = {
     carro: [
-      { id: 'carro', label: '🚗 HUBy Carro', base: 6.0, km: 2.2, min: 0.3 },
-      { id: 'moto', label: '🏍️ HUBy Moto', base: 4.0, km: 1.4, min: 0.2 }
+      { id: 'carro', label: '🚗 HUBy Carro', base: 16.10 },
+      { id: 'moto', label: '🛵 HUBy Moto', base: 9.50 }
     ],
     flash: [
-      { id: 'flash_moto', label: '🛵 Flash Moto', base: 4.5, km: 1.5, min: 0.25 },
-      { id: 'flash_carro', label: '🚗 Flash Carro', base: 7.0, km: 2.3, min: 0.35 }
+      { id: 'flash_moto', label: '⚡ Flash Moto', base: 8.90 },
+      { id: 'flash_carro', label: '📦 Flash Utilitário', base: 19.00 }
     ],
     cargo: [
-      { id: 'cargo_vuc', label: '🚚 HUBy Cargo (VUC / Caminhão)', base: 80.0, km: 6.5, min: 0.8 }
+      { id: 'cargo_pickup', label: '🛻 Caminhonete/Picape', base: 55.00 },
+      { id: 'cargo_van', label: '🚐 Van de Carga', base: 85.00 },
+      { id: 'cargo_vuc', label: '🚚 Caminhão Pequeno (VUC)', base: 140.00 }
     ]
   };
 
-  const coresModalidade = {
-    carro: { cor: '#10B981', text: '#042F2E', glow: 'rgba(16, 185, 129, 0.25)' },
-    flash: { cor: '#0EA5E9', text: '#082F49', glow: 'rgba(14, 165, 233, 0.25)' },
-    cargo: { cor: '#F97316', text: '#431407', glow: 'rgba(249, 115, 22, 0.25)' }
-  };
-
-  const containerSubVeiculos = document.getElementById('containerSubVeiculos');
+  const containerSub = document.getElementById('containerSubVeiculos');
   const linhaAjudante = document.getElementById('linhaAjudante');
   const linhaEscada = document.getElementById('linhaEscada');
-  const chkEscada = document.getElementById('chkEscada');
-  const chkParadaExtra = document.getElementById('chkParadaExtra');
-  const txtQtdAjudantes = document.getElementById('txtQtdAjudantes');
-  const txtDistKm = document.getElementById('txtDistKm');
-  const txtDuracaoMin = document.getElementById('txtDuracaoMin');
-  const txtValorAdicionais = document.getElementById('txtValorAdicionais');
-  const txtPrecoFinal = document.getElementById('txtPrecoFinal');
-  const txtBotaoAcao = document.getElementById('txtBotaoAcao');
-  const btnSolicitarHuby = document.getElementById('btnSolicitarHuby');
-  const bannerStatus = document.getElementById('bannerStatusCorrida');
 
-  function renderSubCategorias() {
-    containerSubVeiculos.innerHTML = '';
-    const lista = subCategorias[rotaAtual.grupo] || [];
-    const tema = coresModalidade[rotaAtual.grupo];
+  function renderizarSubVeiculos() {
+    if (!containerSub) return;
+    const lista = configVeiculos[grupoSelecionado] || [];
+    containerSub.innerHTML = lista.map((v, i) => `
+      <button type="button" class="sub-pill ${i === 0 ? 'active' : ''}" data-id="${v.id}" data-base="${v.base}" data-label="${v.label}">
+        ${v.label}
+      </button>
+    `).join('');
 
-    lista.forEach((item, index) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = `btn-sub-veiculo ${index === 0 ? 'active' : ''}`;
-      btn.textContent = item.label;
-      btn.style.cssText = `
-        padding: 8px 14px;
-        background: ${index === 0 ? tema.cor : 'rgba(255, 255, 255, 0.05)'};
-        color: ${index === 0 ? tema.text : '#FFFFFF'};
-        border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        font-size: 12px;
-        font-weight: 700;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: all 0.2s ease;
-      `;
+    subVeiculoSelecionado = lista[0]?.label || 'HUBy Carro';
+    precoBase = lista[0]?.base || 16.10;
 
+    containerSub.querySelectorAll('.sub-pill').forEach(btn => {
       btn.addEventListener('click', () => {
-        containerSubVeiculos.querySelectorAll('button').forEach(b => {
-          b.style.background = 'rgba(255, 255, 255, 0.05)';
-          b.style.color = '#FFFFFF';
-        });
-        btn.style.background = tema.cor;
-        btn.style.color = tema.text;
-        rotaAtual.subTipo = item.id;
-        atualizarCalculos();
+        containerSub.querySelectorAll('.sub-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        subVeiculoSelecionado = btn.getAttribute('data-label');
+        precoBase = parseFloat(btn.getAttribute('data-base')) || 16.10;
+        recalcularValores();
       });
-
-      containerSubVeiculos.appendChild(btn);
     });
 
-    rotaAtual.subTipo = lista[0]?.id || 'carro';
+    if (grupoSelecionado === 'cargo') {
+      if (linhaAjudante) linhaAjudante.style.display = 'flex';
+      if (linhaEscada) linhaEscada.style.display = 'flex';
+    } else {
+      if (linhaAjudante) linhaAjudante.style.display = 'none';
+      if (linhaEscada) linhaEscada.style.display = 'none';
+    }
+
+    recalcularValores();
   }
 
-  // 3. Alternância dos Grupos Principais
   document.querySelectorAll('.tab-card').forEach(tab => {
     tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab-card').forEach(t => {
-        t.classList.remove('active-carro', 'active-flash', 'active-cargo');
-      });
-
-      rotaAtual.grupo = tab.getAttribute('data-grupo');
-      tab.classList.add(`active-${rotaAtual.grupo}`);
-
-      const tema = coresModalidade[rotaAtual.grupo];
-      btnSolicitarHuby.style.background = tema.cor;
-      btnSolicitarHuby.style.color = tema.text;
-      btnSolicitarHuby.style.boxShadow = `0 8px 24px ${tema.glow}`;
-
-      if (rotaAtual.grupo === 'cargo') {
-        linhaAjudante.style.display = 'flex';
-        linhaEscada.style.display = 'flex';
-      } else {
-        linhaAjudante.style.display = 'none';
-        linhaEscada.style.display = 'none';
-        rotaAtual.ajudantes = 0;
-        txtQtdAjudantes.textContent = '0';
-        chkEscada.checked = false;
-        rotaAtual.escada = false;
-      }
-
-      renderSubCategorias();
-      atualizarCalculos();
+      document.querySelectorAll('.tab-card').forEach(t => t.className = 'tab-card');
+      const g = tab.getAttribute('data-grupo');
+      tab.classList.add(`active-${g}`);
+      grupoSelecionado = g;
+      renderizarSubVeiculos();
     });
   });
 
-  // 4. Controles de Adicionais
-  document.getElementById('btnMaisAjudante')?.addEventListener('click', () => {
-    rotaAtual.ajudantes++;
-    txtQtdAjudantes.textContent = rotaAtual.ajudantes;
-    atualizarCalculos();
-  });
+  renderizarSubVeiculos();
 
+  // 4. ADICIONAIS E CÁLCULO
+  const txtQtdAjudantes = document.getElementById('txtQtdAjudantes');
   document.getElementById('btnMenosAjudante')?.addEventListener('click', () => {
-    if (rotaAtual.ajudantes > 0) {
-      rotaAtual.ajudantes--;
-      txtQtdAjudantes.textContent = rotaAtual.ajudantes;
-      atualizarCalculos();
+    if (qtdAjudantes > 0) {
+      qtdAjudantes--;
+      if (txtQtdAjudantes) txtQtdAjudantes.textContent = qtdAjudantes;
+      recalcularValores();
     }
   });
 
-  chkEscada?.addEventListener('change', (e) => {
-    rotaAtual.escada = e.target.checked;
-    atualizarCalculos();
+  document.getElementById('btnMaisAjudante')?.addEventListener('click', () => {
+    if (qtdAjudantes < 4) {
+      qtdAjudantes++;
+      if (txtQtdAjudantes) txtQtdAjudantes.textContent = qtdAjudantes;
+      recalcularValores();
+    }
   });
 
-  chkParadaExtra?.addEventListener('change', (e) => {
-    rotaAtual.paradaExtra = e.target.checked;
-    atualizarCalculos();
+  document.getElementById('chkEscada')?.addEventListener('change', (e) => {
+    temEscada = e.target.checked;
+    recalcularValores();
   });
 
-  // 5. Cálculo Dinâmico de Valores
-  function atualizarCalculos() {
-    let tarifa = null;
-    const lista = subCategorias[rotaAtual.grupo] || [];
-    tarifa = lista.find(s => s.id === rotaAtual.subTipo) || lista[0];
+  document.getElementById('chkParadaExtra')?.addEventListener('change', (e) => {
+    temParadaExtra = e.target.checked;
+    recalcularValores();
+  });
 
-    const km = rotaAtual.distanciaKm;
-    const min = rotaAtual.duracaoMin;
-
-    let valorBase = tarifa.base + (km * tarifa.km) + (min * tarifa.min);
-
+  function recalcularValores() {
     let adicionais = 0;
-    if (rotaAtual.ajudantes > 0) adicionais += (rotaAtual.ajudantes * 50);
-    if (rotaAtual.escada) adicionais += 20;
-    if (rotaAtual.paradaExtra) adicionais += 6;
+    if (grupoSelecionado === 'cargo') {
+      adicionais += (qtdAjudantes * 50);
+      if (temEscada) adicionais += 20;
+    }
+    if (temParadaExtra) adicionais += 6;
 
-    const total = valorBase + adicionais;
+    const totalFinal = precoBase + adicionais;
 
-    txtDistKm.textContent = `${km.toFixed(1)} km`;
-    txtDuracaoMin.textContent = `${min}`;
-    txtValorAdicionais.textContent = `R$ ${adicionais.toFixed(2).replace('.', ',')}`;
-    txtPrecoFinal.textContent = `R$ ${total.toFixed(2).replace('.', ',')}`;
-    txtBotaoAcao.textContent = `Chamar ${tarifa.label.replace(/^[^\s]+ /, '')}`;
+    const txtValorAdicionais = document.getElementById('txtValorAdicionais');
+    if (txtValorAdicionais) txtValorAdicionais.textContent = `R$ ${adicionais.toFixed(2).replace('.', ',')}`;
+
+    const txtPrecoFinal = document.getElementById('txtPrecoFinal');
+    if (txtPrecoFinal) txtPrecoFinal.textContent = `R$ ${totalFinal.toFixed(2).replace('.', ',')}`;
+
+    const txtBotaoAcao = document.getElementById('txtBotaoAcao');
+    if (txtBotaoAcao) txtBotaoAcao.textContent = `Chamar ${subVeiculoSelecionado}`;
   }
 
-  // 6. Geolocalização (GPS)
-  const btnLocalizarGPS = document.getElementById('btnLocalizarGPS');
-  btnLocalizarGPS?.addEventListener('click', () => {
-    if (!navigator.geolocation) return;
-    btnLocalizarGPS.textContent = 'Buscando...';
+  // 5. ENVIAR PEDIDO AO RENDER/NEON
+  const btnSolicitar = document.getElementById('btnSolicitarHuby');
+  const bannerStatus = document.getElementById('bannerStatusCorrida');
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude, longitude } = pos.coords;
-        const coords = [latitude, longitude];
-
-        map.setView(coords, 16);
-
-        if (!marcadorOrigem) {
-          marcadorOrigem = L.circleMarker(coords, {
-            radius: 8,
-            color: '#10B981',
-            fillColor: '#10B981',
-            fillOpacity: 1
-          }).addTo(map);
-        } else {
-          marcadorOrigem.setLatLng(coords);
-        }
-
-        btnLocalizarGPS.textContent = '📍 Meu GPS';
-        document.getElementById('inputOrigem').value = 'GPS: Localização exata ativa';
-      },
-      () => {
-        alert('Não foi possível obter o sinal de GPS.');
-        btnLocalizarGPS.textContent = '📍 Meu GPS';
-      },
-      { enableHighAccuracy: true }
-    );
-  });
-
-  // 7. Clique no Mapa para Seleção de Destino
-  map.on('click', (e) => {
-    const coords = e.latlng;
-
-    if (!marcadorDestino) {
-      marcadorDestino = L.marker(coords).addTo(map);
-    } else {
-      marcadorDestino.setLatLng(coords);
-    }
-
-    document.getElementById('inputDestino').value = 'Ponto selecionado no mapa';
-
-    const origem = marcadorOrigem ? marcadorOrigem.getLatLng() : L.latLng(defaultCoords);
-    const distanciaMetros = map.distance(origem, coords);
-
-    rotaAtual.distanciaKm = Math.max(1, distanciaMetros / 1000);
-    rotaAtual.duracaoMin = Math.round(rotaAtual.distanciaKm * 2.2);
-
-    if (linhaRota) map.removeLayer(linhaRota);
-    linhaRota = L.polyline([origem, coords], {
-      color: coresModalidade[rotaAtual.grupo].cor,
-      weight: 4,
-      dashArray: '8, 8'
-    }).addTo(map);
-
-    atualizarCalculos();
-  });
-
-  // 8. Solicitar Corrida / Frete (Híbrido: LocalStorage + API Neon no Render)
-  btnSolicitarHuby?.addEventListener('click', async () => {
-    const idPedido = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const lista = subCategorias[rotaAtual.grupo] || [];
-    const tarifa = lista.find(s => s.id === rotaAtual.subTipo) || { label: 'HUBy Carro' };
+  btnSolicitar?.addEventListener('click', async () => {
+    const inputDestino = document.getElementById('inputDestino');
+    const destinoTexto = inputDestino?.value.trim() || 'Ponto selecionado no mapa (1.0 km)';
+    const metodoPgto = document.getElementById('selectMetodoPgto')?.value || 'pix_app';
+    const precoTexto = document.getElementById('txtPrecoFinal')?.textContent || 'R$ 16,10';
 
     const novoPedido = {
-      id: idPedido,
-      tipo: rotaAtual.grupo,
-      subTipoLabel: tarifa.label,
-      origem: document.getElementById('inputOrigem').value || 'GPS: Paes Landim',
-      destino: document.getElementById('inputDestino').value || 'Destino no Mapa',
-      distancia: `${rotaAtual.distanciaKm.toFixed(1)} km`,
-      preco: txtPrecoFinal.textContent,
-      metodoPgto: document.getElementById('selectMetodoPgto').value,
-      horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      criado_em: new Date().toISOString()
+      id: Math.random().toString(36).substring(2, 7).toUpperCase(),
+      tipo: grupoSelecionado,
+      subTipoLabel: subVeiculoSelecionado,
+      origem: 'GPS: Localização exata ativa',
+      destino: destinoTexto,
+      distancia: '1.0 km',
+      preco: precoTexto,
+      metodoPgto: metodoPgto,
+      criadoEm: new Date().toISOString()
     };
 
-    // 1. Persistência imediata no dispositivo
-    const pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
-    pedidosLocais.unshift(novoPedido);
-    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
-
-    // 2. Disparo via BroadcastChannel para abas abertas simultâneas
-    try {
-      const hubyChannel = new BroadcastChannel('huby_orders_channel');
-      hubyChannel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
-    } catch (e) {
-      console.warn('BroadcastChannel não suportado:', e);
+    if (bannerStatus) {
+      bannerStatus.className = 'status-banner ativo';
+      bannerStatus.innerHTML = `⏳ A enviar solicitação #${novoPedido.id}...`;
     }
 
-    // 3. Envio para a API ativa no Render com gravação no Neon
+    // Grava localmente de imediato
+    const pedidosAtuais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    pedidosAtuais.unshift(novoPedido);
+    localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosAtuais));
+
+    // Notifica o canal do motorista
     try {
-      fetch(`${API_URL}/api/pedidos`, {
+      const channel = new BroadcastChannel('huby_orders_channel');
+      channel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: novoPedido });
+    } catch (e) {}
+
+    // Envia para o Render / Neon[cite: 1]
+    try {
+      await fetch(`${API_URL}/api/pedidos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(novoPedido)
-      })
-      .then(res => res.json())
-      .then(dados => console.log('✅ Pedido gravado no Neon via Render:', dados))
-      .catch(err => console.warn('Aviso: Falha ao sincronizar com Render, mantido localmente.', err));
-    } catch (e) {}
+      });
+    } catch (err) {
+      console.warn('Erro ao ligar ao servidor Render, mantido localmente.', err);
+    }
 
-    // 4. Feedback no ecrã
-    bannerStatus.style.display = 'block';
-    bannerStatus.innerHTML = `
-      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; border-radius: 12px; padding: 12px; margin-bottom: 12px; font-size: 13px; text-align: center;">
-        ✅ Pedido <strong>#${idPedido}</strong> enviado com sucesso!<br>
-        A aguardar motorista parceiro HUBy...
-      </div>
-    `;
-
-    setTimeout(() => {
-      bannerStatus.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    if (bannerStatus) {
+      bannerStatus.innerHTML = `✅ Pedido <strong>#${novoPedido.id}</strong> enviado com sucesso!<br><small>A aguardar motorista parceiro HUBy...</small>`;
+    }
   });
 
-  renderSubCategorias();
-  atualizarCalculos();
+  // 6. NAVEGAÇÃO ENTRE AS ABAS INFERIORES
+  const botoesNav = document.querySelectorAll('.nav-item');
+  const telas = document.querySelectorAll('.tab-view');
+
+  botoesNav.forEach(btn => {
+    btn.addEventListener('click', () => {
+      botoesNav.forEach(b => b.classList.remove('active'));
+      telas.forEach(t => t.classList.remove('active-view'));
+
+      btn.classList.add('active');
+      const targetId = btn.getAttribute('data-tab');
+      const targetView = document.getElementById(targetId);
+      if (targetView) targetView.classList.add('active-view');
+
+      if (targetId === 'viewInicio') {
+        setTimeout(() => map?.invalidateSize(), 200);
+      }
+    });
+  });
 });
