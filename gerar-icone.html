@@ -1,0 +1,76 @@
+cat << 'EOF' > gerar-icone.html
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerador de Ícone HUBy huby
+  </title>
+</head>
+<body style="background:#000; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:sans-serif;">
+  <h2>A gerar o seu icon-512.png...</h2>
+  <canvas id="cv" width="512" height="512" style="border-radius:24px; border:2px solid #10B981;"></canvas>
+  <br>
+  <button id="btnDownload" style="background:#10B981; border:none; padding:12px 24px; font-weight:800; border-radius:12px; cursor:pointer;">Descarregar icon-512.png</button>
+
+  <script>
+    const canvas = document.getElementById('cv');
+    const ctx = canvas.getContext('2d');
+
+    // Fundo escuro do app
+    ctx.fillStyle = '#080C14';
+    ctx.beginPath();
+    ctx.roundRect(0, 0, 512, 512, [90]);
+    ctx.fill();
+
+    // Contorno verde esmeralda
+    ctx.strokeStyle = '#10B981';
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.roundRect(16, 16, 480, 480, [80]);
+    ctx.stroke();
+
+    // Texto "HUB"
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '900 115px system-ui, -apple-system, sans-serif';
+    ctx.fillText('HUB', 85, 290);
+
+    // Caixa verde do "y"
+    ctx.fillStyle = '#10B981';
+    ctx.beginPath();
+    ctx.roundRect(330, 190, 105, 105, [24]);
+    ctx.fill();
+
+    // Letra "y"
+    ctx.fillStyle = '#03251E';
+    ctx.font = '900 85px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('y', 382.5, 245);
+
+    // Ponto GPS laranja/vermelho de destaque
+    ctx.fillStyle = '#EF4444';
+    ctx.beginPath();
+    ctx.arc(425, 195, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Seta/arco de rota inferior
+    ctx.strokeStyle = '#10B981';
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.arc(256, 320, 130, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
+
+    // Função de descarregar
+    function baixar() {
+      const link = document.createElement('a');
+      link.download = 'icon-512.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    document.getElementById('btnDownload').onclick = baixar;
+    setTimeout(baixar, 400);
+  </script>
+</body>
+</html>
+EOF
