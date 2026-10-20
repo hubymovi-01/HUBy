@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>HUBy - Cadastro de Passageiro</title>
+  <link rel="stylesheet" href="./css/global.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #080C14;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .top-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .btn-back {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+    }
+    .form-container {
+      max-width: 440px;
+      margin: 0 auto;
+    }
+    .form-card {
+      background: rgba(18, 27, 47, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #10B981;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .field-group label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94A3B8;
+    }
+    .form-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 12px;
+      color: #FFFFFF;
+      font-size: 13px;
+      outline: none;
+    }
+    .form-input:focus { border-color: #10B981; }
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: #03251E;
+      border: none;
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="form-container">
+    <header class="top-bar">
+      <a href="./index.html" class="btn-back">←</a>
+      <h2>Criar Conta de Passageiro</h2>
+    </header>
+
+    <form id="formCadastroCliente">
+      <div class="form-card">
+        <div class="card-title">👤 Informações Pessoais</div>
+
+        <div class="field-group">
+          <label>Nome Completo</label>
+          <input type="text" id="cliNome" class="form-input" placeholder="Ex: Maria Silva" required>
+        </div>
+
+        <div class="field-group">
+          <label>Telemóvel / WhatsApp</label>
+          <input type="tel" id="cliTelefone" class="form-input" placeholder="(89) 99999-9999" required>
+        </div>
+
+        <div class="field-group">
+          <label>CPF</label>
+          <input type="text" id="cliCpf" class="form-input" placeholder="000.000.000-00" required>
+        </div>
+
+        <div class="field-group">
+          <label>Idade</label>
+          <input type="number" id="cliIdade" class="form-input" placeholder="Ex: 25" min="12" max="120" required>
+        </div>
+      </div>
+
+      <button type="submit" class="btn-submit" id="btnSalvarCliente">Avançar para o HUBy</button>
+    </form>
+  </div>
+
+  <script>
+    const API_URL = 'https://huby.onrender.com';
+
+    document.getElementById('formCadastroCliente').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('btnSalvarCliente');
+      btn.textContent = 'A guardar...';
+      btn.disabled = true;
+
+      const payload = {
+        nome: document.getElementById('cliNome').value.trim(),
+        telefone: document.getElementById('cliTelefone').value.trim(),
+        cpf: document.getElementById('cliCpf').value.trim(),
+        idade: parseInt(document.getElementById('cliIdade').value) || 18
+      };
+
+      try {
+        // Envia para o banco de dados Neon/Render
+        await fetch(`${API_URL}/api/clientes/cadastro`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch (err) {
+        console.warn('Modo offline / erro na API, registando localmente.');
+      }
+
+      // Salva sessão local do cliente e redireciona para o mapa
+      localStorage.setItem('huby_user_role', 'cliente');
+      localStorage.setItem('huby_cliente_nome', payload.nome);
+      window.location.href = './index.html?logado=1';
+    });
+  </script>
+</body>
+
+</html>
