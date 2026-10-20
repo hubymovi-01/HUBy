@@ -1,149 +1,445 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Cadastro de Motorista Parceiro</title>
+  <title>HUBy - Cadastro de Parceiro</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#080C14">
   <link rel="stylesheet" href="./css/global.css">
+
   <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
     body {
       background-color: #080C14;
       color: #FFFFFF;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      margin: 0;
-      padding: 16px;
+      min-height: 100vh;
+      min-height: 100dvh;
+      overflow-x: hidden;
+      padding-bottom: 40px;
     }
-    .form-container {
+
+    /* BARRA SUPERIOR */
+    .top-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: rgba(8, 12, 20, 0.95);
+      backdrop-filter: blur(14px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .btn-back {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .top-bar-title {
+      font-size: 16px;
+      font-weight: 800;
+    }
+
+    .page-content {
       max-width: 480px;
       margin: 0 auto;
-      padding-bottom: 30px;
+      padding: 16px;
     }
-    .brand-title {
-      font-size: 22px;
+
+    /* HERO CARD */
+    .hero-banner {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(13, 20, 36, 0.6));
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .hero-icon {
+      font-size: 32px;
+      background: rgba(16, 185, 129, 0.2);
+      width: 54px;
+      height: 54px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .hero-text h2 {
+      font-size: 17px;
       font-weight: 900;
       color: #10B981;
-      margin-bottom: 4px;
     }
-    .brand-sub {
-      font-size: 13px;
+
+    .hero-text p {
+      font-size: 11px;
       color: #94A3B8;
-      margin-bottom: 20px;
+      margin-top: 2px;
+      line-height: 1.4;
     }
-    .section-title {
-      font-size: 14px;
+
+    /* GRUPOS EM CARTÕES */
+    .form-card {
+      background: rgba(18, 27, 47, 0.55);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+
+    .card-title {
+      font-size: 12px;
       font-weight: 800;
-      color: #CBD5E1;
+      color: #10B981;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin: 18px 0 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 4px;
+      letter-spacing: 0.6px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
+
     .field-group {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
       margin-bottom: 12px;
     }
+
+    .field-group:last-child {
+      margin-bottom: 0;
+    }
+
     .field-group label {
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       color: #94A3B8;
     }
-    .field-group input, .field-group select {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 10px;
-      padding: 12px;
-      color: #FFFFFF;
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 12px;
       font-size: 14px;
+      color: #64748B;
+      pointer-events: none;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 11px 12px 11px 36px;
+      color: #FFFFFF;
+      font-size: 13px;
+      font-weight: 600;
       outline: none;
+      transition: border-color 0.2s, background 0.2s;
     }
-    .field-group input:focus, .field-group select:focus {
+
+    .form-input:focus {
       border-color: #10B981;
+      background: rgba(16, 185, 129, 0.05);
     }
+
+    select.form-input {
+      appearance: none;
+      -webkit-appearance: none;
+      cursor: pointer;
+    }
+
     .row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
     }
+
+    /* UPLOAD DE DOCUMENTOS */
+    .docs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .doc-upload-box {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1.5px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 14px 8px;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.2s;
+    }
+
+    .doc-upload-box:hover, .doc-upload-box.has-file {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.06);
+    }
+
+    .doc-icon {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+
+    .doc-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #E2E8F0;
+      display: block;
+    }
+
+    .doc-status {
+      font-size: 9px;
+      color: #94A3B8;
+      margin-top: 2px;
+      display: block;
+    }
+
+    .doc-input-hidden {
+      display: none;
+    }
+
+    /* BOTÃO SUBMIT */
     .btn-submit {
       width: 100%;
       background: linear-gradient(135deg, #10B981, #059669);
       color: #03251E;
       border: none;
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 14px;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 900;
       cursor: pointer;
-      margin-top: 20px;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 10px;
+      transition: transform 0.15s ease;
+    }
+
+    .btn-submit:active {
+      transform: scale(0.98);
     }
   </style>
 </head>
+
 <body>
-  <div class="form-container">
-    <div class="brand-title">HUBy Parceiro 🚘</div>
-    <div class="brand-sub">Cadastre seus dados e comece a faturar com viagens, entregas e fretes.</div>
+  <!-- BARRA SUPERIOR -->
+  <header class="top-bar">
+    <a href="./index.html" class="btn-back" title="Voltar">←</a>
+    <span class="top-bar-title">Cadastro de Parceiro</span>
+  </header>
+
+  <main class="page-content">
+    <!-- BANNER HERO -->
+    <div class="hero-banner">
+      <div class="hero-icon">🚘</div>
+      <div class="hero-text">
+        <h2>Seja um Parceiro HUBy</h2>
+        <p>Receba chamadas de passageiros, entregas flash e fretes na sua cidade.</p>
+      </div>
+    </div>
 
     <form id="formCadastroMotorista">
-      <div class="section-title">1. Dados Pessoais & CNH</div>
-      <div class="field-group">
-        <label>Nome Completo</label>
-        <input type="text" id="cadNome" placeholder="Ex: Tarcyo Carvalho" required>
-      </div>
-      <div class="row-2">
-        <div class="field-group">
-          <label>Telefone / WhatsApp</label>
-          <input type="tel" id="cadTelefone" placeholder="(89) 99999-9999" required>
-        </div>
-        <div class="field-group">
-          <label>CPF</label>
-          <input type="text" id="cadCpf" placeholder="000.000.000-00" required>
-        </div>
-      </div>
-      <div class="field-group">
-        <label>Número de Registro da CNH</label>
-        <input type="text" id="cadCnh" placeholder="Ex: 01234567890" required>
-      </div>
+      <!-- 1. DADOS PESSOAIS -->
+      <section class="form-card">
+        <div class="card-title">👤 1. Dados Pessoais</div>
 
-      <div class="section-title">2. Modalidade & Veículo</div>
-      <div class="field-group">
-        <label>Categoria Principal</label>
-        <select id="cadCategoria">
-          <option value="carro">🚗 HUBy Viagem (Carro Particular)</option>
-          <option value="moto">🛵 HUBy Moto (Passageiro)</option>
-          <option value="flash">📦 HUBy Flash (Entregas e Encomendas)</option>
-          <option value="cargo">🚚 HUBy Cargo (Furgão, Caminhonete ou VUC)</option>
-        </select>
-      </div>
-      <div class="field-group">
-        <label>Modelo do Veículo</label>
-        <input type="text" id="cadModelo" placeholder="Ex: Chevrolet Onix 1.0 ou Honda CG 160" required>
-      </div>
-      <div class="row-2">
         <div class="field-group">
-          <label>Placa</label>
-          <input type="text" id="cadPlaca" placeholder="ABC1D23" required>
+          <label for="cadNome">Nome Completo</label>
+          <div class="input-wrapper">
+            <span class="input-icon">📝</span>
+            <input type="text" id="cadNome" class="form-input" placeholder="Ex: Tarcyo Carvalho" required>
+          </div>
         </div>
-        <div class="field-group">
-          <label>Cor</label>
-          <input type="text" id="cadCor" placeholder="Ex: Prata" required>
-        </div>
-      </div>
 
-      <button type="submit" class="btn-submit" id="btnSalvarCadastro">Concluir Cadastro e Ir ao Radar</button>
+        <div class="row-2">
+          <div class="field-group">
+            <label for="cadTelefone">WhatsApp / Telemóvel</label>
+            <div class="input-wrapper">
+              <span class="input-icon">📱</span>
+              <input type="tel" id="cadTelefone" class="form-input" placeholder="(89) 99999-9999" maxlength="15" required>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="cadCpf">CPF</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🪪</span>
+              <input type="text" id="cadCpf" class="form-input" placeholder="000.000.000-00" maxlength="14" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="cadCnh">Número da CNH</label>
+          <div class="input-wrapper">
+            <span class="input-icon">📄</span>
+            <input type="text" id="cadCnh" class="form-input" placeholder="Ex: 01234567890" maxlength="11" required>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. VEÍCULO & CATEGORIA -->
+      <section class="form-card">
+        <div class="card-title">🚗 2. Modalidade & Veículo</div>
+
+        <div class="field-group">
+          <label for="cadCategoria">Categoria de Trabalho</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🏷️</span>
+            <select id="cadCategoria" class="form-input">
+              <option value="carro">🚗 HUBy Viagem (Carro Particular)</option>
+              <option value="moto">🛵 HUBy Moto (Passageiro)</option>
+              <option value="flash">📦 HUBy Flash (Entregas e Encomendas)</option>
+              <option value="cargo">🚚 HUBy Cargo (Furgão, VUC ou Fretes)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="cadModelo">Marca e Modelo</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🚘</span>
+            <input type="text" id="cadModelo" class="form-input" placeholder="Ex: Onix 1.0 ou Titan 160" required>
+          </div>
+        </div>
+
+        <div class="row-2">
+          <div class="field-group">
+            <label for="cadPlaca">Placa</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🔢</span>
+              <input type="text" id="cadPlaca" class="form-input" placeholder="ABC1D23" maxlength="8" style="text-transform:uppercase;" required>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label for="cadCor">Cor</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🎨</span>
+              <input type="text" id="cadCor" class="form-input" placeholder="Ex: Prata" required>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. DOCUMENTOS -->
+      <section class="form-card">
+        <div class="card-title">📸 3. Comprovativos (Fotos)</div>
+        <div class="docs-grid">
+          <label class="doc-upload-box" id="boxFotoCnh">
+            <div class="doc-icon">🪪</div>
+            <span class="doc-label">Foto da CNH</span>
+            <span class="doc-status" id="txtStatusCnh">Toque para anexar</span>
+            <input type="file" accept="image/*" class="doc-input-hidden" id="fileCnh">
+          </label>
+
+          <label class="doc-upload-box" id="boxFotoVeiculo">
+            <div class="doc-icon">🚗</div>
+            <span class="doc-label">Foto do Veículo</span>
+            <span class="doc-status" id="txtStatusVeiculo">Toque para anexar</span>
+            <input type="file" accept="image/*" class="doc-input-hidden" id="fileVeiculo">
+          </label>
+        </div>
+      </section>
+
+      <button type="submit" class="btn-submit" id="btnSalvarCadastro">
+        <span>Concluir Cadastro e Ativar Radar</span>
+        <span>➔</span>
+      </button>
     </form>
-  </div>
+  </main>
 
   <script>
     const API_URL = 'https://huby.onrender.com';
-    const form = document.getElementById('formCadastroMotorista');
 
+    // 1. MÁSCARAS AUTOMÁTICAS
+    const inputTel = document.getElementById('cadTelefone');
+    inputTel.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length > 11) v = v.substring(0, 11);
+      if (v.length > 6) {
+        e.target.value = `(${v.substring(0,2)}) ${v.substring(2,7)}-${v.substring(7)}`;
+      } else if (v.length > 2) {
+        e.target.value = `(${v.substring(0,2)}) ${v.substring(2)}`;
+      } else {
+        e.target.value = v;
+      }
+    });
+
+    const inputCpf = document.getElementById('cadCpf');
+    inputCpf.addEventListener('input', (e) => {
+      let v = e.target.value.replace(/\D/g, '');
+      if (v.length > 11) v = v.substring(0, 11);
+      v = v.replace(/(\d{3})(\d)/, '$1.$2');
+      v = v.replace(/(\d{3})(\d)/, '$1.$2');
+      v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      e.target.value = v;
+    });
+
+    const inputPlaca = document.getElementById('cadPlaca');
+    inputPlaca.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 7);
+    });
+
+    // 2. RETORNO VISUAL DE UPLOAD
+    document.getElementById('fileCnh').addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        document.getElementById('boxFotoCnh').classList.add('has-file');
+        document.getElementById('txtStatusCnh').textContent = '✅ Anexada';
+      }
+    });
+
+    document.getElementById('fileVeiculo').addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        document.getElementById('boxFotoVeiculo').classList.add('has-file');
+        document.getElementById('txtStatusVeiculo').textContent = '✅ Anexada';
+      }
+    });
+
+    // 3. ENVIO DO FORMULÁRIO
+    const form = document.getElementById('formCadastroMotorista');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('btnSalvarCadastro');
-      btn.textContent = 'Gravando cadastro...';
+      btn.innerHTML = '<span>A gravar cadastro...</span>';
       btn.disabled = true;
 
       const payload = {
@@ -166,21 +462,16 @@
 
         const dados = await resp.json();
         if (resp.ok && dados.sucesso) {
-          // Salva a sessão do motorista no celular
           localStorage.setItem('huby_user_role', 'motorista');
           localStorage.setItem('huby_motorista_id', dados.motorista.id);
           localStorage.setItem('huby_motorista_nome', dados.motorista.nome);
           localStorage.setItem('huby_motorista_categoria', dados.motorista.categoria);
-
-          // Redireciona imediatamente para a tela restrita de motorista
           window.location.href = './motorista.html';
         } else {
-          alert('Erro ao cadastrar: ' + (dados.erro || 'Verifique as informações.'));
-          btn.textContent = 'Concluir Cadastro e Ir ao Radar';
-          btn.disabled = false;
+          throw new Error(dados.erro || 'Erro no servidor');
         }
       } catch (err) {
-        // Fallback local caso o backend esteja em repouso
+        // Fallback local se a API estiver em repouso
         localStorage.setItem('huby_user_role', 'motorista');
         localStorage.setItem('huby_motorista_nome', payload.nome);
         localStorage.setItem('huby_motorista_categoria', payload.categoria);
@@ -189,4 +480,5 @@
     });
   </script>
 </body>
+
 </html>

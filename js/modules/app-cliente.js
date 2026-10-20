@@ -206,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 5. ENVIAR PEDIDO AO RENDER/NEON
   const btnSolicitar = document.getElementById('btnSolicitarHuby');
   const bannerStatus = document.getElementById('bannerStatusCorrida');
+  let bannerTimer = null;
 
   btnSolicitar?.addEventListener('click', async () => {
     const inputDestino = document.getElementById('inputDestino');
@@ -234,7 +235,9 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     if (bannerStatus) {
+      if (bannerTimer) clearTimeout(bannerTimer);
       bannerStatus.className = 'status-banner ativo';
+      bannerStatus.style.display = 'block';
       bannerStatus.innerHTML = `⏳ A enviar solicitação #${novoPedido.id}...`;
     }
 
@@ -262,6 +265,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (bannerStatus) {
       bannerStatus.innerHTML = `✅ Pedido <strong>#${novoPedido.id}</strong> enviado com sucesso!<br><small>A aguardar motorista parceiro HUBy...</small>`;
+      // Oculta automaticamente após 5 segundos para liberar o visual
+      bannerTimer = setTimeout(() => {
+        bannerStatus.classList.remove('ativo');
+        bannerStatus.style.display = 'none';
+      }, 5000);
     }
   });
 
