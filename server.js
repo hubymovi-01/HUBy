@@ -20,7 +20,11 @@ app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online', banco: 'Neon PostgreSQL' });
 });
 
-// 1. Inserir novo pedido (Cliente chama corrida/frete)
+// ==========================================
+// 1. ROTAS DE PEDIDOS (Cliente & Motorista)
+// ==========================================
+
+// Inserir novo pedido (Cliente chama corrida/frete)
 app.post('/api/pedidos', async (req, res) => {
   try {
     const { id, tipo, subTipoLabel, origem, destino, distancia, preco, metodoPgto } = req.body;
@@ -41,16 +45,26 @@ app.post('/api/pedidos', async (req, res) => {
   }
 });
 
-// 2. Listar pedidos pendentes (Motorista consulta radar)
+// Listar pedidos (Motorista consulta radar ou Admin visualiza tudo)
 app.get('/api/pedidos', async (req, res) => {
   try {
-    const statusFiltro = req.query.status || 'pendente';
-    const pedidos = await sql`
-      SELECT * FROM pedidos 
-      WHERE status = ${statusFiltro}
-      ORDER BY criado_em DESC
-      LIMIT 25
-    `;
+    const statusFiltro = req.query.status;
+    let pedidos;
+
+    if (statusFiltro) {
+      pedidos = await sql`
+        SELECT * FROM pedidos 
+        WHERE status = ${statusFiltro}
+        ORDER BY criado_em DESC
+        LIMIT 25
+      `;
+    } else {
+      pedidos = await sql`
+        SELECT * FROM pedidos 
+        ORDER BY criado_em DESC
+        LIMIT 50
+      `;
+    }
     res.json(pedidos);
   } catch (error) {
     console.error('Erro ao consultar pedidos:', error);
@@ -58,7 +72,7 @@ app.get('/api/pedidos', async (req, res) => {
   }
 });
 
-// 3. Atualizar estado do pedido (Motorista aceita ou rejeita)
+// Atualizar estado do pedido (Motorista aceita ou rejeita)
 app.patch('/api/pedidos', async (req, res) => {
   try {
     const { id, novoStatus } = req.body;
@@ -80,10 +94,11 @@ app.patch('/api/pedidos', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Servidor HUBy ativo na porta ${port}`);
-});
-// POST /api/motoristas/cadastro
+// ==========================================
+// 2. ROTAS DE MOTORISTAS (Cadastro & Admin)
+// ==========================================
+
+// Cadastrar novo motorista parceiro
 app.post('/api/motoristas/cadastro', async (req, res) => {
   try {
     const {
@@ -92,25 +107,56 @@ app.post('/api/motoristas/cadastro', async (req, res) => {
       fotoCnhUrl, fotoVeiculoUrl
     } = req.body;
 
-    const query = `
+    const resultado = await sql`
       INSERT INTO motoristas (
         nome, telefone, cpf, cnh_numero, categoria,
         veiculo_modelo, veiculo_placa, veiculo_cor,
-        foto_cnh_url, foto_veiculo_url, status_online
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
+        foto_cnh_url, foto_veiculo_url, status_online, status_aprovacao
+      ) VALUES (
+        ${nome}, ${telefone}, ${cpf}, ${cnhNumero}, ${categoria},
+        ${veiculoModelo}, ${veiculoPlaca.toUpperCase()}, ${veiculoCor},
+        ${fotoCnhUrl || ''}, ${fotoVeiculoUrl || ''}, TRUE, 'pendente'
+      )
       RETURNING id, nome, categoria, veiculo_modelo, status_aprovacao;
     `;
 
-    const valores = [
-      nome, telefone, cpf, cnhNumero,
-      categoria, veiculoModelo, veiculoPlaca.toUpperCase(), veiculoCor,
-      fotoCnhUrl || '', fotoVeiculoUrl || ''
-    ];
-
-    const resultado = await pool.query(query, valores);
-    res.status(201).json({ sucesso: true, motorista: resultado.rows[0] });
+    res.status(201).json({ sucesso: true, motorista: resultado[0] });
   } catch (err) {
     console.error('Erro no cadastro de motorista:', err);
-    res.status(500).json({ erro: 'Falha ao realizar cadastro do motorista' });
+    res.status(500).json({ erro: 'Falha ao realizar cadastro do motorista: ' + err.message });
   }
+});
+
+// Listar motoristas pendentes para o painel administrativo
+app.get('/api/motoristas', async (req, res) => {
+  try {
+    const motoristas = await sql`
+      SELECT * FROM motoristas 
+      ORDER BY criado_em DESC
+    `;
+    res.json(motoristas);
+  } catch (error) {
+    console.error('Erro ao listar motoristas:', error);
+    res.status(500).json({ erro: error.message });
+  }
+});
+
+// Aprovar motorista pelo painel administrativo
+app.post('/api/motoristas/aprovar', async (req, res) => {
+  try {
+    const { id } = req.body;
+    await sql`
+      UPDATE motoristas 
+      SET status_aprovacao = 'aprovado' 
+      WHERE id = ${id}
+    `;
+    res.json({ sucesso: true, mensagem: 'Motorista aprovado com sucesso.' });
+  } catch (error) {
+    console.error('Erro ao aprovar motorista:', error);
+    res.status(500).json({ erro: error.message });
+  }
+});
+
+app.listen(port, () => {
+  console.log(`Servidor HUBy ativo na porta ${port}`);
 });
