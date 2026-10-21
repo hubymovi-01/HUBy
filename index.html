@@ -19,6 +19,7 @@
       }
 
       if (jaEntrou === '1') {
+        document.documentElement.classList.add('app-pronto');
         document.addEventListener('DOMContentLoaded', () => {
           const splash = document.getElementById('splashScreen');
           if (splash) {
@@ -36,7 +37,34 @@
   <link rel="stylesheet" href="./css/cliente.css">
   <link rel="stylesheet" href="./css/welcome.css">
   <style>
-    /* Estilo adicional para garantir a transição suave do carrossel */
+    /* Estilo de fixação absoluta do Splash Overlay */
+    #splashScreen.welcome-overlay {
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      bottom: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      background: #080C14 !important;
+      z-index: 999999 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      padding: 24px 20px env(safe-area-inset-bottom, 24px) 20px !important;
+      box-sizing: border-box !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .app-pronto #splashScreen,
+    #splashScreen.fechado {
+      display: none !important;
+      visibility: hidden !important;
+    }
+
+    /* Estilo adicional para transição do carrossel */
     .pillar-card {
       transition: all 0.4s ease-in-out;
       opacity: 0.4;
@@ -53,116 +81,117 @@
 
 <body>
 
-  <div class="app-layout">
+  <!-- 1. TELA DE ENTRADA / ONBOARDING (Fora de app-layout para sobrepor a 100%) -->
+  <div id="splashScreen" class="welcome-overlay">
+    <div class="glow-bg top-glow"></div>
+    <div class="glow-bg bottom-glow"></div>
 
-    <!-- TELA DE ENTRADA / ONBOARDING COM CARROSSEL AUTOMÁTICO -->
-    <div id="splashScreen" class="welcome-overlay">
-      <div class="glow-bg top-glow"></div>
-      <div class="glow-bg bottom-glow"></div>
-
-      <!-- Logótipo Vertical com Selo de Segurança -->
-      <header class="welcome-header">
-        <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; margin-bottom: 12px; letter-spacing: 0.5px;">
-          🛡️ PLATAFORMA 100% VERIFICADA & SEGURA
+    <!-- Logótipo Vertical com Selo de Segurança -->
+    <header class="welcome-header">
+      <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; margin-bottom: 12px; letter-spacing: 0.5px;">
+        🛡️ PLATAFORMA 100% VERIFICADA & SEGURA
+      </div>
+      <div class="brand-hero-stacked">
+        <div class="brand-row brand-row-small">
+          <span class="brand-hub-small">HUB</span>
+          <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
         </div>
-        <div class="brand-hero-stacked">
-          <div class="brand-row brand-row-small">
-            <span class="brand-hub-small">HUB</span>
-            <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
-          </div>
-          <div class="brand-row brand-row-large">
-            <span class="brand-hub-large">HUB</span>
-            <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
-          </div>
+        <div class="brand-row brand-row-large">
+          <span class="brand-hub-large">HUB</span>
+          <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
         </div>
-        <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
-      </header>
+      </div>
+      <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
+    </header>
 
-      <!-- Carrossel de Pilares Dinâmico -->
-      <div class="pillars-container" id="pillarsContainer">
-        <div class="pillar-card active" data-slide="0">
-          <div class="pillar-icon">🔒</div>
-          <div class="pillar-content">
-            <h4>Viagens Protegidas</h4>
-            <p>Passageiros e motoristas com CPF e CNH validados.</p>
-          </div>
-        </div>
-
-        <div class="pillar-card" data-slide="1">
-          <div class="pillar-icon">📍</div>
-          <div class="pillar-content">
-            <h4>Rastreio Satelital</h4>
-            <p>Partilha de rota em tempo real com contactos de emergência.</p>
-          </div>
-        </div>
-
-        <div class="pillar-card" data-slide="2">
-          <div class="pillar-icon">⚡</div>
-          <div class="pillar-content">
-            <h4>Suporte 24h</h4>
-            <p>Central de operações ativa para retaguarda em fretes e viagens.</p>
-          </div>
+    <!-- Carrossel de Pilares Dinâmico -->
+    <div class="pillars-container" id="pillarsContainer">
+      <div class="pillar-card active" data-slide="0">
+        <div class="pillar-icon">🔒</div>
+        <div class="pillar-content">
+          <h4>Viagens Protegidas</h4>
+          <p>Passageiros e motoristas com CPF e CNH validados.</p>
         </div>
       </div>
 
-      <!-- Indicadores de Pontos (Dots) -->
-      <div class="slide-dots" id="slideDots">
-        <span class="dot active"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
+      <div class="pillar-card" data-slide="1">
+        <div class="pillar-icon">📍</div>
+        <div class="pillar-content">
+          <h4>Rastreio Satelital</h4>
+          <p>Partilha de rota em tempo real com contactos de emergência.</p>
+        </div>
       </div>
 
-      <!-- Ações de Entrada: Cadastro, Login e Motorista -->
-      <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
-        <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente" style="width: 100%; display: flex; align-items: center; justify-content: space-between; text-decoration: none; box-sizing: border-box;">
-          <span>📱 Criar Conta de Passageiro</span>
-          <span class="btn-arrow">➔</span>
-        </a>
-
-        <a href="./login.html" class="btn-welcome-login" style="
-          width: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          text-decoration: none;
-          box-sizing: border-box;
-          background: rgba(255, 255, 255, 0.05);
-          border: 1.5px solid rgba(255, 255, 255, 0.12);
-          color: #F8FAFC;
-          font-weight: 800;
-          padding: 14px 20px;
-          border-radius: 14px;
-          font-size: 14px;
-          backdrop-filter: blur(8px);
-        ">
-          <span>🔑 Já tenho conta (Fazer Login)</span>
-          <span style="color: #10B981;">➔</span>
-        </a>
-
-        <a href="./cadastro-motorista.html" class="btn-welcome-secondary" style="
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          background: rgba(16, 185, 129, 0.15);
-          border: 1.5px solid #10B981;
-          color: #10B981;
-          padding: 14px 20px;
-          border-radius: 14px;
-          font-weight: 800;
-          text-decoration: none;
-          font-size: 14px;
-          width: 100%;
-          box-sizing: border-box;
-        ">
-          <span>🚘 Quero ser Motorista / Parceiro</span>
-          <span>➔</span>
-        </a>
-
-        <div style="text-align: center; font-size: 10px; color: #64748B; margin-top: 4px;">
-          🔒 Dados protegidos pela LGPD com criptografia ponta a ponta.
+      <div class="pillar-card" data-slide="2">
+        <div class="pillar-icon">⚡</div>
+        <div class="pillar-content">
+          <h4>Suporte 24h</h4>
+          <p>Central de operações ativa para retaguarda em fretes e viagens.</p>
         </div>
-      </footer>
+      </div>
     </div>
+
+    <!-- Indicadores de Pontos (Dots) -->
+    <div class="slide-dots" id="slideDots">
+      <span class="dot active"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+
+    <!-- Ações de Entrada -->
+    <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
+      <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente" style="width: 100%; display: flex; align-items: center; justify-content: space-between; text-decoration: none; box-sizing: border-box;">
+        <span>📱 Criar Conta de Passageiro</span>
+        <span class="btn-arrow">➔</span>
+      </a>
+
+      <a href="./login.html" class="btn-welcome-login" style="
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-decoration: none;
+        box-sizing: border-box;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1.5px solid rgba(255, 255, 255, 0.12);
+        color: #F8FAFC;
+        font-weight: 800;
+        padding: 14px 20px;
+        border-radius: 14px;
+        font-size: 14px;
+        backdrop-filter: blur(8px);
+      ">
+        <span>🔑 Já tenho conta (Fazer Login)</span>
+        <span style="color: #10B981;">➔</span>
+      </a>
+
+      <a href="./cadastro-motorista.html" class="btn-welcome-secondary" style="
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: rgba(16, 185, 129, 0.15);
+        border: 1.5px solid #10B981;
+        color: #10B981;
+        padding: 14px 20px;
+        border-radius: 14px;
+        font-weight: 800;
+        text-decoration: none;
+        font-size: 14px;
+        width: 100%;
+        box-sizing: border-box;
+      ">
+        <span>🚘 Quero ser Motorista / Parceiro</span>
+        <span>➔</span>
+      </a>
+
+      <div style="text-align: center; font-size: 10px; color: #64748B; margin-top: 4px;">
+        🔒 Dados protegidos pela LGPD com criptografia ponta a ponta.
+      </div>
+    </footer>
+  </div>
+
+  <!-- 2. APLICAÇÃO PRINCIPAL -->
+  <div class="app-layout">
 
     <!-- CABEÇALHO DO APLICATIVO -->
     <header class="huby-header">
@@ -371,7 +400,7 @@
           </div>
 
           <div class="profile-menu">
-            <!-- PAINEL ADMINISTRATIVO (Invisível por padrão, desbloqueado via token seguro) -->
+            <!-- PAINEL ADMINISTRATIVO -->
             <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
               <div class="menu-item-left">
                 <span class="menu-icon">🛡️</span>
@@ -480,7 +509,7 @@
         setInterval(trocarSlide, 3500);
       }
 
-      // Verificação do token seguro de Administrador
+      // Verificação do token de Administrador
       const adminBtn = document.getElementById('menuAdminBtn');
       const tokenAdmin = localStorage.getItem('huby_admin_token');
 
@@ -488,7 +517,7 @@
         if (adminBtn) adminBtn.style.display = 'flex';
       }
 
-      // Atalho seguro: clique triplo na pílula da carteira no topo para inserir a senha de admin
+      // Atalho: clique triplo na pílula da carteira
       const walletPill = document.getElementById('btnIrCarteira');
       let cliquesCarteira = 0;
       let ultimaCliques = 0;

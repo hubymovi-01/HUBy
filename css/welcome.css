@@ -1,8 +1,36 @@
-/* Classes para o novo index modular */
-.app-pronto #splashScreen {
-  display: none !important;
+/* ==========================================================================
+   TELA DE ENTRADA / ONBOARDING FULLSCREEN FIXA (WELCOME OVERLAY)
+   ========================================================================== */
+
+.welcome-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important; /* Suporte dinâmico à barra de navegação no mobile */
+  background: #080C14 !important;
+  z-index: 99999 !important; /* Fica acima do cabeçalho fixo e dos azulejos do Leaflet */
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  padding: 24px 20px env(safe-area-inset-bottom, 24px) 20px !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
 }
 
+/* Ocultação quando a sessão estiver iniciada */
+.welcome-overlay.fechado,
+.app-pronto #splashScreen {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Elementos visuais internos */
 .badge-verificado {
   display: inline-block;
   background: rgba(16, 185, 129, 0.15);
