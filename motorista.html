@@ -31,8 +31,124 @@
   <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   
-  <!-- CSS Exclusivo do Motorista -->
+  <!-- CSS Global e do Motorista -->
+  <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/motorista.css">
+
+  <style>
+    /* Blindagem de layout em tela cheia mobile */
+    html, body {
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      overflow: hidden !important;
+      background-color: #070B12 !important;
+    }
+
+    .driver-layout {
+      position: relative !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+      overflow: hidden !important;
+    }
+
+    .driver-map-wrapper,
+    #mapaMotorista {
+      position: absolute !important;
+      inset: 0 !important;
+      width: 100% !important;
+      height: 100% !important;
+      z-index: 1 !important;
+      background-color: #070B12 !important;
+    }
+
+    /* Força o Dark Mode no Leaflet */
+    .leaflet-tile-pane {
+      filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7) !important;
+    }
+
+    /* Cabeçalho superior sempre visível acima do mapa */
+    .driver-header {
+      position: fixed !important;
+      top: max(12px, env(safe-area-inset-top, 12px)) !important;
+      left: 14px !important;
+      right: 14px !important;
+      z-index: 9999 !important;
+      background: rgba(11, 17, 28, 0.92) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      backdrop-filter: blur(16px) !important;
+      -webkit-backdrop-filter: blur(16px) !important;
+      border-radius: 18px !important;
+      padding: 10px 14px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+    }
+
+    /* Pílula de status do radar */
+    .radar-status-badge {
+      position: fixed !important;
+      top: 80px !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      z-index: 9998 !important;
+      background: rgba(8, 12, 20, 0.88) !important;
+      border: 1px solid rgba(16, 185, 129, 0.35) !important;
+      backdrop-filter: blur(12px) !important;
+      border-radius: 20px !important;
+      padding: 6px 14px !important;
+      font-size: 11.5px !important;
+      font-weight: 700 !important;
+      color: #E2E8F0 !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 7px !important;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    .btn-recenter-gps {
+      position: fixed !important;
+      right: 16px !important;
+      bottom: 230px !important;
+      z-index: 9998 !important;
+      width: 44px !important;
+      height: 44px !important;
+      border-radius: 50% !important;
+      background: rgba(11, 17, 28, 0.9) !important;
+      border: 1px solid rgba(255, 255, 255, 0.15) !important;
+      backdrop-filter: blur(10px) !important;
+      color: #FFFFFF !important;
+      font-size: 18px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      cursor: pointer !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+    }
+
+    /* Dock deslizante inferior fixado na base */
+    .driver-bottom-dock {
+      position: fixed !important;
+      bottom: 0 !important;
+      left: 0 !important;
+      right: 0 !important;
+      z-index: 9999 !important;
+      background: rgba(11, 17, 28, 0.95) !important;
+      border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+      backdrop-filter: blur(20px) !important;
+      -webkit-backdrop-filter: blur(20px) !important;
+      border-radius: 22px 22px 0 0 !important;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 12px)) 16px !important;
+      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 10px !important;
+    }
+  </style>
 </head>
 
 <body>
@@ -56,7 +172,6 @@
           <span class="pulse-indicator"></span>
           <span id="txtStatusMotorista">ONLINE</span>
         </button>
-        <!-- Botão para encerrar a sessão de motorista -->
         <button type="button" class="btn-mode-icon" id="btnSairConta" title="Encerrar Sessão">🚪</button>
       </div>
     </header>
