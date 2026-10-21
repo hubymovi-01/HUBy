@@ -11,6 +11,23 @@ document.addEventListener('DOMContentLoaded', () => {
   let marcadorDestinoAtivo = null;
   let pontoDestinoCoords = null;
 
+  // Estado de ganhos do dia
+  let corridasConcluidas = parseInt(localStorage.getItem('huby_driver_runs') || '0', 10);
+  let ganhosHoje = parseFloat(localStorage.getItem('huby_driver_earnings') || '0.00');
+
+  function atualizarPainelGanhos() {
+    const txtGanhos = document.getElementById('txtGanhosHoje');
+    const txtCorridas = document.getElementById('txtQtdCorridas');
+    if (txtGanhos) {
+      txtGanhos.textContent = `R$ ${ganhosHoje.toFixed(2).replace('.', ',')}`;
+    }
+    if (txtCorridas) {
+      txtCorridas.textContent = `${corridasConcluidas} corrida${corridasConcluidas === 1 ? '' : 's'}`;
+    }
+  }
+
+  atualizarPainelGanhos();
+
   // Inicia o mapa sem controlo de zoom e sem atribuição
   const map = L.map('mapaMotorista', {
     zoomControl: false,
@@ -21,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     maxZoom: 19
   }).addTo(map);
 
-  // Marcador do Motorista
+  // Marcador do Motorista com efeito de radar
   const markerMotorista = L.circleMarker(defaultCoords, {
     radius: 11,
     color: '#10B981',
@@ -59,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         motoristaCoords = [latitude, longitude];
         markerMotorista.setLatLng(motoristaCoords);
 
-        // Se estiver em rota e se mover significativamente, redesenha o traçado pelas ruas
+        // Se estiver em rota e se mover, recalcula o traçado viário
         if (linhaRotaAtiva && pontoDestinoCoords) {
           tracarRotaViasUrbanas(motoristaCoords, pontoDestinoCoords, false);
         }
@@ -90,31 +107,31 @@ document.addEventListener('DOMContentLoaded', () => {
   btnToggleStatus?.addEventListener('click', () => {
     isOnline = !isOnline;
     if (isOnline) {
-      btnToggleStatus.className = 'btn-toggle-online status-online';
+      btnToggleStatus.className = 'btn-status-toggle online';
       txtStatusMotorista.textContent = 'ONLINE';
-      if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas...';
+      if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas próximas...';
       if (badgeRadar) badgeRadar.style.display = 'flex';
       carregarFilaDePedidos();
     } else {
-      btnToggleStatus.className = 'btn-toggle-online status-offline';
+      btnToggleStatus.className = 'btn-status-toggle offline';
       txtStatusMotorista.textContent = 'OFFLINE';
-      if (txtRadarStatus) txtRadarStatus.textContent = '⏸️ Modo pausa ativo';
+      if (txtRadarStatus) txtRadarStatus.textContent = 'Modo pausa ativo';
       if (feedChamadas) {
         feedChamadas.innerHTML = `
-          <div class="empty-jobs-state">
-            <div class="empty-radar-icon">⏸️</div>
-            <div class="empty-title">Modo Offline Ativo</div>
-            <div class="empty-sub">Fique online para voltar a receber corridas e fretes.</div>
+          <div class="radar-empty-box">
+            <div class="radar-empty-icon">⏸️</div>
+            <div class="radar-empty-title">Modo Offline Ativo</div>
+            <div class="radar-empty-sub">Fique online para voltar a receber solicitações em tempo real.</div>
           </div>
         `;
       }
     }
   });
 
-  document.querySelectorAll('.filter-pill').forEach(pill => {
+  document.querySelectorAll('.filter-chip').forEach(pill => {
     pill.addEventListener('click', () => {
       if (linhaRotaAtiva) return;
-      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.filter-chip').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       filtroAtual = pill.getAttribute('data-filter') || 'todos';
       carregarFilaDePedidos();
@@ -125,36 +142,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const isCargo = p.tipo === 'cargo';
     const isFlash = p.tipo === 'flash';
     const badgeClasse = isCargo ? 'cargo' : (isFlash ? 'flash' : 'viagem');
-    const btnClasse = isCargo ? 'cargo-btn' : 'emerald-btn';
 
     return `
-      <div class="job-card" id="card-${p.id}">
-        <div class="job-top">
-          <div class="job-badge ${badgeClasse}">${p.subTipoLabel || 'HUBy'} #${p.id}</div>
-          <div class="job-distance">📍 ${p.horario || 'Agora'}</div>
+      <div class="job-card-premium" id="card-${p.id}">
+        <div class="job-header-row">
+          <span class="job-type-pill ${badgeClasse}">${p.subTipoLabel || 'HUBy'} #${p.id}</span>
+          <span class="job-price-highlight">${p.preco}</span>
         </div>
 
-        <div class="job-body">
-          <div class="job-route-line">
-            <div class="route-point">
-              <span class="dot-indicator green"></span>
-              <p>${p.origem}</p>
-            </div>
-            <div class="route-point">
-              <span class="dot-indicator orange"></span>
-              <p>${p.destino} (${p.distancia || '1.0 km'})</p>
+        <div class="job-address-block">
+          <div class="address-line-row">
+            <span class="pin-indicator green"></span>
+            <div class="address-text-desc">
+              ${p.origem}
+              <small>Ponto de partida do passageiro</small>
             </div>
           </div>
-
-          <div class="job-pricing">
-            <span class="price-tag">${p.preco}</span>
-            <span class="split-info">${(p.metodoPgto || 'Pix').toUpperCase()}</span>
+          <div class="address-line-row">
+            <span class="pin-indicator orange"></span>
+            <div class="address-text-desc">
+              ${p.destino}
+              <small>Distância estimada: ${p.distancia || '1.0 km'}</small>
+            </div>
           </div>
         </div>
 
-        <div class="job-actions">
-          <button type="button" class="btn-job-reject" onclick="rejeitarPedido('${p.id}')">Recusar</button>
-          <button type="button" class="btn-job-accept ${btnClasse}" onclick="aceitarPedido('${p.id}')">Aceitar Corrida</button>
+        <div class="job-actions-row">
+          <button type="button" class="btn-reject-action" onclick="rejeitarPedido('${p.id}')">Recusar</button>
+          <button type="button" class="btn-accept-action" onclick="aceitarPedido('${p.id}')">
+            Aceitar Corrida ➔
+          </button>
         </div>
       </div>
     `;
@@ -162,10 +179,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderEmptyState() {
     return `
-      <div class="empty-jobs-state">
-        <div class="empty-radar-icon">📡</div>
-        <div class="empty-title">Radar de Chamadas Ativo</div>
-        <div class="empty-sub">Aguardando novas solicitações de passageiros e fretes nas proximidades...</div>
+      <div class="radar-empty-box">
+        <div class="radar-empty-icon">📡</div>
+        <div class="radar-empty-title">Radar de Chamadas Ativo</div>
+        <div class="radar-empty-sub">Aguardando novas solicitações de passageiros e fretes nas proximidades...</div>
       </div>
     `;
   }
@@ -259,7 +276,6 @@ document.addEventListener('DOMContentLoaded', () => {
       console.warn('OSRM indisponível, usando traçado auxiliar:', err);
     }
 
-    // Fallback se o serviço falhar temporariamente
     if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
     linhaRotaAtiva = L.polyline([origem, destino], {
       color: '#10B981',
@@ -301,8 +317,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. Cria marcador de destino (Bandeira de Chegada Laranja)
     marcadorDestinoAtivo = L.circleMarker(pontoDest, {
       radius: 12,
-      color: '#F97316',
-      fillColor: '#F97316',
+      color: '#FF6B00',
+      fillColor: '#FF6B00',
       fillOpacity: 1,
       weight: 3
     }).addTo(map);
@@ -329,55 +345,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 6. Atualiza o badge superior
     if (badgeRadar) {
-      badgeRadar.style.borderColor = '#10B981';
       if (txtRadarStatus) txtRadarStatus.textContent = `Em rota para entrega #${id}`;
     }
 
-    // 7. Isola o feed e exibe painel ativo de navegação
+    // 7. Isola o feed e exibe o card de navegação executiva
     if (feedChamadas) {
       feedChamadas.innerHTML = `
-        <div class="job-card active-delivery-card" style="border-color: #10B981; background: rgba(16, 185, 129, 0.08); padding: 18px 14px;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
-            <span style="background: rgba(16, 185, 129, 0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 20px;">
-              🧭 NAVEGAÇÃO ATIVA #${id}
-            </span>
-            <strong style="color: #10B981; font-size: 16px;">${pedido?.preco || 'R$ 16,10'}</strong>
+        <div class="active-navigation-card">
+          <div class="nav-header-row">
+            <span class="nav-status-badge">🧭 NAVEGAÇÃO ATIVA #${id}</span>
+            <span class="nav-price">${pedido?.preco || 'R$ 16,10'}</span>
           </div>
           
-          <div style="font-size: 13px; color: #F8FAFC; margin-bottom: 4px; font-weight: 700;">
+          <div class="nav-destination-title">
             Destino: ${pedido?.destino || 'Ponto selecionado'}
           </div>
-          <p style="font-size: 11px; color: #94A3B8; margin-bottom: 14px;">
-            Trajeto traçado por vias pavimentadas até o destino.
-          </p>
+          <small style="color: #94A3B8; font-size: 11px;">
+            Siga a rota traçada no mapa por vias pavimentadas.
+          </small>
 
-          <button type="button" onclick="finalizarCorrida('${id}')" style="
-            width: 100%;
-            background: linear-gradient(135deg, #10B981, #059669);
-            color: #03251E;
-            border: none;
-            border-radius: 12px;
-            padding: 13px;
-            font-weight: 900;
-            font-size: 14px;
-            cursor: pointer;
-            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
-          ">
-            ✅ Concluir Entrega
+          <button type="button" class="btn-complete-delivery" onclick="finalizarCorrida('${id}', '${pedido?.preco || 'R$ 16,10'}')">
+            ✅ Concluir Corrida
           </button>
         </div>
       `;
     }
   };
 
-  window.finalizarCorrida = (id) => {
+  window.finalizarCorrida = (id, precoTexto = 'R$ 0,00') => {
     if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
     if (marcadorDestinoAtivo) map.removeLayer(marcadorDestinoAtivo);
     linhaRotaAtiva = null;
     marcadorDestinoAtivo = null;
     pontoDestinoCoords = null;
 
-    if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas...';
+    // Atualiza saldo acumulado
+    const valorNumerico = parseFloat(precoTexto.replace('R$', '').replace('.', '').replace(',', '.').trim()) || 0;
+    ganhosHoje += valorNumerico;
+    corridasConcluidas += 1;
+
+    localStorage.setItem('huby_driver_earnings', ganhosHoje.toFixed(2));
+    localStorage.setItem('huby_driver_runs', corridasConcluidas.toString());
+    atualizarPainelGanhos();
+
+    if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas próximas...';
     map.setView(motoristaCoords, 16, { animate: true });
     setTimeout(() => map.invalidateSize(), 200);
 
