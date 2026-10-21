@@ -4,7 +4,7 @@
 
 :root {
   /* Paleta Oficial HUBy */
-  --bg-deep: #090D16;          /* Fundo principal escuro */
+  --bg-deep: #080C14;          /* Fundo principal escuro */
   --bg-card: #0F172A;          /* Fundo de painéis e cards */
   --bg-surface: #1E293B;       /* Inputs, barras secundárias e hover */
   --border-color: #334155;     /* Linhas divisórias sutis */
@@ -29,11 +29,12 @@
   --shadow-lg: 0 15px 35px rgba(0, 0, 0, 0.55);
 }
 
+/* Reset Universal Mobile (Corrigido de '-' para '*') */
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -41,6 +42,7 @@ body {
   background-color: var(--bg-deep);
   color: var(--text-white);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
@@ -53,11 +55,12 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--bg-surface);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 100;
 }
 
-.brand-logo {
+.brand-logo,
+.brand-logo-compact {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -65,21 +68,23 @@ body {
   user-select: none;
 }
 
-.brand-hub {
-  font-size: 26px;
+.brand-hub,
+.brand-hub-nav {
+  font-size: 24px;
   font-weight: 900;
   color: var(--text-white);
   letter-spacing: -1px;
 }
 
-.brand-y-badge {
+.brand-y-badge,
+.brand-y-nav {
   background-color: var(--huby-emerald);
   color: var(--bg-deep);
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 900;
   font-style: italic;
-  padding: 1px 8px 3px;
-  border-radius: 8px;
+  padding: 1px 7px 2px;
+  border-radius: 7px;
   position: relative;
   line-height: 1;
 }
@@ -98,28 +103,45 @@ body {
 /* Badges e Pílulas de Status */
 .badge-pill {
   font-size: 11px;
-  font-weight: 700;
-  padding: 5px 12px;
+  font-weight: 800;
+  padding: 6px 12px;
   border-radius: 20px;
-  background-color: var(--bg-surface);
-  color: var(--text-light);
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--huby-emerald);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wallet-pill {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-light);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 /* Botões Principais */
 .btn-primary {
   width: 100%;
-  background-color: var(--huby-emerald);
-  color: var(--bg-deep);
+  background: linear-gradient(135deg, var(--huby-emerald), #059669);
+  color: #03251E;
   border: none;
-  padding: 16px 20px;
+  padding: 15px 18px;
   border-radius: var(--radius-md);
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 900;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
   transition: transform 0.15s ease, opacity 0.2s ease;
 }
 
@@ -128,20 +150,20 @@ body {
 }
 
 .btn-primary .price-box {
-  background-color: var(--bg-deep);
-  color: var(--text-white);
-  padding: 5px 12px;
+  background-color: #03251E;
+  color: #FFFFFF;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 900;
 }
 
 /* Inputs Padrão */
 .input-group {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
-  padding: 10px 14px;
+  padding: 11px 14px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -153,7 +175,8 @@ body {
   background: transparent;
   border: none;
   color: var(--text-white);
-  font-size: 14px;
+  font-size: 13.5px;
+  font-weight: 600;
   outline: none;
 }
 
@@ -161,7 +184,17 @@ body {
   color: var(--text-muted);
 }
 
-/* Filtro Dark Mode para os Tiles do OpenStreetMap em todas as telas */
+/* Indicadores Circulares */
+.dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot-indicator.green { background-color: var(--huby-emerald); box-shadow: 0 0 8px var(--huby-emerald); }
+.dot-indicator.orange { background-color: var(--huby-cargo); box-shadow: 0 0 8px var(--huby-cargo); }
+
+/* Filtro Dark Mode para os Tiles do Mapa */
 .leaflet-tile-pane {
   filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
 }
@@ -178,12 +211,43 @@ body {
   right: 0 !important;
   width: 100vw !important;
   height: 64px !important;
-  background: var(--bg-deep) !important;
+  background: rgba(8, 12, 20, 0.96) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
   display: flex !important;
   justify-content: space-around !important;
   align-items: center !important;
   z-index: 99999 !important;
-  padding-bottom: env(safe-area-inset-bottom, 8px) !important;
+  padding-bottom: env(safe-area-inset-bottom, 6px) !important;
   box-sizing: border-box !important;
+}
+
+.bottom-nav .nav-item {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 16px;
+  transition: all 0.2s ease;
+}
+
+.bottom-nav .nav-item .nav-icon {
+  font-size: 19px;
+  transition: transform 0.2s ease;
+}
+
+.bottom-nav .nav-item.active {
+  color: var(--huby-emerald);
+}
+
+.bottom-nav .nav-item.active .nav-icon {
+  transform: translateY(-2px);
 }
