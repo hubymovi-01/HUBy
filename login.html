@@ -125,7 +125,7 @@
       btn.disabled = true;
 
       try {
-        // Validação no servidor via Neon PostgreSQL
+        // Validação no backend com banco Neon
         const response = await fetch(`${API_URL}/api/admin/verificar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -142,7 +142,8 @@
           localStorage.setItem('huby_user_role', 'cliente');
         }
       } catch (err) {
-        console.warn('Servidor offline. Mantendo autenticação local.');
+        console.warn('Servidor indisponível temporariamente. Seguindo como cliente.');
+        localStorage.removeItem('huby_admin_token');
         localStorage.setItem('huby_user_role', 'cliente');
       }
 
