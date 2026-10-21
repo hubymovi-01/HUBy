@@ -1,91 +1,186 @@
-// ./js/modules/app-admin.js
+<!DOCTYPE html>
+<html lang="pt-PT">
 
-document.addEventListener('DOMContentLoaded', () => {
-  const API_URL = 'https://huby.onrender.com';
-  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim - PI
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>HUBy - Painel Administrativo & Despacho</title>
+  <meta name="theme-color" content="#080C14">
 
-  // 1. Inicializar Mapa Administrativo
-  const mapElement = document.getElementById('mapaAdmin');
-  let map = null;
-
-  if (mapElement) {
-    map = L.map('mapaAdmin', {
-      zoomControl: false,
-      attributionControl: false
-    }).setView(defaultCoords, 15);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19
-    }).addTo(map);
-
-    // Marcador simulado da frota ativa em campo
-    L.circleMarker(defaultCoords, {
-      radius: 10,
-      color: '#10B981',
-      fillColor: '#10B981',
-      fillOpacity: 1,
-      weight: 3
-    }).addTo(map).bindPopup('<b>Tarcyo Carvalho</b><br>Status: Online (HUBy Carro)');
-
-    setTimeout(() => map.invalidateSize(), 300);
-    window.addEventListener('resize', () => map.invalidateSize());
-  }
-
-  // 2. Sincronizar Fila de Pedidos Ativos com a API e localStorage
-  async function carregarFilaAdmin() {
-    const listaContainer = document.getElementById('listaPedidosAdmin');
-    if (!listaContainer) return;
-
-    let pedidos = [];
-
-    // Tenta buscar no Render
-    try {
-      const resp = await fetch(`${API_URL}/api/pedidos`);
-      if (resp.ok) {
-        pedidos = await resp.json();
-      }
-    } catch (e) {
-      console.warn('API Admin offline, a carregar dados locais.');
+  <!-- CSS do Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Estilos Globais -->
+  <link rel="stylesheet" href="./css/global.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      background-color: #080C14;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 16px;
     }
-
-    // Fallback local se a API estiver vazia
-    if (!pedidos || pedidos.length === 0) {
-      pedidos = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
+    .admin-container {
+      max-width: 600px;
+      margin: 0 auto;
     }
-
-    if (pedidos.length === 0) {
-      listaContainer.innerHTML = `
-        <div style="text-align: center; padding: 24px; color: #64748B; font-size: 12px;">
-          Nenhum pedido ou frete ativo no momento.
-        </div>
-      `;
-      return;
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
     }
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-back {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #FFFFFF;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      font-size: 16px;
+    }
+    .top-bar h2 {
+      font-size: 16px;
+      font-weight: 800;
+      color: #EF4444;
+    }
+    .admin-badge {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #EF4444;
+      font-size: 10px;
+      font-weight: 800;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+    .admin-map-card {
+      background: rgba(18, 27, 47, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .map-header-title {
+      padding: 14px 16px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    #mapaAdmin {
+      width: 100%;
+      height: 260px;
+      background: #0B101D;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #10B981;
+      text-transform: uppercase;
+      margin: 20px 0 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .admin-orders-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .admin-order-row {
+      background: rgba(18, 27, 47, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .order-type-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .order-type-icon.emerald { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+    .order-type-icon.flash { background: rgba(59, 130, 246, 0.15); color: #3B82F6; }
+    .order-type-icon.cargo { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+    .order-meta {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .order-meta strong {
+      font-size: 13px;
+      color: #FFFFFF;
+    }
+    .order-meta span, .order-meta small {
+      font-size: 11px;
+      color: #94A3B8;
+    }
+    .order-status-box {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .status-pill {
+      font-size: 9px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 10px;
+      text-transform: uppercase;
+    }
+    .status-pill.em-rota { background: rgba(16, 185, 129, 0.2); color: #10B981; }
+    .order-status-box strong {
+      font-size: 13px;
+      color: #10B981;
+    }
+  </style>
+</head>
 
-    listaContainer.innerHTML = pedidos.map(p => {
-      const isCargo = p.tipo === 'cargo';
-      const isFlash = p.tipo === 'flash';
-      const iconeClasse = isCargo ? 'cargo' : (isFlash ? 'flash' : 'emerald');
-      const emoji = isCargo ? '🚚' : (isFlash ? '📦' : '🚗');
+<body>
+  <div class="admin-container">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <a href="./index.html" class="btn-back">←</a>
+        <h2>Painel Executivo</h2>
+      </div>
+      <div class="admin-badge">🛡️ ADMIN MASTER</div>
+    </header>
 
-      return `
-        <div class="admin-order-row">
-          <div class="order-type-icon ${iconeClasse}">${emoji}</div>
-          <div class="order-meta">
-            <strong>#${p.id} • ${p.subTipoLabel || 'HUBy Viagem'}</strong>
-            <span>Origem: ${p.origem}</span>
-            <small>Destino: ${p.destino} (${p.distancia || '1.0 km'})</small>
-          </div>
-          <div class="order-status-box">
-            <span class="status-pill em-rota">${p.status || 'Pendente'}</span>
-            <strong>${p.preco}</strong>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
+    <!-- MAPA DA FROTA ATIVA -->
+    <div class="admin-map-card">
+      <div class="map-header-title">📍 Radar de Operações em Tempo Real</div>
+      <div id="mapaAdmin"></div>
+    </div>
 
-  // Atualiza a cada 5 segundos
-  setInterval(carregarFilaAdmin, 5000);
-  carregarFilaAdmin();
-});
+    <!-- FILA DE PEDIDOS E FRETES -->
+    <div class="section-title">📦 Fila de Pedidos & Fretes Ativos</div>
+    <div class="admin-orders-list" id="listaPedidosAdmin">
+      <!-- Preenchido dinamicamente pelo script -->
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./js/modules/app-admin.js"></script>
+</body>
+
+</html>
