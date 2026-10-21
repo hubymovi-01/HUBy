@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Bem-vindo ao HUBy</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
@@ -10,6 +10,129 @@
   <!-- Estilos Globais e da Tela de Entrada -->
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/welcome.css">
+  <style>
+    /* Otimização de visualização e responsividade */
+    .welcome-container {
+      position: relative;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 28px 20px env(safe-area-inset-bottom, 24px) 20px;
+      box-sizing: border-box;
+      background-color: var(--bg-deep, #090D16);
+      overflow-y: auto;
+    }
+
+    .brand-hero {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      font-size: 34px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .brand-hub-hero {
+      color: #FFFFFF;
+    }
+
+    .brand-y-badge-hero {
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: #03251E;
+      padding: 0 8px;
+      border-radius: 8px;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .brand-gps-dot-hero {
+      width: 6px;
+      height: 6px;
+      background: #FF6B00;
+      border: 1.5px solid #FFFFFF;
+      border-radius: 50%;
+      position: absolute;
+      top: -3px;
+      right: -3px;
+    }
+
+    .pillar-card {
+      display: none;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 16px;
+      align-items: center;
+      gap: 14px;
+      box-sizing: border-box;
+    }
+
+    .pillar-card.active {
+      display: flex;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.08);
+      animation: fadeInSlide 0.35s ease-in-out;
+    }
+
+    @keyframes fadeInSlide {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .slide-dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin: 16px 0;
+    }
+
+    .slide-dots .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .slide-dots .dot.active {
+      width: 22px;
+      border-radius: 6px;
+      background: #10B981;
+    }
+
+    .btn-welcome-secondary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1.5px solid rgba(255, 255, 255, 0.12);
+      color: #F8FAFC;
+      font-weight: 800;
+      padding: 14px 20px;
+      border-radius: 14px;
+      font-size: 14px;
+      text-decoration: none;
+      box-sizing: border-box;
+      backdrop-filter: blur(8px);
+    }
+
+    .driver-cta-box {
+      margin-top: 10px;
+      text-align: center;
+      font-size: 13px;
+      color: #94A3B8;
+    }
+
+    .driver-link {
+      color: #10B981;
+      font-weight: 700;
+      text-decoration: none;
+      margin-left: 5px;
+    }
+  </style>
 </head>
 <body>
 
@@ -20,11 +143,14 @@
 
     <!-- Cabeçalho / Logotipo Central -->
     <header class="welcome-header">
+      <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; margin-bottom: 12px; letter-spacing: 0.5px;">
+        🛡️ PLATAFORMA 100% VERIFICADA & SEGURA
+      </div>
       <div class="brand-hero">
         <span class="brand-hub-hero">HUB</span>
         <span class="brand-y-badge-hero">y<span class="brand-gps-dot-hero"></span></span>
       </div>
-      <p class="tagline">Mobilidade, entregas rápidas e fretes na palma da mão.</p>
+      <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitoramento em tempo real.</p>
     </header>
 
     <!-- Apresentação dos Pilares de Serviços -->
@@ -33,7 +159,7 @@
         <div class="pillar-icon">🚗</div>
         <div class="pillar-content">
           <h4>HUBy Viagem</h4>
-          <p>Carro e moto com preço justo e resposta rápida.</p>
+          <p>Carro e moto com preço justo, rota inteligente e resposta rápida.</p>
         </div>
       </div>
 
@@ -41,7 +167,7 @@
         <div class="pillar-icon">📦</div>
         <div class="pillar-content">
           <h4>HUBy Flash</h4>
-          <p>Envie e receba pacotes e documentos sem complicação.</p>
+          <p>Envie e receba pacotes e encomendas com rastreio satelital.</p>
         </div>
       </div>
 
@@ -49,7 +175,7 @@
         <div class="pillar-icon">🚚</div>
         <div class="pillar-content">
           <h4>HUBy Cargo</h4>
-          <p>Fretes, mudanças e cargas com ajudantes opcionais.</p>
+          <p>Fretes, mudanças e cargas pesadas com opção de ajudantes.</p>
         </div>
       </div>
     </div>
@@ -62,34 +188,40 @@
     </div>
 
     <!-- Ações de Entrada -->
-    <footer class="welcome-actions">
-      <a href="./index.html" class="btn-welcome-primary">
-        <span>Começar a Usar</span>
+    <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
+      <a href="./cadastro-cliente.html" class="btn-welcome-primary" style="display: flex; justify-content: space-between; align-items: center; text-decoration: none;">
+        <span>📱 Criar Conta de Passageiro</span>
         <span class="btn-arrow">➔</span>
       </a>
 
+      <a href="./login.html" class="btn-welcome-secondary">
+        <span>🔑 Já tenho conta (Fazer Login)</span>
+        <span style="color: #10B981;">➔</span>
+      </a>
+
       <div class="driver-cta-box">
-        <span>Quer trabalhar connosco?</span>
-        <a href="./motorista.html" class="driver-link">Aceder como Motorista</a>
+        <span>Quer faturar dirigindo ou fazendo fretes?</span>
+        <a href="./cadastro-motorista.html" class="driver-link">Seja Parceiro HUBy ➔</a>
       </div>
     </footer>
   </div>
 
   <script>
-    // Rotação subtil dos cartões em ecrãs móveis
     const cards = document.querySelectorAll('.pillar-card');
     const dots = document.querySelectorAll('.slide-dots .dot');
     let currentIndex = 0;
 
-    setInterval(() => {
-      currentIndex = (currentIndex + 1) % cards.length;
-      cards.forEach((card, idx) => {
-        card.classList.toggle('active', idx === currentIndex);
-      });
-      dots.forEach((dot, idx) => {
-        dot.classList.toggle('active', idx === currentIndex);
-      });
-    }, 3500);
+    if (cards.length > 0) {
+      setInterval(() => {
+        currentIndex = (currentIndex + 1) % cards.length;
+        cards.forEach((card, idx) => {
+          card.classList.toggle('active', idx === currentIndex);
+        });
+        dots.forEach((dot, idx) => {
+          dot.classList.toggle('active', idx === currentIndex);
+        });
+      }, 3500);
+    }
   </script>
 </body>
 </html>
