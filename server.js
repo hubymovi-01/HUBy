@@ -21,11 +21,35 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 0. AUTENTICAÇÃO ADMINISTRATIVA SEGURA
+// 0. AUTENTICAÇÃO ADMINISTRATIVA SEGURA VIA BANCO
 // ==========================================
+app.post('/api/admin/verificar', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ sucesso: false, erro: 'E-mail não fornecido.' });
+    }
+
+    // Consulta na base de dados Neon se o cargo deste e-mail é admin
+    const resultado = await sql`
+      SELECT role FROM clientes WHERE email = ${email.trim().toLowerCase()} LIMIT 1
+    `;
+
+    if (resultado.length > 0 && resultado[0].role === 'admin') {
+      res.json({ sucesso: true, isAdmin: true, token: 'token_admin_autorizado_998877' });
+    } else {
+      res.status(403).json({ sucesso: false, isAdmin: false, erro: 'Acesso negado.' });
+    }
+  } catch (error) {
+    console.error('Erro ao verificar permissão de admin:', error);
+    res.status(500).json({ sucesso: false, erro: error.message });
+  }
+});
+
+// Rota de login por senha administrativa (opcional caso queira manter as duas opções)
 app.post('/api/admin/login', (req, res) => {
   const { senhaAdmin } = req.body;
-  // A senha real é lida das Variáveis de Ambiente do Render (ou usa fallback seguro)
   const senhaSecretaOficial = process.env.ADMIN_SECRET_KEY || 'HubyAdmin2026!';
 
   if (senhaAdmin === senhaSecretaOficial) {
@@ -46,7 +70,7 @@ app.post('/api/clientes/cadastro', async (req, res) => {
       return res.status(400).json({ erro: 'Dados obrigatórios em falta para o cadastro do cliente.' });
     }
 
-    // Cria a tabela de clientes automaticamente se não existir
+    // Cria a tabela de clientes com suporte a role (perfil) se não existir
     await sql`
       CREATE TABLE IF NOT EXISTS clientes (
         id VARCHAR(50) PRIMARY KEY,
@@ -58,6 +82,7 @@ app.post('/api/clientes/cadastro', async (req, res) => {
         genero VARCHAR(30),
         emergencia_nome VARCHAR(150),
         emergencia_tel VARCHAR(25),
+        role VARCHAR(30) DEFAULT 'cliente',
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
@@ -65,7 +90,7 @@ app.post('/api/clientes/cadastro', async (req, res) => {
     // Insere ou atualiza o cliente na base de dados Neon
     await sql`
       INSERT INTO clientes (id, nome, telefone, cpf, email, idade, genero, emergencia_nome, emergencia_tel)
-      VALUES (${id || 'cli_' + Date.now()}, ${nome}, ${telefone}, ${cpf}, ${email}, ${idade || 18}, ${genero || 'nao_informar'}, ${emergenciaNome || ''}, ${emergenciaTel || ''})
+      VALUES (${id || 'cli_' + Date.now()}, ${nome}, ${telefone}, ${cpf}, ${email.toLowerCase().trim()}, ${idade || 18}, ${genero || 'nao_informar'}, ${emergenciaNome || ''}, ${emergenciaTel || ''})
       ON CONFLICT (email) DO UPDATE 
       SET nome = EXCLUDED.nome, telefone = EXCLUDED.telefone, idade = EXCLUDED.idade, genero = EXCLUDED.genero, emergencia_nome = EXCLUDED.emergencia_nome, emergencia_tel = EXCLUDED.emergencia_tel
     `;
