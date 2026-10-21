@@ -103,6 +103,7 @@ body {
   border-radius: 20px;
   background-color: var(--bg-surface);
   color: var(--text-light);
+  text-decoration: none;
 }
 
 /* Botões Principais */
@@ -167,4 +168,22 @@ body {
 
 .leaflet-container {
   background-color: var(--bg-deep) !important;
+}
+
+/* Fixação da Barra Inferior Global */
+.bottom-nav {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100vw !important;
+  height: 64px !important;
+  background: var(--bg-deep) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  display: flex !important;
+  justify-content: space-around !important;
+  align-items: center !important;
+  z-index: 99999 !important;
+  padding-bottom: env(safe-area-inset-bottom, 8px) !important;
+  box-sizing: border-box !important;
 }
