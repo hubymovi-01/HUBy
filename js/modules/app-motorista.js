@@ -5,10 +5,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const mapElement = document.getElementById('mapaMotorista');
   if (!mapElement) return;
 
-  const defaultCoords = [-7.7735, -42.2472]; // Paes Landim (fallback inicial)
+  const defaultCoords = [-8.358, -41.895]; // Coordenada base
   let motoristaCoords = [...defaultCoords];
   let linhaRotaAtiva = null;
   let marcadorDestinoAtivo = null;
+  let pontoDestinoCoords = null;
 
   // Inicia o mapa sem controlo de zoom e sem atribuição
   const map = L.map('mapaMotorista', {
@@ -29,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
     weight: 3
   }).addTo(map);
 
-  // Calibrações iniciais para prevenir quadrantes cinzentos
   map.invalidateSize();
   setTimeout(() => map.invalidateSize(), 250);
   setTimeout(() => map.invalidateSize(), 600);
@@ -58,16 +58,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const { latitude, longitude } = pos.coords;
         motoristaCoords = [latitude, longitude];
         markerMotorista.setLatLng(motoristaCoords);
-        if (linhaRotaAtiva) {
-          const pontosAtuais = linhaRotaAtiva.getLatLngs();
-          if (pontosAtuais.length > 0) {
-            pontosAtuais[0] = L.latLng(motoristaCoords);
-            linhaRotaAtiva.setLatLngs(pontosAtuais);
-          }
+
+        // Se estiver em rota e se mover significativamente, redesenha o traçado pelas ruas
+        if (linhaRotaAtiva && pontoDestinoCoords) {
+          tracarRotaViasUrbanas(motoristaCoords, pontoDestinoCoords, false);
         }
       },
       (err) => console.warn('Erro watchPosition:', err),
-      { enableHighAccuracy: true, maximumAge: 5000 }
+      { enableHighAccuracy: true, maximumAge: 4000 }
     );
   }
 
@@ -115,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
-      if (linhaRotaAtiva) return; // Bloqueia filtro se estiver com corrida ativa
+      if (linhaRotaAtiva) return;
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       filtroAtual = pill.getAttribute('data-filter') || 'todos';
@@ -175,7 +173,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let listaPedidosCache = [];
 
   async function carregarFilaDePedidos() {
-    // Se já estiver com entrega em andamento, mantém o painel de navegação limpo
     if (!feedChamadas || !isOnline || linhaRotaAtiva) return;
 
     let listaPedidos = [];
@@ -226,7 +223,57 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================================
-  // TRAÇAR A ROTA NO MAPA AO ACEITAR A CORRIDA (MODO NAVEGAÇÃO LIMPO)
+  // MOTOR DE ROTAS POR RUAS COM OSRM (EVITA LINHA RETA)
+  // =========================================================================
+  async function tracarRotaViasUrbanas(origem, destino, ajustarZoom = true) {
+    const [lat1, lon1] = origem;
+    const [lat2, lon2] = destino;
+
+    const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`;
+
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.routes && data.routes.length > 0) {
+        const trajetoCoords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+        if (linhaRotaAtiva) {
+          map.removeLayer(linhaRotaAtiva);
+        }
+
+        linhaRotaAtiva = L.polyline(trajetoCoords, {
+          color: '#10B981',
+          weight: 6,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(map);
+
+        if (ajustarZoom) {
+          map.fitBounds(linhaRotaAtiva.getBounds(), { padding: [60, 60] });
+        }
+        return;
+      }
+    } catch (err) {
+      console.warn('OSRM indisponível, usando traçado auxiliar:', err);
+    }
+
+    // Fallback se o serviço falhar temporariamente
+    if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
+    linhaRotaAtiva = L.polyline([origem, destino], {
+      color: '#10B981',
+      weight: 5,
+      dashArray: '6, 8'
+    }).addTo(map);
+
+    if (ajustarZoom) {
+      map.fitBounds(linhaRotaAtiva.getBounds(), { padding: [60, 60] });
+    }
+  }
+
+  // =========================================================================
+  // ACEITAR CORRIDA E INICIAR NAVEGAÇÃO REAL
   // =========================================================================
   window.aceitarPedido = async (id) => {
     const pedido = listaPedidosCache.find(p => String(p.id) === String(id));
@@ -245,6 +292,8 @@ document.addEventListener('DOMContentLoaded', () => {
       pontoDest = [motoristaCoords[0] + 0.007, motoristaCoords[1] + 0.007];
     }
 
+    pontoDestinoCoords = pontoDest;
+
     // 1. Limpa trajeto anterior
     if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
     if (marcadorDestinoAtivo) map.removeLayer(marcadorDestinoAtivo);
@@ -258,25 +307,11 @@ document.addEventListener('DOMContentLoaded', () => {
       weight: 3
     }).addTo(map);
 
-    // 3. Traça a linha contínua e nítida da rota
-    const pontosRota = [
-      L.latLng(motoristaCoords[0], motoristaCoords[1]),
-      L.latLng(pontoDest[0], pontoDest[1])
-    ];
+    // 3. Traça a rota viária real seguindo as ruas da cidade
+    await tracarRotaViasUrbanas(motoristaCoords, pontoDest, true);
 
-    linhaRotaAtiva = L.polyline(pontosRota, {
-      color: '#10B981',
-      weight: 6,
-      opacity: 0.95,
-      lineCap: 'round',
-      lineJoin: 'round',
-      dashArray: '8, 8'
-    }).addTo(map);
-
-    // 4. Força o redesenho do Leaflet para eliminar blocos cinzentos e enquadrar a rota
+    // 4. Força atualização do layout Leaflet
     map.invalidateSize();
-    const bounds = L.latLngBounds([motoristaCoords, pontoDest]);
-    map.fitBounds(bounds, { padding: [70, 70], animate: true });
     setTimeout(() => map.invalidateSize(), 250);
 
     // 5. Atualiza no servidor
@@ -298,7 +333,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (txtRadarStatus) txtRadarStatus.textContent = `Em rota para entrega #${id}`;
     }
 
-    // 7. ISOLA O FEED: remove todos os outros pedidos e exibe apenas o painel de entrega
+    // 7. Isola o feed e exibe painel ativo de navegação
     if (feedChamadas) {
       feedChamadas.innerHTML = `
         <div class="job-card active-delivery-card" style="border-color: #10B981; background: rgba(16, 185, 129, 0.08); padding: 18px 14px;">
@@ -313,7 +348,7 @@ document.addEventListener('DOMContentLoaded', () => {
             Destino: ${pedido?.destino || 'Ponto selecionado'}
           </div>
           <p style="font-size: 11px; color: #94A3B8; margin-bottom: 14px;">
-            Siga o trajeto traçado até o ponto de embarque/entrega.
+            Trajeto traçado por vias pavimentadas até o destino.
           </p>
 
           <button type="button" onclick="finalizarCorrida('${id}')" style="
@@ -340,6 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (marcadorDestinoAtivo) map.removeLayer(marcadorDestinoAtivo);
     linhaRotaAtiva = null;
     marcadorDestinoAtivo = null;
+    pontoDestinoCoords = null;
 
     if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas...';
     map.setView(motoristaCoords, 16, { animate: true });
