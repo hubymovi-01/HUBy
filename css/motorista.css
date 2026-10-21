@@ -15,10 +15,10 @@ body, html {
   height: 100dvh;
   overflow: hidden;
   background-color: #070B12;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-/* Layout Geral em Ecrã Inteiro */
+/* Layout Geral em Tela Inteira */
 .driver-layout {
   position: relative;
   width: 100vw;
@@ -55,12 +55,12 @@ body, html {
 
 /* 1. CABEÇALHO SUPERIOR FLUTUANTE */
 .driver-header {
-  position: absolute;
+  position: fixed;
   top: max(12px, env(safe-area-inset-top, 12px));
   left: 14px;
   right: 14px;
-  z-index: 1000;
-  background: rgba(11, 17, 28, 0.9);
+  z-index: 9999;
+  background: rgba(11, 17, 28, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -190,16 +190,17 @@ body, html {
 
 /* Pílula de Radar Flutuante */
 .radar-status-badge {
-  position: absolute;
-  top: 78px;
+  position: fixed;
+  top: 80px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 999;
+  z-index: 9998;
   background: rgba(8, 12, 20, 0.88);
   border: 1px solid rgba(16, 185, 129, 0.35);
   backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border-radius: 20px;
-  padding: 5px 14px;
+  padding: 6px 14px;
   font-size: 11.5px;
   font-weight: 700;
   color: #E2E8F0;
@@ -219,10 +220,10 @@ body, html {
 
 /* Botão Recentralizar GPS */
 .btn-recenter-gps {
-  position: absolute;
+  position: fixed;
   right: 16px;
-  bottom: 230px;
-  z-index: 999;
+  bottom: 240px;
+  z-index: 9998;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -240,11 +241,11 @@ body, html {
 
 /* 2. PAINEL DESLIZANTE INFERIOR */
 .driver-bottom-dock {
-  position: absolute;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 1000;
+  z-index: 9999;
   background: rgba(11, 17, 28, 0.95);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(20px);
@@ -275,7 +276,8 @@ body, html {
 }
 .dock-filters::-webkit-scrollbar { display: none; }
 
-.filter-pill {
+.filter-pill,
+.filter-chip {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #94A3B8;
@@ -287,22 +289,24 @@ body, html {
   white-space: nowrap;
 }
 
-.filter-pill.active {
+.filter-pill.active,
+.filter-chip.active {
   background: rgba(16, 185, 129, 0.15);
   border-color: #10B981;
   color: #10B981;
 }
 
-/* Feed de Chamadas e Cards de Pedido */
+/* Feed de Chamadas */
 .driver-feed {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 250px;
+  max-height: 260px;
   overflow-y: auto;
 }
 
-.job-card {
+/* Cards de Pedido Dinâmicos (app-motorista.js) */
+.job-card-premium {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
@@ -312,126 +316,195 @@ body, html {
   gap: 10px;
 }
 
-.job-top {
+.job-header-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.job-badge {
+.job-type-pill {
   font-size: 11px;
   font-weight: 800;
   padding: 3px 8px;
   border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.job-type-pill.viagem {
   background: rgba(16, 185, 129, 0.15);
   color: #10B981;
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.job-distance {
-  font-size: 12px;
-  color: #94A3B8;
+.job-type-pill.flash {
+  background: rgba(56, 189, 248, 0.15);
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
 }
 
-.job-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.job-type-pill.cargo {
+  background: rgba(255, 107, 0, 0.15);
+  color: #FF6B00;
+  border: 1px solid rgba(255, 107, 0, 0.3);
 }
 
-.job-route-line {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.route-point {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12.5px;
-  color: #F8FAFC;
-}
-
-.dot-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.dot-indicator.green { background: #10B981; }
-.dot-indicator.orange { background: #FF6B00; }
-
-.job-pricing {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 4px;
-}
-
-.price-tag {
+.job-price-highlight {
   font-size: 18px;
   font-weight: 900;
   color: #FFFFFF;
 }
 
-.split-info {
-  font-size: 11px;
-  color: #94A3B8;
-  font-weight: 700;
+.job-address-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.job-actions {
+.address-line-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.address-text-desc {
+  display: flex;
+  flex-direction: column;
+  font-size: 12.5px;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.address-text-desc small {
+  font-size: 10.5px;
+  color: #94A3B8;
+  font-weight: normal;
+  margin-top: 1px;
+}
+
+.pin-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.pin-indicator.green { background: #10B981; box-shadow: 0 0 8px #10B981; }
+.pin-indicator.orange { background: #FF6B00; box-shadow: 0 0 8px #FF6B00; }
+
+.job-actions-row {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: 8px;
   margin-top: 4px;
 }
 
-.btn-job-reject {
+.btn-reject-action {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #94A3B8;
-  padding: 10px;
+  padding: 11px;
   border-radius: 12px;
   font-weight: 700;
   font-size: 13px;
   cursor: pointer;
 }
 
-.btn-job-accept {
+.btn-accept-action {
   background: linear-gradient(135deg, #10B981, #059669);
   border: none;
   color: #03251E;
-  padding: 10px;
+  padding: 11px;
   border-radius: 12px;
   font-weight: 900;
   font-size: 13px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
 }
 
-/* Estado de Radar Vazio */
-.empty-jobs-state {
+.btn-accept-action:active,
+.btn-reject-action:active {
+  transform: scale(0.98);
+}
+
+/* Card de Navegação Ativa */
+.active-navigation-card {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: 16px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+
+.nav-header-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  text-align: center;
-  padding: 16px 10px;
-  gap: 5px;
 }
 
-.empty-radar-icon {
-  font-size: 24px;
+.nav-status-badge {
+  font-size: 11px;
+  font-weight: 900;
+  color: #10B981;
+  text-transform: uppercase;
 }
 
-.empty-title {
+.nav-price {
+  font-size: 18px;
+  font-weight: 900;
+  color: #FFFFFF;
+}
+
+.nav-destination-title {
   font-size: 13.5px;
   font-weight: 800;
   color: #FFFFFF;
 }
 
-.empty-sub {
+.btn-complete-delivery {
+  width: 100%;
+  background: linear-gradient(135deg, #10B981, #059669);
+  color: #03251E;
+  border: none;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  margin-top: 4px;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);
+}
+
+/* Estado de Radar Vazio */
+.radar-empty-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 18px 10px;
+  gap: 6px;
+}
+
+.radar-empty-icon {
+  font-size: 26px;
+}
+
+.radar-empty-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.radar-empty-sub {
   font-size: 11.5px;
   color: #64748B;
-  max-width: 280px;
+  max-width: 290px;
+  line-height: 1.4;
 }
