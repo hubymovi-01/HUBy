@@ -8,12 +8,22 @@
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- GUARDA DE PERFIL: Impede acesso sem cadastro -->
+  <!-- GUARDA DE PERFIL: Valida se é motorista e redireciona se for de outra modalidade -->
   <script>
     (function () {
       const papel = localStorage.getItem('huby_user_role');
+      const categoria = localStorage.getItem('huby_parceiro_categoria');
+
       if (papel !== 'motorista') {
         window.location.replace('./cadastro-motorista.html');
+        return;
+      }
+
+      // Redireciona para o painel dedicado se for Moto ou Cargo
+      if (categoria === 'moto' || categoria === 'flash') {
+        window.location.replace('./painel-motoboy.html');
+      } else if (categoria === 'cargo') {
+        window.location.replace('./painel-cargo.html');
       }
     })();
   </script>
@@ -46,7 +56,7 @@
           <span class="pulse-indicator"></span>
           <span id="txtStatusMotorista">ONLINE</span>
         </button>
-        <!-- Botão para encerrar a sessão de motorista se necessário -->
+        <!-- Botão para encerrar a sessão de motorista -->
         <button type="button" class="btn-mode-icon" id="btnSairConta" title="Encerrar Sessão">🚪</button>
       </div>
     </header>
@@ -71,17 +81,15 @@
     <section class="driver-bottom-dock">
       <div class="dock-grabber"></div>
 
-      <!-- Filtros em Pílulas -->
+      <!-- Filtros em Pílulas: Dedicado a Carro Particular -->
       <div class="dock-filters">
-        <button type="button" class="filter-pill active" data-filter="todos">Todos</button>
-        <button type="button" class="filter-pill" data-filter="carro">🚗 Viagem</button>
-        <button type="button" class="filter-pill" data-filter="flash">📦 Flash</button>
-        <button type="button" class="filter-pill" data-filter="cargo">🚚 Cargo</button>
+        <button type="button" class="filter-pill active" data-filter="carro">🚗 HUBy Viagem (Carro)</button>
+        <button type="button" class="filter-pill" data-filter="todos">Todos</button>
       </div>
 
       <!-- Lista de Chamadas / Estado Vazio -->
       <div class="driver-feed" id="feedChamadas">
-        <!-- Renderizado dinamicamente via JS -->
+        <!-- Renderizado dinamicamente via app-motorista.js -->
       </div>
     </section>
 
@@ -91,7 +99,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-motorista.js"></script>
 
-  <!-- Script Inline para Carregar Dados do Cadastro e Logout -->
+  <!-- Script para Carregar Dados do Perfil e Logout -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const nomeSalvo = localStorage.getItem('huby_motorista_nome') || 'Motorista Parceiro';
@@ -99,7 +107,7 @@
       const elAvatar = document.getElementById('lblAvatarMotorista');
 
       if (elNome) {
-        elNome.textContent = nomeSalvo.split(' ')[0]; // Exibe o primeiro nome
+        elNome.textContent = nomeSalvo.split(' ')[0];
       }
 
       if (elAvatar) {
@@ -114,6 +122,7 @@
       document.getElementById('btnSairConta')?.addEventListener('click', () => {
         if (confirm('Deseja realmente sair da sua conta de motorista?')) {
           localStorage.removeItem('huby_user_role');
+          localStorage.removeItem('huby_parceiro_categoria');
           localStorage.removeItem('huby_motorista_id');
           localStorage.removeItem('huby_motorista_nome');
           window.location.href = './index.html';

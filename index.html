@@ -8,348 +8,20 @@
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- GUARDA DE PERFIL E SEGURANÇA DE SESSÃO -->
-  <script>
-    (function () {
-      const papel = localStorage.getItem('huby_user_role');
-      const jaEntrou = localStorage.getItem('huby_ja_entrou');
-
-      if (papel === 'motorista') {
-        window.location.replace('./motorista.html');
-      }
-
-      if (jaEntrou === '1') {
-        document.documentElement.classList.add('app-pronto');
-        document.addEventListener('DOMContentLoaded', () => {
-          const splash = document.getElementById('splashScreen');
-          if (splash) {
-            splash.style.display = 'none';
-          }
-        });
-      }
-    })();
-  </script>
+  <!-- Verificação rápida de sessão -->
+  <script src="./js/modules/auth-guard.js"></script>
 
   <!-- CSS do Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Estilos Globais, do Cliente e da Tela de Entrada -->
+  <!-- Folhas de Estilos Externas -->
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/cliente.css">
   <link rel="stylesheet" href="./css/welcome.css">
-  <style>
-    /* Estilos Premium da Tela de Entrada (Splash/Onboarding) */
-    #splashScreen.welcome-overlay {
-      position: fixed !important;
-      inset: 0 !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      height: 100dvh !important;
-      background: radial-gradient(circle at 50% 12%, #0E1A29 0%, #070B12 100%) !important;
-      z-index: 999999 !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: space-between !important;
-      padding: 32px 22px calc(20px + env(safe-area-inset-bottom, 12px)) 22px !important;
-      box-sizing: border-box !important;
-      overflow: hidden !important;
-    }
-
-    .app-pronto #splashScreen,
-    #splashScreen.fechado {
-      display: none !important;
-      visibility: hidden !important;
-    }
-
-    .top-glow {
-      position: absolute;
-      top: -110px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 320px;
-      height: 320px;
-      background: radial-gradient(circle, rgba(16, 185, 129, 0.22) 0%, transparent 70%);
-      pointer-events: none;
-      filter: blur(45px);
-    }
-
-    .bottom-glow {
-      position: absolute;
-      bottom: -100px;
-      right: -40px;
-      width: 260px;
-      height: 260px;
-      background: radial-gradient(circle, rgba(56, 189, 248, 0.14) 0%, transparent 70%);
-      pointer-events: none;
-      filter: blur(50px);
-    }
-
-    .welcome-header {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      z-index: 2;
-      margin-top: 6px;
-    }
-
-    .security-badge-header {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid rgba(16, 185, 129, 0.35);
-      color: #10B981;
-      font-size: 11px;
-      font-weight: 800;
-      padding: 6px 14px;
-      border-radius: 30px;
-      margin-bottom: 14px;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      backdrop-filter: blur(8px);
-    }
-
-    .security-badge-header .pulse-dot {
-      width: 6px;
-      height: 6px;
-      background-color: #10B981;
-      border-radius: 50%;
-      box-shadow: 0 0 8px #10B981;
-      animation: pulseSecurity 1.8s infinite;
-    }
-
-    @keyframes pulseSecurity {
-      0% { transform: scale(0.9); opacity: 0.7; }
-      50% { transform: scale(1.3); opacity: 1; }
-      100% { transform: scale(0.9); opacity: 0.7; }
-    }
-
-    .brand-hero-title {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      font-size: 40px;
-      font-weight: 900;
-      letter-spacing: -1px;
-      margin-bottom: 8px;
-    }
-
-    .brand-hero-title .hub-part {
-      color: #FFFFFF;
-    }
-
-    .brand-hero-title .y-part {
-      background: linear-gradient(135deg, #10B981, #059669);
-      color: #03231A;
-      padding: 2px 10px 4px 8px;
-      border-radius: 10px;
-      position: relative;
-      font-style: italic;
-      display: inline-flex;
-    }
-
-    .brand-hero-title .gps-point {
-      width: 6px;
-      height: 6px;
-      background: #FF6B00;
-      border: 1.5px solid #FFFFFF;
-      border-radius: 50%;
-      position: absolute;
-      top: -3px;
-      right: -3px;
-    }
-
-    .welcome-header .tagline {
-      color: #94A3B8;
-      font-size: 13.5px;
-      line-height: 1.45;
-      max-width: 310px;
-      margin: 0 auto;
-    }
-
-    /* Carrossel de Pilares */
-    .pillars-wrapper {
-      margin: auto 0;
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      z-index: 2;
-    }
-
-    .pillars-container {
-      width: 100%;
-      max-width: 360px;
-      min-height: 88px;
-    }
-
-    .pillar-card {
-      display: none !important;
-      background: rgba(255, 255, 255, 0.04) !important;
-      border: 1px solid rgba(255, 255, 255, 0.08) !important;
-      backdrop-filter: blur(12px) !important;
-      border-radius: 18px !important;
-      padding: 16px 18px !important;
-      align-items: center !important;
-      gap: 15px !important;
-      box-sizing: border-box !important;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35) !important;
-    }
-
-    .pillar-card.active {
-      display: flex !important;
-      border-color: rgba(16, 185, 129, 0.45) !important;
-      background: linear-gradient(145deg, rgba(16, 185, 129, 0.12), rgba(15, 23, 42, 0.7)) !important;
-      animation: cardFadeIn 0.38s cubic-bezier(0.16, 1, 0.3, 1) !important;
-    }
-
-    @keyframes cardFadeIn {
-      from { opacity: 0; transform: translateY(6px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-
-    .pillar-icon-box {
-      width: 46px;
-      height: 46px;
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      border-radius: 13px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 22px;
-      flex-shrink: 0;
-    }
-
-    .pillar-info h4 {
-      font-size: 15px;
-      font-weight: 800;
-      color: #FFFFFF;
-      margin-bottom: 2px;
-    }
-
-    .pillar-info p {
-      font-size: 12.5px;
-      color: #94A3B8;
-      line-height: 1.35;
-      margin: 0;
-    }
-
-    .slide-dots {
-      display: flex !important;
-      justify-content: center !important;
-      gap: 7px !important;
-      margin-top: 16px !important;
-    }
-
-    .slide-dots .dot {
-      width: 7px !important;
-      height: 7px !important;
-      border-radius: 50% !important;
-      background: rgba(255, 255, 255, 0.18) !important;
-      transition: all 0.35s ease !important;
-    }
-
-    .slide-dots .dot.active {
-      width: 24px !important;
-      border-radius: 8px !important;
-      background: #10B981 !important;
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5) !important;
-    }
-
-    /* Ações de Entrada */
-    .welcome-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 11px;
-      width: 100%;
-      max-width: 360px;
-      margin: 0 auto;
-      z-index: 2;
-    }
-
-    .btn-start-primary {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-      color: #03231A;
-      font-size: 15px;
-      font-weight: 900;
-      padding: 16px 20px;
-      border-radius: 15px;
-      text-decoration: none;
-      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
-      transition: transform 0.15s ease;
-      box-sizing: border-box;
-    }
-
-    .btn-start-primary:active {
-      transform: scale(0.98);
-    }
-
-    .btn-login-secondary {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: #F8FAFC;
-      font-size: 14px;
-      font-weight: 700;
-      padding: 14px 20px;
-      border-radius: 15px;
-      text-decoration: none;
-      backdrop-filter: blur(10px);
-      box-sizing: border-box;
-    }
-
-    .btn-driver-link {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 8px;
-      color: #10B981;
-      font-size: 13px;
-      font-weight: 700;
-      text-decoration: none;
-    }
-
-    .footer-copy {
-      text-align: center;
-      font-size: 10.5px;
-      color: #64748B;
-      margin-top: 2px;
-    }
-
-    /* Fixação definitiva da barra inferior */
-    .bottom-nav {
-      position: fixed !important;
-      bottom: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      width: 100vw !important;
-      height: 64px !important;
-      background: #080C14 !important;
-      border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-      display: flex !important;
-      justify-content: space-around !important;
-      align-items: center !important;
-      z-index: 99999 !important;
-      padding-bottom: env(safe-area-inset-bottom, 8px) !important;
-      box-sizing: border-box !important;
-    }
-
-    .order-sheet {
-      margin-bottom: 74px !important;
-    }
-  </style>
 </head>
 
 <body>
 
-  <!-- 1. TELA DE ENTRADA / ONBOARDING -->
+  <!-- 1. TELA DE ENTRADA / ONBOARDING (Controlada via welcome.css) -->
   <div id="splashScreen" class="welcome-overlay">
     <div class="top-glow"></div>
     <div class="bottom-glow"></div>
@@ -371,7 +43,7 @@
     <div class="pillars-wrapper">
       <div class="pillars-container" id="pillarsContainer">
         <div class="pillar-card active" data-slide="0">
-          <div class="pillar-icon-box">🔒</div>
+          <div class="pillar-icon-box">🚗</div>
           <div class="pillar-info">
             <h4>Viagens Protegidas</h4>
             <p>Passageiros e condutores com documentos validados.</p>
@@ -379,7 +51,7 @@
         </div>
 
         <div class="pillar-card" data-slide="1">
-          <div class="pillar-icon-box">📍</div>
+          <div class="pillar-icon-box">📦</div>
           <div class="pillar-info">
             <h4>Rastreio Satelital</h4>
             <p>Compartilhamento de trajeto em tempo real e apoio 24h.</p>
@@ -423,7 +95,7 @@
     </footer>
   </div>
 
-  <!-- 2. APLICAÇÃO PRINCIPAL -->
+  <!-- 2. APLICAÇÃO PRINCIPAL DO CLIENTE -->
   <div class="app-layout">
 
     <header class="huby-header">
@@ -439,7 +111,7 @@
 
     <main class="tabs-viewport">
 
-      <!-- ABA 1: INÍCIO -->
+      <!-- ABA 1: INÍCIO (MAPA + PEDIDO) -->
       <section class="tab-view active-view" id="viewInicio">
         <div class="map-wrapper">
           <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
@@ -631,6 +303,7 @@
           </div>
 
           <div class="profile-menu">
+            <!-- Botão Admin liberado via API -->
             <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
               <div class="menu-item-left">
                 <span class="menu-icon">🛡️</span>
@@ -646,8 +319,8 @@
               <div class="menu-item-left">
                 <span class="menu-icon">🚘</span>
                 <div>
-                  <strong>Modo Motorista</strong>
-                  <p>Cadastre seu veículo e ganhe dirigindo ou fazendo fretes</p>
+                  <strong>Modo Motorista / Parceiro</strong>
+                  <p>Ganhe dinheiro dirigindo ou fazendo fretes</p>
                 </div>
               </div>
               <span class="menu-arrow">➔</span>
@@ -664,17 +337,7 @@
               <span class="menu-arrow">›</span>
             </div>
 
-            <div class="menu-item">
-              <div class="menu-item-left">
-                <span class="menu-icon">🌱</span>
-                <div>
-                  <strong>Pegada de Carbono</strong>
-                  <p>Compensação de emissões das viagens</p>
-                </div>
-              </div>
-              <span class="menu-tag">0g CO₂</span>
-            </div>
-
+            <!-- Botão Sair da Conta -->
             <div class="menu-item" id="btnSairConta" style="cursor: pointer; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 10px;">
               <div class="menu-item-left">
                 <span class="menu-icon" style="font-size: 18px;">🚪</span>
@@ -691,6 +354,7 @@
 
     </main>
 
+    <!-- BARRA INFERIOR FIXA -->
     <nav class="bottom-nav">
       <button type="button" class="nav-item active" data-tab="viewInicio">
         <span class="nav-icon">📍</span>
@@ -711,123 +375,9 @@
     </nav>
   </div>
 
+  <!-- Scripts Modulares -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const cards = document.querySelectorAll('.pillar-card');
-      const dots = document.querySelectorAll('.slide-dots .dot');
-      let currentIndex = 0;
-
-      function trocarSlide() {
-        cards.forEach(c => c.classList.remove('active'));
-        dots.forEach(d => d.classList.remove('active'));
-
-        currentIndex = (currentIndex + 1) % cards.length;
-
-        cards[currentIndex].classList.add('active');
-        if (dots[currentIndex]) {
-          dots[currentIndex].classList.add('active');
-        }
-      }
-
-      if (cards.length > 0) {
-        setInterval(trocarSlide, 3500);
-      }
-
-      async function sincronizarPermissoesAdmin() {
-        const adminBtn = document.getElementById('menuAdminBtn');
-        if (!adminBtn) return;
-
-        const token = localStorage.getItem('huby_admin_token');
-        const papel = localStorage.getItem('huby_user_role');
-        const emailLogado = localStorage.getItem('huby_cliente_email');
-
-        if (token === 'token_admin_autorizado_998877' || papel === 'admin') {
-          adminBtn.style.display = 'flex';
-          return;
-        }
-
-        if (emailLogado) {
-          try {
-            const res = await fetch('https://huby.onrender.com/api/admin/verificar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: emailLogado })
-            });
-            const data = await res.json();
-            if (data.sucesso && data.isAdmin) {
-              localStorage.setItem('huby_admin_token', data.token);
-              localStorage.setItem('huby_user_role', 'admin');
-              adminBtn.style.display = 'flex';
-            } else {
-              adminBtn.style.display = 'none';
-            }
-          } catch (e) {
-            // Mantém oculto se falhar
-          }
-        }
-      }
-
-      sincronizarPermissoesAdmin();
-
-      document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
-        btn.addEventListener('click', () => {
-          if (btn.getAttribute('data-tab') === 'viewConta') {
-            sincronizarPermissoesAdmin();
-          }
-        });
-      });
-
-      const emailLogado = localStorage.getItem('huby_cliente_email');
-      const txtPerfilNome = document.getElementById('txtPerfilNome');
-      const txtPerfilAvatar = document.getElementById('txtPerfilAvatar');
-      if (emailLogado && txtPerfilNome) {
-        const usuario = emailLogado.split('@')[0];
-        const nomeFormatado = usuario.charAt(0).toUpperCase() + usuario.slice(1);
-        txtPerfilNome.textContent = nomeFormatado;
-        if (txtPerfilAvatar) {
-          txtPerfilAvatar.textContent = nomeFormatado.substring(0, 2).toUpperCase();
-        }
-      }
-
-      const btnSair = document.getElementById('btnSairConta');
-      btnSair?.addEventListener('click', () => {
-        const confirmar = confirm('Tem certeza de que deseja sair da sua conta?');
-        if (!confirmar) return;
-
-        localStorage.removeItem('huby_ja_entrou');
-        localStorage.removeItem('huby_user_role');
-        localStorage.removeItem('huby_admin_token');
-        localStorage.removeItem('huby_cliente_email');
-        localStorage.removeItem('huby_corrida_ativa');
-
-        window.location.reload();
-      });
-    });
-
-    document.getElementById('btnEntrarCliente')?.addEventListener('click', () => {
-      localStorage.setItem('huby_user_role', 'cliente');
-      localStorage.setItem('huby_ja_entrou', '1');
-      const splash = document.getElementById('splashScreen');
-      if (splash) {
-        splash.classList.add('fechado');
-        splash.style.display = 'none';
-      }
-    });
-
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        const swPath = window.location.pathname.includes('/HUBy')
-          ? '/HUBy/service-worker.js'
-          : './service-worker.js';
-
-        navigator.serviceWorker.register(swPath)
-          .then(reg => console.log('Service Worker HUBy registrado:', reg.scope))
-          .catch(err => console.warn('Erro ao registrar Service Worker:', err));
-      });
-    }
-  </script>
 </body>
 
 </html>
