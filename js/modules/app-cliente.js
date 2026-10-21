@@ -2,12 +2,12 @@
 
 document.addEventListener('DOMContentLoaded', () => {
   const API_URL = 'https://huby.onrender.com';
-  const defaultCoords = [-8.3565, -42.2504]; // Paes Landim (fallback inicial)
+  const defaultCoords = [-8.3565, -42.2504]; // Piauí (fallback inicial)
   let clienteCoords = [...defaultCoords];
   let pontoDestinoCoords = null;
   let linhaTracaoRota = null;
   
-  // Declaração antecipada das variáveis de estado para evitar erros
+  // Declaração das variáveis de estado
   let distanciaKmGlobal = 1.5;
   let grupoSelecionado = 'carro';
   let subVeiculoSelecionado = 'HUBy Carro';
@@ -16,6 +16,54 @@ document.addEventListener('DOMContentLoaded', () => {
   let qtdAjudantes = 0;
   let temEscada = false;
   let temParadaExtra = false;
+
+  // SISTEMA DE NOTIFICAÇÃO TOAST VISUAL (Sem alert cinzento do navegador)
+  function mostrarToast(mensagem, tipo = 'alerta') {
+    let toast = document.getElementById('hubyToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'hubyToast';
+      toast.style.position = 'fixed';
+      toast.style.top = '22px';
+      toast.style.left = '50%';
+      toast.style.transform = 'translateX(-50%) translateY(-20px)';
+      toast.style.padding = '12px 20px';
+      toast.style.borderRadius = '14px';
+      toast.style.fontSize = '12px';
+      toast.style.fontWeight = '800';
+      toast.style.letterSpacing = '0.3px';
+      toast.style.zIndex = '99999';
+      toast.style.boxShadow = '0 12px 30px rgba(0,0,0,0.6)';
+      toast.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+      toast.style.display = 'flex';
+      toast.style.alignItems = 'center';
+      toast.style.gap = '8px';
+      toast.style.maxWidth = '90%';
+      toast.style.backdropFilter = 'blur(10px)';
+      toast.style.webkitBackdropFilter = 'blur(10px)';
+      document.body.appendChild(toast);
+    }
+
+    if (tipo === 'alerta') {
+      toast.style.background = 'rgba(239, 68, 68, 0.92)';
+      toast.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      toast.style.color = '#FFFFFF';
+      toast.innerHTML = `⚠️ <span>${mensagem}</span>`;
+    } else {
+      toast.style.background = 'rgba(16, 185, 129, 0.92)';
+      toast.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      toast.style.color = '#03251E';
+      toast.innerHTML = `✅ <span>${mensagem}</span>`;
+    }
+
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0px)';
+
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(-20px)';
+    }, 3200);
+  }
 
   // 1. INICIALIZAR O MAPA DO PASSAGEIRO
   const mapElement = document.getElementById('mapaCliente');
@@ -108,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function executarBuscaDestino() {
     const texto = inputDestino?.value.trim();
     if (!texto) {
-      alert('Digite o nome de uma rua, bairro ou local.');
+      mostrarToast('Digite o nome de uma rua, bairro ou local no destino.');
       return;
     }
 
@@ -130,10 +178,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const lon = parseFloat(resultado.lon);
         definirDestinoNoMapa(lat, lon, resultado.display_name.split(',')[0]);
       } else {
-        alert('Endereço não localizado. Toque diretamente no mapa.');
+        mostrarToast('Endereço não localizado. Toque diretamente no mapa.');
       }
     } catch (err) {
       console.warn('Erro ao pesquisar:', err);
+      mostrarToast('Falha na busca. Toque diretamente no mapa.');
     } finally {
       if (btnBuscarEndereco) {
         btnBuscarEndereco.textContent = 'Ir';
@@ -301,7 +350,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (txtBotaoAcao) txtBotaoAcao.textContent = `Chamar ${subVeiculoSelecionado}`;
   }
 
-  // Executa o cálculo inicial
   recalcularValores();
 
   // 6. ENVIAR PEDIDO AO RENDER/NEON
@@ -366,6 +414,8 @@ document.addEventListener('DOMContentLoaded', () => {
         bannerStatus.style.display = 'none';
       }, 5000);
     }
+    
+    mostrarToast(`Solicitação #${novoPedido.id} enviada!`, 'sucesso');
   });
 
   // 7. NAVEGAÇÃO ENTRE AS ABAS

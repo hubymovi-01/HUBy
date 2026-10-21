@@ -29,6 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
     weight: 3
   }).addTo(map);
 
+  // Calibrações iniciais para prevenir quadrantes cinzentos
   map.invalidateSize();
   setTimeout(() => map.invalidateSize(), 250);
   setTimeout(() => map.invalidateSize(), 600);
@@ -38,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     motoristaCoords = [latitude, longitude];
     markerMotorista.setLatLng(motoristaCoords);
     map.setView(motoristaCoords, zoom, { animate: true });
-    map.invalidateSize();
+    setTimeout(() => map.invalidateSize(), 150);
   }
 
   // 1. GPS em tempo real do motorista
@@ -58,7 +59,6 @@ document.addEventListener('DOMContentLoaded', () => {
         motoristaCoords = [latitude, longitude];
         markerMotorista.setLatLng(motoristaCoords);
         if (linhaRotaAtiva) {
-          // Atualiza o início da rota conforme o motorista anda
           const pontosAtuais = linhaRotaAtiva.getLatLngs();
           if (pontosAtuais.length > 0) {
             pontosAtuais[0] = L.latLng(motoristaCoords);
@@ -72,7 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   document.getElementById('btnRecenterGPS')?.addEventListener('click', () => {
-    focarNoGPS(motoristaCoords[0], motoristaCoords[1], 16);
+    if (linhaRotaAtiva && marcadorDestinoAtivo) {
+      const bounds = L.latLngBounds([motoristaCoords, marcadorDestinoAtivo.getLatLng()]);
+      map.fitBounds(bounds, { padding: [70, 70], animate: true });
+    } else {
+      focarNoGPS(motoristaCoords[0], motoristaCoords[1], 16);
+    }
   });
 
   // Gestão de Status Online / Offline
@@ -110,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.querySelectorAll('.filter-pill').forEach(pill => {
     pill.addEventListener('click', () => {
+      if (linhaRotaAtiva) return; // Bloqueia filtro se estiver com corrida ativa
       document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
       pill.classList.add('active');
       filtroAtual = pill.getAttribute('data-filter') || 'todos';
@@ -126,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return `
       <div class="job-card" id="card-${p.id}">
         <div class="job-top">
-          <div class="job-badge ${badgeClasse}">${p.subTipoLabel || 'HUBy'} • #${p.id}</div>
+          <div class="job-badge ${badgeClasse}">${p.subTipoLabel || 'HUBy'} #${p.id}</div>
           <div class="job-distance">📍 ${p.horario || 'Agora'}</div>
         </div>
 
@@ -169,7 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let listaPedidosCache = [];
 
   async function carregarFilaDePedidos() {
-    if (!feedChamadas || !isOnline) return;
+    // Se já estiver com entrega em andamento, mantém o painel de navegação limpo
+    if (!feedChamadas || !isOnline || linhaRotaAtiva) return;
 
     let listaPedidos = [];
 
@@ -219,33 +226,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // =========================================================================
-  // TRAÇAR A ROTA NO MAPA AO ACEITAR A CORRIDA
+  // TRAÇAR A ROTA NO MAPA AO ACEITAR A CORRIDA (MODO NAVEGAÇÃO LIMPO)
   // =========================================================================
   window.aceitarPedido = async (id) => {
     const pedido = listaPedidosCache.find(p => String(p.id) === String(id));
 
-    // Determinar as coordenadas de destino
     let pontoDest = null;
     if (pedido?.coordsDestino && Array.isArray(pedido.coordsDestino)) {
       pontoDest = pedido.coordsDestino;
     } else if (pedido?.destino && pedido.destino.includes('(')) {
-      // Extrai coordenadas do formato "Ponto selecionado (-8.3586, -42.2467)"
       const partes = pedido.destino.split('(')[1]?.replace(')', '').split(',');
       if (partes && partes.length === 2) {
         pontoDest = [parseFloat(partes[0].trim()), parseFloat(partes[1].trim())];
       }
     }
 
-    // Fallback se não encontrar o destino: 800m à frente
     if (!pontoDest || isNaN(pontoDest[0])) {
       pontoDest = [motoristaCoords[0] + 0.007, motoristaCoords[1] + 0.007];
     }
 
-    // 1. Limpar trajeto anterior se existir
+    // 1. Limpa trajeto anterior
     if (linhaRotaAtiva) map.removeLayer(linhaRotaAtiva);
     if (marcadorDestinoAtivo) map.removeLayer(marcadorDestinoAtivo);
 
-    // 2. Criar marcador de destino (Bandeira / Ponto Laranja)
+    // 2. Cria marcador de destino (Bandeira de Chegada Laranja)
     marcadorDestinoAtivo = L.circleMarker(pontoDest, {
       radius: 12,
       color: '#F97316',
@@ -254,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
       weight: 3
     }).addTo(map);
 
-    // 3. Traçar linha da rota em verde néon / esmeralda
+    // 3. Traça a linha contínua e nítida da rota
     const pontosRota = [
       L.latLng(motoristaCoords[0], motoristaCoords[1]),
       L.latLng(pontoDest[0], pontoDest[1])
@@ -263,17 +267,19 @@ document.addEventListener('DOMContentLoaded', () => {
     linhaRotaAtiva = L.polyline(pontosRota, {
       color: '#10B981',
       weight: 6,
-      opacity: 0.9,
+      opacity: 0.95,
       lineCap: 'round',
       lineJoin: 'round',
       dashArray: '8, 8'
     }).addTo(map);
 
-    // 4. Enquadrar o mapa automaticamente mostrando o motorista e o passageiro
+    // 4. Força o redesenho do Leaflet para eliminar blocos cinzentos e enquadrar a rota
+    map.invalidateSize();
     const bounds = L.latLngBounds([motoristaCoords, pontoDest]);
     map.fitBounds(bounds, { padding: [70, 70], animate: true });
+    setTimeout(() => map.invalidateSize(), 250);
 
-    // Atualizar status no servidor
+    // 5. Atualiza no servidor
     try {
       await fetch(`${API_URL}/api/pedidos`, {
         method: 'PATCH',
@@ -286,20 +292,44 @@ document.addEventListener('DOMContentLoaded', () => {
     pedidosLocais = pedidosLocais.filter(p => String(p.id) !== String(id));
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
-    // Notificar no painel que a navegação está ativa
+    // 6. Atualiza o badge superior
     if (badgeRadar) {
       badgeRadar.style.borderColor = '#10B981';
       if (txtRadarStatus) txtRadarStatus.textContent = `Em rota para entrega #${id}`;
     }
 
-    const card = document.getElementById(`card-${id}`);
-    if (card) {
-      card.innerHTML = `
-        <div style="text-align:center; padding:16px 10px;">
-          <div style="font-size:20px; margin-bottom:4px;">🧭</div>
-          <strong style="color:#10B981; font-size:14px;">Rota #${id} Ativa no Mapa!</strong>
-          <p style="font-size:11px; color:#94A3B8; margin-top:4px;">Siga o trajeto traçado até o ponto de embarque/entrega.</p>
-          <button type="button" onclick="finalizarCorrida('${id}')" style="margin-top:12px; width:100%; background:linear-gradient(135deg, #10B981, #059669); color:#03251E; border:none; border-radius:10px; padding:10px; font-weight:900; font-size:13px; cursor:pointer;">Concluir Entrega</button>
+    // 7. ISOLA O FEED: remove todos os outros pedidos e exibe apenas o painel de entrega
+    if (feedChamadas) {
+      feedChamadas.innerHTML = `
+        <div class="job-card active-delivery-card" style="border-color: #10B981; background: rgba(16, 185, 129, 0.08); padding: 18px 14px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <span style="background: rgba(16, 185, 129, 0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 4px 10px; border-radius: 20px;">
+              🧭 NAVEGAÇÃO ATIVA #${id}
+            </span>
+            <strong style="color: #10B981; font-size: 16px;">${pedido?.preco || 'R$ 16,10'}</strong>
+          </div>
+          
+          <div style="font-size: 13px; color: #F8FAFC; margin-bottom: 4px; font-weight: 700;">
+            Destino: ${pedido?.destino || 'Ponto selecionado'}
+          </div>
+          <p style="font-size: 11px; color: #94A3B8; margin-bottom: 14px;">
+            Siga o trajeto traçado até o ponto de embarque/entrega.
+          </p>
+
+          <button type="button" onclick="finalizarCorrida('${id}')" style="
+            width: 100%;
+            background: linear-gradient(135deg, #10B981, #059669);
+            color: #03251E;
+            border: none;
+            border-radius: 12px;
+            padding: 13px;
+            font-weight: 900;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35);
+          ">
+            ✅ Concluir Entrega
+          </button>
         </div>
       `;
     }
@@ -313,6 +343,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas...';
     map.setView(motoristaCoords, 16, { animate: true });
+    setTimeout(() => map.invalidateSize(), 200);
+
     carregarFilaDePedidos();
   };
 
