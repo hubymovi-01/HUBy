@@ -1,186 +1,332 @@
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-BR">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Painel Administrativo & Despacho</title>
+  <title>HUBy - Mobilidade Segura, Flash e Fretes</title>
+  <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- CSS do Leaflet -->
+  <!-- Script inline crítico rápido apenas para evitar piscar splash se já logado -->
+  <script>
+    if (localStorage.getItem('huby_ja_entrou') === '1') {
+      document.documentElement.classList.add('app-pronto');
+    }
+  </script>
+
+  <!-- Leaflet & Estilos Globais -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <!-- Estilos Globais -->
   <link rel="stylesheet" href="./css/global.css">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-    body {
-      background-color: #080C14;
-      color: #FFFFFF;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      min-height: 100vh;
-      padding: 16px;
-    }
-    .admin-container {
-      max-width: 600px;
-      margin: 0 auto;
-    }
-    .top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 20px;
-    }
-    .top-bar-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .btn-back {
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #FFFFFF;
-      width: 38px;
-      height: 38px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-decoration: none;
-      font-size: 16px;
-    }
-    .top-bar h2 {
-      font-size: 16px;
-      font-weight: 800;
-      color: #EF4444;
-    }
-    .admin-badge {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      color: #EF4444;
-      font-size: 10px;
-      font-weight: 800;
-      padding: 4px 10px;
-      border-radius: 20px;
-    }
-    .admin-map-card {
-      background: rgba(18, 27, 47, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      overflow: hidden;
-      margin-bottom: 16px;
-    }
-    .map-header-title {
-      padding: 14px 16px;
-      font-size: 12px;
-      font-weight: 800;
-      color: #94A3B8;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    #mapaAdmin {
-      width: 100%;
-      height: 260px;
-      background: #0B101D;
-    }
-    .section-title {
-      font-size: 13px;
-      font-weight: 800;
-      color: #10B981;
-      text-transform: uppercase;
-      margin: 20px 0 10px 0;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .admin-orders-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .admin-order-row {
-      background: rgba(18, 27, 47, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 14px;
-      padding: 14px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    .order-type-icon {
-      width: 42px;
-      height: 42px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      flex-shrink: 0;
-    }
-    .order-type-icon.emerald { background: rgba(16, 185, 129, 0.15); color: #10B981; }
-    .order-type-icon.flash { background: rgba(59, 130, 246, 0.15); color: #3B82F6; }
-    .order-type-icon.cargo { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
-    .order-meta {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-    .order-meta strong {
-      font-size: 13px;
-      color: #FFFFFF;
-    }
-    .order-meta span, .order-meta small {
-      font-size: 11px;
-      color: #94A3B8;
-    }
-    .order-status-box {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 4px;
-    }
-    .status-pill {
-      font-size: 9px;
-      font-weight: 800;
-      padding: 3px 8px;
-      border-radius: 10px;
-      text-transform: uppercase;
-    }
-    .status-pill.em-rota { background: rgba(16, 185, 129, 0.2); color: #10B981; }
-    .order-status-box strong {
-      font-size: 13px;
-      color: #10B981;
-    }
-  </style>
+  <link rel="stylesheet" href="./css/cliente.css">
+  <link rel="stylesheet" href="./css/welcome.css">
 </head>
 
 <body>
-  <div class="admin-container">
-    <header class="top-bar">
-      <div class="top-bar-left">
-        <a href="./index.html" class="btn-back">←</a>
-        <h2>Painel Executivo</h2>
+
+  <div class="app-layout">
+
+    <!-- ONBOARDING / TELA INICIAL -->
+    <div id="splashScreen" class="welcome-overlay">
+      <div class="glow-bg top-glow"></div>
+      <div class="glow-bg bottom-glow"></div>
+
+      <header class="welcome-header">
+        <div class="badge-verificado">🛡️ PLATAFORMA 100% VERIFICADA & SEGURA</div>
+        <div class="brand-hero-stacked">
+          <div class="brand-row brand-row-small">
+            <span class="brand-hub-small">HUB</span>
+            <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
+          </div>
+          <div class="brand-row brand-row-large">
+            <span class="brand-hub-large">HUB</span>
+            <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
+          </div>
+        </div>
+        <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
+      </header>
+
+      <!-- Carrossel de Pilares -->
+      <div class="pillars-container" id="pillarsContainer">
+        <div class="pillar-card active" data-slide="0">
+          <div class="pillar-icon">🔒</div>
+          <div class="pillar-content">
+            <h4>Viagens Protegidas</h4>
+            <p>Passageiros e motoristas com CPF e CNH validados.</p>
+          </div>
+        </div>
+
+        <div class="pillar-card" data-slide="1">
+          <div class="pillar-icon">📍</div>
+          <div class="pillar-content">
+            <h4>Rastreio Satelital</h4>
+            <p>Partilha de rota em tempo real com contactos de emergência.</p>
+          </div>
+        </div>
+
+        <div class="pillar-card" data-slide="2">
+          <div class="pillar-icon">⚡</div>
+          <div class="pillar-content">
+            <h4>Suporte 24h</h4>
+            <p>Central de operações ativa para retaguarda em fretes e viagens.</p>
+          </div>
+        </div>
       </div>
-      <div class="admin-badge">🛡️ ADMIN MASTER</div>
+
+      <div class="slide-dots" id="slideDots">
+        <span class="dot active"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+
+      <!-- Ações de Entrada -->
+      <footer class="welcome-actions">
+        <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente">
+          <span>📱 Criar Conta de Passageiro</span>
+          <span class="btn-arrow">➔</span>
+        </a>
+
+        <a href="./login.html" class="btn-welcome-login">
+          <span>🔑 Já tenho conta (Fazer Login)</span>
+          <span class="btn-arrow">➔</span>
+        </a>
+
+        <a href="./cadastro-motorista.html" class="btn-welcome-secondary">
+          <span>🚘 Quero ser Motorista / Parceiro</span>
+          <span>➔</span>
+        </a>
+
+        <div class="lgpd-nota">🔒 Dados protegidos pela LGPD com criptografia ponta a ponta.</div>
+      </footer>
+    </div>
+
+    <!-- CABEÇALHO -->
+    <header class="huby-header">
+      <a href="./index.html" class="brand-logo-compact">
+        <span class="brand-hub-nav">HUB</span><span class="brand-y-nav">y</span>
+        <span class="brand-sub-nav">HUBy</span>
+      </a>
+      <div class="header-right">
+        <span class="wallet-pill" id="btnIrCarteira" style="cursor: pointer;">🪙 <strong>R$ 0,00</strong></span>
+        <a href="./cadastro-motorista.html" class="badge-pill">Seja Parceiro ➔</a>
+      </div>
     </header>
 
-    <!-- MAPA DA FROTA ATIVA -->
-    <div class="admin-map-card">
-      <div class="map-header-title">📍 Radar de Operações em Tempo Real</div>
-      <div id="mapaAdmin"></div>
-    </div>
+    <!-- VIEWS / ABAS DINÂMICAS -->
+    <main class="tabs-viewport">
 
-    <!-- FILA DE PEDIDOS E FRETES -->
-    <div class="section-title">📦 Fila de Pedidos & Fretes Ativos</div>
-    <div class="admin-orders-list" id="listaPedidosAdmin">
-      <!-- Preenchido dinamicamente pelo script -->
-    </div>
+      <!-- ABA 1: INÍCIO (MAPA + CHAMADA) -->
+      <section class="tab-view active-view" id="viewInicio">
+        <div class="map-wrapper">
+          <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
+          <div id="mapaCliente"></div>
+          <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
+        </div>
+
+        <div class="order-sheet">
+          <div class="sheet-drag-handle"></div>
+          <div class="status-banner" id="bannerStatusCorrida"></div>
+
+          <div class="group-tabs">
+            <div class="tab-card active-carro" data-grupo="carro">
+              <div class="tab-icon">🚗</div>
+              <div class="tab-title">HUBy Viagem</div>
+              <div class="tab-sub">Carro & Moto</div>
+            </div>
+            <div class="tab-card" data-grupo="flash">
+              <div class="tab-icon">📦</div>
+              <div class="tab-title">HUBy Flash</div>
+              <div class="tab-sub">Entregas</div>
+            </div>
+            <div class="tab-card" data-grupo="cargo">
+              <div class="tab-icon">🚚</div>
+              <div class="tab-title">HUBy Cargo</div>
+              <div class="tab-sub">Caminhão/Frete</div>
+            </div>
+          </div>
+
+          <div class="sub-vehicles" id="containerSubVeiculos"></div>
+
+          <div class="addresses-box">
+            <div class="input-group">
+              <span class="dot-indicator green"></span>
+              <input type="text" id="inputOrigem" value="A minha localização atual" readonly>
+            </div>
+            <div class="address-row">
+              <div class="input-group" style="flex:1;">
+                <span class="dot-indicator orange"></span>
+                <input type="text" id="inputDestino" placeholder="Para onde vamos levar? (ou toque no mapa)">
+              </div>
+              <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
+            </div>
+          </div>
+
+          <div class="cargo-options-box">
+            <div class="option-line" id="linhaAjudante" style="display:none;">
+              <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
+              <div class="counter-control">
+                <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
+                <strong id="txtQtdAjudantes">0</strong>
+                <button type="button" class="btn-qty" id="btnMaisAjudante">+</button>
+              </div>
+            </div>
+
+            <div class="option-line" id="linhaEscada" style="display:none;">
+              <label for="chkEscada" style="cursor:pointer;">🏢 Escada sem elevador (+R$ 20)</label>
+              <input type="checkbox" id="chkEscada" class="huby-check">
+            </div>
+
+            <div class="option-line">
+              <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no percurso (+R$ 6)</label>
+              <input type="checkbox" id="chkParadaExtra" class="huby-check">
+            </div>
+          </div>
+
+          <div class="trip-breakdown">
+            <span>📏 Rota: <strong id="txtDistKm">1.5 km</strong> (<span id="txtDuracaoMin">6</span> min)</span>
+            <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
+          </div>
+
+          <div class="payment-bar">
+            <span class="payment-label">Pagamento:</span>
+            <select id="selectMetodoPgto">
+              <option value="pix_app">💠 Pix no App (Split Automático)</option>
+              <option value="dinheiro_presencial">💵 Dinheiro ao Motorista</option>
+              <option value="cartao_app">💳 Cartão de Crédito</option>
+            </select>
+          </div>
+
+          <button type="button" class="btn-primary" id="btnSolicitarHuby">
+            <span id="txtBotaoAcao">Chamar HUBy Carro</span>
+            <span class="price-box" id="txtPrecoFinal">R$ 10,90</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ABA 2: OPÇÕES -->
+      <section class="tab-view" id="viewOpcoes">
+        <div class="view-content">
+          <div class="view-header-title">
+            <h2>Serviços & Opções</h2>
+            <p>Vá para onde quiser ou envie o que precisar</p>
+          </div>
+          <div class="services-grid">
+            <div class="service-card action-solicitar" data-target-group="carro">
+              <div class="service-badge promo">-20% OFF</div>
+              <div class="service-icon">🚗</div>
+              <h3>Viagem</h3>
+              <p>Carro e moto particular</p>
+            </div>
+            <div class="service-card action-solicitar" data-target-group="flash">
+              <div class="service-badge novo">Rápido</div>
+              <div class="service-icon">📦</div>
+              <h3>HUBy Flash</h3>
+              <p>Envio de pacotes e encomendas</p>
+            </div>
+            <div class="service-card action-solicitar" data-target-group="cargo" style="grid-column: span 2;">
+              <div class="service-badge cargo">Fretes & Mudanças</div>
+              <div class="service-icon">🚚</div>
+              <h3>HUBy Cargo</h3>
+              <p>VUCs, vans e picapes sob demanda</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 3: ATIVIDADE -->
+      <section class="tab-view" id="viewAtividade">
+        <div class="view-content">
+          <div class="view-header-title">
+            <h2>Atividade</h2>
+            <p>Histórico recente de viagens e fretes</p>
+          </div>
+          <div class="activity-list" id="activityList">
+            <div class="activity-card">
+              <div class="activity-icon-box">🚗</div>
+              <div class="activity-info">
+                <h4>HUBy Carro</h4>
+                <span>Hoje • Viagem concluída</span>
+                <div class="activity-badge concluido">Concluído</div>
+              </div>
+              <div class="activity-price">R$ 16,10</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 4: CONTA -->
+      <section class="tab-view" id="viewConta">
+        <div class="view-content">
+          <div class="profile-header">
+            <div class="profile-avatar">HU</div>
+            <div class="profile-details">
+              <h2>Minha Conta</h2>
+              <div class="profile-rating">⭐ 5.0 <span>Passageiro VIP</span></div>
+            </div>
+          </div>
+
+          <div class="profile-menu">
+            <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
+              <div class="menu-item-left">
+                <span class="menu-icon">🛡️</span>
+                <div>
+                  <strong style="color: #EF4444;">Painel Administrativo</strong>
+                  <p>Gestão executiva e radar da frota</p>
+                </div>
+              </div>
+              <span class="menu-arrow">➔</span>
+            </a>
+
+            <a href="./cadastro-motorista.html" class="menu-item highlight">
+              <div class="menu-item-left">
+                <span class="menu-icon">🚘</span>
+                <div>
+                  <strong>Modo Motorista</strong>
+                  <p>Cadastre seu veículo e ganhe dirigindo</p>
+                </div>
+              </div>
+              <span class="menu-arrow">➔</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- NAVEGAÇÃO INFERIOR -->
+    <nav class="bottom-nav">
+      <button type="button" class="nav-item active" data-tab="viewInicio">
+        <span class="nav-icon">📍</span>
+        <span class="nav-label">Início</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="viewOpcoes">
+        <span class="nav-icon">⊞</span>
+        <span class="nav-label">Opções</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="viewAtividade">
+        <span class="nav-icon">📄</span>
+        <span class="nav-label">Atividade</span>
+      </button>
+      <button type="button" class="nav-item" data-tab="viewConta">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">Conta</span>
+      </button>
+    </nav>
   </div>
 
-  
- <!-- Scripts -->
+  <!-- Scripts Modulares Carregados via ES Module -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="./js/modules/painel-admin.js"></script>
+  <script type="module">
+    import { OnboardingCarousel } from './js/modules/onboarding.js';
+    import { AuthGuard } from './js/modules/auth-guard.js';
+
+    // Inicialização orientada a classes
+    document.addEventListener('DOMContentLoaded', () => {
+      new OnboardingCarousel();
+      new AuthGuard();
+    });
+  </script>
+  <script type="module" src="./js/modules/app-cliente.js"></script>
 </body>
+
 </html>

@@ -1,332 +1,63 @@
-/* ==========================================================================
-   HUBy HUBy - Splash Screen Premium (css/welcome.css)
-   ========================================================================== */
-
-.welcome-overlay {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
-  background: radial-gradient(circle at 50% 18%, #0d1527 0%, #060911 75%);
-  z-index: 99999;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  padding: 42px 20px 32px;
-  overflow: hidden;
-  box-sizing: border-box;
-  transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease;
+/* Classes para o novo index modular */
+.app-pronto #splashScreen {
+  display: none !important;
 }
 
-.welcome-overlay.fechado {
-  transform: translateY(-100%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* Trava de proporção padrão móvel para qualquer tela */
-.welcome-overlay > * {
-  max-width: 410px;
-  width: 100%;
-}
-
-/* Efeitos Luminosos de Fundo */
-.glow-bg {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  filter: blur(50px);
-}
-
-.top-glow {
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%);
-  top: -80px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.bottom-glow {
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.14) 0%, transparent 70%);
-  bottom: -60px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-/* Cabeçalho da Splash Screen */
-.welcome-header {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  margin-top: 10px;
-}
-
-/* Logótipo Vertical: Um Pequeno Superior e Um Grande Principal */
-.brand-hero-stacked {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  position: relative;
-  user-select: none;
-}
-
-.brand-row {
-  display: flex;
-  align-items: center;
-  line-height: 1;
-}
-
-/* 1. Versão Pequena (Topo) */
-.brand-row-small {
-  gap: 4px;
-  opacity: 0.85;
-  letter-spacing: 1px;
-}
-
-.brand-hub-small {
-  font-size: 16px;
+.badge-verificado {
+  display: inline-block;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #10B981;
+  font-size: 10px;
   font-weight: 800;
-  color: #94A3B8;
+  padding: 4px 10px;
+  border-radius: 20px;
+  margin-bottom: 12px;
   letter-spacing: 0.5px;
 }
 
-.brand-y-badge-small {
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid rgba(16, 185, 129, 0.4);
-  color: #34D399;
-  font-size: 13px;
-  font-weight: 800;
-  font-style: italic;
-  padding: 1px 6px 2px;
-  border-radius: 5px;
-  position: relative;
-  line-height: 1;
-}
-
-.brand-gps-dot-small {
-  width: 5px;
-  height: 5px;
-  background-color: var(--huby-cargo);
-  border: 1px solid #FFFFFF;
-  border-radius: 50%;
-  position: absolute;
-  top: -2px;
-  right: -2px;
-}
-
-/* 2. Versão Grande (Principal com Efeito Neon) */
-.brand-row-large {
-  gap: 6px;
-  position: relative;
-  margin-top: -2px;
-}
-
-.brand-hub-large {
-  font-size: 44px;
-  font-weight: 900;
-  color: #FFFFFF;
-  letter-spacing: -1.5px;
-  background: linear-gradient(180deg, #FFFFFF 30%, #CBD5E1 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 4px 18px rgba(16, 185, 129, 0.25));
-}
-
-.brand-y-badge-large {
-  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-  color: #022c22;
-  font-size: 32px;
-  font-weight: 900;
-  font-style: italic;
-  padding: 2px 12px 5px;
-  border-radius: 11px;
-  position: relative;
-  line-height: 1;
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
-  animation: pulseBadgeLarge 2.8s infinite ease-in-out;
-}
-
-@keyframes pulseBadgeLarge {
-  0%, 100% {
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.45);
-    transform: scale(1);
-  }
-  50% {
-    box-shadow: 0 0 30px rgba(16, 185, 129, 0.85);
-    transform: scale(1.02);
-  }
-}
-
-.brand-gps-dot-large {
-  width: 9px;
-  height: 9px;
-  background-color: var(--huby-cargo);
-  border: 1.5px solid #FFFFFF;
-  border-radius: 50%;
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  box-shadow: 0 0 10px rgba(249, 115, 22, 0.9);
-}
-
-.tagline {
-  color: #94A3B8;
-  font-size: 13px;
-  font-weight: 500;
-  margin-top: 12px;
-  line-height: 1.45;
-  letter-spacing: -0.2px;
-}
-
-/* Pilares de Serviços (Cards Dark Glassmorphism) */
-.pillars-container {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin: auto 0;
-}
-
-.pillar-card {
-  background: rgba(18, 26, 43, 0.55);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  transition: all 0.25s ease;
-  cursor: default;
-}
-
-.pillar-card:hover,
-.pillar-card.active {
-  background: rgba(22, 33, 56, 0.8);
-  border-color: rgba(16, 185, 129, 0.45);
-  transform: translateY(-2px);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
-}
-
-.pillar-icon {
-  font-size: 22px;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.pillar-content h4 {
-  font-size: 14px;
-  font-weight: 800;
-  color: #F8FAFC;
-  margin-bottom: 2px;
-  letter-spacing: -0.2px;
-}
-
-.pillar-content p {
-  font-size: 11px;
-  color: #94A3B8;
-  line-height: 1.35;
-}
-
-/* Indicadores de Pontos */
-.slide-dots {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 20px;
-}
-
-.slide-dots .dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  transition: all 0.25s ease;
-}
-
-.slide-dots .dot.active {
-  width: 20px;
-  border-radius: 4px;
-  background: #10B981;
-  box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
-}
-
-/* Ações Inferiores */
 .welcome-actions {
-  position: relative;
-  z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .btn-welcome-primary {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-decoration: none;
+  box-sizing: border-box;
   background: linear-gradient(135deg, #10B981 0%, #059669 100%);
-  color: #03251e;
-  border: none;
-  padding: 15px 22px;
+  color: #03251E;
+  font-weight: 900;
+  padding: 14px 20px;
   border-radius: 14px;
   font-size: 14px;
-  font-weight: 900;
-  letter-spacing: 0.2px;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+}
+
+.btn-welcome-login {
+  width: 100%;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
-}
-
-.btn-welcome-primary:active {
-  transform: scale(0.98);
-}
-
-.btn-arrow {
-  font-size: 15px;
-  transition: transform 0.2s ease;
-}
-
-.btn-welcome-primary:hover .btn-arrow {
-  transform: translateX(3px);
-}
-
-.driver-cta-box {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #94A3B8;
-}
-
-.driver-link {
-  color: #10B981;
   text-decoration: none;
-  font-weight: 700;
-  transition: color 0.15s ease;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  color: #F8FAFC;
+  font-weight: 800;
+  padding: 14px 20px;
+  border-radius: 14px;
+  font-size: 14px;
+  backdrop-filter: blur(8px);
 }
 
-.driver-link:hover {
-  color: #34D399;
+.lgpd-nota {
+  text-align: center;
+  font-size: 10px;
+  color: #64748B;
+  margin-top: 4px;
 }
