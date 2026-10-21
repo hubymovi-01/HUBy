@@ -174,16 +174,54 @@
       background: rgba(16, 185, 129, 0.05);
     }
 
-    select.form-input {
-      appearance: none;
-      -webkit-appearance: none;
-      cursor: pointer;
-    }
-
     .row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
+    }
+
+    /* SELETORES VISUAIS DE CATEGORIA (SEM MENU SUSPENSO) */
+    .cat-selector-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .cat-pick-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1.5px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 12px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .cat-pick-card.active {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.12);
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.25);
+    }
+
+    .cat-pick-card .cat-emoji {
+      font-size: 22px;
+      margin-bottom: 4px;
+    }
+
+    .cat-pick-card .cat-name {
+      display: block;
+      color: #FFFFFF;
+      font-size: 12.5px;
+      font-weight: 800;
+    }
+
+    .cat-pick-card .cat-subtitle {
+      display: block;
+      color: #94A3B8;
+      font-size: 10.5px;
+      margin-top: 2px;
+      line-height: 1.2;
     }
 
     /* UPLOAD DE DOCUMENTOS */
@@ -316,28 +354,45 @@
         </div>
       </section>
 
-      <!-- 2. VEÍCULO & CATEGORIA -->
+      <!-- 2. VEÍCULO & CATEGORIA COM SELETORES VISUAIS -->
       <section class="form-card">
         <div class="card-title">🚗 2. Modalidade & Veículo</div>
 
         <div class="field-group">
-          <label for="cadCategoria">Categoria de Trabalho</label>
-          <div class="input-wrapper">
-            <span class="input-icon">🏷️</span>
-            <select id="cadCategoria" class="form-input">
-              <option value="carro">🚗 HUBy Viagem (Carro Particular)</option>
-              <option value="moto">🛵 HUBy Moto (Passageiro)</option>
-              <option value="flash">📦 HUBy Flash (Entregas e Encomendas)</option>
-              <option value="cargo">🚚 HUBy Cargo (Furgão, VUC ou Fretes)</option>
-            </select>
+          <label>Selecione a Categoria de Atuação</label>
+          <div class="cat-selector-grid">
+            <div class="cat-pick-card active" data-category="carro">
+              <div class="cat-emoji">🚗</div>
+              <span class="cat-name">HUBy Carro</span>
+              <span class="cat-subtitle">Particular urbano</span>
+            </div>
+
+            <div class="cat-pick-card" data-category="moto">
+              <div class="cat-emoji">🛵</div>
+              <span class="cat-name">HUBy Moto</span>
+              <span class="cat-subtitle">Passageiro rápido</span>
+            </div>
+
+            <div class="cat-pick-card" data-category="flash">
+              <div class="cat-emoji">📦</div>
+              <span class="cat-name">HUBy Flash</span>
+              <span class="cat-subtitle">Entregas de moto</span>
+            </div>
+
+            <div class="cat-pick-card" data-category="cargo">
+              <div class="cat-emoji">🚚</div>
+              <span class="cat-name">HUBy Cargo</span>
+              <span class="cat-subtitle">Vans, VUC e fretes</span>
+            </div>
           </div>
+          <input type="hidden" id="cadCategoria" value="carro">
         </div>
 
-        <div class="field-group">
+        <div class="field-group" style="margin-top: 12px;">
           <label for="cadModelo">Marca e Modelo</label>
           <div class="input-wrapper">
             <span class="input-icon">🚘</span>
-            <input type="text" id="cadModelo" class="form-input" placeholder="Ex: Onix 1.0 ou Titan 160" required>
+            <input type="text" id="cadModelo" class="form-input" placeholder="Ex: Onix 1.0 ou Fan 160" required>
           </div>
         </div>
 
@@ -390,7 +445,19 @@
   <script>
     const API_URL = 'https://huby.onrender.com';
 
-    // 1. MÁSCARAS AUTOMÁTICAS
+    // 1. SELEÇÃO VISUAL DE CATEGORIA (SEM ABRIR JANELA SUSPENSA DO SO)
+    const catCards = document.querySelectorAll('.cat-pick-card');
+    const inputCategoria = document.getElementById('cadCategoria');
+
+    catCards.forEach(card => {
+      card.addEventListener('click', () => {
+        catCards.forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        inputCategoria.value = card.getAttribute('data-category');
+      });
+    });
+
+    // 2. MÁSCARAS AUTOMÁTICAS
     const inputTel = document.getElementById('cadTelefone');
     inputTel.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
@@ -419,35 +486,47 @@
       e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 7);
     });
 
-    // 2. RETORNO VISUAL DE UPLOAD
+    // 3. RETORNO VISUAL DE UPLOAD
     document.getElementById('fileCnh').addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
+      if (e.target.files && e.target.files.length > 0) {
         document.getElementById('boxFotoCnh').classList.add('has-file');
         document.getElementById('txtStatusCnh').textContent = '✅ Anexada';
       }
     });
 
     document.getElementById('fileVeiculo').addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
+      if (e.target.files && e.target.files.length > 0) {
         document.getElementById('boxFotoVeiculo').classList.add('has-file');
         document.getElementById('txtStatusVeiculo').textContent = '✅ Anexada';
       }
     });
 
-    // 3. ENVIO DO FORMULÁRIO
+    // 4. FUNÇÃO AUXILIAR DE REDIRECIONAMENTO POR MODALIDADE
+    function redirecionarPorCategoria(categoria) {
+      if (categoria === 'moto' || categoria === 'flash') {
+        window.location.replace('./painel-motoboy.html');
+      } else if (categoria === 'cargo') {
+        window.location.replace('./painel-cargo.html');
+      } else {
+        window.location.replace('./motorista.html');
+      }
+    }
+
+    // 5. ENVIO DO FORMULÁRIO E SALVAMENTO DE SESSÃO
     const form = document.getElementById('formCadastroMotorista');
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = document.getElementById('btnSalvarCadastro');
-      btn.innerHTML = '<span>A gravar cadastro...</span>';
+      btn.innerHTML = '<span>Salvando cadastro...</span>';
       btn.disabled = true;
 
+      const categoriaEscolhida = inputCategoria.value;
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
         telefone: document.getElementById('cadTelefone').value.trim(),
         cpf: document.getElementById('cadCpf').value.trim(),
         cnhNumero: document.getElementById('cadCnh').value.trim(),
-        categoria: document.getElementById('cadCategoria').value,
+        categoria: categoriaEscolhida,
         veiculoModelo: document.getElementById('cadModelo').value.trim(),
         veiculoPlaca: document.getElementById('cadPlaca').value.trim(),
         veiculoCor: document.getElementById('cadCor').value.trim()
@@ -463,19 +542,19 @@
         const dados = await resp.json();
         if (resp.ok && dados.sucesso) {
           localStorage.setItem('huby_user_role', 'motorista');
+          localStorage.setItem('huby_parceiro_categoria', categoriaEscolhida);
           localStorage.setItem('huby_motorista_id', dados.motorista.id);
           localStorage.setItem('huby_motorista_nome', dados.motorista.nome);
-          localStorage.setItem('huby_motorista_categoria', dados.motorista.categoria);
-          window.location.href = './motorista.html';
+          redirecionarPorCategoria(categoriaEscolhida);
         } else {
-          throw new Error(dados.erro || 'Erro no servidor');
+          throw new Error(dados.erro || 'Falha de gravação');
         }
       } catch (err) {
-        // Fallback local se a API estiver em repouso
+        // Fallback local caso o backend esteja em cold start
         localStorage.setItem('huby_user_role', 'motorista');
+        localStorage.setItem('huby_parceiro_categoria', categoriaEscolhida);
         localStorage.setItem('huby_motorista_nome', payload.nome);
-        localStorage.setItem('huby_motorista_categoria', payload.categoria);
-        window.location.href = './motorista.html';
+        redirecionarPorCategoria(categoriaEscolhida);
       }
     });
   </script>
