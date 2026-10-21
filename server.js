@@ -8,46 +8,50 @@ const port = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// Verifica se a variável de ligação existe
 if (!process.env.DATABASE_URL) {
   console.error('AVISO: DATABASE_URL não definida nas variáveis de ambiente.');
 }
 
 const sql = neon(process.env.DATABASE_URL);
 
-// Teste de integridade do servidor
 app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online', banco: 'Neon PostgreSQL' });
 });
 
 // ==========================================
-// 0. AUTENTICAÇÃO ADMINISTRATIVA SEGURA VIA BANCO
+// 0. AUTENTICAÇÃO ADMINISTRATIVA SEGURA
 // ==========================================
 app.post('/api/admin/verificar', async (req, res) => {
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ sucesso: false, erro: 'E-mail não fornecido.' });
+      return res.status(400).json({ sucesso: false, isAdmin: false, erro: 'E-mail não fornecido.' });
     }
 
-    // Consulta na base de dados Neon se o cargo deste e-mail é admin
+    const emailLimpo = String(email).trim().toLowerCase();
+
     const resultado = await sql`
-      SELECT role FROM clientes WHERE email = ${email.trim().toLowerCase()} LIMIT 1
+      SELECT role FROM clientes 
+      WHERE LOWER(TRIM(email)) = ${emailLimpo} 
+      LIMIT 1
     `;
 
     if (resultado.length > 0 && resultado[0].role === 'admin') {
-      res.json({ sucesso: true, isAdmin: true, token: 'token_admin_autorizado_998877' });
-    } else {
-      res.status(403).json({ sucesso: false, isAdmin: false, erro: 'Acesso negado.' });
+      return res.json({ 
+        sucesso: true, 
+        isAdmin: true, 
+        token: process.env.ADMIN_TOKEN || 'token_admin_autorizado_998877' 
+      });
     }
+
+    return res.json({ sucesso: true, isAdmin: false });
   } catch (error) {
     console.error('Erro ao verificar permissão de admin:', error);
-    res.status(500).json({ sucesso: false, erro: error.message });
+    res.status(500).json({ sucesso: false, isAdmin: false, erro: error.message });
   }
 });
 
-// Rota de login por senha administrativa (opcional caso queira manter as duas opções)
 app.post('/api/admin/login', (req, res) => {
   const { senhaAdmin } = req.body;
   const senhaSecretaOficial = process.env.ADMIN_SECRET_KEY || 'HubyAdmin2026!';
@@ -60,7 +64,7 @@ app.post('/api/admin/login', (req, res) => {
 });
 
 // ==========================================
-// 1. ROTAS DE CLIENTES (Cadastro & Perfis)
+// 1. ROTAS DE CLIENTES
 // ==========================================
 app.post('/api/clientes/cadastro', async (req, res) => {
   try {
@@ -70,7 +74,6 @@ app.post('/api/clientes/cadastro', async (req, res) => {
       return res.status(400).json({ erro: 'Dados obrigatórios em falta para o cadastro do cliente.' });
     }
 
-    // Cria a tabela de clientes com suporte a role (perfil) se não existir
     await sql`
       CREATE TABLE IF NOT EXISTS clientes (
         id VARCHAR(50) PRIMARY KEY,
@@ -87,7 +90,6 @@ app.post('/api/clientes/cadastro', async (req, res) => {
       )
     `;
 
-    // Insere ou atualiza o cliente na base de dados Neon
     await sql`
       INSERT INTO clientes (id, nome, telefone, cpf, email, idade, genero, emergencia_nome, emergencia_tel)
       VALUES (${id || 'cli_' + Date.now()}, ${nome}, ${telefone}, ${cpf}, ${email.toLowerCase().trim()}, ${idade || 18}, ${genero || 'nao_informar'}, ${emergenciaNome || ''}, ${emergenciaTel || ''})
@@ -103,10 +105,8 @@ app.post('/api/clientes/cadastro', async (req, res) => {
 });
 
 // ==========================================
-// 2. ROTAS DE PEDIDOS (Cliente & Motorista)
+// 2. ROTAS DE PEDIDOS
 // ==========================================
-
-// Inserir novo pedido (Cliente chama corrida/frete)
 app.post('/api/pedidos', async (req, res) => {
   try {
     const { id, tipo, subTipoLabel, origem, destino, distancia, preco, metodoPgto } = req.body;
@@ -127,7 +127,6 @@ app.post('/api/pedidos', async (req, res) => {
   }
 });
 
-// Listar pedidos (Motorista consulta radar ou Admin visualiza tudo)
 app.get('/api/pedidos', async (req, res) => {
   try {
     const statusFiltro = req.query.status;
@@ -154,7 +153,6 @@ app.get('/api/pedidos', async (req, res) => {
   }
 });
 
-// Atualizar estado do pedido (Motorista aceita ou rejeita)
 app.patch('/api/pedidos', async (req, res) => {
   try {
     const { id, novoStatus } = req.body;
@@ -177,10 +175,8 @@ app.patch('/api/pedidos', async (req, res) => {
 });
 
 // ==========================================
-// 3. ROTAS DE MOTORISTAS (Cadastro & Admin)
+// 3. ROTAS DE MOTORISTAS
 // ==========================================
-
-// Cadastrar novo motorista parceiro
 app.post('/api/motoristas/cadastro', async (req, res) => {
   try {
     const {
@@ -209,7 +205,6 @@ app.post('/api/motoristas/cadastro', async (req, res) => {
   }
 });
 
-// Listar motoristas pendentes para o painel administrativo
 app.get('/api/motoristas', async (req, res) => {
   try {
     const motoristas = await sql`
@@ -223,7 +218,6 @@ app.get('/api/motoristas', async (req, res) => {
   }
 });
 
-// Aprovar motorista pelo painel administrativo
 app.post('/api/motoristas/aprovar', async (req, res) => {
   try {
     const { id } = req.body;

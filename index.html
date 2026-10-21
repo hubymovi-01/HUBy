@@ -148,7 +148,7 @@
       background: #10B981 !important;
     }
 
-    /* FIXAÇÃO DEFINITIVA DA BARRA INFERIOR DE NAVEGAÇÃO */
+    /* Fixação definitiva da barra inferior */
     .bottom-nav {
       position: fixed !important;
       bottom: 0 !important;
@@ -166,7 +166,6 @@
       box-sizing: border-box !important;
     }
 
-    /* Impede que o card de corrida cubra o menu de navegação */
     .order-sheet {
       margin-bottom: 74px !important;
     }
@@ -175,12 +174,11 @@
 
 <body>
 
-  <!-- 1. TELA DE ENTRADA / ONBOARDING (Fora de app-layout para sobrepor a 100%) -->
+  <!-- 1. TELA DE ENTRADA / ONBOARDING -->
   <div id="splashScreen" class="welcome-overlay">
     <div class="glow-bg top-glow"></div>
     <div class="glow-bg bottom-glow"></div>
 
-    <!-- Logótipo Vertical com Selo de Segurança -->
     <header class="welcome-header">
       <div style="display: inline-block; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #10B981; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; margin-bottom: 12px; letter-spacing: 0.5px;">
         🛡️ PLATAFORMA 100% VERIFICADA & SEGURA
@@ -198,7 +196,6 @@
       <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
     </header>
 
-    <!-- Carrossel de Pilares Dinâmico -->
     <div class="pillars-container" id="pillarsContainer">
       <div class="pillar-card active" data-slide="0">
         <div class="pillar-icon">🔒</div>
@@ -225,14 +222,12 @@
       </div>
     </div>
 
-    <!-- Indicadores de Pontos (Dots) -->
     <div class="slide-dots" id="slideDots">
       <span class="dot active"></span>
       <span class="dot"></span>
       <span class="dot"></span>
     </div>
 
-    <!-- Ações de Entrada -->
     <footer class="welcome-actions" style="display: flex; flex-direction: column; gap: 10px;">
       <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente" style="width: 100%; display: flex; align-items: center; justify-content: space-between; text-decoration: none; box-sizing: border-box;">
         <span>📱 Criar Conta de Passageiro</span>
@@ -287,7 +282,6 @@
   <!-- 2. APLICAÇÃO PRINCIPAL -->
   <div class="app-layout">
 
-    <!-- CABEÇALHO DO APLICATIVO -->
     <header class="huby-header">
       <a href="./index.html" class="brand-logo-compact">
         <span class="brand-hub-nav">HUB</span><span class="brand-y-nav">y</span>
@@ -299,10 +293,9 @@
       </div>
     </header>
 
-    <!-- CONTAINER DAS TELAS DINÂMICAS -->
     <main class="tabs-viewport">
 
-      <!-- ABA 1: INÍCIO (MAPA + CHAMADA RÁPIDA) -->
+      <!-- ABA 1: INÍCIO -->
       <section class="tab-view active-view" id="viewInicio">
         <div class="map-wrapper">
           <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
@@ -494,7 +487,6 @@
           </div>
 
           <div class="profile-menu">
-            <!-- PAINEL ADMINISTRATIVO (Ativado via Token do Banco de Dados) -->
             <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
               <div class="menu-item-left">
                 <span class="menu-icon">🛡️</span>
@@ -539,7 +531,6 @@
               <span class="menu-tag">0g CO₂</span>
             </div>
 
-            <!-- BOTÃO SAIR DA CONTA -->
             <div class="menu-item" id="btnSairConta" style="cursor: pointer; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 10px;">
               <div class="menu-item-left">
                 <span class="menu-icon" style="font-size: 18px;">🚪</span>
@@ -556,7 +547,6 @@
 
     </main>
 
-    <!-- BARRA DE NAVEGAÇÃO INFERIOR FIXA -->
     <nav class="bottom-nav">
       <button type="button" class="nav-item active" data-tab="viewInicio">
         <span class="nav-icon">📍</span>
@@ -577,11 +567,9 @@
     </nav>
   </div>
 
-  <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
   <script>
-    // Motor do Carrossel Automático da Tela Inicial
     document.addEventListener('DOMContentLoaded', () => {
       const cards = document.querySelectorAll('.pillar-card');
       const dots = document.querySelectorAll('.slide-dots .dot');
@@ -603,7 +591,6 @@
         setInterval(trocarSlide, 3500);
       }
 
-      // Verificação Segura de Administrador via Token (Sem dados sensíveis)
       function sincronizarPermissoesAdmin() {
         const adminBtn = document.getElementById('menuAdminBtn');
         const token = localStorage.getItem('huby_admin_token');
@@ -620,7 +607,14 @@
 
       sincronizarPermissoesAdmin();
 
-      // Carregar identificador/nome do usuário logado se disponível
+      document.querySelectorAll('.bottom-nav .nav-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.getAttribute('data-tab') === 'viewConta') {
+            sincronizarPermissoesAdmin();
+          }
+        });
+      });
+
       const emailLogado = localStorage.getItem('huby_cliente_email');
       const txtPerfilNome = document.getElementById('txtPerfilNome');
       const txtPerfilAvatar = document.getElementById('txtPerfilAvatar');
@@ -633,25 +627,22 @@
         }
       }
 
-      // Função de Logout (Sair da Conta)
       const btnSair = document.getElementById('btnSairConta');
       btnSair?.addEventListener('click', () => {
         const confirmar = confirm('Tem certeza de que deseja sair da sua conta?');
         if (!confirmar) return;
 
-        // Limpa dados de sessão sem expor credenciais
         localStorage.removeItem('huby_ja_entrou');
         localStorage.removeItem('huby_user_role');
         localStorage.removeItem('huby_admin_token');
         localStorage.removeItem('huby_cliente_email');
         localStorage.removeItem('huby_corrida_ativa');
 
-        // Volta para a tela inicial
         window.location.reload();
       });
     });
 
-    document.getElementById('btnEntrarCliente')?.addEventListener('click', (e) => {
+    document.getElementById('btnEntrarCliente')?.addEventListener('click', () => {
       localStorage.setItem('huby_user_role', 'cliente');
       localStorage.setItem('huby_ja_entrou', '1');
       const splash = document.getElementById('splashScreen');
