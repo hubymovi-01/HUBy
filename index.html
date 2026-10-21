@@ -344,9 +344,9 @@
       <section class="tab-view" id="viewConta">
         <div class="view-content">
           <div class="profile-header">
-            <div class="profile-avatar">TC</div>
+            <div class="profile-avatar" id="txtPerfilAvatar">TC</div>
             <div class="profile-details">
-              <h2>Tarcyo Carvalho</h2>
+              <h2 id="txtPerfilNome">Tarcyo Carvalho</h2>
               <div class="profile-rating">⭐ 5.0 <span>Passageiro VIP</span></div>
             </div>
           </div>
@@ -414,6 +414,18 @@
                 </div>
               </div>
               <span class="menu-tag">0g CO₂</span>
+            </div>
+
+            <!-- BOTÃO SAIR DA CONTA -->
+            <div class="menu-item" id="btnSairConta" style="cursor: pointer; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 10px;">
+              <div class="menu-item-left">
+                <span class="menu-icon" style="font-size: 18px;">🚪</span>
+                <div>
+                  <strong style="color: #EF4444;">Sair da Conta</strong>
+                  <p style="color: #94A3B8;">Encerrar sessão neste dispositivo</p>
+                </div>
+              </div>
+              <span class="menu-arrow" style="color: #EF4444;">➔</span>
             </div>
           </div>
         </div>
@@ -519,6 +531,36 @@
             alert('Erro ao conectar ao servidor de segurança.');
           }
         }
+      });
+
+      // Carregar e-mail/nome do usuário logado se disponível
+      const emailLogado = localStorage.getItem('huby_cliente_email');
+      const txtPerfilNome = document.getElementById('txtPerfilNome');
+      const txtPerfilAvatar = document.getElementById('txtPerfilAvatar');
+      if (emailLogado && txtPerfilNome) {
+        const partesEmail = emailLogado.split('@')[0];
+        const nomeFormatado = partesEmail.charAt(0).toUpperCase() + partesEmail.slice(1);
+        txtPerfilNome.textContent = nomeFormatado;
+        if (txtPerfilAvatar) {
+          txtPerfilAvatar.textContent = nomeFormatado.substring(0, 2).toUpperCase();
+        }
+      }
+
+      // Função de Logout (Sair da Conta)
+      const btnSair = document.getElementById('btnSairConta');
+      btnSair?.addEventListener('click', () => {
+        const confirmar = confirm('Tem certeza de que deseja sair da sua conta?');
+        if (!confirmar) return;
+
+        // Limpa dados de sessão
+        localStorage.removeItem('huby_ja_entrou');
+        localStorage.removeItem('huby_user_role');
+        localStorage.removeItem('huby_admin_token');
+        localStorage.removeItem('huby_cliente_email');
+        localStorage.removeItem('huby_corrida_ativa');
+
+        // Volta para a tela inicial
+        window.location.reload();
       });
     });
 
