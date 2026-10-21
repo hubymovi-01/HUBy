@@ -151,7 +151,7 @@
         <span class="brand-sub-nav">HUBy</span>
       </a>
       <div class="header-right">
-        <span class="wallet-pill" id="btnIrCarteira">🪙 <strong>R$ 0,00</strong></span>
+        <span class="wallet-pill" id="btnIrCarteira" style="cursor: pointer;" title="Toque para gerir carteira ou introduzir senha admin">🪙 <strong>R$ 0,00</strong></span>
         <a href="./cadastro-motorista.html" class="badge-pill">Seja Parceiro ➔</a>
       </div>
     </header>
@@ -351,6 +351,18 @@
           </div>
 
           <div class="profile-menu">
+            <!-- PAINEL ADMINISTRATIVO (Invisível por padrão, desbloqueado via token seguro) -->
+            <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
+              <div class="menu-item-left">
+                <span class="menu-icon">🛡️</span>
+                <div>
+                  <strong style="color: #EF4444;">Painel Administrativo</strong>
+                  <p>Gestão executiva, faturamento e radar da frota</p>
+                </div>
+              </div>
+              <span class="menu-arrow">➔</span>
+            </a>
+
             <a href="./cadastro-motorista.html" class="menu-item highlight">
               <div class="menu-item-left">
                 <span class="menu-icon">🚘</span>
@@ -432,10 +444,62 @@
         }
       }
 
-      // Roda automaticamente a cada 3.5 segundos
       if (cards.length > 0) {
         setInterval(trocarSlide, 3500);
       }
+
+      // Verificação do token seguro de Administrador
+      const adminBtn = document.getElementById('menuAdminBtn');
+      const tokenAdmin = localStorage.getItem('huby_admin_token');
+
+      if (tokenAdmin === 'token_admin_autorizado_998877') {
+        if (adminBtn) adminBtn.style.display = 'flex';
+      }
+
+      // Atalho seguro: clique triplo na pílula da carteira no topo para inserir a senha de admin
+      const walletPill = document.getElementById('btnIrCarteira');
+      let cliquesCarteira = 0;
+      let ultimaCliques = 0;
+
+      walletPill?.addEventListener('click', async () => {
+        const agora = new Date().getTime();
+        if (agora - ultimaCliques > 1500) {
+          cliquesCarteira = 1;
+        } else {
+          cliquesCarteira++;
+        }
+        ultimaCliques = agora;
+
+        if (cliquesCarteira >= 3) {
+          cliquesCarteira = 0;
+          if (localStorage.getItem('huby_admin_token') === 'token_admin_autorizado_998877') {
+            alert('🛡️ Painel Admin já está desbloqueado.');
+            return;
+          }
+
+          const senhaDigitada = prompt('🔒 Introduza a senha de Administrador:');
+          if (!senhaDigitada) return;
+
+          try {
+            const response = await fetch('https://huby.onrender.com/api/admin/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ senhaAdmin: senhaDigitada })
+            });
+            const data = await response.json();
+
+            if (data.sucesso) {
+              localStorage.setItem('huby_admin_token', data.token);
+              if (adminBtn) adminBtn.style.display = 'flex';
+              alert('🛡️ Painel Administrativo desbloqueado com sucesso!');
+            } else {
+              alert('❌ Senha incorreta.');
+            }
+          } catch (err) {
+            alert('Erro ao conectar ao servidor de segurança.');
+          }
+        }
+      });
     });
 
     document.getElementById('btnEntrarCliente')?.addEventListener('click', (e) => {

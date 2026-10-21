@@ -21,7 +21,64 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 1. ROTAS DE PEDIDOS (Cliente & Motorista)
+// 0. AUTENTICAÇÃO ADMINISTRATIVA SEGURA
+// ==========================================
+app.post('/api/admin/login', (req, res) => {
+  const { senhaAdmin } = req.body;
+  // A senha real é lida das Variáveis de Ambiente do Render (ou usa fallback seguro)
+  const senhaSecretaOficial = process.env.ADMIN_SECRET_KEY || 'HubyAdmin2026!';
+
+  if (senhaAdmin === senhaSecretaOficial) {
+    res.json({ sucesso: true, token: 'token_admin_autorizado_998877' });
+  } else {
+    res.status(401).json({ sucesso: false, erro: 'Senha de administrador inválida.' });
+  }
+});
+
+// ==========================================
+// 1. ROTAS DE CLIENTES (Cadastro & Perfis)
+// ==========================================
+app.post('/api/clientes/cadastro', async (req, res) => {
+  try {
+    const { id, nome, telefone, cpf, email, idade, genero, emergenciaNome, emergenciaTel } = req.body;
+
+    if (!nome || !cpf || !email) {
+      return res.status(400).json({ erro: 'Dados obrigatórios em falta para o cadastro do cliente.' });
+    }
+
+    // Cria a tabela de clientes automaticamente se não existir
+    await sql`
+      CREATE TABLE IF NOT EXISTS clientes (
+        id VARCHAR(50) PRIMARY KEY,
+        nome VARCHAR(150) NOT NULL,
+        telefone VARCHAR(25),
+        cpf VARCHAR(20) UNIQUE,
+        email VARCHAR(150) UNIQUE,
+        idade INT,
+        genero VARCHAR(30),
+        emergencia_nome VARCHAR(150),
+        emergencia_tel VARCHAR(25),
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    // Insere ou atualiza o cliente na base de dados Neon
+    await sql`
+      INSERT INTO clientes (id, nome, telefone, cpf, email, idade, genero, emergencia_nome, emergencia_tel)
+      VALUES (${id || 'cli_' + Date.now()}, ${nome}, ${telefone}, ${cpf}, ${email}, ${idade || 18}, ${genero || 'nao_informar'}, ${emergenciaNome || ''}, ${emergenciaTel || ''})
+      ON CONFLICT (email) DO UPDATE 
+      SET nome = EXCLUDED.nome, telefone = EXCLUDED.telefone, idade = EXCLUDED.idade, genero = EXCLUDED.genero, emergencia_nome = EXCLUDED.emergencia_nome, emergencia_tel = EXCLUDED.emergencia_tel
+    `;
+
+    res.status(201).json({ sucesso: true, mensagem: 'Cliente cadastrado com sucesso no Neon.' });
+  } catch (error) {
+    console.error('Erro ao guardar cliente no Neon:', error);
+    res.status(500).json({ erro: error.message });
+  }
+});
+
+// ==========================================
+// 2. ROTAS DE PEDIDOS (Cliente & Motorista)
 // ==========================================
 
 // Inserir novo pedido (Cliente chama corrida/frete)
@@ -95,7 +152,7 @@ app.patch('/api/pedidos', async (req, res) => {
 });
 
 // ==========================================
-// 2. ROTAS DE MOTORISTAS (Cadastro & Admin)
+// 3. ROTAS DE MOTORISTAS (Cadastro & Admin)
 // ==========================================
 
 // Cadastrar novo motorista parceiro
