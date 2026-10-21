@@ -4,329 +4,361 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Mobilidade Segura, Flash e Fretes</title>
+  <title>HUBy - Painel de Gestão & Radar Administrativo</title>
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- Script inline crítico rápido apenas para evitar piscar splash se já logado -->
+  <!-- GUARDA DE PERFIL ADMIN RÁPIDA -->
   <script>
-    if (localStorage.getItem('huby_ja_entrou') === '1') {
-      document.documentElement.classList.add('app-pronto');
-    }
+    (function () {
+      const token = localStorage.getItem('huby_admin_token');
+      const role = localStorage.getItem('huby_user_role');
+      if (token !== 'token_admin_autorizado_998877' && role !== 'admin') {
+        window.location.replace('./login.html');
+      }
+    })();
   </script>
 
-  <!-- Leaflet & Estilos Globais -->
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- CSS Global e do Painel Administrativo -->
   <link rel="stylesheet" href="./css/global.css">
-  <link rel="stylesheet" href="./css/cliente.css">
-  <link rel="stylesheet" href="./css/welcome.css">
+  <link rel="stylesheet" href="./css/admin.css">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: #070B12;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* TOPO EXECUTIVO */
+    .admin-navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      background: rgba(11, 17, 28, 0.95);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .brand-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .admin-badge {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #EF4444;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 4px 10px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+    }
+
+    .btn-exit-admin {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94A3B8;
+      padding: 8px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* CONTEÚDO PRINCIPAL */
+    .admin-viewport {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 16px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    /* MÉTRICAS EM CARDS */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+
+    .metric-card {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 14px;
+      backdrop-filter: blur(12px);
+    }
+
+    .metric-card small {
+      display: block;
+      color: #94A3B8;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .metric-card strong {
+      font-size: 20px;
+      font-weight: 900;
+      color: #FFFFFF;
+    }
+
+    .metric-card.highlight strong {
+      color: #10B981;
+    }
+
+    .metric-card.warning strong {
+      color: #F59E0B;
+    }
+
+    /* GRID DO MAPA E DA FILA */
+    .admin-main-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 16px;
+      flex: 1;
+    }
+
+    @media (max-width: 860px) {
+      .admin-main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* PAINEL DO MAPA */
+    .map-panel {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 380px;
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 800;
+      color: #CBD5E1;
+    }
+
+    #mapaAdmin {
+      width: 100%;
+      height: 100%;
+      min-height: 340px;
+      background: #070B12;
+    }
+
+    /* FILA DE PEDIDOS */
+    .orders-panel {
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      display: flex;
+      flex-direction: column;
+      max-height: 520px;
+    }
+
+    .orders-list-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .admin-order-row {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 14px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .order-type-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .order-type-icon.emerald { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
+    .order-type-icon.flash { background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); }
+    .order-type-icon.cargo { background: rgba(255, 107, 0, 0.15); border: 1px solid rgba(255, 107, 0, 0.3); }
+
+    .order-meta {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .order-meta strong {
+      font-size: 12.5px;
+      color: #FFFFFF;
+    }
+
+    .order-meta span {
+      font-size: 11px;
+      color: #94A3B8;
+    }
+
+    .order-meta small {
+      font-size: 10.5px;
+      color: #64748B;
+    }
+
+    .order-status-box {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    .status-pill {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 10px;
+      text-transform: uppercase;
+    }
+
+    .status-pill.pendente { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+    .status-pill.em-rota { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+    .status-pill.concluido { background: rgba(148, 163, 184, 0.15); color: #94A3B8; }
+  </style>
 </head>
 
 <body>
 
-  <div class="app-layout">
-
-    <!-- ONBOARDING / TELA INICIAL -->
-    <div id="splashScreen" class="welcome-overlay">
-      <div class="glow-bg top-glow"></div>
-      <div class="glow-bg bottom-glow"></div>
-
-      <header class="welcome-header">
-        <div class="badge-verificado">🛡️ PLATAFORMA 100% VERIFICADA & SEGURA</div>
-        <div class="brand-hero-stacked">
-          <div class="brand-row brand-row-small">
-            <span class="brand-hub-small">HUB</span>
-            <span class="brand-y-badge-small">y<span class="brand-gps-dot-small"></span></span>
-          </div>
-          <div class="brand-row brand-row-large">
-            <span class="brand-hub-large">HUB</span>
-            <span class="brand-y-badge-large">y<span class="brand-gps-dot-large"></span></span>
-          </div>
-        </div>
-        <p class="tagline">Mobilidade urbana, entregas rápidas e fretes com monitorização por satélite em tempo real.</p>
-      </header>
-
-      <!-- Carrossel de Pilares -->
-      <div class="pillars-container" id="pillarsContainer">
-        <div class="pillar-card active" data-slide="0">
-          <div class="pillar-icon">🔒</div>
-          <div class="pillar-content">
-            <h4>Viagens Protegidas</h4>
-            <p>Passageiros e motoristas com CPF e CNH validados.</p>
-          </div>
-        </div>
-
-        <div class="pillar-card" data-slide="1">
-          <div class="pillar-icon">📍</div>
-          <div class="pillar-content">
-            <h4>Rastreio Satelital</h4>
-            <p>Partilha de rota em tempo real com contactos de emergência.</p>
-          </div>
-        </div>
-
-        <div class="pillar-card" data-slide="2">
-          <div class="pillar-icon">⚡</div>
-          <div class="pillar-content">
-            <h4>Suporte 24h</h4>
-            <p>Central de operações ativa para retaguarda em fretes e viagens.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="slide-dots" id="slideDots">
-        <span class="dot active"></span>
-        <span class="dot"></span>
-        <span class="dot"></span>
-      </div>
-
-      <!-- Ações de Entrada -->
-      <footer class="welcome-actions">
-        <a href="./cadastro-cliente.html" class="btn-welcome-primary" id="btnEntrarCliente">
-          <span>📱 Criar Conta de Passageiro</span>
-          <span class="btn-arrow">➔</span>
-        </a>
-
-        <a href="./login.html" class="btn-welcome-login">
-          <span>🔑 Já tenho conta (Fazer Login)</span>
-          <span class="btn-arrow">➔</span>
-        </a>
-
-        <a href="./cadastro-motorista.html" class="btn-welcome-secondary">
-          <span>🚘 Quero ser Motorista / Parceiro</span>
-          <span>➔</span>
-        </a>
-
-        <div class="lgpd-nota">🔒 Dados protegidos pela LGPD com criptografia ponta a ponta.</div>
-      </footer>
+  <!-- BARRA SUPERIOR EXECUTIVA -->
+  <nav class="admin-navbar">
+    <div class="brand-meta">
+      <a href="./index.html" style="text-decoration: none; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: -0.5px;">
+        HUB<span style="color: #10B981;">y</span>
+      </a>
+      <span class="admin-badge">Painel de Controlo</span>
     </div>
 
-    <!-- CABEÇALHO -->
-    <header class="huby-header">
-      <a href="./index.html" class="brand-logo-compact">
-        <span class="brand-hub-nav">HUB</span><span class="brand-y-nav">y</span>
-        <span class="brand-sub-nav">HUBy</span>
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <a href="./index.html" class="btn-exit-admin" title="Voltar ao início">
+        <span>🏠 Ver App</span>
       </a>
-      <div class="header-right">
-        <span class="wallet-pill" id="btnIrCarteira" style="cursor: pointer;">🪙 <strong>R$ 0,00</strong></span>
-        <a href="./cadastro-motorista.html" class="badge-pill">Seja Parceiro ➔</a>
+      <button type="button" class="btn-exit-admin" id="btnAdminLogout" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.3);">
+        <span>🚪 Sair</span>
+      </button>
+    </div>
+  </nav>
+
+  <main class="admin-viewport">
+
+    <!-- MÉTRICAS DE FATURAMENTO E OPERAÇÃO (Sincronizadas com painel-admin.js) -->
+    <section class="metrics-grid">
+      <div class="metric-card highlight">
+        <small>Faturamento Bruto</small>
+        <strong id="statFaturamentoTotal">R$ 0,00</strong>
       </div>
-    </header>
 
-    <!-- VIEWS / ABAS DINÂMICAS -->
-    <main class="tabs-viewport">
+      <div class="metric-card highlight">
+        <small>Comissão HUBy (12%)</small>
+        <strong id="statComissaoTotal">R$ 0,00</strong>
+      </div>
 
-      <!-- ABA 1: INÍCIO (MAPA + CHAMADA) -->
-      <section class="tab-view active-view" id="viewInicio">
-        <div class="map-wrapper">
-          <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
-          <div id="mapaCliente"></div>
-          <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
+      <div class="metric-card warning">
+        <small>Corridas Ativas</small>
+        <strong id="statCorridasAtivas">0</strong>
+      </div>
+
+      <div class="metric-card">
+        <small>Total de Chamadas</small>
+        <strong id="statQtdPedidosTotal">0</strong>
+      </div>
+    </section>
+
+    <!-- GRID DIVIDIDO: MAPA DE MONITORIZAÇÃO E FILA DE SOLICITAÇÕES -->
+    <section class="admin-main-grid">
+      <!-- Painel do Mapa -->
+      <div class="map-panel">
+        <div class="panel-header">
+          <span>📡 Radar da Frota & Trajetos em Campo</span>
+          <small style="color: #10B981; font-weight: 800;">● Em tempo real</small>
         </div>
+        <div id="mapaAdmin"></div>
+      </div>
 
-        <div class="order-sheet">
-          <div class="sheet-drag-handle"></div>
-          <div class="status-banner" id="bannerStatusCorrida"></div>
-
-          <div class="group-tabs">
-            <div class="tab-card active-carro" data-grupo="carro">
-              <div class="tab-icon">🚗</div>
-              <div class="tab-title">HUBy Viagem</div>
-              <div class="tab-sub">Carro & Moto</div>
-            </div>
-            <div class="tab-card" data-grupo="flash">
-              <div class="tab-icon">📦</div>
-              <div class="tab-title">HUBy Flash</div>
-              <div class="tab-sub">Entregas</div>
-            </div>
-            <div class="tab-card" data-grupo="cargo">
-              <div class="tab-icon">🚚</div>
-              <div class="tab-title">HUBy Cargo</div>
-              <div class="tab-sub">Caminhão/Frete</div>
-            </div>
-          </div>
-
-          <div class="sub-vehicles" id="containerSubVeiculos"></div>
-
-          <div class="addresses-box">
-            <div class="input-group">
-              <span class="dot-indicator green"></span>
-              <input type="text" id="inputOrigem" value="A minha localização atual" readonly>
-            </div>
-            <div class="address-row">
-              <div class="input-group" style="flex:1;">
-                <span class="dot-indicator orange"></span>
-                <input type="text" id="inputDestino" placeholder="Para onde vamos levar? (ou toque no mapa)">
-              </div>
-              <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
-            </div>
-          </div>
-
-          <div class="cargo-options-box">
-            <div class="option-line" id="linhaAjudante" style="display:none;">
-              <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
-              <div class="counter-control">
-                <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
-                <strong id="txtQtdAjudantes">0</strong>
-                <button type="button" class="btn-qty" id="btnMaisAjudante">+</button>
-              </div>
-            </div>
-
-            <div class="option-line" id="linhaEscada" style="display:none;">
-              <label for="chkEscada" style="cursor:pointer;">🏢 Escada sem elevador (+R$ 20)</label>
-              <input type="checkbox" id="chkEscada" class="huby-check">
-            </div>
-
-            <div class="option-line">
-              <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no percurso (+R$ 6)</label>
-              <input type="checkbox" id="chkParadaExtra" class="huby-check">
-            </div>
-          </div>
-
-          <div class="trip-breakdown">
-            <span>📏 Rota: <strong id="txtDistKm">1.5 km</strong> (<span id="txtDuracaoMin">6</span> min)</span>
-            <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
-          </div>
-
-          <div class="payment-bar">
-            <span class="payment-label">Pagamento:</span>
-            <select id="selectMetodoPgto">
-              <option value="pix_app">💠 Pix no App (Split Automático)</option>
-              <option value="dinheiro_presencial">💵 Dinheiro ao Motorista</option>
-              <option value="cartao_app">💳 Cartão de Crédito</option>
-            </select>
-          </div>
-
-          <button type="button" class="btn-primary" id="btnSolicitarHuby">
-            <span id="txtBotaoAcao">Chamar HUBy Carro</span>
-            <span class="price-box" id="txtPrecoFinal">R$ 10,90</span>
-          </button>
+      <!-- Painel da Fila em Tempo Real -->
+      <div class="orders-panel">
+        <div class="panel-header">
+          <span>📄 Fila Global de Solicitações</span>
+          <small style="color: #94A3B8;">Auto-sync (5s)</small>
         </div>
-      </section>
-
-      <!-- ABA 2: OPÇÕES -->
-      <section class="tab-view" id="viewOpcoes">
-        <div class="view-content">
-          <div class="view-header-title">
-            <h2>Serviços & Opções</h2>
-            <p>Vá para onde quiser ou envie o que precisar</p>
-          </div>
-          <div class="services-grid">
-            <div class="service-card action-solicitar" data-target-group="carro">
-              <div class="service-badge promo">-20% OFF</div>
-              <div class="service-icon">🚗</div>
-              <h3>Viagem</h3>
-              <p>Carro e moto particular</p>
-            </div>
-            <div class="service-card action-solicitar" data-target-group="flash">
-              <div class="service-badge novo">Rápido</div>
-              <div class="service-icon">📦</div>
-              <h3>HUBy Flash</h3>
-              <p>Envio de pacotes e encomendas</p>
-            </div>
-            <div class="service-card action-solicitar" data-target-group="cargo" style="grid-column: span 2;">
-              <div class="service-badge cargo">Fretes & Mudanças</div>
-              <div class="service-icon">🚚</div>
-              <h3>HUBy Cargo</h3>
-              <p>VUCs, vans e picapes sob demanda</p>
-            </div>
-          </div>
+        <div class="orders-list-body" id="listaPedidosAdmin">
+          <!-- Renderizado dinamicamente via painel-admin.js -->
         </div>
-      </section>
+      </div>
+    </section>
 
-      <!-- ABA 3: ATIVIDADE -->
-      <section class="tab-view" id="viewAtividade">
-        <div class="view-content">
-          <div class="view-header-title">
-            <h2>Atividade</h2>
-            <p>Histórico recente de viagens e fretes</p>
-          </div>
-          <div class="activity-list" id="activityList">
-            <div class="activity-card">
-              <div class="activity-icon-box">🚗</div>
-              <div class="activity-info">
-                <h4>HUBy Carro</h4>
-                <span>Hoje • Viagem concluída</span>
-                <div class="activity-badge concluido">Concluído</div>
-              </div>
-              <div class="activity-price">R$ 16,10</div>
-            </div>
-          </div>
-        </div>
-      </section>
+  </main>
 
-      <!-- ABA 4: CONTA -->
-      <section class="tab-view" id="viewConta">
-        <div class="view-content">
-          <div class="profile-header">
-            <div class="profile-avatar">HU</div>
-            <div class="profile-details">
-              <h2>Minha Conta</h2>
-              <div class="profile-rating">⭐ 5.0 <span>Passageiro VIP</span></div>
-            </div>
-          </div>
-
-          <div class="profile-menu">
-            <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
-              <div class="menu-item-left">
-                <span class="menu-icon">🛡️</span>
-                <div>
-                  <strong style="color: #EF4444;">Painel Administrativo</strong>
-                  <p>Gestão executiva e radar da frota</p>
-                </div>
-              </div>
-              <span class="menu-arrow">➔</span>
-            </a>
-
-            <a href="./cadastro-motorista.html" class="menu-item highlight">
-              <div class="menu-item-left">
-                <span class="menu-icon">🚘</span>
-                <div>
-                  <strong>Modo Motorista</strong>
-                  <p>Cadastre seu veículo e ganhe dirigindo</p>
-                </div>
-              </div>
-              <span class="menu-arrow">➔</span>
-            </a>
-          </div>
-        </div>
-      </section>
-
-    </main>
-
-    <!-- NAVEGAÇÃO INFERIOR -->
-    <nav class="bottom-nav">
-      <button type="button" class="nav-item active" data-tab="viewInicio">
-        <span class="nav-icon">📍</span>
-        <span class="nav-label">Início</span>
-      </button>
-      <button type="button" class="nav-item" data-tab="viewOpcoes">
-        <span class="nav-icon">⊞</span>
-        <span class="nav-label">Opções</span>
-      </button>
-      <button type="button" class="nav-item" data-tab="viewAtividade">
-        <span class="nav-icon">📄</span>
-        <span class="nav-label">Atividade</span>
-      </button>
-      <button type="button" class="nav-item" data-tab="viewConta">
-        <span class="nav-icon">👤</span>
-        <span class="nav-label">Conta</span>
-      </button>
-    </nav>
-  </div>
-
-  <!-- Scripts Modulares Carregados via ES Module -->
+  <!-- SCRIPTS MODULARES -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module">
-    import { OnboardingCarousel } from './js/modules/onboarding.js';
-    import { AuthGuard } from './js/modules/auth-guard.js';
+  <script type="module" src="./js/modules/painel-admin.js"></script>
 
-    // Inicialização orientada a classes
-    document.addEventListener('DOMContentLoaded', () => {
-      new OnboardingCarousel();
-      new AuthGuard();
+  <script>
+    // Ação do Botão Sair do Modo Administrador
+    document.getElementById('btnAdminLogout')?.addEventListener('click', () => {
+      if (confirm('Deseja realmente encerrar a sessão de Administrador?')) {
+        localStorage.removeItem('huby_admin_token');
+        if (localStorage.getItem('huby_user_role') === 'admin') {
+          localStorage.setItem('huby_user_role', 'cliente');
+        }
+        window.location.replace('./index.html');
+      }
     });
   </script>
-  <script type="module" src="./js/modules/app-cliente.js"></script>
 </body>
 
 </html>
