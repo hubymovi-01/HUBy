@@ -1,6 +1,7 @@
 /**
  * ============================================================================
  * HUBy - Serviço de Mapa, Geolocalização (GPS) e Cálculo de Rotas (OSRM)
+ * Arquivo: js/services/mapa-service.js
  * ============================================================================
  */
 
@@ -12,7 +13,7 @@ export class MapaService {
     this.markerDestino = null;
     this.rotaLayer = null;
 
-    // Coordenada inicial padrão (ajustada automaticamente pelo GPS do utilizador)
+    // Coordenada padrão (São João do Piauí / Região)
     this.coordsOrigem = { lat: -8.358, lng: -42.246 };
     this.coordsDestino = null;
   }
@@ -23,21 +24,28 @@ export class MapaService {
       return;
     }
 
-    this.map = L.map(this.containerId, { zoomControl: false }).setView(
-      [this.coordsOrigem.lat, this.coordsOrigem.lng],
-      15
-    );
+    const container = document.getElementById(this.containerId);
+    if (!container) return;
 
-    // Tema escuro moderno (CartoDB Dark Matter) alinhado com a identidade HUBy
+    this.map = L.map(this.containerId, { 
+      zoomControl: false,
+      attributionControl: false 
+    }).setView([this.coordsOrigem.lat, this.coordsOrigem.lng], 15);
+
+    // CartoDB Dark Matter para harmonia visual com o HUBy
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
       subdomains: 'abcd',
       maxZoom: 19
     }).addTo(this.map);
 
     this.definirMarcadorOrigem(this.coordsOrigem.lat, this.coordsOrigem.lng);
 
-    // Permite clicar no mapa para definir rapidamente o destino
+    // Previne blocos cinzentos ao renderizar no mobile
+    setTimeout(() => this.invalidarTamanho(), 250);
+    setTimeout(() => this.invalidarTamanho(), 600);
+    window.addEventListener('resize', () => this.invalidarTamanho());
+
+    // Permite tocar/clicar no mapa para definir o destino
     if (onDestinoSelecionado) {
       this.map.on('click', async (e) => {
         const { lat, lng } = e.latlng;
@@ -45,6 +53,12 @@ export class MapaService {
         const rota = await this.calcularRotaOSRM(this.coordsOrigem, { lat, lng });
         onDestinoSelecionado(rota, { lat, lng });
       });
+    }
+  }
+
+  invalidarTamanho() {
+    if (this.map) {
+      this.map.invalidateSize();
     }
   }
 
@@ -68,7 +82,7 @@ export class MapaService {
     this.coordsDestino = { lat, lng };
     const iconeDestino = L.divIcon({
       className: 'huby-pin-destino',
-      html: `<div style="width:18px;height:18px;background:#FF6B00;border:3px solid #fff;border-radius:4px;box-shadow:0 0 10px #FF6B00;"></div>`,
+      html: `<div style="width:18px;height:18px;background:#F97316;border:3px solid #fff;border-radius:6px;box-shadow:0 0 10px #F97316;"></div>`,
       iconSize: [18, 18],
       iconAnchor: [9, 9]
     });
@@ -87,10 +101,11 @@ export class MapaService {
       (pos) => {
         const { latitude, longitude } = pos.coords;
         this.definirMarcadorOrigem(latitude, longitude);
-        this.map.setView([latitude, longitude], 16);
+        this.map.setView([latitude, longitude], 16, { animate: true });
+        this.invalidarTamanho();
         if (callbackSucesso) callbackSucesso({ lat: latitude, lng: longitude });
       },
-      (err) => console.warn('Permissão de GPS negada ou indisponível:', err.message),
+      (err) => console.warn('GPS indisponível:', err.message),
       { enableHighAccuracy: true, timeout: 8000 }
     );
   }
@@ -98,14 +113,18 @@ export class MapaService {
   async buscarEnderecoNominatim(textoBusca) {
     if (!textoBusca || textoBusca.length < 3) return null;
     const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(textoBusca)}&limit=1&countrycodes=br`;
-    const res = await fetch(url);
-    const dados = await res.json();
-    if (dados && dados.length > 0) {
-      return {
-        nome: dados[0].display_name.split(',')[0],
-        lat: parseFloat(dados[0].lat),
-        lng: parseFloat(dados[0].lon)
-      };
+    try {
+      const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' } });
+      const dados = await res.json();
+      if (dados && dados.length > 0) {
+        return {
+          nome: dados[0].display_name.split(',')[0],
+          lat: parseFloat(dados[0].lat),
+          lng: parseFloat(dados[0].lon)
+        };
+      }
+    } catch (e) {
+      console.warn('Erro Nominatim:', e);
     }
     return null;
   }
@@ -120,27 +139,46 @@ export class MapaService {
       if (data.code === 'Ok' && data.routes.length > 0) {
         const rota = data.routes[0];
         const distanciaKm = Math.max(0.5, rota.distance / 1000);
-        const duracaoMin = Math.max(2, rota.duration / 60);
+        const duracaoMin = Math.max(2, Math.round(rota.duration / 60));
 
         if (this.rotaLayer) {
           this.map.removeLayer(this.rotaLayer);
         }
 
         this.rotaLayer = L.geoJSON(rota.geometry, {
-          style: { color: corLinha, weight: 5, opacity: 0.9 }
+          style: { 
+            color: corLinha, 
+            weight: 5, 
+            opacity: 0.95,
+            dashArray: '6, 8',
+            lineCap: 'round',
+            lineJoin: 'round'
+          }
         }).addTo(this.map);
 
-        this.map.fitBounds(this.rotaLayer.getBounds(), { padding: [40, 40] });
+        this.map.fitBounds(this.rotaLayer.getBounds(), { padding: [60, 60], animate: true });
+        setTimeout(() => this.invalidarTamanho(), 200);
 
         return { distanciaKm, duracaoMin };
       }
     } catch (erro) {
-      console.warn('Falha no servidor de rotas, a usar cálculo linear de contingência.', erro);
+      console.warn('OSRM indisponível, aplicando fallback linear.', erro);
     }
 
-    // Cálculo linear de segurança caso o utilizador esteja com internet fraca
     const distLinear = this.calcularDistanciaHaversine(origem, destino);
-    return { distanciaKm: distLinear, duracaoMin: distLinear * 2.2 };
+    return { distanciaKm: distLinear, duracaoMin: Math.round(distLinear * 2.5 + 2) };
+  }
+
+  limparRota() {
+    if (this.rotaLayer && this.map) {
+      this.map.removeLayer(this.rotaLayer);
+      this.rotaLayer = null;
+    }
+    if (this.markerDestino && this.map) {
+      this.map.removeLayer(this.markerDestino);
+      this.markerDestino = null;
+    }
+    this.coordsDestino = null;
   }
 
   calcularDistanciaHaversine(p1, p2) {
@@ -152,6 +190,6 @@ export class MapaService {
       Math.cos((p1.lat * Math.PI) / 180) *
         Math.cos((p2.lat * Math.PI) / 180) *
         Math.sin(dLon / 2) ** 2;
-    return Math.max(1, R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+    return Math.max(0.5, Number((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1)));
   }
 }
