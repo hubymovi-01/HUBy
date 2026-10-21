@@ -1,4 +1,4 @@
-// ./js/modules/app-admin.js
+// ./js/modules/painel-admin.js
 
 document.addEventListener('DOMContentLoaded', () => {
   // 1. GUARDA DE SEGURANÇA ADMIN
@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
     maxZoom: 19
   }).addTo(map);
 
-  // Recalcular viewport para eliminar blocos cinzentos
+  // Recalcular viewport para prevenir blocos cinzentos
   setTimeout(() => map.invalidateSize(), 250);
   window.addEventListener('resize', () => map.invalidateSize());
 
