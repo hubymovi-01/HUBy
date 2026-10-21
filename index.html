@@ -37,7 +37,7 @@
   <link rel="stylesheet" href="./css/cliente.css">
   <link rel="stylesheet" href="./css/welcome.css">
   <style>
-    /* Estilo de fixação absoluta do Splash Overlay */
+    /* Overlay fixo e total */
     #splashScreen.welcome-overlay {
       position: fixed !important;
       top: 0 !important;
@@ -64,17 +64,88 @@
       visibility: hidden !important;
     }
 
-    /* Estilo adicional para transição do carrossel */
+    /* Oculta os itens inativos e mostra apenas o ativo */
     .pillar-card {
-      transition: all 0.4s ease-in-out;
-      opacity: 0.4;
-      transform: scale(0.96);
+      display: none !important;
+      background: rgba(255, 255, 255, 0.04) !important;
+      border: 1px solid rgba(255, 255, 255, 0.08) !important;
+      border-radius: 16px !important;
+      padding: 16px !important;
+      align-items: center !important;
+      gap: 14px !important;
+      box-sizing: border-box !important;
     }
+
     .pillar-card.active {
-      opacity: 1;
-      transform: scale(1);
-      border-color: #10B981 !important;
+      display: flex !important;
+      border-color: rgba(16, 185, 129, 0.4) !important;
       background: rgba(16, 185, 129, 0.08) !important;
+      animation: fadeInSlide 0.35s ease-in-out;
+    }
+
+    @keyframes fadeInSlide {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Formatação correta do Logótipo */
+    .brand-row-small {
+      display: none !important;
+    }
+
+    .brand-row-large {
+      display: flex !important;
+      align-items: center !important;
+      gap: 2px !important;
+      font-size: 34px !important;
+      font-weight: 900 !important;
+      margin: 4px 0 8px 0;
+    }
+
+    .brand-hub-large {
+      color: #FFFFFF !important;
+    }
+
+    .brand-y-badge-large {
+      background: linear-gradient(135deg, #10B981, #059669) !important;
+      color: #03251E !important;
+      padding: 0 8px !important;
+      border-radius: 8px !important;
+      position: relative !important;
+      display: inline-flex !important;
+      align-items: center !important;
+    }
+
+    .brand-gps-dot-large {
+      width: 5px !important;
+      height: 5px !important;
+      background: #FFFFFF !important;
+      border-radius: 50% !important;
+      position: absolute !important;
+      top: 6px !important;
+      right: 5px !important;
+    }
+
+    /* Pontos indicadores (Dots) */
+    .slide-dots {
+      display: flex !important;
+      justify-content: center !important;
+      gap: 6px !important;
+      margin: 12px 0 !important;
+    }
+
+    .slide-dots .dot {
+      width: 7px !important;
+      height: 7px !important;
+      border-radius: 50% !important;
+      background: rgba(255, 255, 255, 0.2) !important;
+      transition: all 0.3s ease !important;
+    }
+
+    .slide-dots .dot.active {
+      width: 22px !important;
+      border-radius: 6px !important;
+      background: #10B981 !important;
     }
   </style>
 </head>
