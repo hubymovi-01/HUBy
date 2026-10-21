@@ -4,158 +4,365 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Acessar Conta</title>
+  <title>HUBy - Acesso à Conta</title>
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#080C14">
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/login.css">
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: #080C14;
+      color: #FFFFFF;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 20px 16px;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    .login-brand {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .login-brand h1 {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -1px;
+    }
+
+    .login-brand h1 span {
+      color: #10B981;
+    }
+
+    .login-brand p {
+      font-size: 13px;
+      color: #94A3B8;
+      margin-top: 4px;
+    }
+
+    /* Abas de Alternância (Cliente vs Motorista) */
+    .role-tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 4px;
+      margin-bottom: 20px;
+    }
+
+    .role-tab-btn {
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .role-tab-btn.active {
+      background: #10B981;
+      color: #03251E;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    }
+
+    /* Cartão do Formulário */
+    .form-card {
+      background: rgba(18, 27, 47, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 22px 18px;
+      backdrop-filter: blur(14px);
+    }
+
+    .field-group {
+      margin-bottom: 14px;
+    }
+
+    .field-group label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #CBD5E1;
+      margin-bottom: 6px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 12px;
+      font-size: 15px;
+      pointer-events: none;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 12px 14px 12px 38px;
+      color: #FFFFFF;
+      font-size: 14px;
+      font-weight: 600;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .btn-submit-login {
+      width: 100%;
+      background: linear-gradient(135deg, #10B981, #059669);
+      color: #03251E;
+      border: none;
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 14.5px;
+      font-weight: 900;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
+      margin-top: 18px;
+      transition: transform 0.15s ease;
+    }
+
+    .btn-submit-login:active {
+      transform: scale(0.98);
+    }
+
+    .login-footer-links {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 12px;
+      color: #94A3B8;
+    }
+
+    .login-footer-links a {
+      color: #10B981;
+      text-decoration: none;
+      font-weight: 800;
+    }
+  </style>
 </head>
 
 <body>
-  <div class="login-wrapper">
-    <div class="glow-bg top-glow"></div>
-    <div class="glow-bg bottom-glow"></div>
 
-    <div class="login-card">
-      <div class="login-top-bar">
-        <a href="./index.html" class="btn-back" title="Voltar ao início">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-        </a>
-        <div class="security-badge">
-          <span>🛡️ Conexão Segura</span>
-        </div>
-      </div>
+  <div class="login-container">
+    
+    <header class="login-brand">
+      <h1>HUB<span>y</span></h1>
+      <p id="lblSubtitulo">Acesse a plataforma de mobilidade e fretes</p>
+    </header>
 
-      <header class="login-brand">
-        <div class="brand-title">
-          <span class="brand-hub">HUB</span><span class="brand-y">y</span>
-        </div>
-        <h2>Acessar sua Conta</h2>
-        <p>Informe suas credenciais para gerenciar viagens, entregas e serviços.</p>
-      </header>
+    <!-- Seletor de Perfil -->
+    <div class="role-tabs">
+      <button type="button" class="role-tab-btn active" id="tabCliente" data-role="cliente">
+        👤 Passageiro
+      </button>
+      <button type="button" class="role-tab-btn" id="tabMotorista" data-role="motorista">
+        🚘 Parceiro HUBy
+      </button>
+    </div>
 
-      <form id="formLogin" class="login-form" autocomplete="on">
-        <div class="form-group">
-          <label for="loginEmail">E-mail</label>
-          <div class="input-container">
+    <div class="form-card">
+      
+      <!-- FORMULÁRIO 1: PASSAGEIRO (E-MAIL E SENHA) -->
+      <form id="formLoginCliente">
+        <div class="field-group">
+          <label for="cliEmail">E-mail Cadastrado</label>
+          <div class="input-wrapper">
             <span class="input-icon">✉️</span>
-            <input 
-              type="email" 
-              id="loginEmail" 
-              name="email" 
-              class="form-input" 
-              placeholder="seuemail@exemplo.com" 
-              required 
-              autocomplete="email"
-            >
+            <input type="email" id="cliEmail" class="form-input" placeholder="seu@email.com" required>
           </div>
         </div>
 
-        <div class="form-group">
-          <div class="label-row">
-            <label for="loginSenha">Senha</label>
-            <a href="#" class="forgot-link" tabindex="-1">Esqueceu?</a>
-          </div>
-          <div class="input-container">
+        <div class="field-group">
+          <label for="cliSenha">Senha</label>
+          <div class="input-wrapper">
             <span class="input-icon">🔒</span>
-            <input 
-              type="password" 
-              id="loginSenha" 
-              name="password" 
-              class="form-input has-action" 
-              placeholder="••••••••" 
-              required 
-              autocomplete="current-password"
-            >
-            <button type="button" class="btn-toggle-eye" id="btnTogglePassword" aria-label="Mostrar ou ocultar senha">
-              <svg id="eyeOpenIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-              <svg id="eyeSlashIcon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                <line x1="1" y1="1" x2="23" y2="23"></line>
-              </svg>
-            </button>
+            <input type="password" id="cliSenha" class="form-input" placeholder="Sua senha" required>
           </div>
         </div>
 
-        <button type="submit" class="btn-submit" id="btnLoginSubmit">
-          <span class="btn-text">Entrar no HUBy</span>
-          <span class="btn-arrow">➔</span>
+        <button type="submit" class="btn-submit-login" id="btnLogarCliente">
+          <span>Entrar como Passageiro</span>
+          <span>➔</span>
         </button>
       </form>
 
-      <footer class="login-footer">
-        <p>Ainda não tem conta? <a href="./cadastro-cliente.html">Cadastre-se</a></p>
-      </footer>
+      <!-- FORMULÁRIO 2: MOTORISTA (CNH E PLACA) -->
+      <form id="formLoginMotorista" style="display: none;">
+        <div class="field-group">
+          <label for="motCnh">Número da CNH</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🪪</span>
+            <input type="tel" id="motCnh" class="form-input" placeholder="Ex: 01234567890" maxlength="11" required>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="motPlaca">Placa do Veículo</label>
+          <div class="input-wrapper">
+            <span class="input-icon">🔢</span>
+            <input type="text" id="motPlaca" class="form-input" placeholder="ABC1D23" maxlength="8" style="text-transform: uppercase;" required>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit-login" id="btnLogarMotorista">
+          <span>Acessar Painel do Motorista</span>
+          <span>➔</span>
+        </button>
+      </form>
+
     </div>
+
+    <footer class="login-footer-links">
+      <span id="txtLinkCadastro">Ainda não tem conta? <a href="./cadastro-cliente.html">Cadastre-se aqui</a></span>
+    </footer>
+
   </div>
 
   <script>
     const API_URL = 'https://huby.onrender.com';
 
-    const btnToggle = document.getElementById('btnTogglePassword');
-    const inputSenha = document.getElementById('loginSenha');
-    const eyeOpen = document.getElementById('eyeOpenIcon');
-    const eyeSlash = document.getElementById('eyeSlashIcon');
+    // 1. Alternância entre Abas
+    const tabCliente = document.getElementById('tabCliente');
+    const tabMotorista = document.getElementById('tabMotorista');
+    const formCliente = document.getElementById('formLoginCliente');
+    const formMotorista = document.getElementById('formLoginMotorista');
+    const txtLinkCadastro = document.getElementById('txtLinkCadastro');
 
-    btnToggle.addEventListener('click', () => {
-      const isPassword = inputSenha.getAttribute('type') === 'password';
-      inputSenha.setAttribute('type', isPassword ? 'text' : 'password');
-      eyeOpen.classList.toggle('hidden', isPassword);
-      eyeSlash.classList.toggle('hidden', !isPassword);
+    tabCliente.addEventListener('click', () => {
+      tabCliente.classList.add('active');
+      tabMotorista.classList.remove('active');
+      formCliente.style.display = 'block';
+      formMotorista.style.display = 'none';
+      txtLinkCadastro.innerHTML = 'Ainda não tem conta? <a href="./cadastro-cliente.html">Cadastre-se aqui</a>';
     });
 
-    document.getElementById('formLogin').addEventListener('submit', async (e) => {
+    tabMotorista.addEventListener('click', () => {
+      tabMotorista.classList.add('active');
+      tabCliente.classList.remove('active');
+      formCliente.style.display = 'none';
+      formMotorista.style.display = 'block';
+      txtLinkCadastro.innerHTML = 'Quer ser um parceiro? <a href="./cadastro-motorista.html">Cadastre seu veículo</a>';
+    });
+
+    // 2. Máscara da Placa
+    const inputPlaca = document.getElementById('motPlaca');
+    inputPlaca.addEventListener('input', (e) => {
+      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 7);
+    });
+
+    // 3. Login do Motorista (CNH + Placa)
+    formMotorista.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('loginEmail').value.trim();
-      const btn = document.getElementById('btnLoginSubmit');
-      const btnText = btn.querySelector('.btn-text');
-      
-      btn.classList.add('loading');
-      btnText.textContent = 'Verificando credenciais...';
+      const btn = document.getElementById('btnLogarMotorista');
+      btn.innerHTML = '<span>Validando CNH e Placa...</span>';
       btn.disabled = true;
 
-      const timerServidor = setTimeout(() => {
-        btnText.textContent = 'Conectando ao servidor seguro...';
-      }, 2500);
+      const cnh = document.getElementById('motCnh').value.trim();
+      const placa = document.getElementById('motPlaca').value.trim().toUpperCase();
 
       try {
-        const response = await fetch(`${API_URL}/api/admin/verificar`, {
+        const resp = await fetch(`${API_URL}/api/motoristas/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({ cnh, placa })
         });
-        
-        clearTimeout(timerServidor);
 
-        if (response.ok) {
-          const data = await response.json();
+        const dados = await resp.json();
 
-          if (data.sucesso && data.isAdmin) {
-            localStorage.setItem('huby_admin_token', data.token || 'token_admin_autorizado_998877');
-            localStorage.setItem('huby_user_role', 'admin');
-          } else {
-            localStorage.removeItem('huby_admin_token');
-            localStorage.setItem('huby_user_role', 'cliente');
-          }
+        if (resp.ok && dados.sucesso) {
+          const motorista = dados.motorista;
+          
+          // Salva as credenciais no localStorage
+          localStorage.setItem('huby_user_role', 'motorista');
+          localStorage.setItem('huby_motorista_id', motorista.id);
+          localStorage.setItem('huby_motorista_nome', motorista.nome);
+          localStorage.setItem('huby_parceiro_categoria', motorista.categoria);
+          localStorage.setItem('huby_motorista_placa', motorista.placa);
+
+          // Redirecionamento inteligente por categoria
+          redirecionarMotorista(motorista.categoria);
         } else {
-          if (!localStorage.getItem('huby_admin_token')) {
-            localStorage.setItem('huby_user_role', 'cliente');
-          }
+          alert(`❌ ${dados.erro || 'CNH ou Placa não correspondem a um motorista cadastrado.'}`);
+          btn.innerHTML = '<span>Acessar Painel do Motorista</span><span>➔</span>';
+          btn.disabled = false;
         }
       } catch (err) {
-        clearTimeout(timerServidor);
-        console.warn('Servidor reiniciando ou sem conexão imediata:', err);
-      }
+        // Fallback offline (se a API estiver dormindo mas os dados já foram salvos neste aparelho)
+        const cnhSalva = localStorage.getItem('huby_motorista_cnh');
+        const placaSalva = localStorage.getItem('huby_motorista_placa');
+        const categoriaSalva = localStorage.getItem('huby_parceiro_categoria') || 'carro';
 
+        if (placaSalva && placaSalva.toUpperCase() === placa) {
+          localStorage.setItem('huby_user_role', 'motorista');
+          redirecionarMotorista(categoriaSalva);
+        } else {
+          alert('⚠️ Falha ao conectar ao servidor. Verifique a sua conexão e tente novamente.');
+          btn.innerHTML = '<span>Acessar Painel do Motorista</span><span>➔</span>';
+          btn.disabled = false;
+        }
+      }
+    });
+
+    // 4. Login de Passageiro
+    formCliente.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('cliEmail').value.trim();
+      
+      localStorage.setItem('huby_user_role', 'cliente');
       localStorage.setItem('huby_ja_entrou', '1');
       localStorage.setItem('huby_cliente_email', email);
 
-      window.location.replace('./index.html');
+      window.location.replace('./index.html?autenticado=1');
     });
+
+    function redirecionarMotorista(categoria) {
+      if (categoria === 'moto' || categoria === 'flash') {
+        window.location.replace('./painel-motoboy.html');
+      } else if (categoria === 'cargo') {
+        window.location.replace('./painel-cargo.html');
+      } else {
+        window.location.replace('./motorista.html');
+      }
+    }
   </script>
 </body>
 

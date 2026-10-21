@@ -177,6 +177,53 @@ app.patch('/api/pedidos', async (req, res) => {
 // ==========================================
 // 3. ROTAS DE MOTORISTAS
 // ==========================================
+
+// Rota de Login do Parceiro via CNH e Placa
+app.post('/api/motoristas/login', async (req, res) => {
+  try {
+    const { cnh, placa } = req.body;
+
+    if (!cnh || !placa) {
+      return res.status(400).json({ sucesso: false, erro: 'Informe o número da CNH e a Placa do veículo.' });
+    }
+
+    const cnhLimpa = String(cnh).replace(/\D/g, '').trim();
+    const placaLimpa = String(placa).replace(/[^A-Za-z0-9]/g, '').trim().toUpperCase();
+
+    const resultado = await sql`
+      SELECT id, nome, telefone, cnh_numero, categoria, veiculo_placa, veiculo_modelo, status_aprovacao
+      FROM motoristas
+      WHERE REPLACE(cnh_numero, ' ', '') = ${cnhLimpa}
+        AND UPPER(REPLACE(veiculo_placa, '-', '')) = ${placaLimpa}
+      LIMIT 1
+    `;
+
+    if (resultado.length === 0) {
+      return res.status(401).json({ 
+        sucesso: false, 
+        erro: 'Nenhum motorista encontrado com esta CNH e Placa.' 
+      });
+    }
+
+    const motorista = resultado[0];
+
+    res.json({
+      sucesso: true,
+      motorista: {
+        id: motorista.id,
+        nome: motorista.nome,
+        categoria: motorista.categoria || 'carro',
+        placa: motorista.veiculo_placa,
+        modelo: motorista.veiculo_modelo,
+        statusAprovacao: motorista.status_aprovacao
+      }
+    });
+  } catch (err) {
+    console.error('Erro no login do motorista:', err);
+    res.status(500).json({ sucesso: false, erro: 'Erro ao validar credenciais no banco: ' + err.message });
+  }
+});
+
 app.post('/api/motoristas/cadastro', async (req, res) => {
   try {
     const {
