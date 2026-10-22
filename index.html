@@ -3,16 +3,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>HUBy</title>
   
+  <!-- Estilos Leaflet e Aplicação -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/cliente.css">
+  <link rel="stylesheet" href="./css/base.css?v=2.0.2">
+  <link rel="stylesheet" href="./css/cliente.css?v=2.0.2">
+
+  <style>
+    /* DESAPARECIMENTO 100% GARANTIDO POR CSS PURO (Sem depender de scripts) */
+    #hubySplash {
+      animation: encerrarSplashHUBy 0.4s ease 1.2s forwards !important;
+    }
+
+    @keyframes encerrarSplashHUBy {
+      0% {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: all;
+      }
+      99% {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+      100% {
+        opacity: 0;
+        visibility: hidden;
+        display: none !important;
+        pointer-events: none;
+      }
+    }
+  </style>
 </head>
 <body class="client-viewport">
 
- <!-- 1. SPLASH SCREEN (ABERTURA COM ANIMAÇÃO E REMOÇÃO GARANTIDA) -->
-  <div id="hubySplash" class="splash-screen">
+  <!-- 1. SPLASH SCREEN COM AUTO-FECHAMENTO NATIVO E TOQUE DE ESCAPE -->
+  <div id="hubySplash" class="splash-screen" onclick="this.style.display='none'">
     <div class="splash-content">
       <div class="splash-logo">
         <span class="s-hub">HUB</span><span class="s-y">y</span>
@@ -22,20 +52,20 @@
     </div>
   </div>
 
-  <!-- SCRIPT DE SEGURANÇA IMEDIATO: garante que a splash sempre fecha -->
+  <!-- SCRIPT DE SEGURANÇA IMEDIATO EM LINHA -->
   <script>
-    function removerSplashHuby() {
-      var sp = document.getElementById('hubySplash');
-      if (sp) {
-        sp.style.opacity = '0';
-        sp.style.transition = 'opacity 0.4s ease';
-        setTimeout(function() {
-          if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
-        }, 400);
+    (function() {
+      function fecharSplashSeguro() {
+        var el = document.getElementById('hubySplash');
+        if (el) {
+          el.style.opacity = '0';
+          setTimeout(function() {
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+          }, 400);
+        }
       }
-    }
-    // Remove em no máximo 1.2 segundos, sem depender de nenhuma outra função
-    setTimeout(removerSplashHuby, 1200);
+      setTimeout(fecharSplashSeguro, 1200);
+    })();
   </script>
 
   <!-- 2. MAPA LEAFLET -->
@@ -54,7 +84,10 @@
     </div>
 
     <button type="button" id="btnNavViagens" class="btn-action-pill">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
       <span>Viagens</span>
     </button>
   </header>
@@ -64,7 +97,7 @@
   <aside id="drawerMenu" class="drawer-panel">
     <!-- Cabeçalho do Perfil -->
     <div class="drawer-profile" id="drawerPerfilBox">
-      <!-- Preenchido via JS conforme estiver logado ou não -->
+      <!-- Preenchido dinamicamente via JS -->
     </div>
 
     <!-- Links de Navegação -->
@@ -87,14 +120,14 @@
         <span class="d-icon">🚘</span>
         <div class="d-info">
           <strong>Painel do Motorista</strong>
-          <small>Acessar modo parceiro</small>
+          <small>Aceder ao modo parceiro</small>
         </div>
       </a>
       <a href="#" id="menuItemAjuda" class="drawer-item">
         <span class="d-icon">💬</span>
         <div class="d-info">
           <strong>Ajuda & Suporte</strong>
-          <small>Fale com a equipe HUBy</small>
+          <small>Fale com a equipa HUBy</small>
         </div>
       </a>
     </nav>
@@ -108,14 +141,20 @@
 
   <!-- 5. BOTÃO GPS FLUTUANTE -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"></circle><line x1="12" y1="1" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="23"></line><line x1="5" y1="12" x2="1" y2="12"></line><line x1="23" y1="12" x2="19" y2="12"></line></svg>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="7"></circle>
+      <line x1="12" y1="1" x2="12" y2="5"></line>
+      <line x1="12" y1="19" x2="12" y2="23"></line>
+      <line x1="5" y1="12" x2="1" y2="12"></line>
+      <line x1="23" y1="12" x2="19" y2="12"></line>
+    </svg>
   </button>
 
   <!-- 6. DOCK INFERIOR (BOTTOM SHEET) -->
   <section class="client-dock-sheet">
     <div class="sheet-drag-handle"></div>
 
-    <!-- Categorias -->
+    <!-- Categorias de Transporte -->
     <div class="category-slider">
       <button type="button" class="category-chip active" data-id="carro">
         <span class="cat-icon">🚗</span>
@@ -135,7 +174,7 @@
       </button>
     </div>
 
-    <!-- Bloco Resumo -->
+    <!-- Bloco Resumo do Trajeto -->
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
         <div class="route-point-indicator"></div>
@@ -150,7 +189,7 @@
       </div>
     </div>
 
-    <!-- Status Viagem Ativa -->
+    <!-- Card de Corrida em Andamento -->
     <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
       <div class="ride-header">
         <div class="pulse-radar"></div>
@@ -159,13 +198,13 @@
       <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
     </div>
 
-    <!-- Botão Chamar -->
+    <!-- Botão de Ação Primária -->
     <button type="button" id="btnPedirHuby" class="btn-main-action">
       Chamar HUBy Carro
     </button>
   </section>
 
-  <!-- MODAL DE HISTÓRICO ELEGANTE (SEM ALERT) -->
+  <!-- MODAL DE HISTÓRICO DE VIAGENS -->
   <div id="modalHistorico" class="modal-backdrop" style="display: none;">
     <div class="modal-card modal-wide">
       <div class="modal-header-row">
@@ -181,8 +220,8 @@
   <!-- MODAL DE AVALIAÇÃO OPCIONAL -->
   <div id="modalAvaliacao" class="modal-backdrop" style="display: none;">
     <div class="modal-card">
-      <h3>Como foi sua viagem?</h3>
-      <p>Classifique o atendimento do condutor:</p>
+      <h3>Como correu a sua viagem?</h3>
+      <p>Classifique o atendimento do condutor parceiro:</p>
       
       <div id="estrelasRating" class="star-rating">
         <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
@@ -197,7 +236,8 @@
     </div>
   </div>
 
+  <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="./js/app-cliente.js"></script>
+  <script type="module" src="./js/app-cliente.js?v=2.0.2"></script>
 </body>
 </html>
