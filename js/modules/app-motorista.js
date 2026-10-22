@@ -185,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     mapaService.definirMarcadorDestino(pontoDest[0], pontoDest[1]);
     await mapaService.calcularRotaOSRM(motoristaCoords, pontoDest, '#10B981');
 
-    // Notifica o backend Render/Neon e limpa da fila local de pedidos
+    // Notifica o backend Render/Neon
     await ApiClient.atualizarStatusCorrida(id, 'em_andamento', {
       motoristaNome: localStorage.getItem('huby_motorista_nome') || 'Motorista Parceiro'
     });
@@ -242,17 +242,25 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarFilaDePedidos();
   };
 
-  // 8. REJEITAR PEDIDO
-  window.rejeitarPedido = (id) => {
+  // 8. REJEITAR PEDIDO (COM NOTIFICAÇÃO AO SERVIDOR)
+  window.rejeitarPedido = async (id) => {
+    // 1. Remove da tela imediatamente para resposta visual rápida
+    const card = document.getElementById(`card-${id}`);
+    if (card) card.remove();
+
+    // 2. Tenta notificar o servidor da recusa
+    try {
+      await ApiClient.atualizarStatusCorrida(id, 'rejeitada');
+    } catch (e) {
+      console.warn(`Ocorreu um erro ao rejeitar o pedido #${id} no backend. Removendo localmente apenas.`);
+    }
+
+    // 3. Atualiza cache local de fallback
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     pedidosLocais = pedidosLocais.filter(p => String(p.id) !== String(id));
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
 
-    const card = document.getElementById(`card-${id}`);
-    if (card) {
-      card.remove();
-      carregarFilaDePedidos();
-    }
+    carregarFilaDePedidos();
   };
 
   // 9. CICLO DE ATUALIZAÇÃO AUTOMÁTICA
