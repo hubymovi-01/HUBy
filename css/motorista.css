@@ -53,6 +53,16 @@ body, html {
   background-color: #070B12 !important;
 }
 
+/* Customização dos Popups do Leaflet no Tema Escuro */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: rgba(11, 17, 28, 0.95) !important;
+  color: #FFFFFF !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  border-radius: 12px;
+}
+
 /* 1. CABEÇALHO SUPERIOR FLUTUANTE */
 .driver-header {
   position: fixed;
