@@ -135,7 +135,7 @@
           <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
         </div>
 
-        <!-- PAINEL INFERIOR LIMPO E EXECUTIVO -->
+        <!-- PAINEL INFERIOR COMPACTO E EXECUTIVO -->
         <div class="order-sheet">
           <div class="sheet-drag-handle"></div>
           <div class="status-banner" id="bannerStatusCorrida"></div>
@@ -168,16 +168,16 @@
             <div class="address-row">
               <div class="input-group" style="flex:1;">
                 <span class="dot-indicator orange"></span>
-                <input type="text" id="inputDestino" placeholder="Para onde vamos? (ou toque no mapa)">
+                <input type="text" id="inputDestino" placeholder="Para onde vamos?">
               </div>
               <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
             </div>
           </div>
 
           <!-- Opções de Cargo / Adicionais (Retraídas quando não selecionadas) -->
-          <div class="cargo-options-box" style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="cargo-options-box" style="display: flex; flex-direction: column; gap: 6px;">
             <div class="option-line" id="linhaAjudante" style="display:none;">
-              <span>👷 Ajudante de Carga (+R$ 50)</span>
+              <span>👷 Ajudante (+R$ 50)</span>
               <div class="counter-control">
                 <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
                 <strong id="txtQtdAjudantes">0</strong>
@@ -186,26 +186,20 @@
             </div>
 
             <div class="option-line" id="linhaEscada" style="display:none;">
-              <label for="chkEscada" style="cursor:pointer;">🏢 Escada sem elevador (+R$ 20)</label>
+              <label for="chkEscada" style="cursor:pointer;">🏢 Escada (+R$ 20)</label>
               <input type="checkbox" id="chkEscada" class="huby-check">
             </div>
 
-            <div class="option-line" style="display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: #94A3B8;">
-              <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no percurso (+R$ 6)</label>
+            <div class="option-line" style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #94A3B8;">
+              <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra (+R$ 6)</label>
               <input type="checkbox" id="chkParadaExtra" class="huby-check">
             </div>
           </div>
 
-          <!-- Resumo de Rota Compacto -->
-          <div class="trip-breakdown">
+          <!-- Resumo de Rota e Pagamento integrados numa linha limpa -->
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #94A3B8; padding: 2px 0;">
             <span>📏 <strong id="txtDistKm">1.5 km</strong> (<span id="txtDuracaoMin">4</span> min)</span>
-            <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
-          </div>
-
-          <!-- Barra de Pagamento Executiva -->
-          <div class="payment-bar" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 12px; font-size: 12px;">
-            <span style="color: #94A3B8;">Pagamento:</span>
-            <select id="selectMetodoPgto" style="background: transparent; border: none; color: #10B981; font-weight: 800; outline: none; cursor: pointer;">
+            <select id="selectMetodoPgto" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #10B981; font-weight: 800; padding: 4px 8px; border-radius: 8px; outline: none; cursor: pointer;">
               <option value="pix_app" style="background: #080C14; color: #fff;">💠 Pix no App</option>
               <option value="dinheiro_presencial" style="background: #080C14; color: #fff;">💵 Dinheiro</option>
               <option value="cartao_app" style="background: #080C14; color: #fff;">💳 Cartão</option>
@@ -215,7 +209,7 @@
           <!-- Botão Principal Executivo -->
           <button type="button" class="btn-primary" id="btnSolicitarHuby">
             <span id="txtBotaoAcao">Chamar HUBy Carro</span>
-            <span class="price-box" id="txtPrecoFinal" style="font-weight: 900; font-size: 15px;">R$ 10,90</span>
+            <span class="price-box" id="txtPrecoFinal" style="font-weight: 900; font-size: 14px;">R$ 10,90</span>
           </button>
         </div>
       </section>
