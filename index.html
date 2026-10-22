@@ -11,7 +11,7 @@
 </head>
 <body class="client-viewport">
 
-  <!-- 1. SPLASH SCREEN (ABERTURA COM ANIMAÇÃO) -->
+ <!-- 1. SPLASH SCREEN (ABERTURA COM ANIMAÇÃO E REMOÇÃO GARANTIDA) -->
   <div id="hubySplash" class="splash-screen">
     <div class="splash-content">
       <div class="splash-logo">
@@ -21,6 +21,22 @@
       <span class="splash-tagline">Mobilidade urbana inteligente</span>
     </div>
   </div>
+
+  <!-- SCRIPT DE SEGURANÇA IMEDIATO: garante que a splash sempre fecha -->
+  <script>
+    function removerSplashHuby() {
+      var sp = document.getElementById('hubySplash');
+      if (sp) {
+        sp.style.opacity = '0';
+        sp.style.transition = 'opacity 0.4s ease';
+        setTimeout(function() {
+          if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
+        }, 400);
+      }
+    }
+    // Remove em no máximo 1.2 segundos, sem depender de nenhuma outra função
+    setTimeout(removerSplashHuby, 1200);
+  </script>
 
   <!-- 2. MAPA LEAFLET -->
   <div id="mapaCliente"></div>

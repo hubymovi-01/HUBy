@@ -8,42 +8,66 @@ let pedidoAtivoId = null;
 let intervalPolling = null;
 let categoriaSelecionada = 'carro';
 
-// Controle da Avaliação pós-corrida
 let corridaParaAvaliarId = null;
 let notaSelecionada = 5;
 
 document.addEventListener('DOMContentLoaded', () => {
-  // 1. Inicializar o Mapa com a classe HubyMapa
-  hubyMapa = new HubyMapa('mapaCliente');
-  hubyMapa.inicializar(async (rota, coords) => {
-    if (pedidoAtivoId) return; // Não recalcula se a corrida já foi solicitada
-    coordsDestino = [coords.lat, coords.lng];
-    rotaAtual = rota;
+  // 1. Garante a remoção da Splash Screen
+  const splash = document.getElementById('hubySplash');
+  if (splash) {
+    splash.style.opacity = '0';
+    setTimeout(() => {
+      if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+    }, 400);
+  }
 
-    const txtDestino = document.getElementById('txtDestinoSelecionado');
-    if (txtDestino) {
-      txtDestino.textContent = `Destino marcado (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
-    }
+  // 2. Inicializar o Mapa Leaflet com tratamento de erro
+  try {
+    hubyMapa = new HubyMapa('mapaCliente');
+    hubyMapa.inicializar(async (rota, coords) => {
+      if (pedidoAtivoId) return;
+      coordsDestino = [coords.lat, coords.lng];
+      rotaAtual = rota;
 
-    atualizarResumoValores();
-  });
+      const txtDestino = document.getElementById('txtDestinoSelecionado');
+      if (txtDestino) {
+        txtDestino.textContent = `Destino marcado (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+      }
 
-  // Forçar o Leaflet a recalcular as dimensões e renderizar os quadrantes na tela
-  setTimeout(() => {
-    if (hubyMapa && hubyMapa.map) {
-      hubyMapa.map.invalidateSize();
-    }
-  }, 200);
+      atualizarResumoValores();
+    });
 
-  // 2. Botão GPS Recenter
-  document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
+    setTimeout(() => {
+      if (hubyMapa && hubyMapa.map) {
+        hubyMapa.map.invalidateSize();
+      }
+    }, 300);
+
     hubyMapa.obterGPS();
+  } catch (err) {
+    console.error('Erro ao inicializar mapa:', err);
+  }
+
+  // 3. Botão GPS Recenter
+  document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
+    if (hubyMapa) hubyMapa.obterGPS();
   });
 
-  // Tentar obter localização real inicial
-  hubyMapa.obterGPS();
+  // 4. Drawer / Menu Lateral
+  configurarDrawerMenu();
 
-  // 3. Seleção de Categorias
+  // 5. Histórico Modal
+  document.getElementById('btnNavViagens')?.addEventListener('click', carregarEExibirHistoricoModal);
+  document.getElementById('menuItemViagens')?.addEventListener('click', () => {
+    fecharDrawer();
+    carregarEExibirHistoricoModal();
+  });
+  document.getElementById('btnFecharHistorico')?.addEventListener('click', () => {
+    const modal = document.getElementById('modalHistorico');
+    if (modal) modal.style.display = 'none';
+  });
+
+  // 6. Seleção de Categorias
   const chips = document.querySelectorAll('.category-chip');
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -55,9 +79,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 4. Botão Pedir / Cancelar HUBy
-  const btnPedir = document.getElementById('btnPedirHuby');
-  btnPedir?.addEventListener('click', () => {
+  // 7. Botão Pedir / Cancelar HUBy
+  document.getElementById('btnPedirHuby')?.addEventListener('click', () => {
     if (pedidoAtivoId) {
       cancelarBusca();
     } else {
@@ -65,12 +88,63 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 5. Botão de Histórico de Viagens
-  document.getElementById('btnAbrirHistorico')?.addEventListener('click', carregarEExibirHistorico);
-
-  // 6. Configurar Interação das Estrelas de Avaliação
+  // 8. Modal de Avaliação
   configurarModalAvaliacao();
 });
+
+function configurarDrawerMenu() {
+  const btnMenu = document.getElementById('btnAbrirMenu');
+  const backdrop = document.getElementById('menuBackdrop');
+  const perfilBox = document.getElementById('drawerPerfilBox');
+  const btnAuth = document.getElementById('btnAcaoConta');
+
+  const token = localStorage.getItem('huby_token');
+  const userName = localStorage.getItem('huby_user_name') || 'Passageiro HUBy';
+  const userPhone = localStorage.getItem('huby_user_phone') || 'Conta cadastrada';
+
+  if (perfilBox && btnAuth) {
+    if (token) {
+      perfilBox.innerHTML = `
+        <div class="profile-card-logged">
+          <div class="profile-avatar">${userName.charAt(0).toUpperCase()}</div>
+          <div class="profile-meta">
+            <strong>${userName}</strong>
+            <small>${userPhone}</small>
+          </div>
+        </div>
+      `;
+      btnAuth.textContent = 'Sair da Conta';
+      btnAuth.classList.add('btn-sair');
+      btnAuth.onclick = () => {
+        localStorage.clear();
+        window.location.reload();
+      };
+    } else {
+      perfilBox.innerHTML = `
+        <h4 class="profile-guest-title">Bem-vindo ao HUBy</h4>
+        <p class="profile-guest-sub">Entre para pedir viagens mais rápido e ver seu histórico.</p>
+      `;
+      btnAuth.textContent = 'Entrar ou Cadastrar';
+      btnAuth.classList.remove('btn-sair');
+      btnAuth.onclick = () => {
+        window.location.href = './login.html';
+      };
+    }
+  }
+
+  btnMenu?.addEventListener('click', abrirDrawer);
+  backdrop?.addEventListener('click', fecharDrawer);
+}
+
+function abrirDrawer() {
+  document.getElementById('drawerMenu')?.classList.add('active');
+  document.getElementById('menuBackdrop')?.classList.add('active');
+}
+
+function fecharDrawer() {
+  document.getElementById('drawerMenu')?.classList.remove('active');
+  document.getElementById('menuBackdrop')?.classList.remove('active');
+}
 
 function configurarModalAvaliacao() {
   const estrelas = document.querySelectorAll('#estrelasRating span');
@@ -83,18 +157,12 @@ function configurarModalAvaliacao() {
     });
   });
 
-  // Botão Enviar Avaliação
   document.getElementById('btnEnviarAvaliacao')?.addEventListener('click', enviarAvaliacaoCorrida);
-
-  // Botão Pular Avaliação (Opcional)
   document.getElementById('btnPularAvaliacao')?.addEventListener('click', fecharModalAvaliacao);
 
-  // Fechar ao clicar fora (no backdrop escuro)
   const modal = document.getElementById('modalAvaliacao');
   modal?.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      fecharModalAvaliacao();
-    }
+    if (e.target === modal) fecharModalAvaliacao();
   });
 }
 
@@ -105,7 +173,6 @@ function fecharModalAvaliacao() {
   const comentarioEl = document.getElementById('txtComentarioAvaliacao');
   if (comentarioEl) comentarioEl.value = '';
 
-  // Reseta para 5 estrelas por padrão
   notaSelecionada = 5;
   const estrelas = document.querySelectorAll('#estrelasRating span');
   estrelas.forEach(s => s.style.color = '#F59E0B');
@@ -240,7 +307,6 @@ function iniciarPollingStatus() {
         corridaParaAvaliarId = pedidoAtivoId;
         resetarPainelCliente();
 
-        // Abre modal de avaliação por estrelas
         const modal = document.getElementById('modalAvaliacao');
         if (modal) {
           modal.style.display = 'flex';
@@ -341,8 +407,8 @@ function resetarPainelCliente() {
   const txtDist = document.getElementById('txtDistanciaEstimada');
   const txtPreco = document.getElementById('txtPrecoEstimado');
 
-  if (txtDestino) txtDestino.textContent = 'Aguardando seleção...';
-  if (txtDist) txtDist.textContent = 'Toque no mapa para o destino';
+  if (txtDestino) txtDestino.textContent = 'Toque no mapa para indicar o destino';
+  if (txtDist) txtDist.textContent = '-- km';
   if (txtPreco) txtPreco.textContent = 'R$ 10,00';
 
   if (btn) {
@@ -353,12 +419,18 @@ function resetarPainelCliente() {
   }
 }
 
-async function carregarEExibirHistorico() {
+async function carregarEExibirHistoricoModal() {
   const token = localStorage.getItem('huby_token');
+  const modal = document.getElementById('modalHistorico');
+  const container = document.getElementById('listaHistoricoCorridas');
+
   if (!token) {
-    alert('Inicie sessão para ver o seu histórico.');
+    window.location.href = './login.html';
     return;
   }
+
+  if (modal) modal.style.display = 'flex';
+  if (container) container.innerHTML = '<p class="loading-txt">Carregando viagens...</p>';
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/historico`, {
@@ -368,17 +440,21 @@ async function carregarEExibirHistorico() {
     if (!resp.ok) throw new Error('Não foi possível obter o histórico.');
 
     const viagens = await resp.json();
-    if (viagens.length === 0) {
-      alert('Ainda não realizou nenhuma viagem com a HUBy.');
+    if (!viagens || viagens.length === 0) {
+      container.innerHTML = '<p class="loading-txt">Você ainda não realizou nenhuma corrida.</p>';
       return;
     }
 
-    const resumoTexto = viagens.slice(0, 5).map(v => 
-      `• ${v.sub_tipo_label || 'Corrida'} (${v.distancia_km} km) - R$ ${Number(v.valor_total).toFixed(2)} [${v.status}]`
-    ).join('\n');
-
-    alert(`Suas últimas viagens:\n\n${resumoTexto}`);
+    container.innerHTML = viagens.map(v => `
+      <div class="card-historico-item">
+        <div class="h-row">
+          <span class="h-title">${v.sub_tipo_label || 'Viagem HUBy'}</span>
+          <span class="h-val">R$ ${Number(v.valor_total).toFixed(2).replace('.', ',')}</span>
+        </div>
+        <div class="h-route">${v.distancia_km} km • ${v.status}</div>
+      </div>
+    `).join('');
   } catch (err) {
-    alert(err.message);
+    if (container) container.innerHTML = `<p class="loading-txt" style="color: #EF4444;">${err.message}</p>`;
   }
 }
