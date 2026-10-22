@@ -65,9 +65,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3200);
   }
 
-  // 3. INICIALIZAR SERVIÇO DE MAPA E ROTAS
+  // 3. INICIALIZAÇÃO BLINDADA DO SERVIÇO DE MAPA
   const mapaService = new MapaService('mapaCliente');
 
+  // Inicializa o mapa com garantia de layout renderizado
   mapaService.inicializarMapa(async (rota, pontoDest) => {
     coordsDestino = [pontoDest.lat, pontoDest.lng];
     distanciaKmAtual = rota.distanciaKm;
@@ -81,10 +82,14 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarOrcamentoInterface();
   });
 
-  // Força o mapa a preencher a tela após o desaparecimento do splash
-  setTimeout(() => {
+  // Sequência de recálculo de tamanho para telas de celular (elimina a tela branca)
+  const forcarRenderizacaoMapa = () => {
     mapaService.invalidarTamanho();
-  }, 300);
+  };
+  requestAnimationFrame(forcarRenderizacaoMapa);
+  setTimeout(forcarRenderizacaoMapa, 150);
+  setTimeout(forcarRenderizacaoMapa, 450);
+  setTimeout(forcarRenderizacaoMapa, 1000);
 
   // Captura o GPS Contínuo
   mapaService.obterGPSAtual((pos) => {
@@ -101,6 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
         atualizarOrcamentoInterface();
       });
     }
+    forcarRenderizacaoMapa();
   }, true);
 
   // Botão Recentralizar GPS
@@ -108,6 +114,7 @@ document.addEventListener('DOMContentLoaded', () => {
     mapaService.obterGPSAtual((pos) => {
       coordsOrigem = [pos.lat, pos.lng];
       mostrarToast('GPS sincronizado com a sua posição real!', 'sucesso');
+      forcarRenderizacaoMapa();
     }, false);
   });
 
@@ -138,6 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
       distanciaKmAtual = rota.distanciaKm;
       duracaoMinAtual = rota.duracaoMin;
       atualizarOrcamentoInterface();
+      forcarRenderizacaoMapa();
     } else {
       mostrarToast('Endereço não localizado. Toque diretamente no mapa.');
     }
@@ -156,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 5. RENDERIZAÇÃO DE SUB-VEÍCULOS (CENTRALIZADO EM TARIFAS.JS)
+  // 5. RENDERIZAÇÃO DE SUB-VEÍCULOS
   const containerSub = document.getElementById('containerSubVeiculos');
   const linhaAjudante = document.getElementById('linhaAjudante');
   const linhaEscada = document.getElementById('linhaEscada');
@@ -267,7 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderizarSubVeiculos();
 
-  // 7. ENVIO DO PEDIDO (CHAMA DIRETAMENTE O API-CLIENT)
+  // 7. ENVIO DO PEDIDO
   const btnSolicitar = document.getElementById('btnSolicitarHuby');
   const bannerStatus = document.getElementById('bannerStatusCorrida');
   let bannerTimer = null;
@@ -282,14 +290,13 @@ document.addEventListener('DOMContentLoaded', () => {
     ];
 
     const orcamentoFinal = atualizarOrcamentoInterface();
-
     btnSolicitar.disabled = true;
 
     if (bannerStatus) {
       if (bannerTimer) clearTimeout(bannerTimer);
       bannerStatus.className = 'status-banner ativo';
       bannerStatus.style.display = 'block';
-      bannerStatus.innerHTML = `⏳ A transmitir pedido para motoristas próximos...`;
+      bannerStatus.innerHTML = `⏳ A transmitir pedido para parceiros próximos...`;
     }
 
     try {
@@ -315,13 +322,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
       mostrarToast(`Chamada #${pedidoCriado.id} enviada com sucesso!`, 'sucesso');
     } catch (err) {
-      mostrarToast('Falha na conexão. Tentando reenvio local...', 'alerta');
+      mostrarToast('Falha na conexão. Registrado em fila local.', 'alerta');
     } finally {
       btnSolicitar.disabled = false;
     }
   });
 
-  // 8. CONTROLE DE NAVEGAÇÃO POR ABAS INFERIORES
+  // 8. NAVEGAÇÃO POR ABAS COM REFRESH DO MAPA
   const botoesNav = document.querySelectorAll('.nav-item');
   const telas = document.querySelectorAll('.tab-view');
 
@@ -336,12 +343,13 @@ document.addEventListener('DOMContentLoaded', () => {
       if (targetView) targetView.classList.add('active-view');
 
       if (targetId === 'viewInicio') {
-        setTimeout(() => mapaService.invalidarTamanho(), 200);
+        setTimeout(() => forcarRenderizacaoMapa(), 50);
+        setTimeout(() => forcarRenderizacaoMapa(), 250);
       }
     });
   });
 
-  // Suporte a cards de atalho na aba Opções
+  // Ações da aba Opções
   document.querySelectorAll('.action-solicitar').forEach(card => {
     card.addEventListener('click', () => {
       const g = card.getAttribute('data-target-group');
@@ -353,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 9. SINCRONIZAÇÃO DO PERFIL E LOGOUT DIRETO (ABA CONTA)
+  // 9. SINCRONIZAÇÃO DO PERFIL E LOGOUT
   const nomeCliente = localStorage.getItem('huby_cliente_nome');
   const emailCliente = localStorage.getItem('huby_cliente_email');
   const papelUsuario = localStorage.getItem('huby_user_role');
@@ -376,15 +384,12 @@ document.addEventListener('DOMContentLoaded', () => {
       : partes[0].substring(0, 2).toUpperCase();
   }
 
-  // Exibe o botão do painel administrativo caso o perfil seja admin
   if (menuAdminBtn && (papelUsuario === 'admin' || localStorage.getItem('huby_admin_token'))) {
     menuAdminBtn.style.display = 'flex';
   }
 
-  // Logout direto com redirecionamento limpo e sem loops
   const btnSairConta = document.getElementById('btnSairConta');
   if (btnSairConta) {
-    // Remove event listeners antigos clonando o elemento
     const novoBtnSair = btnSairConta.cloneNode(true);
     btnSairConta.parentNode.replaceChild(novoBtnSair, btnSairConta);
 
