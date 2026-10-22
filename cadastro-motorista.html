@@ -445,7 +445,7 @@
   <script>
     const API_URL = 'https://huby.onrender.com';
 
-    // 1. SELEÇÃO VISUAL DE CATEGORIA (SEM ABRIR JANELA SUSPENSA DO SO)
+    // 1. SELEÇÃO VISUAL DE CATEGORIA
     const catCards = document.querySelectorAll('.cat-pick-card');
     const inputCategoria = document.getElementById('cadCategoria');
 
@@ -545,6 +545,7 @@
           localStorage.setItem('huby_parceiro_categoria', categoriaEscolhida);
           localStorage.setItem('huby_motorista_id', dados.motorista.id);
           localStorage.setItem('huby_motorista_nome', dados.motorista.nome);
+          localStorage.setItem('huby_motorista_placa', payload.veiculoPlaca); // Essencial para fallback futuro
           redirecionarPorCategoria(categoriaEscolhida);
         } else {
           throw new Error(dados.erro || 'Falha de gravação');
@@ -554,6 +555,7 @@
         localStorage.setItem('huby_user_role', 'motorista');
         localStorage.setItem('huby_parceiro_categoria', categoriaEscolhida);
         localStorage.setItem('huby_motorista_nome', payload.nome);
+        localStorage.setItem('huby_motorista_placa', payload.veiculoPlaca); // Essencial para fallback futuro
         redirecionarPorCategoria(categoriaEscolhida);
       }
     });
