@@ -7,9 +7,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const mapElement = document.getElementById('mapaMotorista');
   if (!mapElement) return;
 
-  // 1. INICIALIZAÇÃO DO SERVIÇO DE MAPA
+  // 1. INICIALIZAÇÃO BLINDADA DO MAPA DO PARCEIRO
   const mapaService = new MapaService('mapaMotorista');
   mapaService.inicializarMapa();
+
+  // Força ciclos de renderização para evitar mapa em branco no mobile
+  const forcarRenderizacaoMapa = () => {
+    mapaService.invalidarTamanho();
+  };
+  requestAnimationFrame(forcarRenderizacaoMapa);
+  setTimeout(forcarRenderizacaoMapa, 150);
+  setTimeout(forcarRenderizacaoMapa, 450);
+  setTimeout(forcarRenderizacaoMapa, 1000);
 
   let motoristaCoords = [-8.358, -41.895];
   let pontoDestinoCoords = null;
@@ -20,10 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let ganhosHoje = parseFloat(localStorage.getItem('huby_driver_earnings') || '0.00');
 
   function atualizarPainelGanhos() {
-    const txtGanhos = document.getElementById('txtGanhosHoje');
+    const txtGanhos = document.getElementById('txtGanhosHoje') || document.getElementById('statGanhosHoje');
     const txtCorridas = document.getElementById('txtQtdCorridas');
     if (txtGanhos) {
-      txtGanhos.textContent = `R$ ${ganhosHoje.toFixed(2).replace('.', ',')}`;
+      txtGanhos.innerHTML = `Hoje: <strong>R$ ${ganhosHoje.toFixed(2).replace('.', ',')}</strong> (${corridasConcluidas} fretes)`;
     }
     if (txtCorridas) {
       txtCorridas.textContent = `${corridasConcluidas} corrida${corridasConcluidas === 1 ? '' : 's'}`;
@@ -36,10 +45,10 @@ document.addEventListener('DOMContentLoaded', () => {
   mapaService.obterGPSAtual((pos) => {
     motoristaCoords = [pos.lat, pos.lng];
 
-    // Se estiver em rota ativa, recalcula dinamicamente a rota urbana pelas vias
     if (corridaEmAndamentoId && pontoDestinoCoords) {
       mapaService.calcularRotaOSRM(motoristaCoords, pontoDestinoCoords, '#10B981');
     }
+    forcarRenderizacaoMapa();
   }, true);
 
   document.getElementById('btnRecenterGPS')?.addEventListener('click', () => {
@@ -48,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (corridaEmAndamentoId && pontoDestinoCoords) {
         mapaService.calcularRotaOSRM(motoristaCoords, pontoDestinoCoords, '#10B981');
       }
+      forcarRenderizacaoMapa();
     }, false);
   });
 
@@ -64,24 +74,25 @@ document.addEventListener('DOMContentLoaded', () => {
     isOnline = !isOnline;
     if (isOnline) {
       btnToggleStatus.className = 'btn-toggle-online status-online';
-      txtStatusMotorista.textContent = 'ONLINE';
+      if (txtStatusMotorista) txtStatusMotorista.textContent = 'ONLINE';
       if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas próximas...';
       if (badgeRadar) badgeRadar.style.display = 'flex';
       carregarFilaDePedidos();
     } else {
       btnToggleStatus.className = 'btn-toggle-online status-offline';
-      txtStatusMotorista.textContent = 'OFFLINE';
+      if (txtStatusMotorista) txtStatusMotorista.textContent = 'OFFLINE';
       if (txtRadarStatus) txtRadarStatus.textContent = 'Modo pausa ativo';
       if (feedChamadas) {
         feedChamadas.innerHTML = `
-          <div class="radar-empty-box">
-            <div class="radar-empty-icon">⏸️</div>
-            <div class="radar-empty-title">Modo Offline Ativo</div>
-            <div class="radar-empty-sub">Fique online para voltar a receber solicitações em tempo real.</div>
+          <div class="radar-empty-box" style="text-align: center; padding: 20px; color: #94A3B8;">
+            <div style="font-size: 28px; margin-bottom: 6px;">⏸️</div>
+            <strong style="color: #FFFFFF; font-size: 13px;">Modo Offline Ativo</strong>
+            <p style="font-size: 11px; margin-top: 4px;">Fique online para voltar a receber solicitações em tempo real.</p>
           </div>
         `;
       }
     }
+    forcarRenderizacaoMapa();
   });
 
   // 4. FILTROS DE CATEGORIA
@@ -101,32 +112,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const badgeClasse = isCargo ? 'cargo' : (isFlash ? 'flash' : 'viagem');
 
     return `
-      <div class="job-card-premium" id="card-${p.id}">
-        <div class="job-header-row">
-          <span class="job-type-pill ${badgeClasse}">${p.subTipoLabel || 'HUBy'} #${p.id}</span>
-          <span class="job-price-highlight">${p.preco}</span>
+      <div class="job-card-premium" id="card-${p.id}" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 12px; margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span class="job-type-pill ${badgeClasse}" style="font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 6px; background: rgba(16,185,129,0.15); color: #10B981;">
+            ${p.subTipoLabel || 'HUBy'} #${p.id}
+          </span>
+          <span style="font-size: 15px; font-weight: 900; color: #FFFFFF;">${p.preco}</span>
         </div>
 
-        <div class="job-address-block">
-          <div class="address-line-row">
-            <span class="pin-indicator green"></span>
-            <div class="address-text-desc">
-              ${p.origem}
-              <small>Ponto de partida do passageiro</small>
-            </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; margin-bottom: 10px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; flex-shrink: 0;"></span>
+            <div>${p.origem} <br><small style="color: #64748B;">Ponto de partida</small></div>
           </div>
-          <div class="address-line-row">
-            <span class="pin-indicator orange"></span>
-            <div class="address-text-desc">
-              ${p.destino}
-              <small>Distância estimada: ${p.distancia || '1.0 km'}</small>
-            </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: #FF6B00; flex-shrink: 0;"></span>
+            <div>${p.destino} <br><small style="color: #64748B;">Distância: ${p.distancia || '1.0 km'}</small></div>
           </div>
         </div>
 
-        <div class="job-actions-row">
-          <button type="button" class="btn-reject-action" onclick="rejeitarPedido('${p.id}')">Recusar</button>
-          <button type="button" class="btn-accept-action" onclick="aceitarPedido('${p.id}')">
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn-reject-action" onclick="window.rejeitarPedido('${p.id}')" style="flex: 1; padding: 9px; border-radius: 10px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.08); color: #EF4444; font-weight: 800; cursor: pointer;">
+            Recusar
+          </button>
+          <button type="button" class="btn-accept-action" onclick="window.aceitarPedido('${p.id}')" style="flex: 2; padding: 9px; border-radius: 10px; border: none; background: #10B981; color: #03251E; font-weight: 900; cursor: pointer;">
             Aceitar Corrida ➔
           </button>
         </div>
@@ -136,17 +145,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderEmptyState() {
     return `
-      <div class="radar-empty-box">
-        <div class="radar-empty-icon">📡</div>
-        <div class="radar-empty-title">Radar de Chamadas Ativo</div>
-        <div class="radar-empty-sub">Aguardando novas solicitações de passageiros e fretes nas proximidades...</div>
+      <div class="radar-empty-box" style="text-align: center; padding: 24px; color: #94A3B8;">
+        <div style="font-size: 32px; margin-bottom: 8px;">📡</div>
+        <strong style="color: #FFFFFF; font-size: 13px;">Radar de Chamadas Ativo</strong>
+        <p style="font-size: 11px; margin-top: 4px;">Aguardando novas solicitações de passageiros e fretes nas proximidades...</p>
       </div>
     `;
   }
 
   let listaPedidosCache = [];
 
-  // 5. CARREGAMENTO CENTRALIZADO VIA API-CLIENT
+  // 5. CARREGAMENTO VIA API-CLIENT
   async function carregarFilaDePedidos() {
     if (!feedChamadas || !isOnline || corridaEmAndamentoId) return;
 
@@ -160,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
     feedChamadas.innerHTML = listaPedidosCache.map(p => gerarCardHtml(p)).join('');
   }
 
-  // 6. ACEITAR CORRIDA E INICIAR NAVEGAÇÃO REAL
+  // 6. ACEITAR CORRIDA E INICIAR NAVEGAÇÃO
   window.aceitarPedido = async (id) => {
     const pedido = listaPedidosCache.find(p => String(p.id) === String(id));
 
@@ -181,11 +190,10 @@ document.addEventListener('DOMContentLoaded', () => {
     corridaEmAndamentoId = id;
     pontoDestinoCoords = pontoDest;
 
-    // Define o pino de destino e traça a rota viária pelas ruas
     mapaService.definirMarcadorDestino(pontoDest[0], pontoDest[1]);
     await mapaService.calcularRotaOSRM(motoristaCoords, pontoDest, '#10B981');
+    forcarRenderizacaoMapa();
 
-    // Notifica o backend Render/Neon
     await ApiClient.atualizarStatusCorrida(id, 'em_andamento', {
       motoristaNome: localStorage.getItem('huby_motorista_nome') || 'Motorista Parceiro'
     });
@@ -194,23 +202,22 @@ document.addEventListener('DOMContentLoaded', () => {
       txtRadarStatus.textContent = `Em rota para entrega #${id}`;
     }
 
-    // Isola o feed e exibe o card de navegação ativa
     if (feedChamadas) {
       feedChamadas.innerHTML = `
-        <div class="active-navigation-card">
-          <div class="nav-header-row">
-            <span class="nav-status-badge">🧭 NAVEGAÇÃO ATIVA #${id}</span>
-            <span class="nav-price">${pedido?.preco || 'R$ 16,10'}</span>
+        <div class="active-navigation-card" style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.3); border-radius: 14px; padding: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 11px; font-weight: 900; color: #10B981;">🧭 NAVEGAÇÃO ATIVA #${id}</span>
+            <span style="font-size: 16px; font-weight: 900; color: #FFFFFF;">${pedido?.preco || 'R$ 16,10'}</span>
           </div>
           
-          <div class="nav-destination-title">
+          <div style="font-size: 13px; font-weight: 700; color: #FFFFFF; margin-bottom: 4px;">
             Destino: ${pedido?.destino || 'Ponto selecionado'}
           </div>
-          <small style="color: #94A3B8; font-size: 11px;">
+          <small style="color: #94A3B8; font-size: 11px; display: block; margin-bottom: 12px;">
             Siga a rota traçada no mapa por vias pavimentadas.
           </small>
 
-          <button type="button" class="btn-complete-delivery" onclick="finalizarCorrida('${id}', '${pedido?.preco || 'R$ 16,10'}')">
+          <button type="button" class="btn-complete-delivery" onclick="window.finalizarCorrida('${id}', '${pedido?.preco || 'R$ 16,10'}')" style="width: 100%; padding: 12px; border-radius: 10px; border: none; background: #10B981; color: #03251E; font-weight: 900; font-size: 13px; cursor: pointer;">
             ✅ Concluir Corrida
           </button>
         </div>
@@ -224,10 +231,9 @@ document.addEventListener('DOMContentLoaded', () => {
     corridaEmAndamentoId = null;
     pontoDestinoCoords = null;
 
-    // Atualiza o status no backend
-    await ApiClient.atualizarStatusCorrida(id, 'concluida');
+    // Alinhado com o status do backend ('concluido')
+    await ApiClient.atualizarStatusCorrida(id, 'concluido');
 
-    // Acumula os ganhos diários
     const valorNumerico = parseFloat(precoTexto.replace('R$', '').replace('.', '').replace(',', '.').trim()) || 0;
     ganhosHoje += valorNumerico;
     corridasConcluidas += 1;
@@ -237,25 +243,22 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarPainelGanhos();
 
     if (txtRadarStatus) txtRadarStatus.textContent = 'A rastrear chamadas próximas...';
-    mapaService.invalidarTamanho();
+    forcarRenderizacaoMapa();
 
     carregarFilaDePedidos();
   };
 
-  // 8. REJEITAR PEDIDO (COM NOTIFICAÇÃO AO SERVIDOR)
+  // 8. REJEITAR PEDIDO (ALINHADO COM STATUS PERMITIDO 'cancelado')
   window.rejeitarPedido = async (id) => {
-    // 1. Remove da tela imediatamente para resposta visual rápida
     const card = document.getElementById(`card-${id}`);
     if (card) card.remove();
 
-    // 2. Tenta notificar o servidor da recusa
     try {
-      await ApiClient.atualizarStatusCorrida(id, 'rejeitada');
+      await ApiClient.atualizarStatusCorrida(id, 'cancelado');
     } catch (e) {
-      console.warn(`Ocorreu um erro ao rejeitar o pedido #${id} no backend. Removendo localmente apenas.`);
+      console.warn(`Erro ao cancelar pedido #${id} no backend.`);
     }
 
-    // 3. Atualiza cache local de fallback
     let pedidosLocais = JSON.parse(localStorage.getItem('huby_pedidos_fila') || '[]');
     pedidosLocais = pedidosLocais.filter(p => String(p.id) !== String(id));
     localStorage.setItem('huby_pedidos_fila', JSON.stringify(pedidosLocais));
