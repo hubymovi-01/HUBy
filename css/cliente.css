@@ -15,7 +15,7 @@ html, body {
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
-  background-color: var(--bg-deep, #080C14);
+  background-color: #080C14;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: #FFFFFF;
 }
@@ -34,18 +34,18 @@ html, body {
 .huby-header {
   position: absolute;
   top: max(10px, env(safe-area-inset-top, 10px));
-  left: 10px;
-  right: 10px;
+  left: 12px;
+  right: 12px;
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(13, 20, 36, 0.94);
+  background: rgba(13, 20, 36, 0.95);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
@@ -64,13 +64,6 @@ html, body {
 .brand-y-nav {
   color: #10B981;
   font-size: 16px;
-}
-
-.brand-sub-nav {
-  margin-left: 6px;
-  font-size: 11px;
-  color: #94A3B8;
-  font-weight: 700;
 }
 
 .header-right {
@@ -125,7 +118,7 @@ html, body {
   flex-direction: column;
 }
 
-/* 3. MAPA DO CLIENTE */
+/* 3. MAPA DO CLIENTE (OCUPA TODO O ESPAÇO LIVRE) */
 .map-wrapper {
   flex: 1;
   width: 100%;
@@ -140,7 +133,7 @@ html, body {
 
 .map-hint-pill {
   position: absolute;
-  top: calc(max(10px, env(safe-area-inset-top, 10px)) + 54px);
+  top: calc(max(10px, env(safe-area-inset-top, 10px)) + 58px);
   left: 50%;
   transform: translateX(-50%);
   z-index: 999;
@@ -158,7 +151,7 @@ html, body {
 .btn-meu-gps {
   position: absolute;
   right: 14px;
-  top: calc(max(10px, env(safe-area-inset-top, 10px)) + 54px);
+  top: calc(max(10px, env(safe-area-inset-top, 10px)) + 58px);
   z-index: 999;
   background: rgba(13, 20, 36, 0.95);
   border: 1px solid rgba(16, 185, 129, 0.4);
@@ -180,22 +173,21 @@ html, body {
   pointer-events: none !important;
 }
 
-/* 4. SHEET INFERIOR DE SOLICITAÇÃO */
+/* 4. SHEET INFERIOR COMPACTO E FLUTUANTE */
 .order-sheet {
-  background: rgba(10, 16, 30, 0.98);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-radius: 22px 22px 0 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px 14px calc(76px + env(safe-area-inset-bottom, 8px));
+  background: rgba(10, 16, 30, 0.96);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 24px 24px 0 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 14px calc(68px + env(safe-area-inset-bottom, 8px));
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 52vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   position: relative;
   z-index: 1000;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
 }
 
 .sheet-drag-handle {
@@ -203,14 +195,14 @@ html, body {
   height: 4px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 2px;
-  margin: 0 auto 4px;
+  margin: 0 auto 2px;
 }
 
 .status-banner {
   display: none;
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
   font-weight: 800;
   text-align: center;
 }
@@ -232,7 +224,7 @@ html, body {
 .tab-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  border-radius: 10px;
   padding: 6px 4px;
   text-align: center;
   cursor: pointer;
@@ -255,7 +247,7 @@ html, body {
 }
 
 .tab-icon {
-  font-size: 18px;
+  font-size: 16px;
   margin-bottom: 2px;
 }
 
@@ -265,14 +257,9 @@ html, body {
   color: #FFFFFF;
 }
 
-.tab-sub {
-  font-size: 9px;
-  color: #94A3B8;
-}
-
 .sub-vehicles {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   overflow-x: auto;
   padding: 2px 0;
   scrollbar-width: none;
@@ -283,8 +270,8 @@ html, body {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
   color: #94A3B8;
-  padding: 6px 12px;
-  border-radius: 20px;
+  padding: 5px 10px;
+  border-radius: 16px;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
@@ -301,7 +288,7 @@ html, body {
 .addresses-box {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .input-group {
@@ -363,7 +350,7 @@ html, body {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 8px;
-  padding: 5px 8px;
+  padding: 4px 8px;
   font-size: 11px;
   color: #CBD5E1;
 }
@@ -375,8 +362,8 @@ html, body {
 }
 
 .btn-qty {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   border: none;
@@ -387,34 +374,8 @@ html, body {
 
 .huby-check {
   accent-color: #10B981;
-  width: 15px;
-  height: 15px;
-}
-
-.trip-breakdown {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11px;
-  color: #94A3B8;
-  padding: 2px 2px;
-}
-
-.payment-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-}
-
-.payment-bar select {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
-  padding: 5px 8px;
-  border-radius: 8px;
-  font-size: 11px;
-  outline: none;
+  width: 14px;
+  height: 14px;
 }
 
 .btn-primary {
@@ -422,8 +383,8 @@ html, body {
   color: #03251e;
   border: none;
   border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 14px;
+  padding: 11px 14px;
+  font-size: 13px;
   font-weight: 900;
   display: flex;
   justify-content: space-between;
@@ -445,7 +406,7 @@ html, body {
   left: 0 !important;
   right: 0 !important;
   width: 100vw !important;
-  height: 60px !important;
+  height: 58px !important;
   background: rgba(10, 16, 30, 0.98) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
@@ -454,7 +415,7 @@ html, body {
   justify-content: space-around !important;
   align-items: center !important;
   z-index: 10000 !important;
-  padding-bottom: env(safe-area-inset-bottom, 6px) !important;
+  padding-bottom: env(safe-area-inset-bottom, 4px) !important;
 }
 
 .nav-item {
@@ -464,11 +425,11 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   font-size: 10px;
   font-weight: 700;
   cursor: pointer;
-  padding: 6px 14px;
+  padding: 4px 12px;
   transition: all 0.2s ease;
 }
 
@@ -477,7 +438,7 @@ html, body {
 }
 
 .nav-icon {
-  font-size: 17px;
+  font-size: 16px;
 }
 
 /* OUTRAS TELAS (OPÇÕES, ATIVIDADE, CONTA) */
@@ -542,32 +503,6 @@ html, body {
   color: #94A3B8;
 }
 
-.promo-banner {
-  margin-top: 14px;
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.2);
-  border-radius: 12px;
-  padding: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.promo-text h4 {
-  font-size: 12px;
-  font-weight: 800;
-  color: #10B981;
-}
-
-.promo-text p {
-  font-size: 10px;
-  color: #94A3B8;
-}
-
-.promo-shield {
-  font-size: 22px;
-}
-
 /* HISTÓRICO / ATIVIDADE */
 .activity-list {
   display: flex;
@@ -594,10 +529,6 @@ html, body {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-}
-
-.activity-icon-box.orange {
-  background: rgba(249, 115, 22, 0.15);
 }
 
 .activity-info h4 {
@@ -661,33 +592,6 @@ html, body {
   color: #FBBF24;
 }
 
-.profile-shortcuts {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.shortcut-item {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 10px 4px;
-  text-align: center;
-  cursor: pointer;
-}
-
-.shortcut-icon {
-  font-size: 18px;
-  margin-bottom: 2px;
-}
-
-.shortcut-item span {
-  font-size: 10px;
-  color: #94A3B8;
-  font-weight: 700;
-}
-
 .profile-menu {
   display: flex;
   flex-direction: column;
@@ -734,12 +638,4 @@ html, body {
 .menu-arrow {
   color: #64748B;
   font-weight: 800;
-}
-
-.menu-tag {
-  font-size: 10px;
-  background: rgba(255, 255, 255, 0.08);
-  padding: 2px 6px;
-  border-radius: 6px;
-  color: #10B981;
 }
