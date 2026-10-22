@@ -1,9 +1,14 @@
 import express from 'express';
 import cors from 'cors';
 import { neon } from '@neondatabase/serverless';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Chave mestra para tokens JWT
+const JWT_SECRET = process.env.JWT_SECRET || 'huby_jwt_secret_key_prod_2026_xpto';
 
 app.use(cors());
 app.use(express.json());
@@ -14,8 +19,29 @@ if (!process.env.DATABASE_URL) {
 
 const sql = neon(process.env.DATABASE_URL);
 
+// Middleware de verificação de Token JWT Admin
+function autenticarAdmin(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    return res.status(401).json({ erro: 'Acesso negado: Token não fornecido.' });
+  }
+
+  const token = authHeader.split(' ')[1] || authHeader;
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (payload.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso restrito a administradores.' });
+    }
+    req.usuario = payload;
+    next();
+  } catch (err) {
+    return res.status(401).json({ erro: 'Token inválido ou expirado.' });
+  }
+}
+
 app.get('/', (req, res) => {
-  res.json({ status: 'HUBy API Online', banco: 'Neon PostgreSQL' });
+  res.json({ status: 'HUBy API Online e Blindada', banco: 'Neon PostgreSQL' });
 });
 
 // ==========================================
@@ -24,7 +50,6 @@ app.get('/', (req, res) => {
 app.post('/api/admin/verificar', async (req, res) => {
   try {
     const { email } = req.body;
-
     if (!email) {
       return res.status(400).json({ sucesso: false, isAdmin: false, erro: 'E-mail não fornecido.' });
     }
@@ -32,23 +57,24 @@ app.post('/api/admin/verificar', async (req, res) => {
     const emailLimpo = String(email).trim().toLowerCase();
 
     const resultado = await sql`
-      SELECT role FROM clientes 
+      SELECT id, role FROM clientes 
       WHERE LOWER(TRIM(email)) = ${emailLimpo} 
       LIMIT 1
     `;
 
     if (resultado.length > 0 && resultado[0].role === 'admin') {
-      return res.json({ 
-        sucesso: true, 
-        isAdmin: true, 
-        token: process.env.ADMIN_TOKEN || 'token_admin_autorizado_998877' 
-      });
+      const token = jwt.sign(
+        { id: resultado[0].id, role: 'admin' }, 
+        JWT_SECRET, 
+        { expiresIn: '12h' }
+      );
+      return res.json({ sucesso: true, isAdmin: true, token });
     }
 
     return res.json({ sucesso: true, isAdmin: false });
   } catch (error) {
-    console.error('Erro ao verificar permissão de admin:', error);
-    res.status(500).json({ sucesso: false, isAdmin: false, erro: error.message });
+    console.error('Erro ao verificar admin:', error);
+    res.status(500).json({ sucesso: false, erro: 'Falha interna ao verificar permissão.' });
   }
 });
 
@@ -57,7 +83,8 @@ app.post('/api/admin/login', (req, res) => {
   const senhaSecretaOficial = process.env.ADMIN_SECRET_KEY || 'HubyAdmin2026!';
 
   if (senhaAdmin === senhaSecretaOficial) {
-    res.json({ sucesso: true, token: 'token_admin_autorizado_998877' });
+    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '8h' });
+    res.json({ sucesso: true, token });
   } else {
     res.status(401).json({ sucesso: false, erro: 'Senha de administrador inválida.' });
   }
@@ -66,17 +93,18 @@ app.post('/api/admin/login', (req, res) => {
 // ==========================================
 // 1. ROTAS DE CLIENTES
 // ==========================================
-
-// Rota de Cadastro de Passageiro
 app.post('/api/clientes/cadastro', async (req, res) => {
   try {
     const { id, nome, telefone, cpf, email, senha, idade, genero, emergenciaNome, emergenciaTel } = req.body;
 
-    if (!nome || !cpf || !email) {
-      return res.status(400).json({ erro: 'Dados obrigatórios em falta para o cadastro do cliente.' });
+    if (!nome || !cpf || !email || !senha) {
+      return res.status(400).json({ erro: 'Preencha todos os campos obrigatórios (nome, cpf, email e senha).' });
     }
 
-    // Cria a tabela se não existir (garantindo a coluna de senha)
+    // Hash da senha com salt seguro
+    const salt = await bcrypt.genSalt(10);
+    const senhaHash = await bcrypt.hash(String(senha), salt);
+
     await sql`
       CREATE TABLE IF NOT EXISTS clientes (
         id VARCHAR(50) PRIMARY KEY,
@@ -94,11 +122,6 @@ app.post('/api/clientes/cadastro', async (req, res) => {
       )
     `;
 
-    // Garante que a coluna de senha exista mesmo se a tabela já tiver sido criada antes
-    try {
-      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS senha VARCHAR(150);`;
-    } catch (_) {}
-
     await sql`
       INSERT INTO clientes (id, nome, telefone, cpf, email, senha, idade, genero, emergencia_nome, emergencia_tel)
       VALUES (
@@ -107,7 +130,7 @@ app.post('/api/clientes/cadastro', async (req, res) => {
         ${telefone}, 
         ${cpf}, 
         ${email.toLowerCase().trim()}, 
-        ${senha || ''}, 
+        ${senhaHash}, 
         ${idade || 18}, 
         ${genero || 'nao_informar'}, 
         ${emergenciaNome || ''}, 
@@ -116,27 +139,26 @@ app.post('/api/clientes/cadastro', async (req, res) => {
       ON CONFLICT (email) DO UPDATE 
       SET nome = EXCLUDED.nome, 
           telefone = EXCLUDED.telefone, 
-          senha = COALESCE(NULLIF(EXCLUDED.senha, ''), clientes.senha),
+          senha = EXCLUDED.senha,
           idade = EXCLUDED.idade, 
           genero = EXCLUDED.genero, 
           emergencia_nome = EXCLUDED.emergencia_nome, 
           emergencia_tel = EXCLUDED.emergencia_tel
     `;
 
-    res.status(201).json({ sucesso: true, mensagem: 'Cliente cadastrado com sucesso no Neon.' });
+    res.status(201).json({ sucesso: true, mensagem: 'Cliente cadastrado com segurança.' });
   } catch (error) {
-    console.error('Erro ao guardar cliente no Neon:', error);
-    res.status(500).json({ erro: error.message });
+    console.error('Erro no cadastro do cliente:', error);
+    res.status(500).json({ erro: 'Falha ao processar cadastro.' });
   }
 });
 
-// Rota de Login do Passageiro (Adicionada)
 app.post('/api/clientes/login', async (req, res) => {
   try {
     const { email, senha } = req.body;
 
-    if (!email) {
-      return res.status(400).json({ sucesso: false, erro: 'Informe o e-mail de acesso.' });
+    if (!email || !senha) {
+      return res.status(400).json({ sucesso: false, erro: 'E-mail e senha são obrigatórios.' });
     }
 
     const emailLimpo = String(email).trim().toLowerCase();
@@ -149,24 +171,32 @@ app.post('/api/clientes/login', async (req, res) => {
     `;
 
     if (resultado.length === 0) {
-      return res.status(401).json({ 
-        sucesso: false, 
-        erro: 'E-mail não encontrado. Por favor, crie uma conta primeiro.' 
-      });
+      return res.status(401).json({ sucesso: false, erro: 'E-mail não cadastrado.' });
     }
 
     const cliente = resultado[0];
 
-    // Validação da senha caso tenha sido cadastrada
-    if (cliente.senha && senha && cliente.senha !== senha) {
-      return res.status(401).json({
-        sucesso: false,
-        erro: 'Senha incorreta. Tente novamente.'
-      });
+    // Validação comparando hash seguro ou texto plano legado
+    let senhaValida = false;
+    if (cliente.senha.startsWith('$2a$') || cliente.senha.startsWith('$2b$')) {
+      senhaValida = await bcrypt.compare(String(senha), cliente.senha);
+    } else {
+      senhaValida = cliente.senha === String(senha);
     }
+
+    if (!senhaValida) {
+      return res.status(401).json({ sucesso: false, erro: 'Credenciais incorretas.' });
+    }
+
+    const tokenCliente = jwt.sign(
+      { id: cliente.id, email: cliente.email, role: cliente.role || 'cliente' },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.json({
       sucesso: true,
+      token: tokenCliente,
       cliente: {
         id: cliente.id,
         nome: cliente.nome,
@@ -177,7 +207,7 @@ app.post('/api/clientes/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro no login do cliente:', err);
-    res.status(500).json({ sucesso: false, erro: 'Erro ao validar login do cliente: ' + err.message });
+    res.status(500).json({ sucesso: false, erro: 'Falha interna ao validar acesso.' });
   }
 });
 
@@ -188,8 +218,8 @@ app.post('/api/pedidos', async (req, res) => {
   try {
     const { id, tipo, subTipoLabel, origem, destino, distancia, preco, metodoPgto } = req.body;
 
-    if (!id || !preco) {
-      return res.status(400).json({ erro: 'Dados incompletos para criação do pedido.' });
+    if (!id || !preco || !origem || !destino) {
+      return res.status(400).json({ erro: 'Dados essenciais em falta para o pedido.' });
     }
 
     await sql`
@@ -199,8 +229,8 @@ app.post('/api/pedidos', async (req, res) => {
 
     res.status(201).json({ sucesso: true, id });
   } catch (error) {
-    console.error('Erro ao guardar pedido no Neon:', error);
-    res.status(500).json({ erro: error.message });
+    console.error('Erro ao registrar pedido:', error);
+    res.status(500).json({ erro: 'Falha ao registrar pedido.' });
   }
 });
 
@@ -211,14 +241,16 @@ app.get('/api/pedidos', async (req, res) => {
 
     if (statusFiltro) {
       pedidos = await sql`
-        SELECT * FROM pedidos 
+        SELECT id, tipo, sub_tipo_label, origem, destino, distancia, preco, metodo_pgto, status, criado_em 
+        FROM pedidos 
         WHERE status = ${statusFiltro}
         ORDER BY criado_em DESC
-        LIMIT 25
+        LIMIT 30
       `;
     } else {
       pedidos = await sql`
-        SELECT * FROM pedidos 
+        SELECT id, tipo, sub_tipo_label, origem, destino, distancia, preco, metodo_pgto, status, criado_em 
+        FROM pedidos 
         ORDER BY criado_em DESC
         LIMIT 50
       `;
@@ -226,7 +258,7 @@ app.get('/api/pedidos', async (req, res) => {
     res.json(pedidos);
   } catch (error) {
     console.error('Erro ao consultar pedidos:', error);
-    res.status(500).json({ erro: error.message });
+    res.status(500).json({ erro: 'Falha ao consultar pedidos.' });
   }
 });
 
@@ -234,8 +266,9 @@ app.patch('/api/pedidos', async (req, res) => {
   try {
     const { id, novoStatus } = req.body;
 
-    if (!id || !novoStatus) {
-      return res.status(400).json({ erro: 'ID e novoStatus são obrigatórios.' });
+    const statusValidos = ['pendente', 'aceito', 'a_caminho', 'em_andamento', 'concluido', 'cancelado'];
+    if (!id || !statusValidos.includes(novoStatus)) {
+      return res.status(400).json({ erro: 'ID ou status de corrida inválido.' });
     }
 
     await sql`
@@ -244,10 +277,10 @@ app.patch('/api/pedidos', async (req, res) => {
       WHERE id = ${id}
     `;
 
-    res.json({ sucesso: true, mensagem: `Pedido #${id} alterado para ${novoStatus}` });
+    res.json({ sucesso: true, mensagem: `Pedido #${id} atualizado para ${novoStatus}` });
   } catch (error) {
     console.error('Erro ao atualizar pedido:', error);
-    res.status(500).json({ erro: error.message });
+    res.status(500).json({ erro: 'Falha ao atualizar pedido.' });
   }
 });
 
@@ -259,14 +292,14 @@ app.post('/api/motoristas/login', async (req, res) => {
     const { cnh, placa } = req.body;
 
     if (!cnh || !placa) {
-      return res.status(400).json({ sucesso: false, erro: 'Informe o número da CNH e a Placa do veículo.' });
+      return res.status(400).json({ sucesso: false, erro: 'Informe CNH e Placa.' });
     }
 
     const cnhLimpa = String(cnh).replace(/\D/g, '').trim();
     const placaLimpa = String(placa).replace(/[^A-Za-z0-9]/g, '').trim().toUpperCase();
 
     const resultado = await sql`
-      SELECT id, nome, telefone, cnh_numero, categoria, veiculo_placa, veiculo_modelo, status_aprovacao
+      SELECT id, nome, categoria, veiculo_placa, veiculo_modelo, status_aprovacao
       FROM motoristas
       WHERE REPLACE(cnh_numero, ' ', '') = ${cnhLimpa}
         AND UPPER(REPLACE(veiculo_placa, '-', '')) = ${placaLimpa}
@@ -274,16 +307,20 @@ app.post('/api/motoristas/login', async (req, res) => {
     `;
 
     if (resultado.length === 0) {
-      return res.status(401).json({ 
-        sucesso: false, 
-        erro: 'Nenhum motorista encontrado com esta CNH e Placa.' 
-      });
+      return res.status(401).json({ sucesso: false, erro: 'Dados de motorista não localizados.' });
     }
 
     const motorista = resultado[0];
 
+    const tokenMotorista = jwt.sign(
+      { id: motorista.id, role: 'motorista' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
     res.json({
       sucesso: true,
+      token: tokenMotorista,
       motorista: {
         id: motorista.id,
         nome: motorista.nome,
@@ -295,7 +332,7 @@ app.post('/api/motoristas/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Erro no login do motorista:', err);
-    res.status(500).json({ sucesso: false, erro: 'Erro ao validar credenciais no banco: ' + err.message });
+    res.status(500).json({ sucesso: false, erro: 'Falha na validação de credenciais.' });
   }
 });
 
@@ -306,6 +343,10 @@ app.post('/api/motoristas/cadastro', async (req, res) => {
       categoria, veiculoModelo, veiculoPlaca, veiculoCor,
       fotoCnhUrl, fotoVeiculoUrl
     } = req.body;
+
+    if (!nome || !cnhNumero || !veiculoPlaca) {
+      return res.status(400).json({ erro: 'Nome, CNH e Placa são obrigatórios.' });
+    }
 
     const resultado = await sql`
       INSERT INTO motoristas (
@@ -323,26 +364,31 @@ app.post('/api/motoristas/cadastro', async (req, res) => {
     res.status(201).json({ sucesso: true, motorista: resultado[0] });
   } catch (err) {
     console.error('Erro no cadastro de motorista:', err);
-    res.status(500).json({ erro: 'Falha ao realizar cadastro do motorista: ' + err.message });
+    res.status(500).json({ erro: 'Falha ao processar cadastro de condutor.' });
   }
 });
 
-app.get('/api/motoristas', async (req, res) => {
+// Listagem de motoristas restrita a administradores autenticados
+app.get('/api/motoristas', autenticarAdmin, async (req, res) => {
   try {
     const motoristas = await sql`
-      SELECT * FROM motoristas 
+      SELECT id, nome, telefone, categoria, veiculo_modelo, veiculo_placa, veiculo_cor, status_aprovacao, criado_em 
+      FROM motoristas 
       ORDER BY criado_em DESC
     `;
     res.json(motoristas);
   } catch (error) {
     console.error('Erro ao listar motoristas:', error);
-    res.status(500).json({ erro: error.message });
+    res.status(500).json({ erro: 'Erro ao listar parceiros.' });
   }
 });
 
-app.post('/api/motoristas/aprovar', async (req, res) => {
+// Aprovação de motorista restrita a administradores autenticados
+app.post('/api/motoristas/aprovar', autenticarAdmin, async (req, res) => {
   try {
     const { id } = req.body;
+    if (!id) return res.status(400).json({ erro: 'ID do motorista não fornecido.' });
+
     await sql`
       UPDATE motoristas 
       SET status_aprovacao = 'aprovado' 
@@ -351,10 +397,10 @@ app.post('/api/motoristas/aprovar', async (req, res) => {
     res.json({ sucesso: true, mensagem: 'Motorista aprovado com sucesso.' });
   } catch (error) {
     console.error('Erro ao aprovar motorista:', error);
-    res.status(500).json({ erro: error.message });
+    res.status(500).json({ erro: 'Falha ao aprovar cadastro.' });
   }
 });
 
 app.listen(port, () => {
-  console.log(`Servidor HUBy ativo na porta ${port}`);
+  console.log(`Servidor HUBy ativo e protegido na porta ${port}`);
 });
