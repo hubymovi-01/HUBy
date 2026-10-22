@@ -277,7 +277,7 @@
           <label for="cliEmail">E-mail de Acesso</label>
           <div class="input-wrapper">
             <span class="input-icon">✉️</span>
-            <input type="email" id="cliEmail" class="form-input" placeholder="exemplo@email.com" required>
+            <input type="email" id="cliEmail" class="form-input" placeholder="exemplo@email.com" autocomplete="username" required>
           </div>
         </div>
 
@@ -286,7 +286,7 @@
             <label for="cliSenha">Senha</label>
             <div class="input-wrapper">
               <span class="input-icon">🔒</span>
-              <input type="password" id="cliSenha" class="form-input" placeholder="Mínimo 6 dígitos" minlength="6" required>
+              <input type="password" id="cliSenha" class="form-input" placeholder="Mínimo 6 dígitos" minlength="6" autocomplete="new-password" required>
             </div>
           </div>
 
@@ -330,7 +330,7 @@
 
       <div class="terms-box">
         <input type="checkbox" id="chkTermos" required>
-        <label for="chkTermos">Concordo com os <strong style="color: #10B981;">Termos de Serviço</strong> e a <strong style="color: #10B981;">Política de Privacidade</strong> do HUBy, autorizando o tratamento de dados para fins de segurança e geolocalização.</label>
+        <label for="chkTermos">Concordo com os <strong style="color: #10B981;">Termos de Serviço</strong> e a <strong style="color: #10B981;">Política de Privacidade</strong> do HUBy.</label>
       </div>
 
       <button type="submit" class="btn-submit" id="btnSalvarCliente">
@@ -353,9 +353,8 @@
       e.target.value = v;
     });
 
-    // Máscara de Telefone Principal
-    const inputTel = document.getElementById('cliTelefone');
-    inputTel.addEventListener('input', (e) => {
+    // Máscara de Telefones
+    function aplicarMascaraTel(e) {
       let v = e.target.value.replace(/\D/g, '');
       if (v.length > 11) v = v.substring(0, 11);
       if (v.length > 6) {
@@ -365,21 +364,9 @@
       } else {
         e.target.value = v;
       }
-    });
-
-    // Máscara de Telefone de Emergência
-    const inputEmerg = document.getElementById('cliEmergenciaTel');
-    inputEmerg.addEventListener('input', (e) => {
-      let v = e.target.value.replace(/\D/g, '');
-      if (v.length > 11) v = v.substring(0, 11);
-      if (v.length > 6) {
-        e.target.value = `(${v.substring(0, 2)}) ${v.substring(2, 7)}-${v.substring(7)}`;
-      } else if (v.length > 2) {
-        e.target.value = `(${v.substring(0, 2)}) ${v.substring(2)}`;
-      } else {
-        e.target.value = v;
-      }
-    });
+    }
+    document.getElementById('cliTelefone').addEventListener('input', aplicarMascaraTel);
+    document.getElementById('cliEmergenciaTel').addEventListener('input', aplicarMascaraTel);
 
     // Envio do formulário
     document.getElementById('formCadastroClienteCompleto').addEventListener('submit', async (e) => {
@@ -401,14 +388,17 @@
       }
 
       const email = document.getElementById('cliEmail').value.trim();
+      const senha = document.getElementById('cliSenha').value.trim(); // Agora captura a senha
       const nome = document.getElementById('cliNome').value.trim();
+      const cliId = Math.random().toString(36).substring(2, 10);
 
       const payload = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: `cli_${cliId}`,
         nome: nome,
         telefone: document.getElementById('cliTelefone').value.trim(),
         cpf: document.getElementById('cliCpf').value.trim(),
         email: email,
+        senha: senha, // Envia para o banco de dados
         idade: idade > 0 ? idade : 18,
         genero: document.getElementById('cliGenero').value,
         emergenciaNome: document.getElementById('cliEmergenciaNome').value.trim(),
@@ -416,18 +406,29 @@
       };
 
       try {
-        await fetch(`${API_URL}/api/clientes/cadastro`, {
+        const resposta = await fetch(`${API_URL}/api/clientes/cadastro`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
+        
+        const dados = await resposta.json();
+        
+        if (!resposta.ok) {
+          alert(`❌ Falha no cadastro: ${dados.erro || 'Erro desconhecido.'}`);
+          btn.innerHTML = '<span>Criar Conta e Começar a Usar</span>';
+          btn.disabled = false;
+          return;
+        }
+
       } catch (err) {
-        console.warn('Servidor offline temporariamente, dados salvos em cache local.');
+        console.warn('Servidor indisponível. Registrando localmente por enquanto...');
       }
 
-      // Persistência completa para consumo em auth-guard.js e app-cliente.js
+      // Persistência completa
       localStorage.setItem('huby_user_role', 'cliente');
       localStorage.setItem('huby_ja_entrou', '1');
+      localStorage.setItem('huby_cliente_id', payload.id);
       localStorage.setItem('huby_cliente_nome', nome);
       localStorage.setItem('huby_cliente_email', email);
 
