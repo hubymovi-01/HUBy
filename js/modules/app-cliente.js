@@ -81,6 +81,11 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarOrcamentoInterface();
   });
 
+  // Força o mapa a preencher a tela após o desaparecimento do splash
+  setTimeout(() => {
+    mapaService.invalidarTamanho();
+  }, 300);
+
   // Captura o GPS Contínuo
   mapaService.obterGPSAtual((pos) => {
     coordsOrigem = [pos.lat, pos.lng];
@@ -159,7 +164,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderizarSubVeiculos() {
     if (!containerSub) return;
 
-    // Filtra todas as categorias de tarifas.js pertencentes ao grupo ativo
     const categoriasDoGrupo = Object.values(CATEGORIAS_HUBY).filter(c => c.grupo === grupoSelecionado);
 
     containerSub.innerHTML = categoriasDoGrupo.map((v, i) => `
@@ -235,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     atualizarOrcamentoInterface();
   });
 
-  // 6. CÁLCULO DE ORÇAMENTO CENTRALIZADO (CHAMA TARIFAS.JS)
+  // 6. CÁLCULO DE ORÇAMENTO CENTRALIZADO
   function atualizarOrcamentoInterface() {
     const orcamento = calcularOrcamentoViagem(subVeiculoId, distanciaKmAtual, duracaoMinAtual, {
       qtdAjudantes,
@@ -261,7 +265,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return orcamento;
   }
 
-  // Render inicial dos subveículos
   renderizarSubVeiculos();
 
   // 7. ENVIO DO PEDIDO (CHAMA DIRETAMENTE O API-CLIENT)
@@ -348,5 +351,47 @@ document.addEventListener('DOMContentLoaded', () => {
       const tabGrupo = document.querySelector(`.tab-card[data-grupo="${g}"]`);
       tabGrupo?.click();
     });
+  });
+
+  // 9. SINCRONIZAÇÃO DO PERFIL E LOGOUT (ABA CONTA)
+  const nomeCliente = localStorage.getItem('huby_cliente_nome');
+  const emailCliente = localStorage.getItem('huby_cliente_email');
+  const papelUsuario = localStorage.getItem('huby_user_role');
+
+  const elNome = document.getElementById('txtPerfilNome');
+  const elAvatar = document.getElementById('txtPerfilAvatar');
+  const menuAdminBtn = document.getElementById('menuAdminBtn');
+
+  if (nomeCliente && elNome) {
+    elNome.textContent = nomeCliente;
+  } else if (emailCliente && elNome) {
+    elNome.textContent = emailCliente.split('@')[0];
+  }
+
+  if (elAvatar) {
+    const textoBase = nomeCliente || emailCliente || 'Passageiro';
+    const partes = textoBase.trim().split(' ');
+    elAvatar.textContent = partes.length > 1
+      ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
+      : partes[0].substring(0, 2).toUpperCase();
+  }
+
+  // Exibe o botão do painel administrativo caso o perfil seja admin
+  if (menuAdminBtn && (papelUsuario === 'admin' || localStorage.getItem('huby_admin_token'))) {
+    menuAdminBtn.style.display = 'flex';
+  }
+
+  // Evento do botão Sair da Conta
+  document.getElementById('btnSairConta')?.addEventListener('click', () => {
+    if (confirm('Tem certeza de que deseja sair da sua conta?')) {
+      localStorage.removeItem('huby_ja_entrou');
+      localStorage.removeItem('huby_user_role');
+      localStorage.removeItem('huby_cliente_id');
+      localStorage.removeItem('huby_cliente_nome');
+      localStorage.removeItem('huby_cliente_email');
+      localStorage.removeItem('huby_admin_token');
+
+      window.location.replace('./login.html');
+    }
   });
 });
