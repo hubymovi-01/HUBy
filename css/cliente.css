@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBy - Estilos da Aplicação do Cliente / Passageiro (css/cliente.css)
+   HUBy - Estilos Corrigidos do Mapa e Aplicação do Cliente
    ========================================================================== */
 
 * {
@@ -23,7 +23,7 @@ html, body {
 .app-layout {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  width: 100vw;
   height: 100vh;
   height: 100dvh;
   position: relative;
@@ -118,17 +118,25 @@ html, body {
   flex-direction: column;
 }
 
-/* 3. MAPA DO CLIENTE (OCUPA TODO O ESPAÇO LIVRE) */
+/* 3. MAPA DO CLIENTE - CORREÇÃO CRÍTICA PARA EVITAR TELA BRANCA */
 .map-wrapper {
-  flex: 1;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
-  position: relative;
+  height: 100%;
+  z-index: 1;
 }
 
 #mapaCliente {
-  width: 100%;
-  height: 100%;
-  background: #080C14;
+  width: 100% !important;
+  height: 100% !important;
+  background-color: #080C14 !important;
+  position: absolute !important;
+  top: 0;
+  left: 0;
 }
 
 .map-hint-pill {
@@ -146,6 +154,7 @@ html, body {
   font-weight: 700;
   color: #E2E8F0;
   white-space: nowrap;
+  pointer-events: none;
 }
 
 .btn-meu-gps {
@@ -173,7 +182,7 @@ html, body {
   pointer-events: none !important;
 }
 
-/* 4. SHEET INFERIOR COMPACTO E FLUTUANTE */
+/* 4. SHEET INFERIOR FLUTUANTE */
 .order-sheet {
   background: rgba(10, 16, 30, 0.96);
   backdrop-filter: blur(20px);
@@ -184,10 +193,12 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  position: relative;
-  z-index: 1000;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 998;
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.6);
-  flex-shrink: 0;
 }
 
 .sheet-drag-handle {
