@@ -1,0 +1,399 @@
+/* ==========================================================================
+   HUBy 2.0 - Interface do Cliente / Passageiro
+   ========================================================================== */
+
+:root {
+  --hub-green: #10B981;
+  --hub-green-hover: #059669;
+  --hub-green-glow: rgba(16, 185, 129, 0.25);
+  --bg-surface: rgba(18, 24, 38, 0.88);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+}
+
+body.client-viewport {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background-color: #0B0F19;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#mapaCliente {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* 1. TOPO FLUTUANTE */
+.top-nav-bar {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 16px) + 12px);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.brand-pill {
+  pointer-events: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  padding: 8px 16px;
+  border-radius: 999px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-weight: 900;
+  font-size: 16px;
+  letter-spacing: -0.5px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.brand-pill .hub-txt { color: #FFF; }
+.brand-pill .y-txt { color: var(--hub-green); }
+
+.btn-action-pill {
+  pointer-events: auto;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  color: var(--text-primary);
+  border-radius: 999px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.btn-action-pill:active {
+  transform: scale(0.96);
+}
+
+/* 2. BOTÃO GPS FLUTUANTE */
+.btn-floating-gps {
+  position: absolute;
+  bottom: calc(230px + env(safe-area-inset-bottom, 16px));
+  right: 16px;
+  z-index: 10;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  color: var(--hub-green);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease;
+}
+
+.btn-floating-gps:active {
+  transform: scale(0.92);
+}
+
+/* 3. DOCK INFERIOR (BOTTOM SHEET) */
+.client-dock-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-glass);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 12px 18px calc(env(safe-area-inset-bottom, 16px) + 16px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sheet-drag-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  margin: 0 auto 4px auto;
+}
+
+/* SELETOR DE CATEGORIAS */
+.category-slider {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.category-slider::-webkit-scrollbar {
+  display: none;
+}
+
+.category-chip {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.category-chip .cat-icon { font-size: 18px; }
+.category-chip .cat-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+
+.category-chip.active {
+  background: var(--hub-green-glow);
+  border-color: var(--hub-green);
+}
+
+.category-chip.active .cat-label {
+  color: #FFF;
+}
+
+/* CARTÃO DE RESUMO DO TRAJETO */
+.trip-summary-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.route-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.route-point-indicator {
+  width: 8px;
+  height: 8px;
+  background: var(--hub-green);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--hub-green);
+  flex-shrink: 0;
+}
+
+.route-texts {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.route-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+
+.route-subtitle {
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.trip-price-block {
+  text-align: right;
+  flex-shrink: 0;
+  padding-left: 10px;
+}
+
+.trip-price-block .price-val {
+  display: block;
+  font-size: 17px;
+  font-weight: 900;
+  color: #FFF;
+}
+
+.trip-price-block .eta-val {
+  font-size: 11px;
+  color: var(--hub-green);
+  font-weight: 700;
+}
+
+/* CARD DE CORRIDA ATIVA */
+.active-ride-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--hub-green);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.ride-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pulse-radar {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--hub-green);
+  box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  animation: pulseGreen 1.5s infinite;
+}
+
+@keyframes pulseGreen {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+.ride-header h4 {
+  margin: 0;
+  font-size: 13px;
+  color: #FFF;
+}
+
+.active-ride-card p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* BOTÃO PRINCIPAL */
+.btn-main-action {
+  width: 100%;
+  background: var(--hub-green);
+  color: #02241C;
+  border: none;
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.35);
+  transition: all 0.15s ease;
+}
+
+.btn-main-action:active {
+  transform: scale(0.98);
+}
+
+/* MODAL DE AVALIAÇÃO */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card {
+  background: #141A28;
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%;
+  max-width: 340px;
+  text-align: center;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.modal-card h3 {
+  margin: 0 0 6px;
+  color: #FFF;
+  font-size: 16px;
+}
+
+.modal-card p {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.star-rating {
+  font-size: 32px;
+  color: #F59E0B;
+  margin-bottom: 16px;
+  user-select: none;
+}
+
+.star-rating span {
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.modal-card textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  color: #FFF;
+  font-size: 12px;
+  padding: 10px;
+  height: 64px;
+  resize: none;
+  margin-bottom: 16px;
+  font-family: inherit;
+}
+
+.modal-btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-secondary-modal {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary-modal {
+  flex: 2;
+  background: var(--hub-green);
+  color: #02241C;
+  border: none;
+  border-radius: 10px;
+  padding: 12px;
+  font-weight: 900;
+  font-size: 13px;
+  cursor: pointer;
+}

@@ -3,90 +3,110 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Mobilidade e Entregas</title>
+  <title>HUBy 2.0</title>
   
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-
-  <!-- Estilos HUBy -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/app.css">
+  <link rel="stylesheet" href="./css/cliente.css">
 </head>
-<body>
+<body class="client-viewport">
 
-  <div class="app-viewport">
-    <!-- 1. MAPA LEAFLET -->
-    <div id="mapaCliente" style="width: 100%; height: 100vh;"></div>
+  <!-- 1. MAPA DE FUNDO -->
+  <div id="mapaCliente"></div>
 
-    <!-- 2. BARRA SUPERIOR SUSPENSA -->
-    <header class="top-bar-floating">
-  <div class="brand-badge">HUB<span>y</span></div>
-  <div style="display: flex; gap: 8px;">
-    <button type="button" class="btn-gps-recenter" id="btnAbrirHistorico">📋 Histórico</button>
-    <button type="button" class="btn-gps-recenter" id="btnLocalizarGPS">📍 Meu GPS</button>
-  </div>
-</header>
-    <!-- 3. PAINEL DE PEDIDO INFERIOR -->
-    <section class="order-sheet">
-      <div class="sheet-handle"></div>
+  <!-- 2. BARRA DE TOPO FLUTUANTE -->
+  <header class="top-nav-bar">
+    <div class="brand-pill">
+      <span class="hub-txt">HUB</span><span class="y-txt">y</span>
+    </div>
+    <div class="nav-actions">
+      <button type="button" id="btnAbrirHistorico" class="btn-action-pill" aria-label="Histórico">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>Viagens</span>
+      </button>
+    </div>
+  </header>
 
-      <!-- Barra de seleção de categorias -->
-      <div class="categories-row" id="containerCategorias">
-        <button type="button" class="category-chip active" data-id="carro">🚗 Carro</button>
-        <button type="button" class="category-chip" data-id="moto">🏍️ Moto</button>
-        <button type="button" class="category-chip" data-id="flash_moto">📦 Flash</button>
-        <button type="button" class="category-chip" data-id="cargo_pickup">🛻 Frete</button>
-      </div>
+  <!-- 3. BOTÃO GPS FLUTUANTE (Posicionado sobre o mapa acima do dock) -->
+  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"></circle><line x1="12" y1="1" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="23"></line><line x1="5" y1="12" x2="1" y2="12"></line><line x1="23" y1="12" x2="19" y2="12"></line></svg>
+  </button>
 
-      <!-- Resumo do Trajeto e Preço (Pré-corrida) -->
-      <div class="route-summary" id="blocoResumo">
-        <div class="route-info">
-          <small id="txtDistanciaEstimada">Toque no mapa para o destino</small>
-          <strong id="txtDestinoSelecionado">Aguardando seleção...</strong>
+  <!-- 4. DOCK INFERIOR PREMIUM -->
+  <section class="client-dock-sheet">
+    <div class="sheet-drag-handle"></div>
+
+    <!-- Seletor de Categorias Estilizado -->
+    <div class="category-slider">
+      <button type="button" class="category-chip active" data-id="carro">
+        <span class="cat-icon">🚗</span>
+        <span class="cat-label">Carro</span>
+      </button>
+      <button type="button" class="category-chip" data-id="moto">
+        <span class="cat-icon">🏍️</span>
+        <span class="cat-label">Moto</span>
+      </button>
+      <button type="button" class="category-chip" data-id="flash_moto">
+        <span class="cat-icon">⚡</span>
+        <span class="cat-label">Flash</span>
+      </button>
+      <button type="button" class="category-chip" data-id="cargo_pickup">
+        <span class="cat-icon">📦</span>
+        <span class="cat-label">Frete</span>
+      </button>
+    </div>
+
+    <!-- Bloco de Resumo da Viagem -->
+    <div id="blocoResumo" class="trip-summary-card">
+      <div class="route-details">
+        <div class="route-point-indicator"></div>
+        <div class="route-texts">
+          <span class="route-title">Destino</span>
+          <span id="txtDestinoSelecionado" class="route-subtitle">Toque no mapa para indicar o destino</span>
         </div>
-        <div class="route-price" id="txtPrecoEstimado">R$ 10,00</div>
       </div>
-
-      <!-- Bloco de Status em Tempo Real (Durante o Radar e Viagem) -->
-      <div id="cardStatusViagem" style="display: none; padding: 12px 0; text-align: left;">
-        <h4 id="statusTitulo" style="color: var(--accent, #00e676); margin-bottom: 6px;">A aguardar condutor...</h4>
-        <div id="statusDescricao" style="font-size: 0.9rem; line-height: 1.4; color: #ddd;"></div>
+      <div class="trip-price-block">
+        <span id="txtPrecoEstimado" class="price-val">R$ 10,00</span>
+        <span id="txtDistanciaEstimada" class="eta-val">-- km</span>
       </div>
-
-      <!-- Botão de Ação / Confirmação -->
-      <button type="button" class="btn-request-huby" id="btnPedirHuby">
-        Chamar HUBy Carro
-      </button>
-    </section>
-  </div>
-
- <!-- Modal de Avaliação HUBy (Opcional) -->
-<div id="modalAvaliacao" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2000; align-items: center; justify-content: center;">
-  <div style="background: #151C2C; padding: 24px; border-radius: 16px; width: 90%; max-width: 380px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
-    <h3 style="color: #FFF; margin-top: 0;">Como foi sua viagem?</h3>
-    <p style="color: #8F9CAE; font-size: 13px;">Classifique o atendimento do condutor parceiro:</p>
-    
-    <div id="estrelasRating" style="font-size: 32px; cursor: pointer; margin: 16px 0; color: #F59E0B;">
-      <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
     </div>
 
-    <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..." style="width: 100%; box-sizing: border-box; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; color: #fff; padding: 10px; font-size: 13px; resize: none; height: 70px; margin-bottom: 16px;"></textarea>
-    
-    <div style="display: flex; gap: 8px;">
-      <button type="button" id="btnPularAvaliacao" style="flex: 1; background: rgba(255,255,255,0.08); color: #8F9CAE; border: none; padding: 12px; border-radius: 10px; font-weight: 700; cursor: pointer;">
-        Pular
-      </button>
-      <button type="button" id="btnEnviarAvaliacao" style="flex: 2; background: #10B981; color: #03251E; border: none; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer;">
-        Enviar Avaliação
-      </button>
+    <!-- Card de Corrida em Andamento (Oculto Inicialmente) -->
+    <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
+      <div class="ride-header">
+        <div class="pulse-radar"></div>
+        <h4 id="statusTitulo">Radar Ativo: Procurando motorista...</h4>
+      </div>
+      <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
+    </div>
+
+    <!-- Botão Principal de Ação -->
+    <button type="button" id="btnPedirHuby" class="btn-main-action">
+      Chamar HUBy Carro
+    </button>
+  </section>
+
+  <!-- Modal de Avaliação Opcional -->
+  <div id="modalAvaliacao" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <h3>Como correu a sua viagem?</h3>
+      <p>Classifique o atendimento do condutor parceiro:</p>
+      
+      <div id="estrelasRating" class="star-rating">
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+      </div>
+
+      <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
+      
+      <div class="modal-btn-row">
+        <button type="button" id="btnPularAvaliacao" class="btn-secondary-modal">Pular</button>
+        <button type="button" id="btnEnviarAvaliacao" class="btn-primary-modal">Enviar</button>
+      </div>
     </div>
   </div>
-</div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-
-  <!-- Script Principal da Aplicação -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/app-cliente.js"></script>
 </body>
 </html>
