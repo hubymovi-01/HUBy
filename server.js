@@ -66,14 +66,17 @@ app.post('/api/admin/login', (req, res) => {
 // ==========================================
 // 1. ROTAS DE CLIENTES
 // ==========================================
+
+// Rota de Cadastro de Passageiro
 app.post('/api/clientes/cadastro', async (req, res) => {
   try {
-    const { id, nome, telefone, cpf, email, idade, genero, emergenciaNome, emergenciaTel } = req.body;
+    const { id, nome, telefone, cpf, email, senha, idade, genero, emergenciaNome, emergenciaTel } = req.body;
 
     if (!nome || !cpf || !email) {
       return res.status(400).json({ erro: 'Dados obrigatórios em falta para o cadastro do cliente.' });
     }
 
+    // Cria a tabela se não existir (garantindo a coluna de senha)
     await sql`
       CREATE TABLE IF NOT EXISTS clientes (
         id VARCHAR(50) PRIMARY KEY,
@@ -81,6 +84,7 @@ app.post('/api/clientes/cadastro', async (req, res) => {
         telefone VARCHAR(25),
         cpf VARCHAR(20) UNIQUE,
         email VARCHAR(150) UNIQUE,
+        senha VARCHAR(150),
         idade INT,
         genero VARCHAR(30),
         emergencia_nome VARCHAR(150),
@@ -90,17 +94,90 @@ app.post('/api/clientes/cadastro', async (req, res) => {
       )
     `;
 
+    // Garante que a coluna de senha exista mesmo se a tabela já tiver sido criada antes
+    try {
+      await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS senha VARCHAR(150);`;
+    } catch (_) {}
+
     await sql`
-      INSERT INTO clientes (id, nome, telefone, cpf, email, idade, genero, emergencia_nome, emergencia_tel)
-      VALUES (${id || 'cli_' + Date.now()}, ${nome}, ${telefone}, ${cpf}, ${email.toLowerCase().trim()}, ${idade || 18}, ${genero || 'nao_informar'}, ${emergenciaNome || ''}, ${emergenciaTel || ''})
+      INSERT INTO clientes (id, nome, telefone, cpf, email, senha, idade, genero, emergencia_nome, emergencia_tel)
+      VALUES (
+        ${id || 'cli_' + Date.now()}, 
+        ${nome}, 
+        ${telefone}, 
+        ${cpf}, 
+        ${email.toLowerCase().trim()}, 
+        ${senha || ''}, 
+        ${idade || 18}, 
+        ${genero || 'nao_informar'}, 
+        ${emergenciaNome || ''}, 
+        ${emergenciaTel || ''}
+      )
       ON CONFLICT (email) DO UPDATE 
-      SET nome = EXCLUDED.nome, telefone = EXCLUDED.telefone, idade = EXCLUDED.idade, genero = EXCLUDED.genero, emergencia_nome = EXCLUDED.emergencia_nome, emergencia_tel = EXCLUDED.emergencia_tel
+      SET nome = EXCLUDED.nome, 
+          telefone = EXCLUDED.telefone, 
+          senha = COALESCE(NULLIF(EXCLUDED.senha, ''), clientes.senha),
+          idade = EXCLUDED.idade, 
+          genero = EXCLUDED.genero, 
+          emergencia_nome = EXCLUDED.emergencia_nome, 
+          emergencia_tel = EXCLUDED.emergencia_tel
     `;
 
     res.status(201).json({ sucesso: true, mensagem: 'Cliente cadastrado com sucesso no Neon.' });
   } catch (error) {
     console.error('Erro ao guardar cliente no Neon:', error);
     res.status(500).json({ erro: error.message });
+  }
+});
+
+// Rota de Login do Passageiro (Adicionada)
+app.post('/api/clientes/login', async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ sucesso: false, erro: 'Informe o e-mail de acesso.' });
+    }
+
+    const emailLimpo = String(email).trim().toLowerCase();
+
+    const resultado = await sql`
+      SELECT id, nome, email, telefone, role, senha 
+      FROM clientes 
+      WHERE LOWER(TRIM(email)) = ${emailLimpo}
+      LIMIT 1
+    `;
+
+    if (resultado.length === 0) {
+      return res.status(401).json({ 
+        sucesso: false, 
+        erro: 'E-mail não encontrado. Por favor, crie uma conta primeiro.' 
+      });
+    }
+
+    const cliente = resultado[0];
+
+    // Validação da senha caso tenha sido cadastrada
+    if (cliente.senha && senha && cliente.senha !== senha) {
+      return res.status(401).json({
+        sucesso: false,
+        erro: 'Senha incorreta. Tente novamente.'
+      });
+    }
+
+    res.json({
+      sucesso: true,
+      cliente: {
+        id: cliente.id,
+        nome: cliente.nome,
+        email: cliente.email,
+        telefone: cliente.telefone,
+        role: cliente.role || 'cliente'
+      }
+    });
+  } catch (err) {
+    console.error('Erro no login do cliente:', err);
+    res.status(500).json({ sucesso: false, erro: 'Erro ao validar login do cliente: ' + err.message });
   }
 });
 
@@ -177,8 +254,6 @@ app.patch('/api/pedidos', async (req, res) => {
 // ==========================================
 // 3. ROTAS DE MOTORISTAS
 // ==========================================
-
-// Rota de Login do Parceiro via CNH e Placa
 app.post('/api/motoristas/login', async (req, res) => {
   try {
     const { cnh, placa } = req.body;

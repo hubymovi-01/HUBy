@@ -8,8 +8,26 @@
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- Verificação rápida de sessão -->
-  <script src="./js/modules/auth-guard.js"></script>
+  <!-- BLINDAGEM CRÍTICA: Se já autenticado, oculta o splash antes da pintura da tela -->
+  <script>
+    (function () {
+      const urlParams = new URLSearchParams(window.location.search);
+      const autenticadoUrl = urlParams.get('autenticado') === '1';
+      const papel = localStorage.getItem('huby_user_role');
+      const jaEntrou = localStorage.getItem('huby_ja_entrou');
+
+      if (autenticadoUrl || jaEntrou === '1' || papel === 'cliente') {
+        localStorage.setItem('huby_ja_entrou', '1');
+        document.documentElement.classList.add('app-pronto');
+
+        // Garante que o splash não apareça nem por um milissegundo
+        const style = document.createElement('style');
+        style.id = 'splash-hide-style';
+        style.innerHTML = '#splashScreen { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';
+        document.head.appendChild(style);
+      }
+    })();
+  </script>
 
   <!-- CSS do Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -21,7 +39,7 @@
 
 <body>
 
-  <!-- 1. TELA DE ENTRADA / ONBOARDING (Controlada via welcome.css) -->
+  <!-- 1. TELA DE ENTRADA / ONBOARDING -->
   <div id="splashScreen" class="welcome-overlay">
     <div class="top-glow"></div>
     <div class="bottom-glow"></div>
@@ -146,7 +164,7 @@
           <div class="addresses-box">
             <div class="input-group">
               <span class="dot-indicator green"></span>
-              <input type="text" id="inputOrigem" value="A minha localização atual" readonly>
+              <input type="text" id="inputOrigem" value="Minha localização atual" readonly>
             </div>
             <div class="address-row">
               <div class="input-group" style="flex:1;">
@@ -179,7 +197,7 @@
           </div>
 
           <div class="trip-breakdown">
-            <span>📏 Rota: <strong id="txtDistKm">3.5 km</strong> (<span id="txtDuracaoMin">8</span> min)</span>
+            <span>📏 Rota: <strong id="txtDistKm">1.5 km</strong> (<span id="txtDuracaoMin">6</span> min)</span>
             <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
           </div>
 
@@ -194,7 +212,7 @@
 
           <button type="button" class="btn-primary" id="btnSolicitarHuby">
             <span id="txtBotaoAcao">Chamar HUBy Carro</span>
-            <span class="price-box" id="txtPrecoFinal">R$ 16,10</span>
+            <span class="price-box" id="txtPrecoFinal">R$ 10,90</span>
           </button>
         </div>
       </section>
@@ -253,20 +271,10 @@
               <div class="activity-icon-box">🚗</div>
               <div class="activity-info">
                 <h4>HUBy Carro</h4>
-                <span>Hoje, 17:40 • Centro ➔ Aeroporto</span>
+                <span>Hoje • Viagem concluída</span>
                 <div class="activity-badge concluido">Concluído</div>
               </div>
-              <div class="activity-price">R$ 24,50</div>
-            </div>
-
-            <div class="activity-card">
-              <div class="activity-icon-box orange">🚚</div>
-              <div class="activity-info">
-                <h4>HUBy Cargo (VUC)</h4>
-                <span>Ontem, 14:15 • Frete residencial</span>
-                <div class="activity-badge concluido">Concluído</div>
-              </div>
-              <div class="activity-price">R$ 142,00</div>
+              <div class="activity-price">R$ 16,10</div>
             </div>
           </div>
         </div>
@@ -375,10 +383,18 @@
     </nav>
   </div>
 
-  <!-- Scripts Modulares -->
+  <!-- Scripts Modulares (Carregados corretamente como tipo module) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module">
+    import { AuthGuard } from './js/modules/auth-guard.js';
+    import { OnboardingCarousel } from './js/modules/onboarding.js';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      new AuthGuard();
+      new OnboardingCarousel();
+    });
+  </script>
   <script type="module" src="./js/modules/app-cliente.js"></script>
-  <script type="module" src="./js/modules/onboarding.js"></script>
 </body>
 
 </html>

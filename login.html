@@ -207,7 +207,7 @@
           <label for="cliEmail">E-mail Cadastrado</label>
           <div class="input-wrapper">
             <span class="input-icon">✉️</span>
-            <input type="email" id="cliEmail" class="form-input" placeholder="seu@email.com" required>
+            <input type="email" id="cliEmail" class="form-input" placeholder="seu@email.com" required autocomplete="username">
           </div>
         </div>
 
@@ -215,7 +215,7 @@
           <label for="cliSenha">Senha</label>
           <div class="input-wrapper">
             <span class="input-icon">🔒</span>
-            <input type="password" id="cliSenha" class="form-input" placeholder="Sua senha" required>
+            <input type="password" id="cliSenha" class="form-input" placeholder="Sua senha" required autocomplete="current-password">
           </div>
         </div>
 
@@ -311,14 +311,12 @@
         if (resp.ok && dados.sucesso) {
           const motorista = dados.motorista;
           
-          // Salva as credenciais no localStorage
           localStorage.setItem('huby_user_role', 'motorista');
           localStorage.setItem('huby_motorista_id', motorista.id);
           localStorage.setItem('huby_motorista_nome', motorista.nome);
           localStorage.setItem('huby_parceiro_categoria', motorista.categoria);
           localStorage.setItem('huby_motorista_placa', motorista.placa);
 
-          // Redirecionamento inteligente por categoria
           redirecionarMotorista(motorista.categoria);
         } else {
           alert(`❌ ${dados.erro || 'CNH ou Placa não correspondem a um motorista cadastrado.'}`);
@@ -326,8 +324,6 @@
           btn.disabled = false;
         }
       } catch (err) {
-        // Fallback offline (se a API estiver dormindo mas os dados já foram salvos neste aparelho)
-        const cnhSalva = localStorage.getItem('huby_motorista_cnh');
         const placaSalva = localStorage.getItem('huby_motorista_placa');
         const categoriaSalva = localStorage.getItem('huby_parceiro_categoria') || 'carro';
 
@@ -335,23 +331,62 @@
           localStorage.setItem('huby_user_role', 'motorista');
           redirecionarMotorista(categoriaSalva);
         } else {
-          alert('⚠️ Falha ao conectar ao servidor. Verifique a sua conexão e tente novamente.');
+          alert('⚠️ Falha ao conectar ao servidor. Verifique sua conexão e tente novamente.');
           btn.innerHTML = '<span>Acessar Painel do Motorista</span><span>➔</span>';
           btn.disabled = false;
         }
       }
     });
 
-    // 4. Login de Passageiro
+    // 4. Login Real de Passageiro integrado ao Neon SQL
     formCliente.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const email = document.getElementById('cliEmail').value.trim();
-      
-      localStorage.setItem('huby_user_role', 'cliente');
-      localStorage.setItem('huby_ja_entrou', '1');
-      localStorage.setItem('huby_cliente_email', email);
+      const btn = document.getElementById('btnLogarCliente');
+      btn.innerHTML = '<span>Autenticando...</span>';
+      btn.disabled = true;
 
-      window.location.replace('./index.html?autenticado=1');
+      const email = document.getElementById('cliEmail').value.trim();
+      const senha = document.getElementById('cliSenha').value.trim();
+
+      try {
+        const resp = await fetch(`${API_URL}/api/clientes/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, senha })
+        });
+
+        const dados = await resp.json();
+
+        if (resp.ok && dados.sucesso) {
+          const cli = dados.cliente;
+
+          localStorage.setItem('huby_user_role', cli.role || 'cliente');
+          localStorage.setItem('huby_ja_entrou', '1');
+          localStorage.setItem('huby_cliente_id', cli.id);
+          localStorage.setItem('huby_cliente_nome', cli.nome);
+          localStorage.setItem('huby_cliente_email', cli.email);
+
+          // Se o passageiro for admin, salva token administrativo
+          if (cli.role === 'admin') {
+            localStorage.setItem('huby_admin_token', 'token_admin_autorizado_998877');
+          }
+
+          window.location.replace('./index.html?autenticado=1');
+        } else {
+          alert(`❌ ${dados.erro || 'E-mail ou senha incorretos.'}`);
+          btn.innerHTML = '<span>Entrar como Passageiro</span><span>➔</span>';
+          btn.disabled = false;
+        }
+      } catch (err) {
+        // Fallback local se a API estiver em cold start
+        console.warn('Backend em repouso, liberando sessão local...');
+        localStorage.setItem('huby_user_role', 'cliente');
+        localStorage.setItem('huby_ja_entrou', '1');
+        localStorage.setItem('huby_cliente_email', email);
+        localStorage.setItem('huby_cliente_nome', email.split('@')[0]);
+
+        window.location.replace('./index.html?autenticado=1');
+      }
     });
 
     function redirecionarMotorista(categoria) {
