@@ -1,0 +1,206 @@
+/* ==========================================================================
+   HUBy 2.0 - Layout do Passageiro (css/app.css)
+   ========================================================================== */
+
+   html, body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #0b0f19;
+}
+/* 1. CONTENTOR GERAL E MAPA */
+.app-viewport {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background-color: var(--bg-dark);
+}
+
+#mapaCliente {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* 2. BARRA DE TOPO SUSPENSA */
+.top-bar-floating {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 16px) + 12px);
+  left: 16px;
+  right: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.brand-badge {
+  pointer-events: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 8px 14px;
+  font-size: 16px;
+  font-weight: 900;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.brand-badge span {
+  color: var(--primary-green);
+}
+
+.btn-gps-recenter {
+  pointer-events: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 8px 12px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+/* 3. FOLHA DE PEDIDO INFERIOR (ORDER SHEET) */
+.order-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-subtle);
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 16px 20px calc(env(safe-area-inset-bottom, 16px) + 16px);
+  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  margin: 0 auto 14px;
+}
+
+/* 4. SELEÇÃO DE CATEGORIAS */
+.categories-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+}
+
+.categories-row::-webkit-scrollbar {
+  display: none;
+}
+
+.category-chip {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 8px 14px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.category-chip.active {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: var(--primary-green);
+  color: var(--primary-green);
+}
+
+/* 5. DESTINO E VALOR */
+.route-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin: 12px 0 16px;
+}
+
+.route-info small {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.route-info strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.route-price {
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+/* 6. BOTÃO DE CONFIRMAÇÃO */
+.btn-request-huby {
+  width: 100%;
+  background: linear-gradient(135deg, var(--primary-green), var(--primary-green-dark));
+  color: #03251E;
+  border: none;
+  border-radius: 14px;
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+  transition: opacity 0.2s ease;
+}
+
+.btn-request-huby:active {
+  opacity: 0.85;
+}
+/* Garante que o mapa preencha a tela toda */
+#mapaCliente {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Garante que o painel inferior fique por cima do mapa */
+.order-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1000;
+}
+
+.top-bar-floating {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  right: 15px;
+  z-index: 1000;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}

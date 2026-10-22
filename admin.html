@@ -1,364 +1,74 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Painel de Gestão & Radar Administrativo</title>
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#080C14">
-
-  <!-- GUARDA DE PERFIL ADMIN RÁPIDA -->
-  <script>
-    (function () {
-      const token = localStorage.getItem('huby_admin_token');
-      const role = localStorage.getItem('huby_user_role');
-      if (token !== 'token_admin_autorizado_998877' && role !== 'admin') {
-        window.location.replace('./login.html');
-      }
-    })();
-  </script>
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  
-  <!-- CSS Global e do Painel Administrativo -->
-  <link rel="stylesheet" href="./css/global.css">
-  <link rel="stylesheet" href="./css/admin.css">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HUBy - Painel Administrativo</title>
+  <link rel="stylesheet" href="./css/base.css">
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    body {
-      background-color: #070B12;
-      color: #FFFFFF;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* TOPO EXECUTIVO */
-    .admin-navbar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 14px 18px;
-      background: rgba(11, 17, 28, 0.95);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(14px);
-      position: sticky;
-      top: 0;
-      z-index: 1000;
-    }
-
-    .brand-meta {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .admin-badge {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      color: #EF4444;
-      font-size: 11px;
-      font-weight: 900;
-      padding: 4px 10px;
-      border-radius: 20px;
-      letter-spacing: 0.5px;
-    }
-
-    .btn-exit-admin {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #94A3B8;
-      padding: 8px 14px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 700;
-      text-decoration: none;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    /* CONTEÚDO PRINCIPAL */
-    .admin-viewport {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 16px;
-      gap: 16px;
-      max-width: 1200px;
-      margin: 0 auto;
-      width: 100%;
-    }
-
-    /* MÉTRICAS EM CARDS */
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-    }
-
-    .metric-card {
-      background: rgba(15, 23, 42, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 14px;
-      backdrop-filter: blur(12px);
-    }
-
-    .metric-card small {
-      display: block;
-      color: #94A3B8;
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 6px;
-    }
-
-    .metric-card strong {
-      font-size: 20px;
-      font-weight: 900;
-      color: #FFFFFF;
-    }
-
-    .metric-card.highlight strong {
-      color: #10B981;
-    }
-
-    .metric-card.warning strong {
-      color: #F59E0B;
-    }
-
-    /* GRID DO MAPA E DA FILA */
-    .admin-main-grid {
-      display: grid;
-      grid-template-columns: 1.4fr 1fr;
-      gap: 16px;
-      flex: 1;
-    }
-
-    @media (max-width: 860px) {
-      .admin-main-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    /* PAINEL DO MAPA */
-    .map-panel {
-      background: rgba(15, 23, 42, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 18px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      min-height: 380px;
-    }
-
-    .panel-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 13px;
-      font-weight: 800;
-      color: #CBD5E1;
-    }
-
-    #mapaAdmin {
-      width: 100%;
-      height: 100%;
-      min-height: 340px;
-      background: #070B12;
-    }
-
-    /* FILA DE PEDIDOS */
-    .orders-panel {
-      background: rgba(15, 23, 42, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 18px;
-      display: flex;
-      flex-direction: column;
-      max-height: 520px;
-    }
-
-    .orders-list-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .admin-order-row {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 14px;
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .order-type-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      flex-shrink: 0;
-    }
-
-    .order-type-icon.emerald { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); }
-    .order-type-icon.flash { background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); }
-    .order-type-icon.cargo { background: rgba(255, 107, 0, 0.15); border: 1px solid rgba(255, 107, 0, 0.3); }
-
-    .order-meta {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .order-meta strong {
-      font-size: 12.5px;
-      color: #FFFFFF;
-    }
-
-    .order-meta span {
-      font-size: 11px;
-      color: #94A3B8;
-    }
-
-    .order-meta small {
-      font-size: 10.5px;
-      color: #64748B;
-    }
-
-    .order-status-box {
-      text-align: right;
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 4px;
-    }
-
-    .status-pill {
-      font-size: 10px;
-      font-weight: 800;
-      padding: 2px 7px;
-      border-radius: 10px;
-      text-transform: uppercase;
-    }
-
-    .status-pill.pendente { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
-    .status-pill.em-rota { background: rgba(16, 185, 129, 0.15); color: #10B981; }
-    .status-pill.concluido { background: rgba(148, 163, 184, 0.15); color: #94A3B8; }
+    body { background: #0B0F19; color: #FFF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; }
+    .admin-container { max-width: 1100px; margin: 0 auto; }
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 30px; }
+    .card-metric { background: #151C2C; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; }
+    .card-metric small { color: #8F9CAE; font-size: 12px; text-transform: uppercase; font-weight: 700; }
+    .card-metric h2 { font-size: 24px; margin: 8px 0 0; color: #10B981; }
+    .table-card { background: #151C2C; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
+    th { color: #8F9CAE; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .badge { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .badge-concluido { background: rgba(16,185,129,0.15); color: #10B981; }
+    .badge-pendente { background: rgba(245,158,11,0.15); color: #F59E0B; }
+    .badge-cancelado { background: rgba(239,68,68,0.15); color: #EF4444; }
   </style>
 </head>
-
 <body>
-
-  <!-- BARRA SUPERIOR EXECUTIVA -->
-  <nav class="admin-navbar">
-    <div class="brand-meta">
-      <a href="./index.html" style="text-decoration: none; color: #fff; font-weight: 900; font-size: 18px; letter-spacing: -0.5px;">
-        HUB<span style="color: #10B981;">y</span>
-      </a>
-      <span class="admin-badge">Painel de Controlo</span>
+  <div class="admin-container">
+    <div class="header-bar">
+      <h2>Painel Executivo HUBy 2.0</h2>
+      <button onclick="window.location.reload()" style="background:#10B981; color:#03251E; border:none; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer;">Atualizar Dados</button>
     </div>
 
-    <div style="display: flex; align-items: center; gap: 10px;">
-      <a href="./index.html" class="btn-exit-admin" title="Voltar ao início">
-        <span>🏠 Ver App</span>
-      </a>
-      <button type="button" class="btn-exit-admin" id="btnAdminLogout" style="color: #EF4444; border-color: rgba(239, 68, 68, 0.3);">
-        <span>🚪 Sair</span>
-      </button>
+    <div class="metrics-grid">
+      <div class="card-metric">
+        <small>Faturação Bruta</small>
+        <h2 id="mFaturamentoBruto">R$ 0,00</h2>
+      </div>
+      <div class="card-metric">
+        <small>Receita HUBy (15%)</small>
+        <h2 id="mReceitaHuby" style="color: #60A5FA;">R$ 0,00</h2>
+      </div>
+      <div class="card-metric">
+        <small>Repasse Parceiros (85%)</small>
+        <h2 id="mRepasseMotoristas">R$ 0,00</h2>
+      </div>
+      <div class="card-metric">
+        <small>Chamadas no Radar</small>
+        <h2 id="mChamadasAbertas" style="color: #F59E0B;">0</h2>
+      </div>
     </div>
-  </nav>
 
-  <main class="admin-viewport">
+    <div class="table-card">
+      <h3 style="margin-top:0; margin-bottom:16px;">Monitor de Viagens Recentes</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Categoria</th>
+            <th>Distância</th>
+            <th>Valor Bruto</th>
+            <th>Motorista</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="corpoTabelaChamadas">
+          <tr><td colspan="6">A carregar métricas...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 
-    <!-- MÉTRICAS DE FATURAMENTO E OPERAÇÃO (Sincronizadas com painel-admin.js) -->
-    <section class="metrics-grid">
-      <div class="metric-card highlight">
-        <small>Faturamento Bruto</small>
-        <strong id="statFaturamentoTotal">R$ 0,00</strong>
-      </div>
-
-      <div class="metric-card highlight">
-        <small>Comissão HUBy (12%)</small>
-        <strong id="statComissaoTotal">R$ 0,00</strong>
-      </div>
-
-      <div class="metric-card warning">
-        <small>Corridas Ativas</small>
-        <strong id="statCorridasAtivas">0</strong>
-      </div>
-
-      <div class="metric-card">
-        <small>Total de Chamadas</small>
-        <strong id="statQtdPedidosTotal">0</strong>
-      </div>
-    </section>
-
-    <!-- GRID DIVIDIDO: MAPA DE MONITORIZAÇÃO E FILA DE SOLICITAÇÕES -->
-    <section class="admin-main-grid">
-      <!-- Painel do Mapa -->
-      <div class="map-panel">
-        <div class="panel-header">
-          <span>📡 Radar da Frota & Trajetos em Campo</span>
-          <small style="color: #10B981; font-weight: 800;">● Em tempo real</small>
-        </div>
-        <div id="mapaAdmin"></div>
-      </div>
-
-      <!-- Painel da Fila em Tempo Real -->
-      <div class="orders-panel">
-        <div class="panel-header">
-          <span>📄 Fila Global de Solicitações</span>
-          <small style="color: #94A3B8;">Auto-sync (5s)</small>
-        </div>
-        <div class="orders-list-body" id="listaPedidosAdmin">
-          <!-- Renderizado dinamicamente via painel-admin.js -->
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- SCRIPTS MODULARES -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="./js/modules/painel-admin.js"></script>
-
-  <script>
-    // Ação do Botão Sair do Modo Administrador
-    document.getElementById('btnAdminLogout')?.addEventListener('click', () => {
-      if (confirm('Deseja realmente encerrar a sessão de Administrador?')) {
-        localStorage.removeItem('huby_admin_token');
-        if (localStorage.getItem('huby_user_role') === 'admin') {
-          localStorage.setItem('huby_user_role', 'cliente');
-        }
-        window.location.replace('./index.html');
-      }
-    });
-  </script>
+  <script type="module" src="./js/admin.js"></script>
 </body>
-
 </html>

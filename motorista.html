@@ -1,250 +1,54 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy Motorista - Radar em Tempo Real</title>
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#080C14">
-
-  <!-- GUARDA DE PERFIL: Valida se é motorista e redireciona se for de outra modalidade -->
-  <script>
-    (function () {
-      const papel = localStorage.getItem('huby_user_role');
-      const categoria = localStorage.getItem('huby_parceiro_categoria');
-
-      if (papel !== 'motorista') {
-        window.location.replace('./cadastro-motorista.html');
-        return;
-      }
-
-      // Redireciona para o painel dedicado se for Moto ou Cargo
-      if (categoria === 'moto' || categoria === 'flash') {
-        window.location.replace('./painel-motoboy.html');
-      } else if (categoria === 'cargo') {
-        window.location.replace('./painel-cargo.html');
-      }
-    })();
-  </script>
-
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <title>HUBy Condutor - Radar de Parceiro</title>
   
-  <!-- CSS Global e do Motorista -->
-  <link rel="stylesheet" href="./css/global.css">
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+  <!-- Estilos HUBy -->
+  <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/motorista.css">
-
-  <style>
-    /* Blindagem de layout em tela cheia mobile */
-    html, body {
-      width: 100vw !important;
-      height: 100vh !important;
-      height: 100dvh !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      overflow: hidden !important;
-      background-color: #070B12 !important;
-    }
-
-    .driver-layout {
-      position: relative !important;
-      width: 100vw !important;
-      height: 100vh !important;
-      height: 100dvh !important;
-      overflow: hidden !important;
-    }
-
-    .driver-map-wrapper,
-    #mapaMotorista {
-      position: absolute !important;
-      inset: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      z-index: 1 !important;
-      background-color: #070B12 !important;
-    }
-
-    /* Força o Dark Mode no Leaflet */
-    .leaflet-tile-pane {
-      filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7) !important;
-    }
-
-    /* Cabeçalho superior sempre visível acima do mapa */
-    .driver-header {
-      position: fixed !important;
-      top: max(12px, env(safe-area-inset-top, 12px)) !important;
-      left: 14px !important;
-      right: 14px !important;
-      z-index: 9999 !important;
-      background: rgba(11, 17, 28, 0.92) !important;
-      border: 1px solid rgba(255, 255, 255, 0.1) !important;
-      backdrop-filter: blur(16px) !important;
-      -webkit-backdrop-filter: blur(16px) !important;
-      border-radius: 18px !important;
-      padding: 10px 14px !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
-    }
-
-    /* Pílula de status do radar */
-    .radar-status-badge {
-      position: fixed !important;
-      top: 80px !important;
-      left: 50% !important;
-      transform: translateX(-50%) !important;
-      z-index: 9998 !important;
-      background: rgba(8, 12, 20, 0.88) !important;
-      border: 1px solid rgba(16, 185, 129, 0.35) !important;
-      backdrop-filter: blur(12px) !important;
-      border-radius: 20px !important;
-      padding: 6px 14px !important;
-      font-size: 11.5px !important;
-      font-weight: 700 !important;
-      color: #E2E8F0 !important;
-      display: flex !important;
-      align-items: center !important;
-      gap: 7px !important;
-      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4) !important;
-    }
-
-    .btn-recenter-gps {
-      position: fixed !important;
-      right: 16px !important;
-      bottom: 230px !important;
-      z-index: 9998 !important;
-      width: 44px !important;
-      height: 44px !important;
-      border-radius: 50% !important;
-      background: rgba(11, 17, 28, 0.9) !important;
-      border: 1px solid rgba(255, 255, 255, 0.15) !important;
-      backdrop-filter: blur(10px) !important;
-      color: #FFFFFF !important;
-      font-size: 18px !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      cursor: pointer !important;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45) !important;
-    }
-
-    /* Dock deslizante inferior fixado na base */
-    .driver-bottom-dock {
-      position: fixed !important;
-      bottom: 0 !important;
-      left: 0 !important;
-      right: 0 !important;
-      z-index: 9999 !important;
-      background: rgba(11, 17, 28, 0.95) !important;
-      border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-      backdrop-filter: blur(20px) !important;
-      -webkit-backdrop-filter: blur(20px) !important;
-      border-radius: 22px 22px 0 0 !important;
-      padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 12px)) 16px !important;
-      box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
-      display: flex !important;
-      flex-direction: column !important;
-      gap: 10px !important;
-    }
-  </style>
 </head>
-
 <body>
-  <div class="driver-layout">
 
-    <!-- CABEÇALHO UNIFICADO E DINÂMICO -->
-    <header class="driver-header">
-      <div class="header-left">
-        <div class="driver-avatar" id="lblAvatarMotorista">TC</div>
-        <div class="driver-meta">
-          <div class="meta-row">
-            <span class="d-name" id="lblNomeMotorista">Motorista</span>
-            <span class="d-badge">⭐ 5.0</span>
-          </div>
-          <span class="d-earnings" id="statGanhosHoje">Hoje: <strong>R$ 0,00</strong> (0 corridas)</span>
-        </div>
-      </div>
+  <div class="driver-viewport">
+    <!-- 1. MAPA LEAFLET -->
+    <div id="mapaMotorista"></div>
 
-      <div class="header-right">
-        <button type="button" id="btnToggleStatus" class="btn-toggle-online status-online">
-          <span class="pulse-indicator"></span>
-          <span id="txtStatusMotorista">ONLINE</span>
-        </button>
-        <button type="button" class="btn-mode-icon" id="btnSairConta" title="Encerrar Sessão">🚪</button>
+    <!-- 2. BARRA DE CONTROLO SUPERIOR -->
+    <header class="driver-top-bar">
+      <div class="driver-status-card">
+        <small id="txtParceiroNome">Parceiro</small>
+        <strong id="txtStatusTexto">A aguardar sinal...</strong>
       </div>
+      <button type="button" class="btn-toggle-status" id="btnToggleStatus">
+        ONLINE
+      </button>
     </header>
 
-    <!-- ÁREA TOTAL DO MAPA -->
-    <main class="driver-map-wrapper">
-      <div id="mapaMotorista"></div>
-
-      <!-- Pílula de Radar Discreta -->
-      <div class="radar-status-badge" id="badgeRadarStatus">
-        <span class="radar-ring-pulse"></span>
-        <span id="txtRadarStatus">A rastrear chamadas...</span>
+    <!-- 3. GAVETA INFERIOR: RADAR DE CHAMADAS -->
+    <section class="driver-dock">
+      <div class="dock-header">
+        <span class="dock-title">Radar de Chamadas</span>
+        <span id="txtTotalPendentes" style="font-size: 11px; color: var(--text-muted); font-weight: 700;">0 disponíveis</span>
       </div>
 
-      <!-- Botão Flutuante de Recentralizar GPS -->
-      <button type="button" id="btnRecenterGPS" class="btn-recenter-gps" aria-label="Recentralizar GPS">
-        📍
-      </button>
-    </main>
-
-    <!-- PAINEL DESLIZANTE INFERIOR (FEED DE CHAMADAS) -->
-    <section class="driver-bottom-dock">
-      <div class="dock-grabber"></div>
-
-      <!-- Filtros em Pílulas: Dedicado a Carro Particular -->
-      <div class="dock-filters">
-        <button type="button" class="filter-pill active" data-filter="carro">🚗 HUBy Viagem (Carro)</button>
-        <button type="button" class="filter-pill" data-filter="todos">Todos</button>
-      </div>
-
-      <!-- Lista de Chamadas / Estado Vazio -->
-      <div class="driver-feed" id="feedChamadas">
-        <!-- Renderizado dinamicamente via app-motorista.js -->
+      <!-- Feed dinâmico de solicitações -->
+      <div class="orders-feed" id="feedPedidos">
+        <div class="dock-empty">
+          A procurar viagens e fretes próximos...
+        </div>
       </div>
     </section>
-
   </div>
 
-  <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="./js/modules/app-motorista.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- Script para Carregar Dados do Perfil e Logout -->
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const nomeSalvo = localStorage.getItem('huby_motorista_nome') || 'Motorista Parceiro';
-      const elNome = document.getElementById('lblNomeMotorista');
-      const elAvatar = document.getElementById('lblAvatarMotorista');
-
-      if (elNome) {
-        elNome.textContent = nomeSalvo.split(' ')[0];
-      }
-
-      if (elAvatar) {
-        const partes = nomeSalvo.trim().split(' ');
-        const iniciais = partes.length > 1 
-          ? (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
-          : partes[0].substring(0, 2).toUpperCase();
-        elAvatar.textContent = iniciais;
-      }
-
-      // Ação de Logout
-      document.getElementById('btnSairConta')?.addEventListener('click', () => {
-        if (confirm('Deseja realmente sair da sua conta de motorista?')) {
-          localStorage.removeItem('huby_user_role');
-          localStorage.removeItem('huby_parceiro_categoria');
-          localStorage.removeItem('huby_motorista_id');
-          localStorage.removeItem('huby_motorista_nome');
-          window.location.href = './index.html';
-        }
-      });
-    });
-  </script>
+  <!-- Script Principal do Condutor -->
+  <script type="module" src="./js/app-motorista.js"></script>
 </body>
-
 </html>

@@ -1,236 +1,66 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy - Acesso à Conta</title>
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#080C14">
-  <link rel="stylesheet" href="./css/global.css">
-  <link rel="stylesheet" href="./css/login.css">
+  <title>Entrar - HUBy</title>
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/auth.css">
 </head>
-
 <body>
 
-  <div class="glow-bg top-glow"></div>
-  <div class="glow-bg bottom-glow"></div>
+  <main class="auth-viewport">
+    <div class="auth-card">
+      <header class="auth-brand">
+        <h1>HUB<span>y</span></h1>
+        <p>Aceda à sua conta de mobilidade e entregas</p>
+      </header>
 
-  <div class="login-container">
-    
-    <header class="login-brand">
-      <h1>HUB<span>y</span></h1>
-      <p id="lblSubtitulo">Acesse a plataforma de mobilidade e fretes</p>
-    </header>
+      <!-- Alternador de Perfil -->
+      <nav class="auth-tabs">
+        <button type="button" class="auth-tab-btn active" id="tabCliente">Passageiro / Geral</button>
+        <button type="button" class="auth-tab-btn" id="tabMotorista">Sou Parceiro</button>
+      </nav>
 
-    <!-- Seletor de Perfil -->
-    <div class="role-tabs">
-      <button type="button" class="role-tab-btn active" id="tabCliente" data-role="cliente">
-        👤 Passageiro
-      </button>
-      <button type="button" class="role-tab-btn" id="tabMotorista" data-role="motorista">
-        🚘 Parceiro HUBy
-      </button>
-    </div>
-
-    <div class="form-card">
-      
-      <!-- FORMULÁRIO 1: PASSAGEIRO (E-MAIL E SENHA) -->
-      <form id="formLoginCliente">
-        <div class="field-group">
-          <label for="cliEmail">E-mail Cadastrado</label>
-          <div class="input-wrapper">
-            <span class="input-icon">✉️</span>
-            <input type="email" id="cliEmail" class="form-input" placeholder="seu@email.com" required autocomplete="username">
-          </div>
+      <!-- 1. Formulário Unificado: Passageiro / Administrador -->
+      <form id="formLoginCliente" class="auth-form">
+        <div class="input-block">
+          <label for="emailCliente">E-mail</label>
+          <input type="email" id="emailCliente" placeholder="exemplo@email.com" required>
         </div>
 
-        <div class="field-group">
-          <label for="cliSenha">Senha</label>
-          <div class="input-wrapper">
-            <span class="input-icon">🔒</span>
-            <input type="password" id="cliSenha" class="form-input" placeholder="Sua senha" required autocomplete="current-password">
-          </div>
+        <div class="input-block">
+          <label for="senhaCliente">Palavra-passe</label>
+          <input type="password" id="senhaCliente" placeholder="Introduza a sua palavra-passe" required>
         </div>
 
-        <button type="submit" class="btn-submit-login" id="btnLogarCliente">
-          <span>Entrar como Passageiro</span>
-          <span>➔</span>
+        <button type="submit" class="btn-auth-submit" id="btnEntrarCliente">Entrar</button>
+      </form>
+
+      <!-- 2. Formulário: Motorista / Cargo -->
+      <form id="formLoginMotorista" class="auth-form" style="display: none;">
+        <div class="input-block">
+          <label for="cnhMotorista">Número da CNH</label>
+          <input type="tel" id="cnhMotorista" placeholder="Apenas números da carta" required>
+        </div>
+
+        <div class="input-block">
+          <label for="placaMotorista">Matrícula / Placa do Veículo</label>
+          <input type="text" id="placaMotorista" placeholder="Ex: ABC1D23" style="text-transform: uppercase;" required>
+        </div>
+
+        <button type="submit" class="btn-auth-submit" id="btnEntrarMotorista" style="background: linear-gradient(135deg, #FF6B00, #C2410C); color: #FFF;">
+          Aceder ao Radar de Parceiro
         </button>
       </form>
 
-      <!-- FORMULÁRIO 2: MOTORISTA (CNH E PLACA) -->
-      <form id="formLoginMotorista" style="display: none;">
-        <div class="field-group">
-          <label for="motCnh">Número da CNH</label>
-          <div class="input-wrapper">
-            <span class="input-icon">🪪</span>
-            <input type="tel" id="motCnh" class="form-input" placeholder="Ex: 01234567890" maxlength="11" required>
-          </div>
-        </div>
-
-        <div class="field-group">
-          <label for="motPlaca">Placa do Veículo</label>
-          <div class="input-wrapper">
-            <span class="input-icon">🔢</span>
-            <input type="text" id="motPlaca" class="form-input" placeholder="ABC1D23" maxlength="8" style="text-transform: uppercase;" required>
-          </div>
-        </div>
-
-        <button type="submit" class="btn-submit-login" id="btnLogarMotorista">
-          <span>Acessar Painel do Motorista</span>
-          <span>➔</span>
-        </button>
-      </form>
-
+      <footer class="auth-footer">
+        <span>Ainda não tem conta?</span>
+        <a href="./cadastro.html">Criar registo</a>
+      </footer>
     </div>
+  </main>
 
-    <footer class="login-footer-links">
-      <span id="txtLinkCadastro">Ainda não tem conta? <a href="./cadastro-cliente.html">Cadastre-se aqui</a></span>
-    </footer>
-
-  </div>
-
-  <script>
-    const API_URL = 'https://huby.onrender.com';
-
-    // 1. Alternância entre Abas
-    const tabCliente = document.getElementById('tabCliente');
-    const tabMotorista = document.getElementById('tabMotorista');
-    const formCliente = document.getElementById('formLoginCliente');
-    const formMotorista = document.getElementById('formLoginMotorista');
-    const txtLinkCadastro = document.getElementById('txtLinkCadastro');
-
-    tabCliente.addEventListener('click', () => {
-      tabCliente.classList.add('active');
-      tabMotorista.classList.remove('active');
-      formCliente.style.display = 'block';
-      formMotorista.style.display = 'none';
-      txtLinkCadastro.innerHTML = 'Ainda não tem conta? <a href="./cadastro-cliente.html">Cadastre-se aqui</a>';
-    });
-
-    tabMotorista.addEventListener('click', () => {
-      tabMotorista.classList.add('active');
-      tabCliente.classList.remove('active');
-      formCliente.style.display = 'none';
-      formMotorista.style.display = 'block';
-      txtLinkCadastro.innerHTML = 'Quer ser um parceiro? <a href="./cadastro-motorista.html">Cadastre seu veículo</a>';
-    });
-
-    // 2. Formatação automática da Placa
-    const inputPlaca = document.getElementById('motPlaca');
-    inputPlaca.addEventListener('input', (e) => {
-      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 7);
-    });
-
-    // 3. Login do Motorista (CNH + Placa)
-    formMotorista.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('btnLogarMotorista');
-      btn.innerHTML = '<span>Validando CNH e Placa...</span>';
-      btn.disabled = true;
-
-      const cnh = document.getElementById('motCnh').value.trim();
-      const placa = document.getElementById('motPlaca').value.trim().toUpperCase();
-
-      try {
-        const resp = await fetch(`${API_URL}/api/motoristas/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cnh, placa })
-        });
-
-        const dados = await resp.json();
-
-        if (resp.ok && dados.sucesso) {
-          const motorista = dados.motorista;
-          
-          localStorage.setItem('huby_user_role', 'motorista');
-          localStorage.setItem('huby_motorista_id', motorista.id);
-          localStorage.setItem('huby_motorista_nome', motorista.nome);
-          localStorage.setItem('huby_parceiro_categoria', motorista.categoria);
-          localStorage.setItem('huby_motorista_placa', motorista.placa);
-
-          redirecionarMotorista(motorista.categoria);
-        } else {
-          alert(`❌ ${dados.erro || 'CNH ou Placa não correspondem a um motorista cadastrado.'}`);
-          btn.innerHTML = '<span>Acessar Painel do Motorista</span><span>➔</span>';
-          btn.disabled = false;
-        }
-      } catch (err) {
-        const placaSalva = localStorage.getItem('huby_motorista_placa');
-        const categoriaSalva = localStorage.getItem('huby_parceiro_categoria') || 'carro';
-
-        if (placaSalva && placaSalva.toUpperCase() === placa) {
-          localStorage.setItem('huby_user_role', 'motorista');
-          redirecionarMotorista(categoriaSalva);
-        } else {
-          alert('⚠️ Falha ao conectar ao servidor. Verifique sua conexão e tente novamente.');
-          btn.innerHTML = '<span>Acessar Painel do Motorista</span><span>➔</span>';
-          btn.disabled = false;
-        }
-      }
-    });
-
-    // 4. Login Real de Passageiro integrado ao Neon SQL
-    formCliente.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('btnLogarCliente');
-      btn.innerHTML = '<span>Autenticando...</span>';
-      btn.disabled = true;
-
-      const email = document.getElementById('cliEmail').value.trim();
-      const senha = document.getElementById('cliSenha').value.trim();
-
-      try {
-        const resp = await fetch(`${API_URL}/api/clientes/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, senha })
-        });
-
-        const dados = await resp.json();
-
-        if (resp.ok && dados.sucesso) {
-          const cli = dados.cliente;
-
-          localStorage.setItem('huby_user_role', cli.role || 'cliente');
-          localStorage.setItem('huby_ja_entrou', '1');
-          localStorage.setItem('huby_cliente_id', cli.id);
-          localStorage.setItem('huby_cliente_nome', cli.nome);
-          localStorage.setItem('huby_cliente_email', cli.email);
-
-          if (cli.role === 'admin') {
-            localStorage.setItem('huby_admin_token', 'token_admin_autorizado_998877');
-          }
-
-          window.location.replace('./index.html?autenticado=1');
-        } else {
-          alert(`❌ ${dados.erro || 'E-mail ou senha incorretos.'}`);
-          btn.innerHTML = '<span>Entrar como Passageiro</span><span>➔</span>';
-          btn.disabled = false;
-        }
-      } catch (err) {
-        console.warn('Backend em repouso, liberando sessão local...');
-        localStorage.setItem('huby_user_role', 'cliente');
-        localStorage.setItem('huby_ja_entrou', '1');
-        localStorage.setItem('huby_cliente_email', email);
-        localStorage.setItem('huby_cliente_nome', email.split('@')[0]);
-
-        window.location.replace('./index.html?autenticado=1');
-      }
-    });
-
-    function redirecionarMotorista(categoria) {
-      if (categoria === 'moto' || categoria === 'flash') {
-        window.location.replace('./painel-motoboy.html');
-      } else if (categoria === 'cargo') {
-        window.location.replace('./painel-cargo.html');
-      } else {
-        window.location.replace('./motorista.html');
-      }
-    }
-  </script>
+  <script type="module" src="./js/auth.js"></script>
 </body>
-
 </html>
