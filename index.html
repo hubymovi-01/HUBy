@@ -20,7 +20,6 @@
         localStorage.setItem('huby_ja_entrou', '1');
         document.documentElement.classList.add('app-pronto');
 
-        // Garante que o splash não apareça nem por um milissegundo
         const style = document.createElement('style');
         style.id = 'splash-hide-style';
         style.innerHTML = '#splashScreen { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }';
@@ -119,7 +118,6 @@
     <header class="huby-header">
       <a href="./index.html" class="brand-logo-compact">
         <span class="brand-hub-nav">HUB</span><span class="brand-y-nav">y</span>
-        <span class="brand-sub-nav">HUBy</span>
       </a>
       <div class="header-right">
         <span class="wallet-pill" id="btnIrCarteira" style="cursor: pointer;" title="Carteira HUBy">🪙 <strong>R$ 0,00</strong></span>
@@ -129,7 +127,7 @@
 
     <main class="tabs-viewport">
 
-      <!-- ABA 1: INÍCIO (MAPA + PEDIDO) -->
+      <!-- ABA 1: INÍCIO (MAPA + PAINEL DE CHAMADA) -->
       <section class="tab-view active-view" id="viewInicio">
         <div class="map-wrapper">
           <div class="map-hint-pill">👆 Toque no mapa ou pesquise o destino</div>
@@ -137,30 +135,31 @@
           <button type="button" class="btn-meu-gps" id="btnLocalizarGPS">📍 Meu GPS</button>
         </div>
 
+        <!-- PAINEL INFERIOR LIMPO E EXECUTIVO -->
         <div class="order-sheet">
           <div class="sheet-drag-handle"></div>
           <div class="status-banner" id="bannerStatusCorrida"></div>
 
+          <!-- Abas de Categoria Superiores -->
           <div class="group-tabs">
-            <div class="tab-card active-carro" data-grupo="carro">
+            <button type="button" class="tab-card active-carro" data-grupo="carro">
               <div class="tab-icon">🚗</div>
-              <div class="tab-title">HUBy Viagem</div>
-              <div class="tab-sub">Carro & Moto</div>
-            </div>
-            <div class="tab-card" data-grupo="flash">
+              <div class="tab-title">Viagem</div>
+            </button>
+            <button type="button" class="tab-card" data-grupo="flash">
               <div class="tab-icon">📦</div>
-              <div class="tab-title">HUBy Flash</div>
-              <div class="tab-sub">Entregas</div>
-            </div>
-            <div class="tab-card" data-grupo="cargo">
+              <div class="tab-title">Flash</div>
+            </button>
+            <button type="button" class="tab-card" data-grupo="cargo">
               <div class="tab-icon">🚚</div>
-              <div class="tab-title">HUBy Cargo</div>
-              <div class="tab-sub">Caminhão/Frete</div>
-            </div>
+              <div class="tab-title">Cargo</div>
+            </button>
           </div>
 
+          <!-- Sub-veículos gerados dinamicamente sem poluição -->
           <div class="sub-vehicles" id="containerSubVeiculos"></div>
 
+          <!-- Campos de Endereço Organizados -->
           <div class="addresses-box">
             <div class="input-group">
               <span class="dot-indicator green"></span>
@@ -169,15 +168,16 @@
             <div class="address-row">
               <div class="input-group" style="flex:1;">
                 <span class="dot-indicator orange"></span>
-                <input type="text" id="inputDestino" placeholder="Para onde vamos levar? (ou toque no mapa)">
+                <input type="text" id="inputDestino" placeholder="Para onde vamos? (ou toque no mapa)">
               </div>
               <button type="button" class="btn-search-dest" id="btnBuscarEndereco">Ir</button>
             </div>
           </div>
 
-          <div class="cargo-options-box">
+          <!-- Opções de Cargo / Adicionais (Retraídas quando não selecionadas) -->
+          <div class="cargo-options-box" style="display: flex; flex-direction: column; gap: 8px;">
             <div class="option-line" id="linhaAjudante" style="display:none;">
-              <span>👷 Ajudante de Carga (+R$ 50 cada)</span>
+              <span>👷 Ajudante de Carga (+R$ 50)</span>
               <div class="counter-control">
                 <button type="button" class="btn-qty" id="btnMenosAjudante">-</button>
                 <strong id="txtQtdAjudantes">0</strong>
@@ -190,29 +190,32 @@
               <input type="checkbox" id="chkEscada" class="huby-check">
             </div>
 
-            <div class="option-line">
+            <div class="option-line" style="display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: #94A3B8;">
               <label for="chkParadaExtra" style="cursor:pointer;">➕ Parada extra no percurso (+R$ 6)</label>
               <input type="checkbox" id="chkParadaExtra" class="huby-check">
             </div>
           </div>
 
+          <!-- Resumo de Rota Compacto -->
           <div class="trip-breakdown">
-            <span>📏 Rota: <strong id="txtDistKm">1.5 km</strong> (<span id="txtDuracaoMin">6</span> min)</span>
+            <span>📏 <strong id="txtDistKm">1.5 km</strong> (<span id="txtDuracaoMin">4</span> min)</span>
             <span>Adicionais: <strong id="txtValorAdicionais">R$ 0,00</strong></span>
           </div>
 
-          <div class="payment-bar">
-            <span class="payment-label">Pagamento:</span>
-            <select id="selectMetodoPgto">
-              <option value="pix_app">💠 Pix no App (Split Automático)</option>
-              <option value="dinheiro_presencial">💵 Dinheiro ao Motorista</option>
-              <option value="cartao_app">💳 Cartão de Crédito</option>
+          <!-- Barra de Pagamento Executiva -->
+          <div class="payment-bar" style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 8px 12px; border-radius: 12px; font-size: 12px;">
+            <span style="color: #94A3B8;">Pagamento:</span>
+            <select id="selectMetodoPgto" style="background: transparent; border: none; color: #10B981; font-weight: 800; outline: none; cursor: pointer;">
+              <option value="pix_app" style="background: #080C14; color: #fff;">💠 Pix no App</option>
+              <option value="dinheiro_presencial" style="background: #080C14; color: #fff;">💵 Dinheiro</option>
+              <option value="cartao_app" style="background: #080C14; color: #fff;">💳 Cartão</option>
             </select>
           </div>
 
+          <!-- Botão Principal Executivo -->
           <button type="button" class="btn-primary" id="btnSolicitarHuby">
             <span id="txtBotaoAcao">Chamar HUBy Carro</span>
-            <span class="price-box" id="txtPrecoFinal">R$ 10,90</span>
+            <span class="price-box" id="txtPrecoFinal" style="font-weight: 900; font-size: 15px;">R$ 10,90</span>
           </button>
         </div>
       </section>
@@ -246,14 +249,6 @@
               <h3>HUBy Cargo</h3>
               <p>VUCs, vans, caminhonetes e ajudantes sob demanda</p>
             </div>
-          </div>
-
-          <div class="promo-banner">
-            <div class="promo-text">
-              <h4>Segurança em primeiro lugar</h4>
-              <p>Monitoramento 24h por satélite e motoristas verificados.</p>
-            </div>
-            <div class="promo-shield">🛡️</div>
           </div>
         </div>
       </section>
@@ -291,27 +286,7 @@
             </div>
           </div>
 
-          <div class="profile-shortcuts">
-            <div class="shortcut-item">
-              <div class="shortcut-icon">👛</div>
-              <span>Carteira</span>
-            </div>
-            <div class="shortcut-item">
-              <div class="shortcut-icon">🛡️</div>
-              <span>Segurança</span>
-            </div>
-            <div class="shortcut-item">
-              <div class="shortcut-icon">💬</div>
-              <span>Mensagens</span>
-            </div>
-            <div class="shortcut-item">
-              <div class="shortcut-icon">🎧</div>
-              <span>Ajuda</span>
-            </div>
-          </div>
-
           <div class="profile-menu">
-            <!-- Botão Admin liberado via API -->
             <a href="./admin.html" class="menu-item highlight" id="menuAdminBtn" style="display: none; border-color: #EF4444; background: rgba(239, 68, 68, 0.1);">
               <div class="menu-item-left">
                 <span class="menu-icon">🛡️</span>
@@ -334,18 +309,6 @@
               <span class="menu-arrow">➔</span>
             </a>
 
-            <div class="menu-item">
-              <div class="menu-item-left">
-                <span class="menu-icon">⚙️</span>
-                <div>
-                  <strong>Configurações</strong>
-                  <p>Preferências da conta e privacidade</p>
-                </div>
-              </div>
-              <span class="menu-arrow">›</span>
-            </div>
-
-            <!-- Botão Sair da Conta -->
             <div class="menu-item" id="btnSairConta" style="cursor: pointer; border-color: rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 10px;">
               <div class="menu-item-left">
                 <span class="menu-icon" style="font-size: 18px;">🚪</span>
@@ -383,7 +346,7 @@
     </nav>
   </div>
 
-  <!-- Scripts Modulares (Carregados corretamente como tipo module) -->
+  <!-- Scripts Modulares -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module">
     import { AuthGuard } from './js/modules/auth-guard.js';
