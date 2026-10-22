@@ -9,7 +9,6 @@ export const CATEGORIAS_HUBY = {
   // --- GRUPO: HUBy Viagem (Carro & Moto) ---
   carro: {
     id: 'carro',
-    alias: 'passageiro_carro',
     grupo: 'carro',
     nome: 'HUBy Carro',
     descricao: 'Viagens confortáveis para até 4 passageiros',
@@ -24,7 +23,6 @@ export const CATEGORIAS_HUBY = {
   },
   moto: {
     id: 'moto',
-    alias: 'passageiro_moto',
     grupo: 'carro',
     nome: 'HUBy Moto',
     descricao: 'Mototáxi rápido e econômico no dia a dia',
@@ -41,7 +39,6 @@ export const CATEGORIAS_HUBY = {
   // --- GRUPO: HUBy Flash (Entregas e Encomendas) ---
   flash_moto: {
     id: 'flash_moto',
-    alias: 'entrega_moto',
     grupo: 'flash',
     nome: 'Flash Moto',
     descricao: 'Encomendas leves, documentos e pacotes (até 20kg)',
@@ -56,7 +53,6 @@ export const CATEGORIAS_HUBY = {
   },
   flash_carro: {
     id: 'flash_carro',
-    alias: 'entrega_utilitario',
     grupo: 'flash',
     nome: 'Flash Utilitário (Fiorino/Picape)',
     descricao: 'Compras de mercado, caixas e eletrodomésticos médios',
@@ -73,7 +69,6 @@ export const CATEGORIAS_HUBY = {
   // --- GRUPO: HUBy Cargo (Fretes Pesados, Vans e Caminhões) ---
   cargo_pickup: {
     id: 'cargo_pickup',
-    alias: 'cargo_pickup',
     grupo: 'cargo',
     nome: 'Caminhonete / Picape',
     descricao: 'Transporte de móveis e cargas médias abertas',
@@ -88,7 +83,6 @@ export const CATEGORIAS_HUBY = {
   },
   cargo_van: {
     id: 'cargo_van',
-    alias: 'cargo_van',
     grupo: 'cargo',
     nome: 'Van de Carga Baú',
     descricao: 'Mudanças parciais protegidas contra chuva',
@@ -103,7 +97,6 @@ export const CATEGORIAS_HUBY = {
   },
   cargo_vuc: {
     id: 'cargo_vuc',
-    alias: 'frete_caminhao',
     grupo: 'cargo',
     nome: 'Caminhão VUC / Grande Porte',
     descricao: 'Mudanças residenciais completas e cargas pesadas',
@@ -118,12 +111,14 @@ export const CATEGORIAS_HUBY = {
   }
 };
 
-// Aliases para retrocompatibilidade
-CATEGORIAS_HUBY.passageiro_carro = CATEGORIAS_HUBY.carro;
-CATEGORIAS_HUBY.passageiro_moto = CATEGORIAS_HUBY.moto;
-CATEGORIAS_HUBY.entrega_moto = CATEGORIAS_HUBY.flash_moto;
-CATEGORIAS_HUBY.entrega_utilitario = CATEGORIAS_HUBY.flash_carro;
-CATEGORIAS_HUBY.frete_caminhao = CATEGORIAS_HUBY.cargo_vuc;
+// Aliases resolvidos com segurança sem duplicar Object.values
+const MAPA_ALIASES = {
+  passageiro_carro: 'carro',
+  passageiro_moto: 'moto',
+  entrega_moto: 'flash_moto',
+  entrega_utilitario: 'flash_carro',
+  frete_caminhao: 'cargo_vuc'
+};
 
 export const TABELA_ADICIONAIS = {
   valorPorAjudante: 50.00,
@@ -135,8 +130,13 @@ export function formatarMoedaBRL(valorNumerico) {
   return `R$ ${Number(valorNumerico || 0).toFixed(2).replace('.', ',')}`;
 }
 
+export function obterCategoriaPorId(categoriaId) {
+  const chaveReal = MAPA_ALIASES[categoriaId] || categoriaId;
+  return CATEGORIAS_HUBY[chaveReal] || CATEGORIAS_HUBY.carro;
+}
+
 export function calcularOrcamentoViagem(categoriaId, distanciaKm, duracaoMin = 0, opcoesExtras = {}) {
-  const cat = CATEGORIAS_HUBY[categoriaId] || CATEGORIAS_HUBY.carro;
+  const cat = obterCategoriaPorId(categoriaId);
 
   const distValida = Math.max(0.5, Number(distanciaKm || 0));
   const durValida = Math.max(1, Number(duracaoMin || 0));
@@ -157,7 +157,6 @@ export function calcularOrcamentoViagem(categoriaId, distanciaKm, duracaoMin = 0
   const valorAdicionais = custoAjudantes + custoEscada + custoParadas;
   const valorTotalCliente = valorBase + valorAdicionais;
 
-  // Split inteligente: Adicionais de ajudante e escada vão 100% para o motorista/parceiro
   const valorComissaoPlataforma = valorBase * (cat.comissaoPercentual / 100);
   const ganhoLiquidoMotorista = (valorBase - valorComissaoPlataforma) + valorAdicionais;
 
