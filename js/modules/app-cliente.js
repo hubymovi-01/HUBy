@@ -353,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 9. SINCRONIZAÇÃO DO PERFIL E LOGOUT (ABA CONTA)
+  // 9. SINCRONIZAÇÃO DO PERFIL E LOGOUT DIRETO (ABA CONTA)
   const nomeCliente = localStorage.getItem('huby_cliente_nome');
   const emailCliente = localStorage.getItem('huby_cliente_email');
   const papelUsuario = localStorage.getItem('huby_user_role');
@@ -381,17 +381,18 @@ document.addEventListener('DOMContentLoaded', () => {
     menuAdminBtn.style.display = 'flex';
   }
 
-  // Evento do botão Sair da Conta
-  document.getElementById('btnSairConta')?.addEventListener('click', () => {
-    if (confirm('Tem certeza de que deseja sair da sua conta?')) {
-      localStorage.removeItem('huby_ja_entrou');
-      localStorage.removeItem('huby_user_role');
-      localStorage.removeItem('huby_cliente_id');
-      localStorage.removeItem('huby_cliente_nome');
-      localStorage.removeItem('huby_cliente_email');
-      localStorage.removeItem('huby_admin_token');
+  // Logout direto com redirecionamento limpo e sem loops
+  const btnSairConta = document.getElementById('btnSairConta');
+  if (btnSairConta) {
+    // Remove event listeners antigos clonando o elemento
+    const novoBtnSair = btnSairConta.cloneNode(true);
+    btnSairConta.parentNode.replaceChild(novoBtnSair, btnSairConta);
 
-      window.location.replace('./login.html');
-    }
-  });
+    novoBtnSair.addEventListener('click', () => {
+      if (confirm('Tem certeza de que deseja sair da sua conta?')) {
+        localStorage.clear();
+        window.location.replace('./login.html');
+      }
+    });
+  }
 });
