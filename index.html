@@ -3,41 +3,103 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy 2.0</title>
+  <title>HUBy</title>
   
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/cliente.css">
 </head>
 <body class="client-viewport">
 
-  <!-- 1. MAPA DE FUNDO -->
+  <!-- 1. SPLASH SCREEN (ABERTURA COM ANIMAÇÃO) -->
+  <div id="hubySplash" class="splash-screen">
+    <div class="splash-content">
+      <div class="splash-logo">
+        <span class="s-hub">HUB</span><span class="s-y">y</span>
+      </div>
+      <div class="splash-spinner"></div>
+      <span class="splash-tagline">Mobilidade urbana inteligente</span>
+    </div>
+  </div>
+
+  <!-- 2. MAPA LEAFLET -->
   <div id="mapaCliente"></div>
 
-  <!-- 2. BARRA DE TOPO FLUTUANTE -->
+  <!-- 3. BARRA SUPERIOR FLUTUANTE COM BOTÃO DO MENU -->
   <header class="top-nav-bar">
+    <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
     <div class="brand-pill">
       <span class="hub-txt">HUB</span><span class="y-txt">y</span>
     </div>
-    <div class="nav-actions">
-      <button type="button" id="btnAbrirHistorico" class="btn-action-pill" aria-label="Histórico">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-        <span>Viagens</span>
-      </button>
-    </div>
+
+    <button type="button" id="btnNavViagens" class="btn-action-pill">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+      <span>Viagens</span>
+    </button>
   </header>
 
-  <!-- 3. BOTÃO GPS FLUTUANTE (Posicionado sobre o mapa acima do dock) -->
+  <!-- 4. MENU LATERAL DESLIZANTE (DRAWER) -->
+  <div id="menuBackdrop" class="drawer-backdrop"></div>
+  <aside id="drawerMenu" class="drawer-panel">
+    <!-- Cabeçalho do Perfil -->
+    <div class="drawer-profile" id="drawerPerfilBox">
+      <!-- Preenchido via JS conforme estiver logado ou não -->
+    </div>
+
+    <!-- Links de Navegação -->
+    <nav class="drawer-nav">
+      <a href="#" id="menuItemViagens" class="drawer-item">
+        <span class="d-icon">📋</span>
+        <div class="d-info">
+          <strong>Minhas Viagens</strong>
+          <small>Histórico e recibos de corridas</small>
+        </div>
+      </a>
+      <a href="#" id="menuItemPagamentos" class="drawer-item">
+        <span class="d-icon">💳</span>
+        <div class="d-info">
+          <strong>Formas de Pagamento</strong>
+          <small>Pix, Cartão e Saldo</small>
+        </div>
+      </a>
+      <a href="./motorista.html" class="drawer-item highlight-driver">
+        <span class="d-icon">🚘</span>
+        <div class="d-info">
+          <strong>Painel do Motorista</strong>
+          <small>Acessar modo parceiro</small>
+        </div>
+      </a>
+      <a href="#" id="menuItemAjuda" class="drawer-item">
+        <span class="d-icon">💬</span>
+        <div class="d-info">
+          <strong>Ajuda & Suporte</strong>
+          <small>Fale com a equipe HUBy</small>
+        </div>
+      </a>
+    </nav>
+
+    <!-- Rodapé do Menu -->
+    <div class="drawer-footer">
+      <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Entrar ou Cadastrar</button>
+      <span class="version-tag">HUBy v2.0 • 2026</span>
+    </div>
+  </aside>
+
+  <!-- 5. BOTÃO GPS FLUTUANTE -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"></circle><line x1="12" y1="1" x2="12" y2="5"></line><line x1="12" y1="19" x2="12" y2="23"></line><line x1="5" y1="12" x2="1" y2="12"></line><line x1="23" y1="12" x2="19" y2="12"></line></svg>
   </button>
 
-  <!-- 4. DOCK INFERIOR PREMIUM -->
+  <!-- 6. DOCK INFERIOR (BOTTOM SHEET) -->
   <section class="client-dock-sheet">
     <div class="sheet-drag-handle"></div>
 
-    <!-- Seletor de Categorias Estilizado -->
+    <!-- Categorias -->
     <div class="category-slider">
       <button type="button" class="category-chip active" data-id="carro">
         <span class="cat-icon">🚗</span>
@@ -57,7 +119,7 @@
       </button>
     </div>
 
-    <!-- Bloco de Resumo da Viagem -->
+    <!-- Bloco Resumo -->
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
         <div class="route-point-indicator"></div>
@@ -72,7 +134,7 @@
       </div>
     </div>
 
-    <!-- Card de Corrida em Andamento (Oculto Inicialmente) -->
+    <!-- Status Viagem Ativa -->
     <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
       <div class="ride-header">
         <div class="pulse-radar"></div>
@@ -81,17 +143,30 @@
       <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
     </div>
 
-    <!-- Botão Principal de Ação -->
+    <!-- Botão Chamar -->
     <button type="button" id="btnPedirHuby" class="btn-main-action">
       Chamar HUBy Carro
     </button>
   </section>
 
-  <!-- Modal de Avaliação Opcional -->
+  <!-- MODAL DE HISTÓRICO ELEGANTE (SEM ALERT) -->
+  <div id="modalHistorico" class="modal-backdrop" style="display: none;">
+    <div class="modal-card modal-wide">
+      <div class="modal-header-row">
+        <h3>Minhas Viagens</h3>
+        <button type="button" id="btnFecharHistorico" class="btn-icon-close">✕</button>
+      </div>
+      <div id="listaHistoricoCorridas" class="historico-scroll-box">
+        <p class="loading-txt">Carregando viagens...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE AVALIAÇÃO OPCIONAL -->
   <div id="modalAvaliacao" class="modal-backdrop" style="display: none;">
     <div class="modal-card">
-      <h3>Como correu a sua viagem?</h3>
-      <p>Classifique o atendimento do condutor parceiro:</p>
+      <h3>Como foi sua viagem?</h3>
+      <p>Classifique o atendimento do condutor:</p>
       
       <div id="estrelasRating" class="star-rating">
         <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
