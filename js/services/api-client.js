@@ -47,36 +47,35 @@ export const ApiClient = {
       channel.postMessage({ tipo: 'NOVO_PEDIDO', pedido: pedidoCompleto });
     } catch (e) {}
 
-    // 1.4. Mapeamento e Envio ao Neon PostgreSQL via backend Render
+    // 1.4. Envio padronizado com as chaves exatas esperadas pelo server.js
     try {
-      const payloadNeon = {
+      const payloadBackend = {
         id: pedidoCompleto.id,
         tipo: pedidoCompleto.tipo,
-        sub_tipo_label: pedidoCompleto.subTipoLabel,
+        subTipoLabel: pedidoCompleto.subTipoLabel,
         origem: pedidoCompleto.origem,
         destino: pedidoCompleto.destino,
-        coords_origem: pedidoCompleto.coordsOrigem,
-        coords_destino: pedidoCompleto.coordsDestino,
         distancia: pedidoCompleto.distancia,
         preco: pedidoCompleto.preco,
-        metodo_pgto: pedidoCompleto.metodoPgto,
-        status: 'pendente',
-        criado_em: pedidoCompleto.criadoEm
+        metodoPgto: pedidoCompleto.metodoPgto
       };
 
       const resp = await fetch(`${BACKEND_URL}/api/pedidos`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payloadNeon)
+        body: JSON.stringify(payloadBackend)
       });
 
       if (resp.ok) {
-        console.log('[HUBy API] Pedido gravado no Neon PostgreSQL');
+        console.log('[HUBy API] Pedido gravado com sucesso no Neon PostgreSQL');
         const resultado = await resp.json();
         return resultado.pedido || pedidoCompleto;
+      } else {
+        const erroTexto = await resp.text();
+        console.warn('[HUBy API] Resposta de erro do backend:', erroTexto);
       }
     } catch (erro) {
-      console.warn('[HUBy API] Servidor em repouso. Operando em sincronia local offline.');
+      console.warn('[HUBy API] Falha na rede ou servidor em repouso. Operando em sincronia local offline.', erro);
     }
 
     return pedidoCompleto;
@@ -107,7 +106,7 @@ export const ApiClient = {
         }
       }
     } catch (e) {
-      // Fallback local se o servidor estiver dormindo
+      // Fallback local se o servidor estiver em repouso
     }
 
     if (lista.length === 0) {
@@ -148,14 +147,12 @@ export const ApiClient = {
       localStorage.setItem(STORAGE_CORRIDA_ATIVA, JSON.stringify(atualizada));
     }
 
-    // Se a corrida foi aceita ou finalizada, remove da fila visível nos radares
     if (novoStatus === 'em_andamento' || novoStatus === 'concluida' || novoStatus === 'cancelada') {
       let fila = JSON.parse(localStorage.getItem(STORAGE_PEDIDOS_FILA) || '[]');
       fila = fila.filter(p => String(p.id) !== String(id));
       localStorage.setItem(STORAGE_PEDIDOS_FILA, JSON.stringify(fila));
     }
 
-    // Comunica a mudança para o backend Render / Neon
     try {
       await fetch(`${BACKEND_URL}/api/pedidos`, {
         method: 'PATCH',
