@@ -8,12 +8,12 @@
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#080C14">
 
-  <!-- GUARDA DE PERFIL: Valida se é motorista/entregador de moto -->
+  <!-- GUARDA DE PERFIL: Valida se é parceiro autenticado -->
   <script>
     (function () {
       const papel = localStorage.getItem('huby_user_role');
       if (papel !== 'motorista') {
-        window.location.replace('./cadastro-motorista.html');
+        window.location.replace('./login.html');
       }
     })();
   </script>
@@ -37,7 +37,8 @@
             <span class="d-name" id="lblNomeMotorista">Entregador</span>
             <span class="d-badge" style="background: rgba(56, 189, 248, 0.15); color: #38BDF8;">🛵 Flash & Moto</span>
           </div>
-          <span class="d-earnings" id="statGanhosHoje">Hoje: <strong>R$ 0,00</strong> (0 entregas)</span>
+          <!-- IDs sincronizados com app-motorista.js -->
+          <span class="d-earnings">Hoje: <strong id="txtGanhosHoje">R$ 0,00</strong> (<span id="txtQtdCorridas">0 corridas</span>)</span>
         </div>
       </div>
 
@@ -105,6 +106,7 @@
           localStorage.removeItem('huby_parceiro_categoria');
           localStorage.removeItem('huby_motorista_id');
           localStorage.removeItem('huby_motorista_nome');
+          localStorage.removeItem('huby_motorista_placa');
           window.location.href = './index.html';
         }
       });
