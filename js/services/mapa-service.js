@@ -1,3 +1,10 @@
+/**
+ * ============================================================================
+ * HUBy - Serviço de Mapa, Geolocalização (GPS) e Cálculo de Rotas (OSRM)
+ * Arquivo: js/services/mapa-service.js
+ * ============================================================================
+ */
+
 export class MapaService {
   constructor(containerId) {
     this.containerId = containerId;
@@ -6,6 +13,8 @@ export class MapaService {
     this.markerDestino = null;
     this.rotaLayer = null;
     this.coordsOrigem = { lat: -8.358, lng: -42.246 };
+    this.coordsDestino = null;
+    this.watchId = null;
   }
 
   inicializarMapa(onDestinoSelecionado = null) {
@@ -16,6 +25,7 @@ export class MapaService {
 
     if (this.map) {
       this.map.remove();
+      this.map = null;
     }
 
     this.map = L.map(this.containerId, { 
@@ -23,17 +33,27 @@ export class MapaService {
       attributionControl: false 
     }).setView([this.coordsOrigem.lat, this.coordsOrigem.lng], 16);
 
-    // CAMADA PÚBLICA GRATUITA (CARTODB DARK MATTER - SEM CHAVE DE API)
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
+    // OPENSTREETMAP OFICIAL (100% GRATUITO E SEM CHAVE DE API)
+    const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      minZoom: 3
+      minZoom: 3,
+      crossOrigin: true
     }).addTo(this.map);
+
+    // APLICA O TEMA DARK DIRETAMENTE NAS IMAGENS DO MAPA
+    const aplicarTemaDark = () => {
+      const tiles = container.querySelectorAll('.leaflet-tile-pane');
+      tiles.forEach(pane => {
+        pane.style.filter = 'brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7)';
+      });
+    };
+    tileLayer.on('load', aplicarTemaDark);
+    setTimeout(aplicarTemaDark, 300);
 
     this.definirMarcadorOrigem(this.coordsOrigem.lat, this.coordsOrigem.lng);
 
     setTimeout(() => {
-      this.map.invalidateSize();
+      if (this.map) this.map.invalidateSize();
     }, 250);
 
     if (onDestinoSelecionado) {
@@ -69,6 +89,7 @@ export class MapaService {
   }
 
   definirMarcadorDestino(lat, lng) {
+    this.coordsDestino = { lat, lng };
     const iconeDestino = L.divIcon({
       className: 'huby-pin-destino',
       html: `<div style="width:18px;height:18px;background:#FF6B00;border:3px solid #FFFFFF;border-radius:6px;box-shadow:0 0 12px rgba(255,107,0,0.85);"></div>`,
@@ -99,6 +120,37 @@ export class MapaService {
       (err) => console.warn('GPS:', err.message),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
+
+    if (seguirContinuo && !this.watchId) {
+      this.watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude } = pos.coords;
+          this.definirMarcadorOrigem(latitude, longitude);
+          if (callbackSucesso) callbackSucesso({ lat: latitude, lng: longitude });
+        },
+        (err) => console.warn('Watch GPS:', err.message),
+        { enableHighAccuracy: true, maximumAge: 3000 }
+      );
+    }
+  }
+
+  async buscarEnderecoNominatim(textoBusca) {
+    if (!textoBusca || textoBusca.length < 3) return null;
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(textoBusca)}&limit=1&countrycodes=br`;
+    try {
+      const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' } });
+      const dados = await res.json();
+      if (dados && dados.length > 0) {
+        return {
+          nome: dados[0].display_name.split(',')[0],
+          lat: parseFloat(dados[0].lat),
+          lng: parseFloat(dados[0].lon)
+        };
+      }
+    } catch (e) {
+      console.warn('Erro Nominatim:', e);
+    }
+    return null;
   }
 
   async calcularRotaOSRM(origem, destino, corLinha = '#10B981') {
