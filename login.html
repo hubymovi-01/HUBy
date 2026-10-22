@@ -9,178 +9,12 @@
   <meta name="theme-color" content="#080C14">
   <link rel="stylesheet" href="./css/global.css">
   <link rel="stylesheet" href="./css/login.css">
-
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-tap-highlight-color: transparent;
-    }
-
-    body {
-      background-color: #080C14;
-      color: #FFFFFF;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      min-height: 100vh;
-      min-height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 20px 16px;
-    }
-
-    .login-container {
-      width: 100%;
-      max-width: 420px;
-      margin: 0 auto;
-    }
-
-    .login-brand {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-
-    .login-brand h1 {
-      font-size: 28px;
-      font-weight: 900;
-      letter-spacing: -1px;
-    }
-
-    .login-brand h1 span {
-      color: #10B981;
-    }
-
-    .login-brand p {
-      font-size: 13px;
-      color: #94A3B8;
-      margin-top: 4px;
-    }
-
-    /* Abas de Alternância (Cliente vs Motorista) */
-    .role-tabs {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 14px;
-      padding: 4px;
-      margin-bottom: 20px;
-    }
-
-    .role-tab-btn {
-      background: transparent;
-      border: none;
-      color: #94A3B8;
-      padding: 10px;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 800;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .role-tab-btn.active {
-      background: #10B981;
-      color: #03251E;
-      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
-    }
-
-    /* Cartão do Formulário */
-    .form-card {
-      background: rgba(18, 27, 47, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 18px;
-      padding: 22px 18px;
-      backdrop-filter: blur(14px);
-    }
-
-    .field-group {
-      margin-bottom: 14px;
-    }
-
-    .field-group label {
-      display: block;
-      font-size: 11.5px;
-      font-weight: 700;
-      color: #CBD5E1;
-      margin-bottom: 6px;
-    }
-
-    .input-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-    }
-
-    .input-icon {
-      position: absolute;
-      left: 12px;
-      font-size: 15px;
-      pointer-events: none;
-    }
-
-    .form-input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 12px 14px 12px 38px;
-      color: #FFFFFF;
-      font-size: 14px;
-      font-weight: 600;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .form-input:focus {
-      border-color: #10B981;
-      background: rgba(16, 185, 129, 0.05);
-    }
-
-    .btn-submit-login {
-      width: 100%;
-      background: linear-gradient(135deg, #10B981, #059669);
-      color: #03251E;
-      border: none;
-      border-radius: 14px;
-      padding: 14px;
-      font-size: 14.5px;
-      font-weight: 900;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35);
-      margin-top: 18px;
-      transition: transform 0.15s ease;
-    }
-
-    .btn-submit-login:active {
-      transform: scale(0.98);
-    }
-
-    .login-footer-links {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 12px;
-      color: #94A3B8;
-    }
-
-    .login-footer-links a {
-      color: #10B981;
-      text-decoration: none;
-      font-weight: 800;
-    }
-  </style>
 </head>
 
 <body>
+
+  <div class="glow-bg top-glow"></div>
+  <div class="glow-bg bottom-glow"></div>
 
   <div class="login-container">
     
@@ -283,7 +117,7 @@
       txtLinkCadastro.innerHTML = 'Quer ser um parceiro? <a href="./cadastro-motorista.html">Cadastre seu veículo</a>';
     });
 
-    // 2. Máscara da Placa
+    // 2. Formatação automática da Placa
     const inputPlaca = document.getElementById('motPlaca');
     inputPlaca.addEventListener('input', (e) => {
       e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 7);
@@ -366,7 +200,6 @@
           localStorage.setItem('huby_cliente_nome', cli.nome);
           localStorage.setItem('huby_cliente_email', cli.email);
 
-          // Se o passageiro for admin, salva token administrativo
           if (cli.role === 'admin') {
             localStorage.setItem('huby_admin_token', 'token_admin_autorizado_998877');
           }
@@ -378,7 +211,6 @@
           btn.disabled = false;
         }
       } catch (err) {
-        // Fallback local se a API estiver em cold start
         console.warn('Backend em repouso, liberando sessão local...');
         localStorage.setItem('huby_user_role', 'cliente');
         localStorage.setItem('huby_ja_entrou', '1');
