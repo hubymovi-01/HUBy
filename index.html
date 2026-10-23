@@ -60,22 +60,12 @@
     }
   </style>
 
-  <!-- VERIFICAÇÃO DE PRIMEIRO ACESSO / ONBOARDING -->
+  <!-- VERIFICAÇÃO DE SESSÃO / ONBOARDING -->
   <script>
     (function() {
       const token = localStorage.getItem('huby_token');
       const perfilEscolhido = localStorage.getItem('huby_tipo_acesso');
-      // Se não está logado e nunca passou pela tela de boas-vindas, vai para o welcome
       if (!token && !perfilEscolhido) {
-        window.location.replace('./welcome.html');
-      }
-    })();
-  </script>
-  <script>
-    (function() {
-      const token = localStorage.getItem('huby_token');
-      // Se não tem login ativo, força ir para a tela de boas-vindas
-      if (!token) {
         window.location.replace('./welcome.html');
       }
     })();
@@ -176,6 +166,15 @@
         <div class="d-info">
           <strong>Ajuda & Suporte</strong>
           <small>Fale com a equipa HUBy</small>
+        </div>
+      </a>
+
+      <!-- ITEM EXCLUSIVO PARA ADMINISTRADOR (INICIALMENTE OCULTO) -->
+      <a href="./admin.html" id="menuItemAdmin" class="drawer-item" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
+        <span class="d-icon">⚡</span>
+        <div class="d-info">
+          <strong style="color: #F87171;">Painel de Controlo</strong>
+          <small>Métricas, motoristas e financeiro</small>
         </div>
       </a>
     </nav>
@@ -363,7 +362,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/app-cliente.js?v=2.0.2"></script>
   
-  <!-- Script de Acionamento da Modal de Segurança -->
+  <!-- Script de Acionamento da Modal de Segurança e Verificação do Admin -->
   <script type="module">
     const modalSeg = document.getElementById('modalSeguranca');
     const btnSOS = document.getElementById('btnSOSRapido');
@@ -402,6 +401,20 @@
       const link = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
       window.open(link, '_blank');
     });
+
+    // Verificação de Admin Garantida no Ciclo de Vida do DOM
+    function checarAdminInstantaneo() {
+      const token = localStorage.getItem('huby_token');
+      const role = localStorage.getItem('huby_user_role');
+      const btnAdmin = document.getElementById('menuItemAdmin');
+
+      if (btnAdmin && token && role === 'admin') {
+        btnAdmin.style.display = 'flex';
+      }
+    }
+
+    checarAdminInstantaneo();
+    document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
   </script>
 </body>
 </html>
