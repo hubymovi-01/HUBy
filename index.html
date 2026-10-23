@@ -18,8 +18,11 @@
   
   <!-- Estilos Leaflet e Aplicação -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./css/base.css?v=2.0.2">
-  <link rel="stylesheet" href="./css/cliente.css?v=2.0.2">
+  <link rel="stylesheet" href="./css/base.css?v=2.0.5">
+  <link rel="stylesheet" href="./css/cliente.css?v=2.0.5">
+
+  <!-- A biblioteca do Leaflet TEM que carregar na Head para o telemóvel desenhar a div na hora -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
     /* DESAPARECIMENTO GARANTIDO DA SPLASH */
@@ -48,15 +51,26 @@
       align-items: center;
       justify-content: center;
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
-      z-index: 800;
+      z-index: 9999; /* Resolvido conflito de z-index no telemovel */
       cursor: pointer;
       backdrop-filter: blur(8px);
       transition: all 0.2s ease;
     }
-    .btn-floating-sos:active {
-      transform: scale(0.92);
-      border-color: #EF4444;
-      background: rgba(239, 68, 68, 0.15);
+    
+    .btn-floating-gps {
+      z-index: 9999; /* Isola o GPS de qualquer painel inferior */
+    }
+
+    /* Trava Absoluta do Ecrã do Leaflet no Telemóvel */
+    #mapaCliente {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: 100%;
+      height: 100vh !important;
+      z-index: 10; 
     }
   </style>
 
@@ -83,21 +97,6 @@
       <span class="splash-tagline">Mobilidade urbana inteligente</span>
     </div>
   </div>
-
-  <script>
-    (function() {
-      function fecharSplashSeguro() {
-        var el = document.getElementById('hubySplash');
-        if (el) {
-          el.style.opacity = '0';
-          setTimeout(function() {
-            if (el && el.parentNode) el.parentNode.removeChild(el);
-          }, 400);
-        }
-      }
-      setTimeout(fecharSplashSeguro, 1200);
-    })();
-  </script>
 
   <!-- 2. MAPA LEAFLET -->
   <div id="mapaCliente"></div>
@@ -127,9 +126,7 @@
   <div id="menuBackdrop" class="drawer-backdrop"></div>
   <aside id="drawerMenu" class="drawer-panel">
     <!-- Cabeçalho do Perfil -->
-    <div class="drawer-profile" id="drawerPerfilBox">
-      <!-- Preenchido dinamicamente via JS -->
-    </div>
+    <div class="drawer-profile" id="drawerPerfilBox"></div>
 
     <!-- Links de Navegação -->
     <nav class="drawer-nav">
@@ -169,7 +166,7 @@
         </div>
       </a>
 
-      <!-- ITEM EXCLUSIVO PARA ADMINISTRADOR (INICIALMENTE OCULTO) -->
+      <!-- ITEM EXCLUSIVO PARA ADMINISTRADOR -->
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
         <span class="d-icon">⚡</span>
         <div class="d-info">
@@ -179,7 +176,6 @@
       </a>
     </nav>
 
-    <!-- Rodapé do Menu -->
     <div class="drawer-footer">
       <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Entrar ou Cadastrar</button>
       <span class="version-tag">HUBy v2.0 • 2026</span>
@@ -205,10 +201,9 @@
   </button>
 
   <!-- 7. DOCK INFERIOR (BOTTOM SHEET) -->
-  <section class="client-dock-sheet">
+  <section class="client-dock-sheet" style="z-index: 50;">
     <div class="sheet-drag-handle"></div>
 
-    <!-- Categorias de Transporte -->
     <div class="category-slider">
       <button type="button" class="category-chip active" data-id="carro">
         <span class="cat-icon">🚗</span>
@@ -228,7 +223,6 @@
       </button>
     </div>
 
-    <!-- Bloco Resumo do Trajeto -->
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
         <div class="route-point-indicator"></div>
@@ -243,7 +237,6 @@
       </div>
     </div>
 
-    <!-- Card de Corrida em Andamento -->
     <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
       <div class="ride-header">
         <div class="pulse-radar"></div>
@@ -252,14 +245,13 @@
       <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
     </div>
 
-    <!-- Botão de Ação Primária -->
     <button type="button" id="btnPedirHuby" class="btn-main-action">
       Chamar HUBy Carro
     </button>
   </section>
 
-  <!-- MODAL DE CONTATO DE SEGURANÇA / SOS -->
-  <div id="modalSeguranca" class="modal-backdrop" style="display: none;">
+  <!-- MODAIS (REMOVIDOS DE Z-INDEX BLOQUEANTE) -->
+  <div id="modalSeguranca" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card">
       <div class="modal-header-row">
         <h3>Segurança na Viagem</h3>
@@ -285,8 +277,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE HISTÓRICO DE VIAGENS -->
-  <div id="modalHistorico" class="modal-backdrop" style="display: none;">
+  <div id="modalHistorico" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card modal-wide">
       <div class="modal-header-row">
         <h3>Minhas Viagens</h3>
@@ -298,8 +289,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE AVALIAÇÃO OPCIONAL -->
-  <div id="modalAvaliacao" class="modal-backdrop" style="display: none;">
+  <div id="modalAvaliacao" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card">
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
@@ -317,8 +307,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE FORMAS DE PAGAMENTO -->
-  <div id="modalPagamento" class="modal-backdrop" style="display: none;">
+  <div id="modalPagamento" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card modal-wide">
       <div class="modal-header-row">
         <h3>Formas de Pagamento</h3>
@@ -358,11 +347,9 @@
     </div>
   </div>
 
-  <!-- Scripts -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="./js/app-cliente.js?v=2.0.2"></script>
+  <!-- Scripts: Forçar a versão nova para limpar cache do PWA -->
+  <script type="module" src="./js/app-cliente.js?v=2.1.0"></script>
   
-  <!-- Script de Acionamento da Modal de Segurança e Verificação do Admin -->
   <script type="module">
     const modalSeg = document.getElementById('modalSeguranca');
     const btnSOS = document.getElementById('btnSOSRapido');
@@ -402,7 +389,6 @@
       window.open(link, '_blank');
     });
 
-    // Verificação de Admin Garantida no Ciclo de Vida do DOM
     function checarAdminInstantaneo() {
       const token = localStorage.getItem('huby_token');
       const role = localStorage.getItem('huby_user_role');
