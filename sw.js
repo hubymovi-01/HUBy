@@ -1,4 +1,4 @@
-const CACHE_NAME = 'huby-v2-cache';
+const CACHE_NAME = 'huby-v3-gps-fix-2026';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();
