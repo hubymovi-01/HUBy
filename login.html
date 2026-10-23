@@ -3,224 +3,215 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Entrar • HUBy</title>
+  <title>Iniciar Sessão • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
-  <style>
-    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body {
-      margin: 0;
-      background: #0B0F19;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      color: #FFF;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      min-height: 100dvh;
-      padding: 20px;
-    }
-    .auth-card {
-      width: 100%;
-      max-width: 380px;
-      background: rgba(17, 24, 39, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 24px;
-      padding: 28px 24px;
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(20px);
-    }
-    .auth-header {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-    .brand-logo {
-      font-size: 38px;
-      font-weight: 900;
-      letter-spacing: -1px;
-      margin-bottom: 6px;
-    }
-    .brand-logo .hub { color: #FFF; }
-    .brand-logo .y { color: #10B981; }
-    .auth-header p {
-      color: #8F9CAE;
-      font-size: 13px;
-      margin: 0;
-    }
-    .tabs-nav {
-      display: flex;
-      background: rgba(255, 255, 255, 0.04);
-      padding: 4px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-    }
-    .tab-btn {
-      flex: 1;
-      background: transparent;
-      border: none;
-      color: #8F9CAE;
-      padding: 10px;
-      border-radius: 8px;
-      font-weight: 700;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    .tab-btn.active {
-      background: #10B981;
-      color: #03251E;
-    }
-    .input-group {
-      margin-bottom: 14px;
-      text-align: left;
-    }
-    .input-group label {
-      display: block;
-      font-size: 12px;
-      color: #8F9CAE;
-      margin-bottom: 6px;
-      font-weight: 600;
-    }
-    .input-group input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      color: #FFF;
-      padding: 12px 14px;
-      font-size: 14px;
-      outline: none;
-    }
-    .input-group input:focus {
-      border-color: #10B981;
-    }
-    .btn-submit {
-      width: 100%;
-      background: #10B981;
-      color: #03251E;
-      border: none;
-      border-radius: 12px;
-      padding: 14px;
-      font-size: 15px;
-      font-weight: 900;
-      cursor: pointer;
-      margin-top: 10px;
-      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.35);
-    }
-    .btn-submit:active { transform: scale(0.98); }
-    .auth-footer {
-      text-align: center;
-      margin-top: 18px;
-    }
-    .auth-footer a {
-      color: #10B981;
-      text-decoration: none;
-      font-size: 13px;
-      font-weight: 700;
-    }
-  </style>
+  <link rel="stylesheet" href="./css/auth.css">
 </head>
-<body>
-  <div class="auth-card">
-    <div class="auth-header">
-      <div class="brand-logo"><span class="hub">HUB</span><span class="y">y</span></div>
-      <p id="authSubtitulo">Acesse sua conta para solicitar corridas</p>
-    </div>
+<body class="auth-body">
 
-    <div class="tabs-nav">
-      <button type="button" id="tabEntrar" class="tab-btn active">Entrar</button>
-      <button type="button" id="tabCadastrar" class="tab-btn">Cadastrar</button>
-    </div>
+  <div class="auth-ambient-glow"></div>
 
-    <form id="formAuth">
-      <div class="input-group" id="grpNome" style="display: none;">
-        <label>Nome Completo</label>
-        <input type="text" id="campoNome" placeholder="Seu nome" />
+  <main class="auth-container">
+    <div class="auth-card">
+
+      <!-- CABEÇALHO DA MARCA -->
+      <header class="auth-header">
+        <div class="auth-badge">Acesso Seguro HUBy</div>
+        <h1 class="auth-brand">HUB<span>y</span></h1>
+        <p id="txtSubtituloLogin" class="auth-desc">Inicie sessão para solicitar corridas</p>
+      </header>
+
+      <!-- SELETOR DE PERFIL: PASSAGEIRO VS MOTORISTA -->
+      <div class="role-selector">
+        <button type="button" id="btnLoginRoleCliente" class="btn-role active">
+          <span class="role-icon">👤</span>
+          <span class="role-name">Passageiro</span>
+        </button>
+        <button type="button" id="btnLoginRoleMotorista" class="btn-role">
+          <span class="role-icon">🚘</span>
+          <span class="role-name">Motorista Parceiro</span>
+        </button>
       </div>
 
-      <div class="input-group">
-        <label>E-mail ou Telefone</label>
-        <input type="text" id="campoIdentificador" placeholder="exemplo@email.com ou (89) 99999-9999" required />
+      <!-- ALERTA INTEGRADO (SEM ALERT NATIVO) -->
+      <div id="alertaLoginBox" class="auth-alert" style="display: none;"></div>
+
+      <!-- FORMULÁRIO DE LOGIN -->
+      <form id="formLoginHuby" class="auth-form" novalidate>
+        
+        <div class="input-group">
+          <label for="loginIdentificador" id="lblIdentificador">E-mail, Telefone ou CPF</label>
+          <div class="input-wrapper">
+            <span class="input-ico" id="icoIdentificador">✉️</span>
+            <input 
+              type="text" 
+              id="loginIdentificador" 
+              placeholder="Digite o seu acesso" 
+              autocomplete="username" 
+              required
+            >
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="loginSenha">Palavra-passe</label>
+          <div class="input-wrapper">
+            <span class="input-ico">🔒</span>
+            <input 
+              type="password" 
+              id="loginSenha" 
+              placeholder="••••••••" 
+              autocomplete="current-password" 
+              required
+            >
+            <button type="button" id="btnToggleLoginSenha" class="btn-toggle-eye" aria-label="Ver palavra-passe">👁️</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btnSubmeterLogin" class="btn-primary-action">
+          <span>Entrar como Passageiro</span>
+        </button>
+      </form>
+
+      <!-- NAVEGAÇÃO DE RODAPÉ -->
+      <footer class="auth-footer-nav">
+        <span>Novo no HUBy?</span>
+        <a href="./cadastro.html">Criar nova conta</a>
+      </footer>
+
+      <div style="text-align: center; margin-top: 14px;">
+        <a href="./index.html" style="color: var(--text-dim); text-decoration: none; font-size: 12px; font-weight: 700;">
+          ← Voltar ao Mapa
+        </a>
       </div>
 
-      <div class="input-group">
-        <label>Palavra-passe / Senha</label>
-        <input type="password" id="campoSenha" placeholder="••••••••" required />
-      </div>
-
-      <button type="submit" id="btnSubmitAuth" class="btn-submit">Entrar na Conta</button>
-    </form>
-
-    <div class="auth-footer">
-      <a href="./index.html">← Voltar ao Mapa</a>
     </div>
-  </div>
+  </main>
 
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    let modoCadastro = false;
-    const tabEntrar = document.getElementById('tabEntrar');
-    const tabCadastrar = document.getElementById('tabCadastrar');
-    const grpNome = document.getElementById('grpNome');
-    const btnSubmit = document.getElementById('btnSubmitAuth');
-    const authSubtitulo = document.getElementById('authSubtitulo');
+    let roleLoginAtual = 'cliente';
 
-    tabEntrar.onclick = () => {
-      modoCadastro = false;
-      tabEntrar.classList.add('active');
-      tabCadastrar.classList.remove('active');
-      grpNome.style.display = 'none';
-      btnSubmit.textContent = 'Entrar na Conta';
-      authSubtitulo.textContent = 'Acesse sua conta para solicitar corridas';
+    const btnRoleCliente = document.getElementById('btnLoginRoleCliente');
+    const btnRoleMotorista = document.getElementById('btnLoginRoleMotorista');
+    const txtSubtitulo = document.getElementById('txtSubtituloLogin');
+    const lblIdentificador = document.getElementById('lblIdentificador');
+    const icoIdentificador = document.getElementById('icoIdentificador');
+    const inputIdentificador = document.getElementById('loginIdentificador');
+    const inputSenha = document.getElementById('loginSenha');
+    const btnToggleSenha = document.getElementById('btnToggleLoginSenha');
+    const btnSubmit = document.getElementById('btnSubmeterLogin');
+    const alertaBox = document.getElementById('alertaLoginBox');
+
+    // 1. Alternador de Perfil
+    btnRoleCliente.onclick = () => {
+      roleLoginAtual = 'cliente';
+      btnRoleCliente.classList.add('active');
+      btnRoleMotorista.classList.remove('active');
+      txtSubtitulo.textContent = 'Inicie sessão para solicitar corridas';
+      lblIdentificador.textContent = 'E-mail, Telefone ou CPF';
+      icoIdentificador.textContent = '✉️';
+      inputIdentificador.placeholder = 'Digite o seu acesso';
+      btnSubmit.querySelector('span').textContent = 'Entrar como Passageiro';
+      esconderAlerta();
     };
 
-    tabCadastrar.onclick = () => {
-      modoCadastro = true;
-      tabCadastrar.classList.add('active');
-      tabEntrar.classList.remove('active');
-      grpNome.style.display = 'block';
-      btnSubmit.textContent = 'Criar Minha Conta';
-      authSubtitulo.textContent = 'Cadastre-se em segundos para começar';
+    btnRoleMotorista.onclick = () => {
+      roleLoginAtual = 'motorista';
+      btnRoleMotorista.classList.add('active');
+      btnRoleCliente.classList.remove('active');
+      txtSubtitulo.textContent = 'Aceda ao radar de corridas e gerencie os seus ganhos';
+      lblIdentificador.textContent = 'CNH, Telefone ou E-mail';
+      icoIdentificador.textContent = '🪪';
+      inputIdentificador.placeholder = 'Digite a sua CNH, telefone ou e-mail';
+      btnSubmit.querySelector('span').textContent = 'Entrar como Motorista Parceiro';
+      esconderAlerta();
     };
 
-    document.getElementById('formAuth').onsubmit = async (e) => {
+    // 2. Alternar visualização da senha
+    btnToggleSenha.onclick = () => {
+      const isPass = inputSenha.type === 'password';
+      inputSenha.type = isPass ? 'text' : 'password';
+      btnToggleSenha.textContent = isPass ? '🔒' : '👁️';
+    };
+
+    // 3. Submissão autenticada compatível com o server.js
+    document.getElementById('formLoginHuby').onsubmit = async (e) => {
       e.preventDefault();
-      const identificador = document.getElementById('campoIdentificador').value.trim();
-      const senha = document.getElementById('campoSenha').value.trim();
-      const nome = document.getElementById('campoNome').value.trim();
+      esconderAlerta();
 
-      const rota = modoCadastro ? '/api/usuarios/cadastro' : '/api/usuarios/login';
-      const payload = modoCadastro 
-        ? { nome, emailOuTelefone: identificador, senha, role: 'cliente' }
-        : { emailOuTelefone: identificador, senha };
+      const identificador = inputIdentificador.value.trim();
+      const senha = inputSenha.value.trim();
+
+      if (!identificador || !senha) {
+        exibirAlerta('Indique os seus dados de acesso e a palavra-passe.', 'error');
+        return;
+      }
 
       try {
         btnSubmit.disabled = true;
-        btnSubmit.textContent = 'Processando...';
+        btnSubmit.querySelector('span').textContent = 'A autenticar credenciais...';
 
-        const resp = await fetch(`${API_URL}${rota}`, {
+        const resp = await fetch(`${API_URL}/api/usuarios/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            identificador,
+            senha,
+            perfilDesejado: roleLoginAtual
+          })
         });
 
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Falha na autenticação.');
+        // Verificação se a resposta foi um HTML por erro de infraestrutura
+        const contentType = resp.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Servidor indisponível ou a iniciar. Aguarde 20 segundos e tente de novo.');
+        }
 
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.erro || 'Falha ao validar credenciais.');
+        }
+
+        // Armazenamento da sessão
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_id', data.usuario.id);
-        localStorage.setItem('huby_user_name', data.usuario.nome || 'Passageiro');
-        localStorage.setItem('huby_user_phone', identificador);
-        localStorage.setItem('huby_user_role', data.usuario.role || 'cliente');
+        localStorage.setItem('huby_user_name', data.usuario.nome);
+        localStorage.setItem('huby_user_role', data.usuario.role);
+        if (data.usuario.telefone) {
+          localStorage.setItem('huby_user_phone', data.usuario.telefone);
+        }
 
-        window.location.replace('./index.html');
+        exibirAlerta('Sessão iniciada com sucesso! A carregar...', 'success');
+
+        setTimeout(() => {
+          if (data.usuario.role === 'motorista') {
+            window.location.replace('./motorista.html');
+          } else {
+            window.location.replace('./index.html');
+          }
+        }, 800);
+
       } catch (err) {
-        alert(err.message);
+        exibirAlerta(err.message, 'error');
       } finally {
         btnSubmit.disabled = false;
-        btnSubmit.textContent = modoCadastro ? 'Criar Minha Conta' : 'Entrar na Conta';
+        btnSubmit.querySelector('span').textContent = roleLoginAtual === 'cliente'
+          ? 'Entrar como Passageiro'
+          : 'Entrar como Motorista Parceiro';
       }
     };
+
+    function exibirAlerta(msg, tipo) {
+      alertaBox.textContent = msg;
+      alertaBox.className = `auth-alert ${tipo}`;
+      alertaBox.style.display = 'block';
+    }
+
+    function esconderAlerta() {
+      alertaBox.style.display = 'none';
+    }
   </script>
 </body>
 </html>
