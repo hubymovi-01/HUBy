@@ -2,34 +2,73 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>HUBy - Painel Administrativo</title>
   <link rel="stylesheet" href="./css/base.css">
+  
+  <!-- GUARDA DE ENTRADA SEGURA VIA JWT/ROLE -->
+  <script type="module">
+    import { API_URL } from './js/config.js';
+
+    const token = localStorage.getItem('huby_token');
+    const role = localStorage.getItem('huby_user_role');
+
+    if (!token || role !== 'admin') {
+      window.location.replace('./welcome.html');
+    } else {
+      // Validação em tempo real no servidor
+      fetch(`${API_URL}/api/admin/metricas`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(res => {
+        if (!res.ok) {
+          localStorage.removeItem('huby_token');
+          localStorage.removeItem('huby_user_role');
+          window.location.replace('./welcome.html');
+        }
+      }).catch(() => {
+        window.location.replace('./welcome.html');
+      });
+    }
+  </script>
+
   <style>
-    body { background: #0B0F19; color: #FFF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; }
+    body { background: #0B0F19; color: #FFF; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; margin: 0; }
     .admin-container { max-width: 1100px; margin: 0 auto; }
-    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+    .header-actions { display: flex; align-items: center; gap: 10px; }
+    .btn-voltar { background: rgba(255,255,255,0.06); color: #94A3B8; border: 1px solid rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 8px; font-weight: 700; text-decoration: none; font-size: 13px; }
+    .btn-atualizar { background: #10B981; color: #03251E; border: none; padding: 8px 16px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    
     .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 30px; }
     .card-metric { background: #151C2C; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; }
     .card-metric small { color: #8F9CAE; font-size: 12px; text-transform: uppercase; font-weight: 700; }
     .card-metric h2 { font-size: 24px; margin: 8px 0 0; color: #10B981; }
-    .table-card { background: #151C2C; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; overflow-x: auto; }
+    
+    .table-card { background: #151C2C; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 20px; overflow-x: auto; margin-bottom: 24px; }
     table { width: 100%; border-collapse: collapse; text-align: left; font-size: 14px; }
-    th { color: #8F9CAE; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-    td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    th { color: #8F9CAE; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 11px; text-transform: uppercase; }
+    td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 13px; }
+    
     .badge { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
-    .badge-concluido { background: rgba(16,185,129,0.15); color: #10B981; }
+    .badge-concluido, .badge-aprovado { background: rgba(16,185,129,0.15); color: #10B981; }
     .badge-pendente { background: rgba(245,158,11,0.15); color: #F59E0B; }
-    .badge-cancelado { background: rgba(239,68,68,0.15); color: #EF4444; }
+    .badge-cancelado, .badge-recusado { background: rgba(239,68,68,0.15); color: #EF4444; }
   </style>
 </head>
 <body>
   <div class="admin-container">
     <div class="header-bar">
-      <h2>Painel Executivo HUBy 2.0</h2>
-      <button onclick="window.location.reload()" style="background:#10B981; color:#03251E; border:none; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer;">Atualizar Dados</button>
+      <div>
+        <h2 style="margin: 0;">Painel Executivo HUBy 2.0</h2>
+        <span style="color: #64748B; font-size: 12px; font-weight: 600;">Acesso Mestre Administrativo</span>
+      </div>
+      <div class="header-actions">
+        <a href="./index.html" class="btn-voltar">← Voltar ao App</a>
+        <button id="btnAtualizarDados" class="btn-atualizar">Atualizar Dados</button>
+      </div>
     </div>
 
+    <!-- CARDS FINANCEIROS E OPERACIONAIS -->
     <div class="metrics-grid">
       <div class="card-metric">
         <small>Faturação Bruta</small>
@@ -49,6 +88,7 @@
       </div>
     </div>
 
+    <!-- TABELA 1: MONITOR DE CORRIDAS RECENTES -->
     <div class="table-card">
       <h3 style="margin-top:0; margin-bottom:16px;">Monitor de Viagens Recentes</h3>
       <table>
@@ -63,10 +103,31 @@
           </tr>
         </thead>
         <tbody id="corpoTabelaChamadas">
-          <tr><td colspan="6">A carregar métricas...</td></tr>
+          <tr><td colspan="6" style="text-align: center; color: #64748B;">A carregar métricas...</td></tr>
         </tbody>
       </table>
     </div>
+
+    <!-- TABELA 2: FROTA DE MOTORISTAS PARCEIROS -->
+    <div class="table-card">
+      <h3 style="margin-top:0; margin-bottom:16px;">Frota de Motoristas Parceiros</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>CNH</th>
+            <th>Veículo & Placa</th>
+            <th>Categoria</th>
+            <th>Saldo Carteira</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="corpoTabelaMotoristas">
+          <tr><td colspan="6" style="text-align: center; color: #64748B;">A carregar parceiros...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
   </div>
 
   <script type="module" src="./js/admin.js"></script>
