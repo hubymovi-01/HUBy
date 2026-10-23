@@ -1023,5 +1023,5 @@ app.get('/api/admin/relatorios/corridas.csv', autenticarToken, async (req, res) 
 // INICIALIZAÇÃO DO SERVIDOR (ÚLTIMA LINHA)
 // ============================================================================
 app.listen(port, () => {
-  console.log(`Servidor HUBy 2.0 ativo na porta ${port}`);
+  console.log(`Servidor HUBy huby ativo na porta ${port}`);
 });
