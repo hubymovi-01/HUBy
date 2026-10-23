@@ -36,10 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRoleCliente?.classList.remove('active');
 
     if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'none';
-    if (grpDataNascPassageiro) grpDataNascPassageiro.style.display = 'none';
     if (secaoMotorista) secaoMotorista.style.display = 'block';
 
-    // Texto sem porcentagem
     txtSubtitulo.textContent = 'Cadastre seu veículo, defina seus horários e dirija com liberdade';
     btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
     if (linkLoginDireto) linkLoginDireto.href = './login.html?perfil=motorista';
@@ -112,11 +110,11 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     esconderAlerta();
 
-    const nome = document.getElementById('cadNome').value.trim();
-    const cpf = document.getElementById('cadCpf').value.trim();
-    const telefone = document.getElementById('cadTelefone').value.trim();
-    const email = document.getElementById('cadEmail').value.trim();
-    const senha = document.getElementById('cadSenha').value.trim();
+    const nome = document.getElementById('cadNome')?.value.trim();
+    const cpf = document.getElementById('cadCpf')?.value.trim();
+    const telefone = document.getElementById('cadTelefone')?.value.trim();
+    const email = document.getElementById('cadEmail')?.value.trim();
+    const senha = document.getElementById('cadSenha')?.value.trim();
 
     if (!nome || !cpf || !telefone || !email || !senha) {
       exibirAlerta('Preencha todos os campos obrigatórios.', 'error');
@@ -128,38 +126,52 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // CAPTURA RESILIENTE DE DATA: Busca qualquer campo de data preenchido
+    const inDataCliente = document.getElementById('cadDataNascCliente')?.value;
+    const inDataMotorista = document.getElementById('cadDataNascMotorista')?.value;
+    const inDataPadrao = document.getElementById('cadDataNascimento')?.value;
+
+    let dataNascimentoVal = inDataCliente || inDataMotorista || inDataPadrao || '';
+
+    // Corrige anos acidentais de 5 dígitos (ex: 20055 -> 2005)
+    if (dataNascimentoVal) {
+      const partes = dataNascimentoVal.split('-');
+      if (partes[0] && partes[0].length > 4) {
+        partes[0] = partes[0].substring(0, 4);
+        dataNascimentoVal = partes.join('-');
+      }
+    }
+
+    if (!dataNascimentoVal) {
+      exibirAlerta('Informe a sua data de nascimento.', 'error');
+      return;
+    }
+
     const payload = {
       nome,
       cpf,
       telefone,
       email,
       senha,
+      dataNascimento: dataNascimentoVal,
       role: roleAtual
     };
 
     if (roleAtual === 'cliente') {
-      const dataNascCliente = document.getElementById('cadDataNascCliente')?.value;
       const emergenciaNome = document.getElementById('cadEmergenciaNome')?.value.trim();
       const emergenciaTel = document.getElementById('cadEmergenciaTelefone')?.value.trim();
-
-      if (!dataNascCliente) {
-        exibirAlerta('Informe a sua data de nascimento.', 'error');
-        return;
-      }
 
       if (!emergenciaNome || !emergenciaTel) {
         exibirAlerta('Indique o nome e o telefone do seu contato de emergência.', 'error');
         return;
       }
 
-      payload.dataNascimento = dataNascCliente;
       payload.contatoEmergenciaNome = emergenciaNome;
       payload.contatoEmergenciaTelefone = emergenciaTel;
     }
 
     if (roleAtual === 'motorista') {
       const cnh = document.getElementById('cadCnh')?.value.trim();
-      const dataNascMotorista = document.getElementById('cadDataNascMotorista')?.value;
       const modelo = document.getElementById('cadModelo')?.value.trim();
       const placa = document.getElementById('cadPlaca')?.value.trim().toUpperCase();
       const categoria = document.getElementById('cadCategoriaVeiculo')?.value;
@@ -170,18 +182,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (!dataNascMotorista) {
-        exibirAlerta('Informe a sua data de nascimento para validação de idade.', 'error');
-        return;
-      }
-
       if (!modelo || !placa) {
         exibirAlerta('Preencha o modelo e a placa do veículo.', 'error');
         return;
       }
 
       payload.cnh = cnh;
-      payload.dataNascimento = dataNascMotorista;
       payload.veiculo_modelo = modelo;
       payload.veiculo_placa = placa;
       payload.categoria_veiculo = categoria;
