@@ -228,6 +228,51 @@ const processarCadastro = async (req, res) => {
     }
     res.status(500).json({ erro: 'Falha ao concluir registo na base de dados.' });
   }
+
+  // Algoritmo Oficial de Verificação de CNH (Módulo 11)
+function validarNumeroCNH(cnh) {
+  cnh = String(cnh).replace(/\D/g, '');
+  if (cnh.length !== 11 || /^(\d)\1+$/.test(cnh)) return false;
+
+  let v = 0, j = 9;
+  for (let i = 0; i < 9; ++i, --j) {
+    v += parseInt(cnh.charAt(i), 10) * j;
+  }
+
+  let d1 = v % 11;
+  let maisUm = false;
+  if (d1 >= 10) {
+    v = 0;
+    d1 = 0;
+    maisUm = true;
+  }
+
+  v = 0;
+  j = 1;
+  for (let i = 0; i < 9; ++i, ++j) {
+    v += parseInt(cnh.charAt(i), 10) * j;
+  }
+
+  let x = v % 11;
+  let d2 = x >= 10 ? 0 : x;
+  if (maisUm) {
+    d2 = d2 - 2 < 0 ? d2 - 2 + 11 : d2 - 2;
+  }
+
+  return `${d1}${d2}` === cnh.substring(9, 11);
+}
+
+// Cálculo preciso de idade com base na data de nascimento
+function calcularIdade(dataNascStr) {
+  const hoje = new Date();
+  const nasc = new Date(dataNascStr);
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
+    idade--;
+  }
+  return idade;
+}
 };
 
 app.post('/api/auth/cadastro', processarCadastro);
@@ -471,15 +516,56 @@ app.get('/api/pedidos/historico', autenticarToken, async (req, res) => {
 
     let historico;
     if (role === 'motorista') {
-      historico = await sql`
-        SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, 
-               distancia_km, valor_total, status, criado_em
-        FROM pedidos
-        WHERE motorista_id = ${usuarioId}
-        ORDER BY criado_em DESC
-        LIMIT 30;
+      const { dataNascimento, fotoVeiculo } = req.body;
+      const cnhLimpa = String(cnh || '').replace(/\D/g, '');
+
+      // 1. Validação Algorítmica da CNH
+      if (!validarNumeroCNH(cnhLimpa)) {
+        return res.status(400).json({ erro: 'Número de CNH inválido. Verifique os dígitos digitados.' });
+      }
+
+      // 2. Validação da Idade Mínima
+      if (!dataNascimento) {
+        return res.status(400).json({ erro: 'Informe a data de nascimento do condutor.' });
+      }
+      const idade = calcularIdade(dataNascimento);
+      if (idade < 18) {
+        return res.status(400).json({ erro: 'Cadastro negado: É obrigatório ter pelo menos 18 anos.' });
+      }
+
+      if (!veiculo_placa || !veiculo_modelo) {
+        return res.status(400).json({ erro: 'Preencha o modelo e a placa do veículo.' });
+      }
+
+      const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const novoId = 'mot_' + Date.now().toString(36);
+
+      const resultado = await sql`
+        INSERT INTO motoristas (
+          id, nome, email, telefone, cpf, senha_hash,
+          cnh_numero, categoria, veiculo_modelo, veiculo_placa,
+          doc_crlv_url, status_aprovacao
+        ) VALUES (
+          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${senhaHash},
+          ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa},
+          ${fotoVeiculo || null}, 'aprovado'
+        )
+        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
       `;
-    } else {
+
+      const motoristaCriado = resultado[0];
+      const token = jwt.sign(
+        { id: motoristaCriado.id, nome: motoristaCriado.nome, role: 'motorista' },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return res.status(201).json({
+        sucesso: true,
+        token,
+        usuario: { ...motoristaCriado, role: 'motorista' }
+      });
+    }else {
       historico = await sql`
         SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, 
                distancia_km, valor_total, status, criado_em, motorista_nome

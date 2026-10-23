@@ -1,6 +1,6 @@
 import { API_URL } from './config.js';
 
-let roleAtual = 'cliente'; // 'cliente' ou 'motorista'
+let roleAtual = 'cliente';
 
 document.addEventListener('DOMContentLoaded', () => {
   const btnRoleCliente = document.getElementById('btnRoleCliente');
@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSubmit = document.getElementById('btnSubmeterCadastro');
   const alertaBox = document.getElementById('alertaBox');
 
-  // 1. ALTERNADOR DE PERFIL
+  // Alternador de Perfis
   btnRoleCliente?.addEventListener('click', () => {
     roleAtual = 'cliente';
     btnRoleCliente.classList.add('active');
@@ -26,14 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
     btnRoleMotorista.classList.add('active');
     btnRoleCliente.classList.remove('active');
     secaoMotorista.style.display = 'block';
-    txtSubtitulo.textContent = 'Trabalhe connosco e receba 85% líquido por corrida';
+    txtSubtitulo.textContent = 'Cadastre seu veículo e receba 85% líquido por corrida';
     btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
     esconderAlerta();
   });
 
-  // 2. MÁSCARA AUTOMÁTICA DE CPF (000.000.000-00)
-  const inputCpf = document.getElementById('cadCpf');
-  inputCpf?.addEventListener('input', (e) => {
+  // Máscara de CPF
+  document.getElementById('cadCpf')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/(\d{3})(\d)/, '$1.$2');
     v = v.replace(/(\d{3})(\d)/, '$1.$2');
@@ -41,31 +40,39 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.value = v;
   });
 
-  // 3. MÁSCARA AUTOMÁTICA DE TELEFONE ((00) 00000-0000)
-  const inputTel = document.getElementById('cadTelefone');
-  inputTel?.addEventListener('input', (e) => {
+  // Máscara de Telefone
+  document.getElementById('cadTelefone')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
     v = v.replace(/(\d)(\d{4})$/, '$1-$2');
     e.target.value = v;
   });
 
-  // 4. MÁSCARA / VALIDAÇÃO DE PLACA (MERCOSUL / TRADICIONAL)
-  const inputPlaca = document.getElementById('cadPlaca');
-  inputPlaca?.addEventListener('input', (e) => {
+  // Formatação de Placa
+  document.getElementById('cadPlaca')?.addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   });
 
-  // 5. MOSTRAR / OCULTAR PALAVRA-PASSE
-  const btnToggleSenha = document.getElementById('btnToggleSenha');
-  const inputSenha = document.getElementById('cadSenha');
-  btnToggleSenha?.addEventListener('click', () => {
-    const isPass = inputSenha.type === 'password';
-    inputSenha.type = isPass ? 'text' : 'password';
-    btnToggleSenha.textContent = isPass ? '🔒' : '👁️';
+  // Botão Mostrar/Ocultar Senha
+  const btnToggle = document.getElementById('btnToggleSenha');
+  const inSenha = document.getElementById('cadSenha');
+  btnToggle?.addEventListener('click', () => {
+    const isPass = inSenha.type === 'password';
+    inSenha.type = isPass ? 'text' : 'password';
+    btnToggle.textContent = isPass ? '🔒' : '👁️';
   });
 
-  // 6. ENVIO DO FORMULÁRIO COM VALIDAÇÃO
+  // Utilitário para converter foto em Base64
+  const converterParaBase64 = (arquivo) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(arquivo);
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  // Submissão do Formulário
   document.getElementById('formCadastroHuby')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     esconderAlerta();
@@ -96,20 +103,46 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     if (roleAtual === 'motorista') {
-      payload.cnh = document.getElementById('cadCnh').value.trim();
-      payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
-      payload.veiculo_modelo = document.getElementById('cadModelo').value.trim();
-      payload.veiculo_placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
+      const cnh = document.getElementById('cadCnh').value.trim();
+      const dataNasc = document.getElementById('cadDataNasc').value;
+      const modelo = document.getElementById('cadModelo').value.trim();
+      const placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
+      const categoria = document.getElementById('cadCategoriaVeiculo').value;
+      const fileInput = document.getElementById('cadFotoVeiculo');
 
-      if (!payload.cnh || !payload.veiculo_placa || !payload.veiculo_modelo) {
-        exibirAlerta('Para condutores parceiros, indique a CNH, Modelo e Placa.', 'error');
+      if (!cnh || cnh.replace(/\D/g, '').length !== 11) {
+        exibirAlerta('Informe um número de CNH válido com 11 dígitos.', 'error');
         return;
+      }
+
+      if (!dataNasc) {
+        exibirAlerta('Informe a sua data de nascimento para validação de idade.', 'error');
+        return;
+      }
+
+      if (!modelo || !placa) {
+        exibirAlerta('Preencha o modelo e a placa do veículo.', 'error');
+        return;
+      }
+
+      payload.cnh = cnh;
+      payload.dataNascimento = dataNasc;
+      payload.veiculo_modelo = modelo;
+      payload.veiculo_placa = placa;
+      payload.categoria_veiculo = categoria;
+
+      if (fileInput.files && fileInput.files[0]) {
+        try {
+          payload.fotoVeiculo = await converterParaBase64(fileInput.files[0]);
+        } catch (errFoto) {
+          console.warn('Erro ao carregar foto do veículo:', errFoto);
+        }
       }
     }
 
     try {
       btnSubmit.disabled = true;
-      btnSubmit.querySelector('span').textContent = 'Processando registo...';
+      btnSubmit.querySelector('span').textContent = 'Validando e registando...';
 
       const resp = await fetch(`${API_URL}/api/usuarios/cadastro`, {
         method: 'POST',
@@ -117,10 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(payload)
       });
 
-      // Valida se o backend devolveu HTML em vez de JSON (servidor dormindo/offline)
       const contentType = resp.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Servidor indisponível ou a iniciar. Aguarde 20 segundos e tente de novo.');
+        throw new Error('Servidor a inicializar no Render. Aguarde 20 segundos e tente novamente.');
       }
 
       const data = await resp.json();
@@ -128,13 +160,12 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(data.erro || 'Falha ao concluir registo.');
       }
 
-      // Salva sessão
       localStorage.setItem('huby_token', data.token);
       localStorage.setItem('huby_user_id', data.usuario.id);
       localStorage.setItem('huby_user_name', data.usuario.nome);
       localStorage.setItem('huby_user_role', data.usuario.role);
 
-      exibirAlerta('Registo concluído! A entrar...', 'success');
+      exibirAlerta('Conta criada com sucesso! Redirecionando...', 'success');
 
       setTimeout(() => {
         if (data.usuario.role === 'motorista') {
@@ -148,8 +179,8 @@ document.addEventListener('DOMContentLoaded', () => {
       exibirAlerta(err.message, 'error');
     } finally {
       btnSubmit.disabled = false;
-      btnSubmit.querySelector('span').textContent = roleAtual === 'cliente' 
-        ? 'Criar Conta de Passageiro' 
+      btnSubmit.querySelector('span').textContent = roleAtual === 'cliente'
+        ? 'Criar Conta de Passageiro'
         : 'Cadastrar Motorista Parceiro';
     }
   });

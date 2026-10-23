@@ -76,15 +76,25 @@
           </div>
         </div>
 
-        <!-- SECÇÃO 2: DADOS DO VEÍCULO (EXCLUSIVO MOTORISTA) -->
+        <!-- SECÇÃO 2: DADOS DO PARCEIRO E VEÍCULO (EXCLUSIVO MOTORISTA) -->
         <div id="secaoMotoristaVeiculo" class="motorista-specs-box" style="display: none;">
-          <div class="form-section-tag highlight">Dados de Parceiro & Veículo</div>
+          <div class="form-section-tag highlight">Validação de Habilitação & Veículo</div>
 
-          <div class="input-group">
-            <label for="cadCnh">Número da CNH</label>
-            <div class="input-wrapper">
-              <span class="input-ico">🪪</span>
-              <input type="tel" id="cadCnh" placeholder="Número do registo da CNH" maxlength="12">
+          <div class="input-row">
+            <div class="input-group">
+              <label for="cadCnh">Número da CNH (11 dígitos)</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🪪</span>
+                <input type="tel" id="cadCnh" placeholder="Ex: 01234567890" maxlength="11">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="cadDataNasc">Data de Nascimento</label>
+              <div class="input-wrapper">
+                <span class="input-ico">📅</span>
+                <input type="date" id="cadDataNasc">
+              </div>
             </div>
           </div>
 
@@ -106,7 +116,7 @@
               <label for="cadModelo">Modelo do Veículo</label>
               <div class="input-wrapper">
                 <span class="input-ico">🚗</span>
-                <input type="text" id="cadModelo" placeholder="Ex: Onix 1.0">
+                <input type="text" id="cadModelo" placeholder="Ex: Onix, Titan 160">
               </div>
             </div>
 
@@ -116,6 +126,14 @@
                 <span class="input-ico">🏷️</span>
                 <input type="text" id="cadPlaca" placeholder="ABC1D23" maxlength="8" style="text-transform: uppercase;">
               </div>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="cadFotoVeiculo">Foto do Veículo (Carro ou Moto)</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📸</span>
+              <input type="file" id="cadFotoVeiculo" accept="image/*" style="padding-left: 40px;">
             </div>
           </div>
         </div>
