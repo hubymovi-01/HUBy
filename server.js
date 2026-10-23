@@ -11,22 +11,22 @@ const app = express();
 const port = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'huby_jwt_secret_key_prod_2026_xpto';
 
-// CORS configurado para aceitar requisições locais do Live Server
+// Configuração ampla de CORS
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 if (!process.env.DATABASE_URL) {
-  console.warn('AVISO: DATABASE_URL não definida nas variáveis de ambiente.');
+  console.warn('AVISO CRÍTICO: DATABASE_URL não definida nas variáveis de ambiente.');
 }
 
 const sql = neon(process.env.DATABASE_URL);
 
-// Middleware para validar tokens JWT
+// Middleware para validação do Token JWT
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) {
@@ -44,46 +44,167 @@ export function autenticarToken(req, res, next) {
   }
 }
 
-// Rota de verificação de integridade da API
+// Inicialização automática das tabelas essenciais no Neon
+async function inicializarBanco() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        email TEXT UNIQUE,
+        telefone TEXT UNIQUE,
+        cpf TEXT UNIQUE,
+        senha_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'cliente',
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS motoristas (
+        id TEXT PRIMARY KEY,
+        nome TEXT NOT NULL,
+        email TEXT UNIQUE,
+        telefone TEXT UNIQUE,
+        cpf TEXT UNIQUE,
+        senha_hash TEXT,
+        cnh_numero TEXT NOT NULL,
+        categoria TEXT DEFAULT 'carro',
+        veiculo_modelo TEXT NOT NULL,
+        veiculo_placa TEXT NOT NULL,
+        veiculo_cor TEXT,
+        saldo_carteira NUMERIC(10,2) DEFAULT 0.00,
+        status_online BOOLEAN DEFAULT FALSE,
+        status_aprovacao TEXT DEFAULT 'aprovado',
+        avaliacao_media NUMERIC(3,2) DEFAULT 5.00,
+        total_avaliacoes INT DEFAULT 0,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS pedidos (
+        id TEXT PRIMARY KEY,
+        cliente_id TEXT,
+        motorista_id TEXT,
+        motorista_nome TEXT,
+        motorista_telefone TEXT,
+        motorista_veiculo TEXT,
+        motorista_placa TEXT,
+        tipo TEXT,
+        sub_tipo_id TEXT,
+        sub_tipo_label TEXT,
+        origem_endereco TEXT,
+        destino_endereco TEXT,
+        origem_lat NUMERIC,
+        origem_lng NUMERIC,
+        destino_lat NUMERIC,
+        destino_lng NUMERIC,
+        distancia_km NUMERIC,
+        duracao_min NUMERIC,
+        valor_total NUMERIC(10,2),
+        valor_adicionais NUMERIC(10,2) DEFAULT 0.00,
+        metodo_pgto TEXT,
+        status TEXT DEFAULT 'pendente',
+        motivo_cancelamento TEXT,
+        cancelado_por TEXT,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS avaliacoes (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT NOT NULL,
+        cliente_id TEXT,
+        motorista_id TEXT,
+        nota INT NOT NULL,
+        comentario TEXT,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
+  } catch (e) {
+    console.error('Aviso ao sincronizar tabelas:', e.message);
+  }
+}
+inicializarBanco();
+
+// Verificação de saúde da API
 app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online', versao: '2.0.0', banco: 'Neon PostgreSQL' });
 });
 
 // ============================================================================
-// 1. AUTENTICAÇÃO UNIFICADA: PASSAGEIROS E ADMINISTRADORES
+// 1. AUTENTICAÇÃO UNIFICADA: PASSAGEIROS & MOTORISTAS
 // ============================================================================
 
-// Registo de Passageiro
-app.post('/api/auth/cadastro', async (req, res) => {
+// CADASTRO (Atende /api/usuarios/cadastro e /api/auth/cadastro)
+const handlerCadastro = async (req, res) => {
   try {
-    const { nome, email, telefone, cpf, senha } = req.body;
+    const {
+      nome, email, telefone, cpf, senha, role = 'cliente',
+      cnh, veiculo_modelo, veiculo_placa, categoria_veiculo
+    } = req.body;
 
-    if (!nome || !email || !telefone || !senha) {
-      return res.status(400).json({ erro: 'Preencha todos os campos obrigatórios.' });
+    if (!nome || !senha || (!email && !telefone)) {
+      return res.status(400).json({ erro: 'Preencha os campos obrigatórios (Nome, Senha e Contato).' });
     }
 
-    const emailLimpo = String(email).trim().toLowerCase();
+    const emailLimpo = email ? String(email).trim().toLowerCase() : null;
+    const telLimpo = telefone ? String(telefone).trim() : null;
+    const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : null;
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(String(senha), salt);
 
+    if (role === 'motorista') {
+      if (!cnh || !veiculo_placa || !veiculo_modelo) {
+        return res.status(400).json({ erro: 'Para motorista parceiro, informe CNH, Modelo e Placa.' });
+      }
+
+      const cnhLimpa = String(cnh).replace(/\D/g, '');
+      const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const novoId = 'mot_' + Date.now().toString(36);
+
+      const resultado = await sql`
+        INSERT INTO motoristas (
+          id, nome, email, telefone, cpf, senha_hash,
+          cnh_numero, categoria, veiculo_modelo, veiculo_placa, status_aprovacao
+        ) VALUES (
+          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${senhaHash},
+          ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa}, 'aprovado'
+        )
+        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
+      `;
+
+      const motoristaCriado = resultado[0];
+      const token = jwt.sign(
+        { id: motoristaCriado.id, nome: motoristaCriado.nome, role: 'motorista' },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return res.status(201).json({
+        sucesso: true,
+        token,
+        usuario: { ...motoristaCriado, role: 'motorista' }
+      });
+    }
+
+    // Cadastro de Passageiro
+    const novoId = 'usr_' + Date.now().toString(36);
     const resultado = await sql`
-      INSERT INTO usuarios (nome, email, telefone, cpf, senha_hash, role)
-      VALUES (
-        ${nome.trim()},
-        ${emailLimpo},
-        ${telefone.trim()},
-        ${cpf ? String(cpf).replace(/\D/g, '') : null},
-        ${senhaHash},
-        'cliente'
-      )
+      INSERT INTO usuarios (id, nome, email, telefone, cpf, senha_hash, role)
+      VALUES (${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${senhaHash}, 'cliente')
       RETURNING id, nome, email, telefone, role;
     `;
 
     const utilizadorCriado = resultado[0];
     const token = jwt.sign(
-      { id: utilizadorCriado.id, email: utilizadorCriado.email, role: utilizadorCriado.role },
+      { id: utilizadorCriado.id, email: utilizadorCriado.email, role: 'cliente' },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
     res.status(201).json({
@@ -94,125 +215,125 @@ app.post('/api/auth/cadastro', async (req, res) => {
   } catch (err) {
     console.error('Erro no registo de utilizador:', err);
     if (err.message && err.message.includes('unique constraint')) {
-      return res.status(409).json({ erro: 'Este e-mail ou CPF já se encontra registado.' });
+      return res.status(409).json({ erro: 'Este e-mail, telefone ou CPF já está cadastrado.' });
     }
     res.status(500).json({ erro: 'Falha ao concluir registo na base de dados.' });
   }
-});
+};
 
-// Login Unificado (Passageiro ou Admin)
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/usuarios/cadastro', handlerCadastro);
+app.post('/api/auth/cadastro', handlerCadastro);
+
+// LOGIN (Atende /api/usuarios/login e /api/auth/login)
+const handlerLogin = async (req, res) => {
   try {
-    const { email, senha } = req.body;
+    const identificador = req.body.identificador || req.body.emailOuTelefone || req.body.email;
+    const senha = req.body.senha;
+    const perfilDesejado = req.body.perfilDesejado || 'cliente';
 
-    if (!email || !senha) {
-      return res.status(400).json({ erro: 'Indique o e-mail e a palavra-passe.' });
+    if (!identificador || !senha) {
+      return res.status(400).json({ erro: 'Indique seu acesso (E-mail, Telefone ou CPF) e a senha.' });
     }
 
-    const emailLimpo = String(email).trim().toLowerCase();
+    const idLimpo = String(identificador).trim().toLowerCase();
+    const idNumeros = String(identificador).replace(/\D/g, '');
 
-    const resultado = await sql`
-      SELECT id, nome, email, telefone, role, senha_hash
-      FROM usuarios
-      WHERE LOWER(TRIM(email)) = ${emailLimpo}
+    // 1. Se estiver tentando logar na aba de Motorista
+    if (perfilDesejado === 'motorista') {
+      const motoristas = await sql`
+        SELECT * FROM motoristas
+        WHERE LOWER(TRIM(email)) = ${idLimpo}
+           OR regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros}
+           OR regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros}
+           OR regexp_replace(cnh_numero, '\\D', '', 'g') = ${idNumeros}
+        LIMIT 1;
+      `;
+
+      if (motoristas.length === 0) {
+        return res.status(404).json({ erro: 'Condutor não encontrado. Verifique os dados ou crie sua conta de parceiro.' });
+      }
+
+      const mot = motoristas[0];
+      const senhaValida = await bcrypt.compare(String(senha), mot.senha_hash);
+      if (!senhaValida) {
+        return res.status(401).json({ erro: 'Senha incorreta.' });
+      }
+
+      await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${mot.id};`;
+
+      const token = jwt.sign(
+        { id: mot.id, nome: mot.nome, role: 'motorista', categoria: mot.categoria },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return res.json({
+        sucesso: true,
+        token,
+        usuario: {
+          id: mot.id,
+          nome: mot.nome,
+          email: mot.email,
+          telefone: mot.telefone,
+          role: 'motorista',
+          veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`,
+          saldo: mot.saldo_carteira
+        }
+      });
+    }
+
+    // 2. Login de Passageiro / Admin
+    const usuarios = await sql`
+      SELECT * FROM usuarios
+      WHERE LOWER(TRIM(email)) = ${idLimpo}
+         OR regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros}
+         OR regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros}
       LIMIT 1;
     `;
 
-    if (resultado.length === 0) {
-      return res.status(401).json({ erro: 'Credenciais inválidas.' });
+    if (usuarios.length === 0) {
+      return res.status(404).json({ erro: 'Usuário não cadastrado.' });
     }
 
-    const utilizador = resultado[0];
-    const senhaCorreta = await bcrypt.compare(String(senha), utilizador.senha_hash);
-
-    if (!senhaCorreta) {
-      return res.status(401).json({ erro: 'Credenciais inválidas.' });
+    const usr = usuarios[0];
+    const senhaValida = await bcrypt.compare(String(senha), usr.senha_hash);
+    if (!senhaValida) {
+      return res.status(401).json({ erro: 'Senha incorreta.' });
     }
 
     const token = jwt.sign(
-      { id: utilizador.id, email: utilizador.email, role: utilizador.role },
+      { id: usr.id, nome: usr.nome, email: usr.email, role: usr.role },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
     res.json({
       sucesso: true,
       token,
       usuario: {
-        id: utilizador.id,
-        nome: utilizador.nome,
-        email: utilizador.email,
-        telefone: utilizador.telefone,
-        role: utilizador.role
+        id: usr.id,
+        nome: usr.nome,
+        email: usr.email,
+        telefone: usr.telefone,
+        role: usr.role
       }
     });
   } catch (err) {
-    console.error('Erro no login de utilizador:', err);
+    console.error('Erro no login:', err);
     res.status(500).json({ erro: 'Falha interna ao validar credenciais.' });
   }
-});
+};
+
+app.post('/api/usuarios/login', handlerLogin);
+app.post('/api/auth/login', handlerLogin);
 
 // ============================================================================
-// 2. AUTENTICAÇÃO E GESTÃO DE PARCEIROS / CONDUTORES
+// 2. PARCEIROS & ROTAS DE SALDO
 // ============================================================================
 
-// Login do Condutor (via CNH e Matrícula/Placa)
-app.post('/api/motoristas/login', async (req, res) => {
-  try {
-    const cnh = req.body.cnh || req.body.cnh_numero;
-    const placa = req.body.placa || req.body.veiculo_placa;
-
-    if (!cnh || !placa) {
-      return res.status(400).json({ erro: 'Indique a CNH e a matrícula/placa do veículo.' });
-    }
-
-    const cnhLimpa = String(cnh).replace(/\D/g, '');
-    const placaLimpa = String(placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-
-    const resultado = await sql`
-      SELECT id, nome, categoria, veiculo_modelo, veiculo_placa, saldo_carteira
-      FROM motoristas
-      WHERE regexp_replace(cnh_numero, '\\D', '', 'g') = ${cnhLimpa}
-        AND UPPER(regexp_replace(veiculo_placa, '[^a-zA-Z0-9]', '', 'g')) = ${placaLimpa}
-      LIMIT 1;
-    `;
-
-    if (resultado.length === 0) {
-      return res.status(401).json({ erro: 'CNH ou Placa não localizados.' });
-    }
-
-    const motorista = resultado[0];
-
-    await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${motorista.id};`;
-
-    const token = jwt.sign(
-      { id: motorista.id, role: 'motorista', categoria: motorista.categoria },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      sucesso: true,
-      token,
-      motorista: {
-        id: motorista.id,
-        nome: motorista.nome,
-        categoria: motorista.categoria,
-        veiculo: `${motorista.veiculo_modelo} (${motorista.veiculo_placa})`,
-        saldo: motorista.saldo_carteira
-      }
-    });
-  } catch (err) {
-    console.error('Erro no login do motorista:', err);
-    res.status(500).json({ erro: 'Falha interna ao validar condutor.' });
-  }
-});
-
-// Consultar saldo e resumo financeiro do parceiro
 app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
   try {
     const motoristaId = req.usuario.id;
-
     const motorista = await sql`
       SELECT id, nome, saldo_carteira, status_online
       FROM motoristas
@@ -226,16 +347,15 @@ app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
 
     res.json(motorista[0]);
   } catch (err) {
-    console.error('Erro ao consultar saldo do parceiro:', err);
+    console.error('Erro ao consultar saldo:', err);
     res.status(500).json({ erro: 'Falha ao obter saldo da carteira.' });
   }
 });
 
 // ============================================================================
-// 3. ROTAS DE PEDIDOS (ROTAS ESTÁTICAS PRIMEIRO)
+// 3. ROTAS DE PEDIDOS (ROTAS ESTÁTICAS ANTES DE /:id)
 // ============================================================================
 
-// Criar Pedido
 app.post('/api/pedidos', async (req, res) => {
   try {
     const {
@@ -268,11 +388,10 @@ app.post('/api/pedidos', async (req, res) => {
     res.status(201).json({ sucesso: true, id });
   } catch (error) {
     console.error('Erro ao registar pedido:', error);
-    res.status(500).json({ erro: 'Falha ao guardar corrida na base de dados.' });
+    res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados.' });
   }
 });
 
-// Listar Pedidos Pendentes (Radar de condutores)
 app.get('/api/pedidos/pendentes', async (req, res) => {
   try {
     const pedidos = await sql`
@@ -288,7 +407,6 @@ app.get('/api/pedidos/pendentes', async (req, res) => {
   }
 });
 
-// Histórico de Viagens (Passageiro ou Motorista) - DEVE FICAR ANTES DE /:id
 app.get('/api/pedidos/historico', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -323,14 +441,12 @@ app.get('/api/pedidos/historico', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 4. ROTAS DE PEDIDOS DINÂMICAS (COM PARÂMETRO :id)
+// 4. ROTAS DE PEDIDOS COM PARÂMETRO DINÂMICO (:id)
 // ============================================================================
 
-// Polling de Status da chamada pelo passageiro
 app.get('/api/pedidos/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
-
     const pedidos = await sql`
       SELECT id, status, motorista_id, motorista_nome, motorista_telefone, 
              motorista_veiculo, motorista_placa, valor_total, distancia_km
@@ -350,7 +466,6 @@ app.get('/api/pedidos/:id/status', async (req, res) => {
   }
 });
 
-// Motorista aceita a chamada
 app.put('/api/pedidos/:id/aceitar', autenticarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -368,7 +483,6 @@ app.put('/api/pedidos/:id/aceitar', autenticarToken, async (req, res) => {
     }
 
     const mot = motoristas[0];
-
     const pedidoAtualizado = await sql`
       UPDATE pedidos 
       SET status = 'aceito',
@@ -382,7 +496,7 @@ app.put('/api/pedidos/:id/aceitar', autenticarToken, async (req, res) => {
     `;
 
     if (pedidoAtualizado.length === 0) {
-      return res.status(409).json({ erro: 'Este pedido já foi aceite por outro condutor ou cancelado.' });
+      return res.status(409).json({ erro: 'Este pedido já foi aceito por outro condutor ou cancelado.' });
     }
 
     res.json({ sucesso: true, pedido: pedidoAtualizado[0] });
@@ -392,7 +506,6 @@ app.put('/api/pedidos/:id/aceitar', autenticarToken, async (req, res) => {
   }
 });
 
-// Concluir Corrida e creditar 85% para o parceiro
 app.put('/api/pedidos/:id/concluir', autenticarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -410,20 +523,15 @@ app.put('/api/pedidos/:id/concluir', autenticarToken, async (req, res) => {
     }
 
     const pedido = pedidos[0];
-
     if (pedido.status === 'concluido') {
-      return res.status(400).json({ erro: 'Este pedido já foi finalizado anteriormente.' });
+      return res.status(400).json({ erro: 'Este pedido já foi finalizado.' });
     }
 
     const valorBruto = Number(pedido.valor_total) || 0;
     const repasseMotorista = Number((valorBruto * 0.85).toFixed(2));
     const taxaPlataforma = Number((valorBruto * 0.15).toFixed(2));
 
-    await sql`
-      UPDATE pedidos 
-      SET status = 'concluido'
-      WHERE id = ${id};
-    `;
+    await sql`UPDATE pedidos SET status = 'concluido' WHERE id = ${id};`;
 
     const condutorAtualizado = await sql`
       UPDATE motoristas 
@@ -440,12 +548,11 @@ app.put('/api/pedidos/:id/concluir', autenticarToken, async (req, res) => {
       novoSaldoCarteira: condutorAtualizado[0].saldo_carteira
     });
   } catch (err) {
-    console.error('Erro ao concluir corrida e liquidar repasse:', err);
-    res.status(500).json({ erro: 'Falha interna ao concluir e processar valores.' });
+    console.error('Erro ao concluir corrida:', err);
+    res.status(500).json({ erro: 'Falha interna ao processar valores.' });
   }
 });
 
-// Cancelamento Inteligente de Chamada (Cliente, Motorista ou Admin)
 app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -454,10 +561,7 @@ app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
     const usuarioRole = req.usuario.role;
 
     const pedidos = await sql`
-      SELECT id, status, cliente_id, motorista_id 
-      FROM pedidos 
-      WHERE id = ${id} 
-      LIMIT 1;
+      SELECT id, status, cliente_id, motorista_id FROM pedidos WHERE id = ${id} LIMIT 1;
     `;
 
     if (pedidos.length === 0) {
@@ -465,171 +569,32 @@ app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
     }
 
     const pedido = pedidos[0];
-
     if (['concluido', 'cancelado'].includes(pedido.status)) {
-      return res.status(400).json({ erro: `O pedido já se encontra com status '${pedido.status}'.` });
+      return res.status(400).json({ erro: `O pedido já se encontra como '${pedido.status}'.` });
     }
 
-    const ehDono = pedido.cliente_id === usuarioId;
-    const ehCondutor = pedido.motorista_id === usuarioId;
-    const ehAdmin = usuarioRole === 'admin';
-
-    if (!ehDono && !ehCondutor && !ehAdmin) {
-      return res.status(403).json({ erro: 'Sem autorização para cancelar esta corrida.' });
-    }
-
-    const canceladoPor = ehDono ? 'cliente' : (ehCondutor ? 'motorista' : 'admin');
+    const canceladoPor = pedido.cliente_id === usuarioId ? 'cliente' : (pedido.motorista_id === usuarioId ? 'motorista' : 'admin');
 
     const atualizado = await sql`
       UPDATE pedidos 
       SET status = 'cancelado',
-          motivo_cancelamento = ${motivo || 'Cancelado pelo utilizador'},
+          motivo_cancelamento = ${motivo || 'Cancelado pelo usuário'},
           cancelado_por = ${canceladoPor}
       WHERE id = ${id}
       RETURNING *;
     `;
 
-    res.json({
-      sucesso: true,
-      mensagem: 'Chamada cancelada com sucesso.',
-      pedido: atualizado[0]
-    });
+    res.json({ sucesso: true, mensagem: 'Chamada cancelada.', pedido: atualizado[0] });
   } catch (err) {
     console.error('Erro ao cancelar chamada:', err);
-    res.status(500).json({ erro: 'Falha interna ao processar cancelamento.' });
+    res.status(500).json({ erro: 'Falha ao processar cancelamento.' });
   }
 });
 
 // ============================================================================
-// 5. PAINEL ADMINISTRATIVO E MÉTRICAS
+// 5. AVALIAÇÕES E DOCUMENTOS
 // ============================================================================
 
-app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
-  try {
-    if (req.usuario.role !== 'admin') {
-      return res.status(403).json({ erro: 'Acesso reservado exclusivamente à administração.' });
-    }
-
-    const statsFinanceiro = await sql`
-      SELECT 
-        COUNT(id) AS total_corridas_concluidas,
-        COALESCE(SUM(valor_total), 0) AS faturamento_bruto
-      FROM pedidos
-      WHERE status = 'concluido';
-    `;
-
-    const faturamentoBruto = Number(statsFinanceiro[0].faturamento_bruto || 0);
-    const receitaPlataforma = Number((faturamentoBruto * 0.15).toFixed(2));
-    const repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
-
-    const statsUsuarios = await sql`
-      SELECT 
-        (SELECT COUNT(*) FROM motoristas WHERE status_aprovacao = 'aprovado') AS motoristas_ativos,
-        (SELECT COUNT(*) FROM usuarios WHERE role = 'cliente') AS total_clientes,
-        (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente') AS chamadas_em_aberto;
-    `;
-
-    const ultimasChamadas = await sql`
-      SELECT id, status, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
-      FROM pedidos
-      ORDER BY criado_em DESC
-      LIMIT 15;
-    `;
-
-    res.json({
-      faturamentoBruto,
-      receitaPlataforma,
-      repasseMotoristas,
-      totalCorridas: Number(statsFinanceiro[0].total_corridas_concluidas || 0),
-      motoristasAtivos: Number(statsUsuarios[0].motoristas_ativos || 0),
-      totalClientes: Number(statsUsuarios[0].total_clientes || 0),
-      chamadasEmAberto: Number(statsUsuarios[0].chamadas_em_aberto || 0),
-      ultimasChamadas
-    });
-  } catch (err) {
-    console.error('Erro nas métricas admin:', err);
-    res.status(500).json({ erro: 'Falha ao extrair métricas do sistema.' });
-  }
-});
-
-// ============================================================================
-// INICIALIZAÇÃO DO SERVIDOR (SEMPRE NA ÚLTIMA LINHA)
-// ============================================================================
-app.listen(port, () => {
-  console.log(`Servidor HUBy 2.0 ativo na porta ${port}`);
-});
-// ============================================================================
-// 7. GESTÃO DE DOCUMENTOS, AUDITORIA ADMIN E AVALIAÇÕES
-// ============================================================================
-
-// 7.1 Motorista envia documentos (URLs ou base64)
-app.post('/api/motoristas/documentos', autenticarToken, async (req, res) => {
-  try {
-    const motoristaId = req.usuario.id;
-    const { docCnh, docCrlv } = req.body;
-
-    if (!docCnh || !docCrlv) {
-      return res.status(400).json({ erro: 'Forneça a foto da CNH e do CRLV.' });
-    }
-
-    const atualizado = await sql`
-      UPDATE motoristas
-      SET doc_cnh_url = ${docCnh},
-          doc_crlv_url = ${docCrlv},
-          status_aprovacao = 'pendente',
-          motivo_recusa = NULL
-      WHERE id = ${motoristaId}
-      RETURNING id, nome, status_aprovacao;
-    `;
-
-    res.json({
-      sucesso: true,
-      mensagem: 'Documentos submetidos para análise da equipe HUBy.',
-      motorista: atualizado[0]
-    });
-  } catch (err) {
-    console.error('Erro no upload de documentos:', err);
-    res.status(500).json({ erro: 'Falha ao registrar documentos.' });
-  }
-});
-
-// 7.2 Administrador aprova ou recusa motorista
-app.put('/api/admin/motoristas/:id/triagem', autenticarToken, async (req, res) => {
-  try {
-    if (req.usuario.role !== 'admin') {
-      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
-    }
-
-    const { id } = req.params;
-    const { acao, motivo } = req.body; // acao: 'aprovar' ou 'recusar'
-
-    if (!['aprovar', 'recusar'].includes(acao)) {
-      return res.status(400).json({ erro: 'Ação inválida. Utilize aprovar ou recusar.' });
-    }
-
-    const novoStatus = acao === 'aprovar' ? 'aprovado' : 'recusado';
-    const motivoRecusa = acao === 'recusar' ? (motivo || 'Documentação em desacordo com as regras.') : null;
-
-    const mot = await sql`
-      UPDATE motoristas
-      SET status_aprovacao = ${novoStatus},
-          motivo_recusa = ${motivoRecusa}
-      WHERE id = ${id}
-      RETURNING id, nome, status_aprovacao, motivo_recusa;
-    `;
-
-    if (mot.length === 0) {
-      return res.status(404).json({ erro: 'Motorista não encontrado.' });
-    }
-
-    res.json({ sucesso: true, motorista: mot[0] });
-  } catch (err) {
-    console.error('Erro na triagem de motorista:', err);
-    res.status(500).json({ erro: 'Falha ao processar triagem.' });
-  }
-});
-
-// 7.3 Passageiro avalia a corrida (1 a 5 estrelas)
 app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -638,48 +603,65 @@ app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
 
     const notaNum = parseInt(nota, 10);
     if (!notaNum || notaNum < 1 || notaNum > 5) {
-      return res.status(400).json({ erro: 'A nota deve ser um número inteiro de 1 a 5.' });
+      return res.status(400).json({ erro: 'A nota deve ser entre 1 e 5.' });
     }
 
-    // Busca o pedido para resgatar o condutor
-    const pedidos = await sql`
-      SELECT id, motorista_id, status FROM pedidos WHERE id = ${id} LIMIT 1;
-    `;
-
-    if (pedidos.length === 0) {
-      return res.status(404).json({ erro: 'Corrida não encontrada.' });
-    }
-
-    const pedido = pedidos[0];
-    if (pedido.status !== 'concluido') {
+    const pedidos = await sql`SELECT id, motorista_id, status FROM pedidos WHERE id = ${id} LIMIT 1;`;
+    if (pedidos.length === 0 || pedidos[0].status !== 'concluido') {
       return res.status(400).json({ erro: 'Apenas corridas concluídas podem ser avaliadas.' });
     }
 
-    // Registra avaliação
     await sql`
       INSERT INTO avaliacoes (pedido_id, cliente_id, motorista_id, nota, comentario)
-      VALUES (${id}, ${clienteId}, ${pedido.motorista_id}, ${notaNum}, ${comentario || null});
+      VALUES (${id}, ${clienteId}, ${pedidos[0].motorista_id}, ${notaNum}, ${comentario || null});
     `;
 
-    // Recalcula média do condutor
-    if (pedido.motorista_id) {
+    if (pedidos[0].motorista_id) {
       const stats = await sql`
         SELECT AVG(nota)::numeric(3,2) AS media, COUNT(*)::int AS total
-        FROM avaliacoes
-        WHERE motorista_id = ${pedido.motorista_id};
+        FROM avaliacoes WHERE motorista_id = ${pedidos[0].motorista_id};
       `;
-
       await sql`
         UPDATE motoristas
-        SET avaliacao_media = ${stats[0].media},
-            total_avaliacoes = ${stats[0].total}
-        WHERE id = ${pedido.motorista_id};
+        SET avaliacao_media = ${stats[0].media}, total_avaliacoes = ${stats[0].total}
+        WHERE id = ${pedidos[0].motorista_id};
       `;
     }
 
-    res.json({ sucesso: true, mensagem: 'Avaliação registrada com sucesso!' });
+    res.json({ sucesso: true, mensagem: 'Avaliação registrada!' });
   } catch (err) {
     console.error('Erro ao avaliar corrida:', err);
     res.status(500).json({ erro: 'Falha ao processar avaliação.' });
   }
+});
+
+// ============================================================================
+// 6. PAINEL ADMINISTRATIVO
+// ============================================================================
+
+app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso reservado à administração.' });
+    }
+
+    const stats = await sql`
+      SELECT COUNT(id) AS total_corridas, COALESCE(SUM(valor_total), 0) AS faturamento
+      FROM pedidos WHERE status = 'concluido';
+    `;
+
+    res.json({
+      faturamentoBruto: Number(stats[0].faturamento || 0),
+      totalCorridas: Number(stats[0].total_corridas || 0)
+    });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro nas métricas.' });
+  }
+});
+
+// ============================================================================
+// INICIALIZAÇÃO DO SERVIDOR (ÚLTIMA LINHA OBRIGATÓRIA)
+// ============================================================================
+app.listen(port, () => {
+  console.log(`Servidor HUBy 2.0 ativo na porta ${port}`);
 });

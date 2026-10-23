@@ -4,7 +4,7 @@
 
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
-  : 'https://huby.onrender.com';
+  : 'https://huby-backend.onrender.com'; // <-- Substitua com o seu link ativo do Render
 
 export const CATEGORIAS = {
   carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.5, km: 2.2, min: 10 },
