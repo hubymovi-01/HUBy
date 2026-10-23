@@ -135,9 +135,9 @@ export class HubyMapa {
     }
   }
 
-  obterGPSReal(callbackSucesso) {
+ obterGPSReal(callbackSucesso) {
     if (!('geolocation' in navigator)) {
-      alert('O seu navegador não suporta geolocalização.');
+      alert('Geolocalização não suportada neste dispositivo.');
       return;
     }
 
@@ -150,7 +150,8 @@ export class HubyMapa {
       this.definirOrigem(lat, lng, precisao);
 
       if (this.map) {
-        this.map.setView([lat, lng], 17);
+        // Voa a câmera diretamente para onde o celular está
+        this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
         this.invalidarTamanho();
       }
 
@@ -159,56 +160,38 @@ export class HubyMapa {
     };
 
     const tratarErro = (err) => {
-      console.warn('Erro na obtenção primária do GPS:', err);
-
-      // Tenta obter posição sem alta precisão (torres de rede / Wi-Fi)
+      console.warn('Tentativa GPS primária falhou no celular:', err.message);
+      
+      // Fallback para celular com sinal fraco de satélite (usa antenas 4G/Wi-Fi)
       navigator.geolocation.getCurrentPosition(
         aplicarPosicao,
-        (errFallback) => {
-          if (err.code === err.PERMISSION_DENIED) {
-            alert('Acesso à localização negado. Aceda às definições do navegador e permita o acesso à localização.');
-          } else {
-            alert('Não foi possível obter a sua localização exata. Certifique-se de que o GPS do telemóvel está ligado.');
+        (err2) => {
+          console.warn('GPS fallback também falhou:', err2.message);
+          if (err.code === 1) {
+            alert('Atenção: A permissão de localização precisa está desativada no seu celular para este site.');
           }
         },
         { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
       );
     };
 
-    // 1. Leitura direta
-    navigator.geolocation.getCurrentPosition(
-      aplicarPosicao,
-      tratarErro,
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-
-    // 2. Rastreamento ativo para calibrar com o satélite
+    // No celular, chamamos o watchPosition direto com alta precisão
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
 
     this.watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const precisao = pos.coords.accuracy;
+      aplicarPosicao,
+      tratarErro,
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
 
-        this.definirOrigem(lat, lng, precisao);
-
-        if (!this.jaCentralizouGPS && this.map) {
-          this.map.flyTo([lat, lng], 17, { duration: 1.0 });
-          this.jaCentralizouGPS = true;
-        }
-
-        if (this.coordsDestino && this.onClickDestinoCallback) {
-          this.calcularRota([lat, lng], this.coordsDestino).then((rota) => {
-            this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
-          });
-        }
-      },
-      (err) => console.warn('Acompanhamento GPS contínuo:', err.message),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    // Disparo imediato para não esperar o primeiro ciclo do satélite
+    navigator.geolocation.getCurrentPosition(
+      aplicarPosicao,
+      tratarErro,
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
     );
   }
-
+  
   obterGPS(callbackSucesso) {
     this.jaCentralizouGPS = false;
     this.obterGPSReal(callbackSucesso);
