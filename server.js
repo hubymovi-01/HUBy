@@ -131,6 +131,7 @@ async function inicializarBanco() {
       );
     `;
 
+    // Garante as colunas na tabela usuarios
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contato_emergencia_nome TEXT;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contato_emergencia_tel TEXT;`;
@@ -160,6 +161,11 @@ async function inicializarBanco() {
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    // GARANTE COLUNAS CRÍTICAS NA TABELA MOTORISTAS
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cpf TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_crlv_url TEXT;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS pedidos (
@@ -301,7 +307,7 @@ const processarCadastro = async (req, res) => {
           doc_crlv_url, status_aprovacao
         ) VALUES (
           ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
-          ${dataNascimento || null}, ${senhaHash},
+          ${dataNascimento ? new Date(dataNascimento) : null}, ${senhaHash},
           ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa},
           ${fotoVeiculo || null}, 'aprovado'
         )
@@ -331,7 +337,7 @@ const processarCadastro = async (req, res) => {
       )
       VALUES (
         ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
-        ${dataNascimento || null},
+        ${dataNascimento ? new Date(dataNascimento) : null},
         ${contatoEmergenciaNome ? String(contatoEmergenciaNome).trim() : null},
         ${contatoEmergenciaTelefone ? String(contatoEmergenciaTelefone).trim() : null},
         ${senhaHash}, 'cliente'
