@@ -1,4 +1,4 @@
-import { API_URL, CATEGORIAS } from './config.js';
+import { API_URL, CATEGORIAS, calcularPreco } from './config.js';
 import { HubyMapa } from './mapa.js';
 
 let hubyMapa = null;
@@ -53,8 +53,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hubyMapa) hubyMapa.obterGPS();
   });
 
-  // 4. Drawer / Menu Lateral
+  // 4. Drawer / Menu Lateral e Checagem do Admin
   configurarDrawerMenu();
+  verificarAcessoAdminMenu();
 
   // 5. Histórico Modal
   document.getElementById('btnNavViagens')?.addEventListener('click', carregarEExibirHistoricoModal);
@@ -117,6 +118,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// Exibe o botão de Admin no Drawer se a role autenticada for 'admin'
+function verificarAcessoAdminMenu() {
+  const token = localStorage.getItem('huby_token');
+  const role = localStorage.getItem('huby_user_role');
+  const btnAdmin = document.getElementById('menuItemAdmin');
+
+  if (btnAdmin) {
+    if (token && role === 'admin') {
+      btnAdmin.style.display = 'flex';
+    } else {
+      btnAdmin.style.display = 'none';
+    }
+  }
+}
 
 function configurarDrawerMenu() {
   const btnMenu = document.getElementById('btnAbrirMenu');
@@ -223,14 +239,13 @@ function atualizarResumoValores() {
   if (!rotaAtual) return;
 
   const km = rotaAtual.distanciaKm;
-  const catCfg = CATEGORIAS[categoriaSelecionada]?.tipos?.[0] || { base: 7.0, km: 2.2 };
-  const valorBase = catCfg.base + (km * catCfg.km);
+  const precoCalculado = calcularPreco(categoriaSelecionada, km);
 
   const txtDist = document.getElementById('txtDistanciaEstimada');
   const txtPreco = document.getElementById('txtPrecoEstimado');
 
   if (txtDist) txtDist.textContent = `${km} km • ${rotaAtual.duracaoMin} min`;
-  if (txtPreco) txtPreco.textContent = `R$ ${valorBase.toFixed(2).replace('.', ',')}`;
+  if (txtPreco) txtPreco.textContent = precoCalculado.formatado;
 }
 
 async function submeterPedido() {
@@ -243,22 +258,21 @@ async function submeterPedido() {
   const clienteId = localStorage.getItem('huby_user_id');
   const novoId = 'ped_' + Date.now().toString(36);
 
-  const catCfg = CATEGORIAS[categoriaSelecionada]?.tipos?.[0] || { base: 7.0, km: 2.2, nome: 'HUBy Pop' };
-  const valorTotal = (catCfg.base + (rotaAtual.distanciaKm * catCfg.km)).toFixed(2);
+  const precoInfo = calcularPreco(categoriaSelecionada, rotaAtual.distanciaKm);
 
   const payload = {
     id: novoId,
     clienteId: clienteId || null,
     tipo: categoriaSelecionada,
-    subTipoId: catCfg.nome ? catCfg.nome.toLowerCase().replace(/\s+/g, '_') : 'huby_pop',
-    subTipoLabel: catCfg.nome || 'HUBy Corrida',
+    subTipoId: categoriaSelecionada,
+    subTipoLabel: precoInfo.categoria,
     origem: 'Local de Partida',
     destino: `Lat: ${coordsDestino[0].toFixed(4)}, Lng: ${coordsDestino[1].toFixed(4)}`,
     coordsOrigem: hubyMapa.coordsOrigem,
     coordsDestino: coordsDestino,
     distanciaKm: rotaAtual.distanciaKm,
     duracaoMin: rotaAtual.duracaoMin,
-    valorTotal: valorTotal,
+    valorTotal: precoInfo.valorTotal,
     metodoPgto: 'pix_app'
   };
 

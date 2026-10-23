@@ -1,12 +1,12 @@
 /**
- * HUBy 2.0 - Configurações de Tarifas e Categorias (js/config.js)
+ * HUBy 2.0 - Configurações Gerais da Aplicação (js/config.js)
  */
 
-// js/config.js
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
+// Tarifas e categorias operacionais
 export const CATEGORIAS = {
   carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.5, km: 2.2, min: 10 },
   moto: { id: 'moto', tipo: 'carro', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.5, min: 7 },

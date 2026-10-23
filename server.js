@@ -50,7 +50,69 @@ export function autenticarToken(req, res, next) {
   }
 }
 
-// Sincronização inicial das tabelas no Neon PostgreSQL
+// Funções Algorítmicas de Validação Documental (Módulo 11)
+function validarNumeroCPF(cpf) {
+  cpf = String(cpf).replace(/\D/g, '');
+  if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 9; i++) soma += parseInt(cpf.charAt(i), 10) * (10 - i);
+  let resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  if (resto !== parseInt(cpf.charAt(9), 10)) return false;
+
+  soma = 0;
+  for (let i = 0; i < 10; i++) soma += parseInt(cpf.charAt(i), 10) * (11 - i);
+  resto = (soma * 10) % 11;
+  if (resto === 10 || resto === 11) resto = 0;
+  return resto === parseInt(cpf.charAt(10), 10);
+}
+
+function validarNumeroCNH(cnh) {
+  cnh = String(cnh).replace(/\D/g, '');
+  if (cnh.length !== 11 || /^(\d)\1+$/.test(cnh)) return false;
+
+  let v = 0, j = 9;
+  for (let i = 0; i < 9; ++i, --j) {
+    v += parseInt(cnh.charAt(i), 10) * j;
+  }
+
+  let d1 = v % 11;
+  let maisUm = false;
+  if (d1 >= 10) {
+    v = 0;
+    d1 = 0;
+    maisUm = true;
+  }
+
+  v = 0;
+  j = 1;
+  for (let i = 0; i < 9; ++i, ++j) {
+    v += parseInt(cnh.charAt(i), 10) * j;
+  }
+
+  let x = v % 11;
+  let d2 = x >= 10 ? 0 : x;
+  if (maisUm) {
+    d2 = d2 - 2 < 0 ? d2 - 2 + 11 : d2 - 2;
+  }
+
+  return `${d1}${d2}` === cnh.substring(9, 11);
+}
+
+function calcularIdade(dataNascStr) {
+  if (!dataNascStr) return 0;
+  const hoje = new Date();
+  const nasc = new Date(dataNascStr);
+  let idade = hoje.getFullYear() - nasc.getFullYear();
+  const m = hoje.getMonth() - nasc.getMonth();
+  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
+    idade--;
+  }
+  return idade;
+}
+
+// Sincronização e migração inicial das tabelas no Neon PostgreSQL
 async function inicializarBanco() {
   try {
     await sql`
@@ -60,11 +122,19 @@ async function inicializarBanco() {
         email TEXT UNIQUE,
         telefone TEXT UNIQUE,
         cpf TEXT UNIQUE,
+        data_nascimento DATE,
+        contato_emergencia_nome TEXT,
+        contato_emergencia_tel TEXT,
         senha_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'cliente',
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    // Garante colunas de segurança caso a tabela já existisse
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contato_emergencia_nome TEXT;`;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contato_emergencia_tel TEXT;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS motoristas (
@@ -73,6 +143,7 @@ async function inicializarBanco() {
         email TEXT UNIQUE,
         telefone TEXT UNIQUE,
         cpf TEXT UNIQUE,
+        data_nascimento DATE,
         senha_hash TEXT,
         cnh_numero TEXT NOT NULL,
         categoria TEXT DEFAULT 'carro',
@@ -133,28 +204,27 @@ async function inicializarBanco() {
       );
     `;
 
-    console.log('Tabelas verificadas no Neon PostgreSQL.');
+    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);
   }
 }
 inicializarBanco();
 
-// Rota de verificação de integridade da API
 app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online', versao: '2.0.0', banco: 'Neon PostgreSQL' });
 });
 
 // ============================================================================
-// 1. AUTENTICAÇÃO UNIFICADA (PASSAGEIROS & CONDUTORES)
+// 1. AUTENTICAÇÃO UNIFICADA
 // ============================================================================
 
-// Handler de Cadastro Unificado (atende /api/auth/cadastro e /api/usuarios/cadastro)
 const processarCadastro = async (req, res) => {
   try {
     const {
       nome, email, telefone, cpf, senha, role = 'cliente',
-      cnh, veiculo_modelo, veiculo_placa, categoria_veiculo
+      dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
+      cnh, veiculo_modelo, veiculo_placa, categoria_veiculo, fotoVeiculo
     } = req.body;
 
     if (!nome || !senha || (!email && !telefone)) {
@@ -164,25 +234,41 @@ const processarCadastro = async (req, res) => {
     const emailLimpo = email ? String(email).trim().toLowerCase() : null;
     const telLimpo = telefone ? String(telefone).trim() : null;
     const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : null;
+
+    if (cpfLimpo && !validarNumeroCPF(cpfLimpo)) {
+      return res.status(400).json({ erro: 'Número de CPF inválido.' });
+    }
+
+    if (dataNascimento && calcularIdade(dataNascimento) < 18) {
+      return res.status(400).json({ erro: 'Cadastro negado: É obrigatório ser maior de 18 anos.' });
+    }
+
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(String(senha), salt);
 
     if (role === 'motorista') {
-      if (!cnh || !veiculo_placa || !veiculo_modelo) {
-        return res.status(400).json({ erro: 'Para parceiros condutores, informe CNH, Modelo e Placa.' });
+      const cnhLimpa = String(cnh || '').replace(/\D/g, '');
+      if (!cnhLimpa || !validarNumeroCNH(cnhLimpa)) {
+        return res.status(400).json({ erro: 'Informe um número de CNH válido com 11 dígitos.' });
       }
 
-      const cnhLimpa = String(cnh).replace(/\D/g, '');
+      if (!veiculo_placa || !veiculo_modelo) {
+        return res.status(400).json({ erro: 'Preencha o modelo e a placa do veículo.' });
+      }
+
       const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const novoId = 'mot_' + Date.now().toString(36);
 
       const resultado = await sql`
         INSERT INTO motoristas (
-          id, nome, email, telefone, cpf, senha_hash,
-          cnh_numero, categoria, veiculo_modelo, veiculo_placa, status_aprovacao
+          id, nome, email, telefone, cpf, data_nascimento, senha_hash,
+          cnh_numero, categoria, veiculo_modelo, veiculo_placa,
+          doc_crlv_url, status_aprovacao
         ) VALUES (
-          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${senhaHash},
-          ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa}, 'aprovado'
+          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
+          ${dataNascimento || null}, ${senhaHash},
+          ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa},
+          ${fotoVeiculo || null}, 'aprovado'
         )
         RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
       `;
@@ -204,14 +290,24 @@ const processarCadastro = async (req, res) => {
     // Registo de Passageiro
     const novoId = 'usr_' + Date.now().toString(36);
     const resultado = await sql`
-      INSERT INTO usuarios (id, nome, email, telefone, cpf, senha_hash, role)
-      VALUES (${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${senhaHash}, 'cliente')
+      INSERT INTO usuarios (
+        id, nome, email, telefone, cpf, data_nascimento,
+        contato_emergencia_nome, contato_emergencia_tel,
+        senha_hash, role
+      )
+      VALUES (
+        ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
+        ${dataNascimento || null},
+        ${contatoEmergenciaNome ? String(contatoEmergenciaNome).trim() : null},
+        ${contatoEmergenciaTelefone ? String(contatoEmergenciaTelefone).trim() : null},
+        ${senhaHash}, 'cliente'
+      )
       RETURNING id, nome, email, telefone, role;
     `;
 
     const utilizadorCriado = resultado[0];
     const token = jwt.sign(
-      { id: utilizadorCriado.id, email: utilizadorCriado.email, role: 'cliente' },
+      { id: utilizadorCriado.id, nome: utilizadorCriado.nome, role: 'cliente' },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -228,57 +324,11 @@ const processarCadastro = async (req, res) => {
     }
     res.status(500).json({ erro: 'Falha ao concluir registo na base de dados.' });
   }
-
-  // Algoritmo Oficial de Verificação de CNH (Módulo 11)
-function validarNumeroCNH(cnh) {
-  cnh = String(cnh).replace(/\D/g, '');
-  if (cnh.length !== 11 || /^(\d)\1+$/.test(cnh)) return false;
-
-  let v = 0, j = 9;
-  for (let i = 0; i < 9; ++i, --j) {
-    v += parseInt(cnh.charAt(i), 10) * j;
-  }
-
-  let d1 = v % 11;
-  let maisUm = false;
-  if (d1 >= 10) {
-    v = 0;
-    d1 = 0;
-    maisUm = true;
-  }
-
-  v = 0;
-  j = 1;
-  for (let i = 0; i < 9; ++i, ++j) {
-    v += parseInt(cnh.charAt(i), 10) * j;
-  }
-
-  let x = v % 11;
-  let d2 = x >= 10 ? 0 : x;
-  if (maisUm) {
-    d2 = d2 - 2 < 0 ? d2 - 2 + 11 : d2 - 2;
-  }
-
-  return `${d1}${d2}` === cnh.substring(9, 11);
-}
-
-// Cálculo preciso de idade com base na data de nascimento
-function calcularIdade(dataNascStr) {
-  const hoje = new Date();
-  const nasc = new Date(dataNascStr);
-  let idade = hoje.getFullYear() - nasc.getFullYear();
-  const m = hoje.getMonth() - nasc.getMonth();
-  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) {
-    idade--;
-  }
-  return idade;
-}
 };
 
 app.post('/api/auth/cadastro', processarCadastro);
 app.post('/api/usuarios/cadastro', processarCadastro);
 
-// Handler de Login Unificado (atende /api/auth/login e /api/usuarios/login)
 const processarLogin = async (req, res) => {
   try {
     const identificador = req.body.identificador || req.body.emailOuTelefone || req.body.email;
@@ -381,81 +431,8 @@ const processarLogin = async (req, res) => {
 app.post('/api/auth/login', processarLogin);
 app.post('/api/usuarios/login', processarLogin);
 
-// Login Legado do Condutor (via CNH e Placa direta)
-app.post('/api/motoristas/login', async (req, res) => {
-  try {
-    const cnh = req.body.cnh || req.body.cnh_numero;
-    const placa = req.body.placa || req.body.veiculo_placa;
-
-    if (!cnh || !placa) {
-      return res.status(400).json({ erro: 'Indique a CNH e a matrícula/placa do veículo.' });
-    }
-
-    const cnhLimpa = String(cnh).replace(/\D/g, '');
-    const placaLimpa = String(placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-
-    const resultado = await sql`
-      SELECT id, nome, categoria, veiculo_modelo, veiculo_placa, saldo_carteira
-      FROM motoristas
-      WHERE regexp_replace(cnh_numero, '\\D', '', 'g') = ${cnhLimpa}
-        AND UPPER(regexp_replace(veiculo_placa, '[^a-zA-Z0-9]', '', 'g')) = ${placaLimpa}
-      LIMIT 1;
-    `;
-
-    if (resultado.length === 0) {
-      return res.status(401).json({ erro: 'CNH ou Placa não localizados.' });
-    }
-
-    const motorista = resultado[0];
-    await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${motorista.id};`;
-
-    const token = jwt.sign(
-      { id: motorista.id, role: 'motorista', categoria: motorista.categoria },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    res.json({
-      sucesso: true,
-      token,
-      motorista: {
-        id: motorista.id,
-        nome: motorista.nome,
-        categoria: motorista.categoria,
-        veiculo: `${motorista.veiculo_modelo} (${motorista.veiculo_placa})`,
-        saldo: motorista.saldo_carteira
-      }
-    });
-  } catch (err) {
-    console.error('Erro no login do motorista:', err);
-    res.status(500).json({ erro: 'Falha interna ao validar condutor.' });
-  }
-});
-
-// Consultar saldo da carteira do condutor
-app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
-  try {
-    const motoristaId = req.usuario.id;
-    const motorista = await sql`
-      SELECT id, nome, saldo_carteira, status_online
-      FROM motoristas
-      WHERE id = ${motoristaId}
-      LIMIT 1;
-    `;
-
-    if (motorista.length === 0) {
-      return res.status(404).json({ erro: 'Condutor não localizado.' });
-    }
-
-    res.json(motorista[0]);
-  } catch (err) {
-    console.error('Erro ao consultar saldo:', err);
-    res.status(500).json({ erro: 'Falha ao obter saldo da carteira.' });
-  }
-});
-
 // ============================================================================
-// 2. GESTÃO DE PEDIDOS (ROTAS ESTÁTICAS)
+// 2. GESTÃO DE PEDIDOS
 // ============================================================================
 
 app.post('/api/pedidos', async (req, res) => {
@@ -516,56 +493,15 @@ app.get('/api/pedidos/historico', autenticarToken, async (req, res) => {
 
     let historico;
     if (role === 'motorista') {
-      const { dataNascimento, fotoVeiculo } = req.body;
-      const cnhLimpa = String(cnh || '').replace(/\D/g, '');
-
-      // 1. Validação Algorítmica da CNH
-      if (!validarNumeroCNH(cnhLimpa)) {
-        return res.status(400).json({ erro: 'Número de CNH inválido. Verifique os dígitos digitados.' });
-      }
-
-      // 2. Validação da Idade Mínima
-      if (!dataNascimento) {
-        return res.status(400).json({ erro: 'Informe a data de nascimento do condutor.' });
-      }
-      const idade = calcularIdade(dataNascimento);
-      if (idade < 18) {
-        return res.status(400).json({ erro: 'Cadastro negado: É obrigatório ter pelo menos 18 anos.' });
-      }
-
-      if (!veiculo_placa || !veiculo_modelo) {
-        return res.status(400).json({ erro: 'Preencha o modelo e a placa do veículo.' });
-      }
-
-      const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      const novoId = 'mot_' + Date.now().toString(36);
-
-      const resultado = await sql`
-        INSERT INTO motoristas (
-          id, nome, email, telefone, cpf, senha_hash,
-          cnh_numero, categoria, veiculo_modelo, veiculo_placa,
-          doc_crlv_url, status_aprovacao
-        ) VALUES (
-          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${senhaHash},
-          ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa},
-          ${fotoVeiculo || null}, 'aprovado'
-        )
-        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
+      historico = await sql`
+        SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, 
+               distancia_km, valor_total, status, criado_em, cliente_id
+        FROM pedidos
+        WHERE motorista_id = ${usuarioId}
+        ORDER BY criado_em DESC
+        LIMIT 30;
       `;
-
-      const motoristaCriado = resultado[0];
-      const token = jwt.sign(
-        { id: motoristaCriado.id, nome: motoristaCriado.nome, role: 'motorista' },
-        JWT_SECRET,
-        { expiresIn: '30d' }
-      );
-
-      return res.status(201).json({
-        sucesso: true,
-        token,
-        usuario: { ...motoristaCriado, role: 'motorista' }
-      });
-    }else {
+    } else {
       historico = await sql`
         SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, 
                distancia_km, valor_total, status, criado_em, motorista_nome
@@ -582,10 +518,6 @@ app.get('/api/pedidos/historico', autenticarToken, async (req, res) => {
     res.status(500).json({ erro: 'Falha ao obter histórico de viagens.' });
   }
 });
-
-// ============================================================================
-// 3. PEDIDOS DINÂMICOS (:id)
-// ============================================================================
 
 app.get('/api/pedidos/:id/status', async (req, res) => {
   try {
@@ -701,7 +633,6 @@ app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
     const { id } = req.params;
     const { motivo } = req.body;
     const usuarioId = req.usuario.id;
-    const usuarioRole = req.usuario.role;
 
     const pedidos = await sql`
       SELECT id, status, cliente_id, motorista_id FROM pedidos WHERE id = ${id} LIMIT 1;
@@ -735,73 +666,8 @@ app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 4. DOCUMENTOS, TRIAGEM E AVALIAÇÕES
+// 3. DOCUMENTOS, TRIAGEM E AVALIAÇÕES
 // ============================================================================
-
-app.post('/api/motoristas/documentos', autenticarToken, async (req, res) => {
-  try {
-    const motoristaId = req.usuario.id;
-    const { docCnh, docCrlv } = req.body;
-
-    if (!docCnh || !docCrlv) {
-      return res.status(400).json({ erro: 'Forneça a foto da CNH e do CRLV.' });
-    }
-
-    const atualizado = await sql`
-      UPDATE motoristas
-      SET doc_cnh_url = ${docCnh},
-          doc_crlv_url = ${docCrlv},
-          status_aprovacao = 'pendente',
-          motivo_recusa = NULL
-      WHERE id = ${motoristaId}
-      RETURNING id, nome, status_aprovacao;
-    `;
-
-    res.json({
-      sucesso: true,
-      mensagem: 'Documentos submetidos para análise da equipe HUBy.',
-      motorista: atualizado[0]
-    });
-  } catch (err) {
-    console.error('Erro no upload de documentos:', err);
-    res.status(500).json({ erro: 'Falha ao registrar documentos.' });
-  }
-});
-
-app.put('/api/admin/motoristas/:id/triagem', autenticarToken, async (req, res) => {
-  try {
-    if (req.usuario.role !== 'admin') {
-      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
-    }
-
-    const { id } = req.params;
-    const { acao, motivo } = req.body;
-
-    if (!['aprovar', 'recusar'].includes(acao)) {
-      return res.status(400).json({ erro: 'Ação inválida. Utilize aprovar ou recusar.' });
-    }
-
-    const novoStatus = acao === 'aprovar' ? 'aprovado' : 'recusado';
-    const motivoRecusa = acao === 'recusar' ? (motivo || 'Documentação em desacordo.') : null;
-
-    const mot = await sql`
-      UPDATE motoristas
-      SET status_aprovacao = ${novoStatus},
-          motivo_recusa = ${motivoRecusa}
-      WHERE id = ${id}
-      RETURNING id, nome, status_aprovacao, motivo_recusa;
-    `;
-
-    if (mot.length === 0) {
-      return res.status(404).json({ erro: 'Motorista não encontrado.' });
-    }
-
-    res.json({ sucesso: true, motorista: mot[0] });
-  } catch (err) {
-    console.error('Erro na triagem:', err);
-    res.status(500).json({ erro: 'Falha ao processar triagem.' });
-  }
-});
 
 app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
   try {
@@ -844,7 +710,7 @@ app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 5. PAINEL ADMINISTRATIVO & MÉTRICAS
+// 4. PAINEL ADMINISTRATIVO & GESTÃO (PROTEGIDO POR ROLE ADMIN)
 // ============================================================================
 
 app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
@@ -895,8 +761,30 @@ app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
   }
 });
 
+// Rota de listagem da frota de parceiros para o painel admin
+app.get('/api/admin/motoristas', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso reservado à administração.' });
+    }
+
+    const motoristas = await sql`
+      SELECT id, nome, email, telefone, cnh_numero AS cnh, 
+             categoria AS categoria_veiculo, veiculo_modelo, veiculo_placa,
+             saldo_carteira, status_aprovacao, avaliacao_media, criado_em
+      FROM motoristas
+      ORDER BY criado_em DESC;
+    `;
+
+    res.json(motoristas);
+  } catch (err) {
+    console.error('Erro ao consultar motoristas:', err);
+    res.status(500).json({ erro: 'Falha ao obter lista de parceiros.' });
+  }
+});
+
 // ============================================================================
-// INICIALIZAÇÃO DO SERVIDOR (NA ÚLTIMA LINHA)
+// INICIALIZAÇÃO DO SERVIDOR (ÚLTIMA LINHA)
 // ============================================================================
 app.listen(port, () => {
   console.log(`Servidor HUBy 2.0 ativo na porta ${port}`);
