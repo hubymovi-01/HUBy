@@ -3,52 +3,209 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy Condutor - Radar de Parceiro</title>
-  
-  <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-
-  <!-- Estilos HUBy -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Registar • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/motorista.css">
+  <link rel="stylesheet" href="./css/auth.css">
 </head>
-<body>
+<body class="auth-body">
 
-  <div class="driver-viewport">
-    <!-- 1. MAPA LEAFLET -->
-    <div id="mapaMotorista"></div>
+  <div class="auth-ambient-glow"></div>
 
-    <!-- 2. BARRA DE CONTROLO SUPERIOR -->
-    <header class="driver-top-bar">
-      <div class="driver-status-card">
-        <small id="txtParceiroNome">Parceiro</small>
-        <strong id="txtStatusTexto">A aguardar sinal...</strong>
+  <main class="auth-container">
+    <div class="auth-card">
+      
+      <!-- CABEÇALHO DA MARCA -->
+      <header class="auth-header">
+        <div class="auth-badge" id="badgeCadastro">Plataforma de Mobilidade Segura</div>
+        <h1 class="auth-brand">HUB<span>y</span></h1>
+        <p id="txtSubtitulo" class="auth-desc">Crie a sua conta para solicitar viagens instantâneas</p>
+      </header>
+
+      <!-- SELETOR DE PERFIL -->
+      <div class="role-selector" id="roleSelectorContainer">
+        <button type="button" id="btnRoleCliente" class="btn-role active">
+          <span class="role-icon">👤</span>
+          <span class="role-name">Passageiro</span>
+        </button>
+        <button type="button" id="btnRoleMotorista" class="btn-role">
+          <span class="role-icon">🚘</span>
+          <span class="role-name">Motorista Parceiro</span>
+        </button>
       </div>
-      <button type="button" class="btn-toggle-status" id="btnToggleStatus">
-        ONLINE
-      </button>
-    </header>
 
-    <!-- 3. GAVETA INFERIOR: RADAR DE CHAMADAS -->
-    <section class="driver-dock">
-      <div class="dock-header">
-        <span class="dock-title">Radar de Chamadas</span>
-        <span id="txtTotalPendentes" style="font-size: 11px; color: var(--text-muted); font-weight: 700;">0 disponíveis</span>
-      </div>
+      <!-- ALERTA / FEEDBACK EMBUTIDO -->
+      <div id="alertaBox" class="auth-alert" style="display: none;"></div>
 
-      <!-- Feed dinâmico de solicitações -->
-      <div class="orders-feed" id="feedPedidos">
-        <div class="dock-empty">
-          A procurar viagens e fretes próximos...
+      <!-- FORMULÁRIO UNIFICADO -->
+      <form id="formCadastroHuby" class="auth-form" novalidate>
+        
+        <!-- SECÇÃO 1: DADOS PESSOAIS DO USUÁRIO -->
+        <div class="form-section-tag">Identificação & Documentação</div>
+
+        <div class="input-group">
+          <label for="cadNome">Nome Completo</label>
+          <div class="input-wrapper">
+            <span class="input-ico">🪪</span>
+            <input type="text" id="cadNome" placeholder="Seu nome completo" required>
+          </div>
         </div>
+
+        <div class="input-row">
+          <div class="input-group">
+            <label for="cadCpf">CPF</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📄</span>
+              <input type="tel" id="cadCpf" placeholder="000.000.000-00" maxlength="14" required>
+            </div>
+          </div>
+
+          <div class="input-group" id="grpDataNascPassageiro">
+            <label for="cadDataNascCliente">Data de Nascimento</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📅</span>
+              <input type="date" id="cadDataNascCliente" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-row">
+          <div class="input-group">
+            <label for="cadTelefone">WhatsApp / Telefone</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📱</span>
+              <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="cadEmail">E-mail</label>
+            <div class="input-wrapper">
+              <span class="input-ico">✉️</span>
+              <input type="email" id="cadEmail" placeholder="seuemail@exemplo.com" required>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECÇÃO 2: CONTATO DE CONFIANÇA (EXCLUSIVO PASSAGEIRO) -->
+        <div id="secaoSegurancaPassageiro">
+          <div class="form-section-tag highlight">Segurança & Contato de Confiança</div>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label for="cadEmergenciaNome">Nome do Contato</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🛡️</span>
+                <input type="text" id="cadEmergenciaNome" placeholder="Ex: Mãe, Pai, Cônjuge" required>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="cadEmergenciaTelefone">Telefone de Emergência</label>
+              <div class="input-wrapper">
+                <span class="input-ico">📞</span>
+                <input type="tel" id="cadEmergenciaTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECÇÃO 3: DADOS DO PARCEIRO E VEÍCULO (EXCLUSIVO MOTORISTA) -->
+        <div id="secaoMotoristaVeiculo" class="motorista-specs-box" style="display: none;">
+          <div class="form-section-tag highlight">Validação de Habilitação & Veículo</div>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label for="cadCnh">Número da CNH (11 dígitos)</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🪪</span>
+                <input type="tel" id="cadCnh" placeholder="Ex: 01234567890" maxlength="11">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="cadDataNascMotorista">Data de Nascimento</label>
+              <div class="input-wrapper">
+                <span class="input-ico">📅</span>
+                <input type="date" id="cadDataNascMotorista">
+              </div>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="cadCategoriaVeiculo">Categoria de Operação</label>
+            <div class="input-wrapper">
+              <span class="input-ico">🚦</span>
+              <select id="cadCategoriaVeiculo">
+                <option value="carro">Carro (HUBy Pop)</option>
+                <option value="moto">Moto (HUBy Moto)</option>
+                <option value="flash_moto">Flash (Entregas Pequenas)</option>
+                <option value="cargo_pickup">Frete (Pickups & Utilitários)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label for="cadModelo">Modelo do Veículo</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🚗</span>
+                <input type="text" id="cadModelo" placeholder="Ex: Onix, Titan 160">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="cadPlaca">Placa</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🏷️</span>
+                <input type="text" id="cadPlaca" placeholder="ABC1D23" maxlength="8" style="text-transform: uppercase;">
+              </div>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="cadFotoVeiculo">Foto do Veículo (Carro ou Moto)</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📸</span>
+              <input type="file" id="cadFotoVeiculo" accept="image/*" style="padding-left: 40px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- SECÇÃO 4: CREDENCIAIS -->
+        <div class="form-section-tag">Segurança de Acesso</div>
+
+        <div class="input-group">
+          <label for="cadSenha">Palavra-passe</label>
+          <div class="input-wrapper">
+            <span class="input-ico">🔒</span>
+            <input type="password" id="cadSenha" placeholder="Mínimo 6 carateres" minlength="6" required>
+            <button type="button" id="btnToggleSenha" class="btn-toggle-eye" aria-label="Ver palavra-passe">👁️</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action">
+          <span>Criar Conta de Passageiro</span>
+        </button>
+      </form>
+
+      <!-- NAVEGAÇÃO DE RODAPÉ LIMPA -->
+      <footer class="auth-footer-nav">
+        <span>Já tem registo efetuado?</span>
+        <a href="./login.html" id="linkLoginDireto">Iniciar sessão</a>
+      </footer>
+
+      <div style="text-align: center; margin-top: 16px;">
+        <a href="./welcome.html" style="color: #64748B; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+          <span>←</span> Escolher outro perfil
+        </a>
       </div>
-    </section>
-  </div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    </div>
+  </main>
 
-  <!-- Script Principal do Condutor -->
-  <script type="module" src="./js/app-motorista.js"></script>
+  <script type="module" src="./js/auth.js"></script>
 </body>
 </html>
