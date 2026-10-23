@@ -6,12 +6,12 @@ export const API_URL = window.location.hostname === 'localhost' || window.locati
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
-// Tarifas de contingência (fallback caso a rede falhe)
+// Tarifas de contingência com tipos rigorosamente mapeados
 export let CATEGORIAS = {
-  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.5, km: 2.2, min: 10 },
-  moto: { id: 'moto', tipo: 'carro', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.5, min: 7 },
-  flash_moto: { id: 'flash_moto', tipo: 'flash', nome: 'Flash Moto', icone: '📦', base: 5.0, km: 1.8, min: 8 },
-  cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo', nome: 'Picape Frete', icone: '🛻', base: 35.0, km: 4.5, min: 45 }
+  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.5, km: 2.2, min: 10.0 },
+  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.5, min: 7.0 },
+  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 5.0, km: 1.8, min: 8.0 },
+  cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 35.0, km: 4.5, min: 45.0 }
 };
 
 export let MULTIPLICADOR_PICO = 1.0;
@@ -23,11 +23,25 @@ export async function sincronizarTarifasServidor() {
     if (!resp.ok) return;
     const dados = await resp.json();
 
-    if (dados.carro) CATEGORIAS.carro = { ...CATEGORIAS.carro, ...dados.carro };
-    if (dados.moto) CATEGORIAS.moto = { ...CATEGORIAS.moto, ...dados.moto };
-    if (dados.flash_moto) CATEGORIAS.flash_moto = { ...CATEGORIAS.flash_moto, ...dados.flash_moto };
-    if (dados.cargo_pickup) CATEGORIAS.cargo_pickup = { ...CATEGORIAS.cargo_pickup, ...dados.cargo_pickup };
-    if (dados.multiplicador_pico) MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
+    const aplicarTarifa = (chave) => {
+      if (dados[chave] && CATEGORIAS[chave]) {
+        CATEGORIAS[chave] = {
+          ...CATEGORIAS[chave],
+          base: Number(dados[chave].base) || CATEGORIAS[chave].base,
+          km: Number(dados[chave].km) || CATEGORIAS[chave].km,
+          min: Number(dados[chave].min) || CATEGORIAS[chave].min
+        };
+      }
+    };
+
+    aplicarTarifa('carro');
+    aplicarTarifa('moto');
+    aplicarTarifa('flash_moto');
+    aplicarTarifa('cargo_pickup');
+
+    if (dados.multiplicador_pico) {
+      MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
+    }
   } catch (err) {
     console.warn('Utilizando tabela de tarifas local de reserva:', err.message);
   }
