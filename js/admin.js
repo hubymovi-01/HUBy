@@ -1,12 +1,34 @@
 import { API_URL } from './config.js';
 
-let chartFinanceiroInstance = null;
-let chartCategoriasInstance = null;
+let chartFin = null;
+let chartCat = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('huby_token');
 
-  async function inicializarDashboard() {
+  // CONTROLE DE NAVEGAÇÃO POR ABAS
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const tabPanes = document.querySelectorAll('.tab-pane');
+
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tabBtns.forEach(b => b.classList.remove('active'));
+      tabPanes.forEach(p => p.classList.remove('active'));
+
+      btn.classList.add('active');
+      const targetId = btn.getAttribute('data-tab');
+      const pane = document.getElementById(targetId);
+      if (pane) pane.classList.add('active');
+
+      // Redesenha gráficos se abrir a aba de Resumo
+      if (targetId === 'tab-geral') {
+        if (chartFin) chartFin.resize();
+        if (chartCat) chartCat.resize();
+      }
+    });
+  });
+
+  async function carregarTudo() {
     await Promise.all([
       carregarMetricas(),
       carregarTarifas(),
@@ -15,13 +37,13 @@ document.addEventListener('DOMContentLoaded', () => {
     ]);
   }
 
-  // 1. CARREGAR MÉTRICAS GERAIS E GRÁFICOS
+  // 1. CARREGAR MÉTRICAS & GRÁFICOS
   async function carregarMetricas() {
     try {
       const resp = await fetch(`${API_URL}/api/admin/metricas`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (!resp.ok) throw new Error();
+      if (!resp.ok) return;
       const data = await resp.json();
 
       document.getElementById('metricBruto').textContent = `R$ ${Number(data.faturamentoBruto || 0).toFixed(2).replace('.', ',')}`;
@@ -29,28 +51,28 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('metricRepasse').textContent = `R$ ${Number(data.repasseMotoristas || 0).toFixed(2).replace('.', ',')}`;
       document.getElementById('metricRadar').textContent = data.chamadasEmAberto || 0;
 
-      renderizarTabelaCorridas(data.ultimasChamadas || []);
+      renderizarCorridas(data.ultimasChamadas || []);
       renderizarGraficos(data);
     } catch (e) {
-      console.warn('Erro ao obter métricas:', e);
+      console.warn('Erro métricas:', e);
     }
   }
 
-  function renderizarTabelaCorridas(corridas) {
+  function renderizarCorridas(corridas) {
     const tbody = document.getElementById('tabelaCorridasBody');
     if (!corridas || corridas.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #64748B;">Nenhuma viagem encontrada.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted);">Nenhuma corrida registrada.</td></tr>';
       return;
     }
 
     tbody.innerHTML = corridas.map(c => `
       <tr>
         <td><strong>#${String(c.id).substring(0, 8)}</strong></td>
-        <td>${c.sub_tipo_label || 'HUBy Corrida'}</td>
+        <td>${c.sub_tipo_label || 'HUBy Pop'}</td>
         <td>${c.distancia_km ? `${c.distancia_km} km` : '--'}</td>
         <td><strong>R$ ${Number(c.valor_total || 0).toFixed(2).replace('.', ',')}</strong></td>
-        <td style="color: #38BDF8;">R$ ${(Number(c.valor_total || 0) * 0.15).toFixed(2).replace('.', ',')}</td>
-        <td>${c.motorista_nome || '<span style="color: #64748B;">Aguardando aceite...</span>'}</td>
+        <td style="color: var(--cyan);">R$ ${(Number(c.valor_total || 0) * 0.15).toFixed(2).replace('.', ',')}</td>
+        <td>${c.motorista_nome || '<span style="color: var(--muted);">Aguardando...</span>'}</td>
         <td><span class="badge badge-${c.status}">${c.status}</span></td>
       </tr>
     `).join('');
@@ -61,17 +83,21 @@ document.addEventListener('DOMContentLoaded', () => {
     const ctxCat = document.getElementById('chartCategorias')?.getContext('2d');
     if (!ctxFin || !ctxCat) return;
 
-    if (chartFinanceiroInstance) chartFinanceiroInstance.destroy();
-    if (chartCategoriasInstance) chartCategoriasInstance.destroy();
+    if (chartFin) chartFin.destroy();
+    if (chartCat) chartCat.destroy();
 
-    chartFinanceiroInstance = new Chart(ctxFin, {
+    chartFin = new Chart(ctxFin, {
       type: 'bar',
       data: {
-        labels: ['Volume Bruto', 'Repasse Parceiros (85%)', 'Receita HUBy (15%)'],
+        labels: ['Bruto', 'Repasse 85%', 'HUBy 15%'],
         datasets: [{
-          data: [Number(data.faturamentoBruto || 0), Number(data.repasseMotoristas || 0), Number(data.receitaPlataforma || 0)],
+          data: [
+            Number(data.faturamentoBruto || 0),
+            Number(data.repasseMotoristas || 0),
+            Number(data.receitaPlataforma || 0)
+          ],
           backgroundColor: ['#10B981', '#F59E0B', '#38BDF8'],
-          borderRadius: 8
+          borderRadius: 6
         }]
       },
       options: {
@@ -79,8 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          y: { grid: { color: 'rgba(255, 255, 255, 0.05)' }, ticks: { color: '#94A3B8' } },
-          x: { grid: { display: false }, ticks: { color: '#94A3B8' } }
+          y: { grid: { color: 'rgba(255, 255, 255, 0.04)' }, ticks: { color: '#64748B', font: { size: 10 } } },
+          x: { grid: { display: false }, ticks: { color: '#64748B', font: { size: 10 } } }
         }
       }
     });
@@ -94,7 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
       else contagem.carro++;
     });
 
-    chartCategoriasInstance = new Chart(ctxCat, {
+    chartCat = new Chart(ctxCat, {
       type: 'doughnut',
       data: {
         labels: ['Carro', 'Moto', 'Flash', 'Frete'],
@@ -108,13 +134,13 @@ document.addEventListener('DOMContentLoaded', () => {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: 'bottom', labels: { color: '#94A3B8', boxWidth: 12 } }
+          legend: { position: 'bottom', labels: { color: '#94A3B8', boxWidth: 10, font: { size: 10 } } }
         }
       }
     });
   }
 
-  // 2. GESTÃO DE TARIFAS EM TEMPO REAL
+  // 2. GESTÃO DE TARIFAS
   async function carregarTarifas() {
     try {
       const resp = await fetch(`${API_URL}/api/config/tarifas`);
@@ -145,7 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('tarifa_multiplicador').value = t.multiplicador_pico;
       }
     } catch (e) {
-      console.warn('Erro ao obter tarifas:', e);
+      console.warn('Erro tarifas:', e);
     }
   }
 
@@ -181,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify(payload)
       });
       if (!resp.ok) throw new Error();
-      alert('Tarifas e Multiplicador atualizados com sucesso no sistema!');
+      alert('Tarifas atualizadas com sucesso!');
     } catch (e) {
       alert('Erro ao atualizar tarifas.');
     }
@@ -190,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btnSalvarTarifas')?.addEventListener('click', salvarTarifas);
   document.getElementById('btnAplicarPico')?.addEventListener('click', salvarTarifas);
 
-  // 3. GESTÃO DE SAQUES PIX
+  // 3. SAQUES PIX
   async function carregarSaques() {
     const tbody = document.getElementById('tabelaSaquesBody');
     try {
@@ -201,7 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const saques = await resp.json();
 
       if (!saques || saques.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #64748B;">Nenhum pedido de saque registrado.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted);">Nenhum pedido de saque.</td></tr>';
         return;
       }
 
@@ -209,20 +235,19 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <td><strong>#${s.id}</strong></td>
           <td>${s.motorista_nome}</td>
-          <td><code>${s.chave_pix}</code> <small>(${s.tipo_chave})</small></td>
-          <td><strong style="color: #10B981;">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</strong></td>
-          <td>${new Date(s.solicitado_em).toLocaleDateString('pt-BR')}</td>
+          <td><code>${s.chave_pix}</code></td>
+          <td><strong style="color: var(--emerald);">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</strong></td>
           <td><span class="badge badge-${s.status}">${s.status}</span></td>
           <td>
             ${s.status === 'pendente' ? `
-              <button class="btn-table-action btn-approve" onclick="window.processarSaque(${s.id}, 'pago')">Marcar Pago</button>
-              <button class="btn-table-action btn-suspend" onclick="window.processarSaque(${s.id}, 'recusado')">Recusar</button>
-            ` : '<span style="color: #64748B;">Finalizado</span>'}
+              <button class="btn-tbl app" onclick="window.processarSaque(${s.id}, 'pago')">Pagar</button>
+              <button class="btn-tbl rej" onclick="window.processarSaque(${s.id}, 'recusado')">Recusar</button>
+            ` : '<span style="color: var(--muted);">Finalizado</span>'}
           </td>
         </tr>
       `).join('');
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #EF4444;">Erro ao consultar saques.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--rose);">Erro ao consultar saques.</td></tr>';
     }
   }
 
@@ -243,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  // 4. FROTA & VISUALIZAÇÃO DE FOTO DO VEÍCULO
+  // 4. FROTA DE MOTORISTAS
   async function carregarFrota() {
     const tbody = document.getElementById('tabelaFrotaBody');
     try {
@@ -254,31 +279,30 @@ document.addEventListener('DOMContentLoaded', () => {
       const motoristas = await resp.json();
 
       if (!motoristas || motoristas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #64748B;">Nenhum condutor cadastrado.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted);">Nenhum motorista cadastrado.</td></tr>';
         return;
       }
 
       tbody.innerHTML = motoristas.map(m => `
         <tr>
-          <td><strong>${m.nome}</strong><br><small style="color: #64748B;">${m.telefone || m.email || ''}</small></td>
-          <td>${m.cnh || '---'}</td>
+          <td><strong>${m.nome}</strong><br><small style="color: var(--muted);">${m.telefone || ''}</small></td>
           <td>${m.veiculo_modelo || 'Veículo'} (${m.veiculo_placa || 'SEM PLACA'})</td>
-          <td><span style="text-transform: uppercase; font-size: 11px; font-weight: 800;">${m.categoria_veiculo || 'carro'}</span></td>
-          <td><strong style="color: #10B981;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</strong></td>
+          <td><span style="text-transform: uppercase; font-size: 10px; font-weight: 800;">${m.categoria_veiculo || 'carro'}</span></td>
+          <td><strong style="color: var(--emerald);">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</strong></td>
           <td><span class="badge badge-${m.status_aprovacao || 'aprovado'}">${m.status_aprovacao || 'aprovado'}</span></td>
           <td>
             ${m.doc_crlv_url ? `
-              <button class="btn-table-action" style="background: rgba(255,255,255,0.08); color: #FFF;" onclick="window.abrirFotoModal('${m.doc_crlv_url}')">📷 Ver Foto</button>
-            ` : '<span style="color: #64748B;">Sem foto</span>'}
+              <button class="btn-tbl" style="background: rgba(255,255,255,0.06); color: #FFF;" onclick="window.abrirFotoModal('${m.doc_crlv_url}')">📷 Foto</button>
+            ` : '<span style="color: var(--muted);">Sem foto</span>'}
           </td>
           <td>
-            <button class="btn-table-action btn-approve" onclick="window.alterarStatusMotorista('${m.id}', 'aprovar')">Aprovar</button>
-            <button class="btn-table-action btn-suspend" onclick="window.alterarStatusMotorista('${m.id}', 'recusar')">Suspender</button>
+            <button class="btn-tbl app" onclick="window.alterarStatusMotorista('${m.id}', 'aprovar')">Aprovar</button>
+            <button class="btn-tbl rej" onclick="window.alterarStatusMotorista('${m.id}', 'recusar')">Suspender</button>
           </td>
         </tr>
       `).join('');
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: #EF4444;">Erro ao carregar parceiros.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose);">Erro ao carregar parceiros.</td></tr>';
     }
   }
 
@@ -305,19 +329,35 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({ acao })
       });
       if (!resp.ok) throw new Error();
-      alert(`Condutor atualizado com sucesso!`);
+      alert('Status atualizado com sucesso!');
       carregarFrota();
     } catch (e) {
       alert('Erro ao alterar status.');
     }
   };
 
-  // 5. EXPORTAR CSV
+  // 5. EXPORTAÇÃO CSV
   document.getElementById('btnExportarCsv')?.addEventListener('click', () => {
-    window.open(`${API_URL}/api/admin/relatorios/corridas.csv?token=${token}`, '_blank');
+    fetch(`${API_URL}/api/admin/relatorios/corridas.csv`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+      .then(res => {
+        if (!res.ok) throw new Error('Falha ao gerar CSV');
+        return res.blob();
+      })
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `huby-relatorio-${Date.now()}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      })
+      .catch(err => alert(err.message));
   });
 
-  document.getElementById('btnSincronizar')?.addEventListener('click', inicializarDashboard);
+  document.getElementById('btnSincronizar')?.addEventListener('click', carregarTudo);
 
-  inicializarDashboard();
+  carregarTudo();
 });
