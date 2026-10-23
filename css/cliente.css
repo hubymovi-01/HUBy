@@ -681,3 +681,96 @@ html, body.client-viewport {
   font-size: 13px;
   cursor: pointer;
 }
+/* MODAL DE PAGAMENTOS */
+.payment-methods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.payment-method-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.payment-method-card.active-method {
+  border-color: var(--hub-green);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.method-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.method-header .m-icon {
+  font-size: 22px;
+}
+
+.method-header strong {
+  display: block;
+  font-size: 14px;
+  color: #FFF;
+}
+
+.method-header small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.badge-active {
+  background: var(--hub-green);
+  color: #02241C;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.pix-charge-box {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: left;
+}
+
+.charge-title {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.pix-key-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pix-key-row input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  color: #FFF;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.pix-key-row button {
+  background: var(--hub-green);
+  color: #02241C;
+  border: none;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}

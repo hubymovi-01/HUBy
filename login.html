@@ -3,64 +3,224 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Entrar - HUBy</title>
+  <title>Entrar • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/auth.css">
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+      margin: 0;
+      background: #0B0F19;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: 20px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 380px;
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 28px 24px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(20px);
+    }
+    .auth-header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .brand-logo {
+      font-size: 38px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      margin-bottom: 6px;
+    }
+    .brand-logo .hub { color: #FFF; }
+    .brand-logo .y { color: #10B981; }
+    .auth-header p {
+      color: #8F9CAE;
+      font-size: 13px;
+      margin: 0;
+    }
+    .tabs-nav {
+      display: flex;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #8F9CAE;
+      padding: 10px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active {
+      background: #10B981;
+      color: #03251E;
+    }
+    .input-group {
+      margin-bottom: 14px;
+      text-align: left;
+    }
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      color: #8F9CAE;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .input-group input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      color: #FFF;
+      padding: 12px 14px;
+      font-size: 14px;
+      outline: none;
+    }
+    .input-group input:focus {
+      border-color: #10B981;
+    }
+    .btn-submit {
+      width: 100%;
+      background: #10B981;
+      color: #03251E;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 900;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.35);
+    }
+    .btn-submit:active { transform: scale(0.98); }
+    .auth-footer {
+      text-align: center;
+      margin-top: 18px;
+    }
+    .auth-footer a {
+      color: #10B981;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 700;
+    }
+  </style>
 </head>
 <body>
-
-  <main class="auth-viewport">
-    <div class="auth-card">
-      <header class="auth-brand">
-        <h1>HUB<span>y</span></h1>
-        <p>Aceda à sua conta de mobilidade e entregas</p>
-      </header>
-
-      <!-- Alternador de Perfil -->
-      <nav class="auth-tabs">
-        <button type="button" class="auth-tab-btn active" id="tabCliente">Passageiro / Geral</button>
-        <button type="button" class="auth-tab-btn" id="tabMotorista">Sou Parceiro</button>
-      </nav>
-
-      <!-- 1. Formulário Unificado: Passageiro / Administrador -->
-      <form id="formLoginCliente" class="auth-form">
-        <div class="input-block">
-          <label for="emailCliente">E-mail</label>
-          <input type="email" id="emailCliente" placeholder="exemplo@email.com" required>
-        </div>
-
-        <div class="input-block">
-          <label for="senhaCliente">Palavra-passe</label>
-          <input type="password" id="senhaCliente" placeholder="Introduza a sua palavra-passe" required>
-        </div>
-
-        <button type="submit" class="btn-auth-submit" id="btnEntrarCliente">Entrar</button>
-      </form>
-
-      <!-- 2. Formulário: Motorista / Cargo -->
-      <form id="formLoginMotorista" class="auth-form" style="display: none;">
-        <div class="input-block">
-          <label for="cnhMotorista">Número da CNH</label>
-          <input type="tel" id="cnhMotorista" placeholder="Apenas números da carta" required>
-        </div>
-
-        <div class="input-block">
-          <label for="placaMotorista">Matrícula / Placa do Veículo</label>
-          <input type="text" id="placaMotorista" placeholder="Ex: ABC1D23" style="text-transform: uppercase;" required>
-        </div>
-
-        <button type="submit" class="btn-auth-submit" id="btnEntrarMotorista" style="background: linear-gradient(135deg, #FF6B00, #C2410C); color: #FFF;">
-          Aceder ao Radar de Parceiro
-        </button>
-      </form>
-
-      <footer class="auth-footer">
-        <span>Ainda não tem conta?</span>
-        <a href="./cadastro.html">Criar registo</a>
-      </footer>
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="brand-logo"><span class="hub">HUB</span><span class="y">y</span></div>
+      <p id="authSubtitulo">Acesse sua conta para solicitar corridas</p>
     </div>
-  </main>
 
-  <script type="module" src="./js/auth.js"></script>
+    <div class="tabs-nav">
+      <button type="button" id="tabEntrar" class="tab-btn active">Entrar</button>
+      <button type="button" id="tabCadastrar" class="tab-btn">Cadastrar</button>
+    </div>
+
+    <form id="formAuth">
+      <div class="input-group" id="grpNome" style="display: none;">
+        <label>Nome Completo</label>
+        <input type="text" id="campoNome" placeholder="Seu nome" />
+      </div>
+
+      <div class="input-group">
+        <label>E-mail ou Telefone</label>
+        <input type="text" id="campoIdentificador" placeholder="exemplo@email.com ou (89) 99999-9999" required />
+      </div>
+
+      <div class="input-group">
+        <label>Palavra-passe / Senha</label>
+        <input type="password" id="campoSenha" placeholder="••••••••" required />
+      </div>
+
+      <button type="submit" id="btnSubmitAuth" class="btn-submit">Entrar na Conta</button>
+    </form>
+
+    <div class="auth-footer">
+      <a href="./index.html">← Voltar ao Mapa</a>
+    </div>
+  </div>
+
+  <script type="module">
+    import { API_URL } from './js/config.js';
+
+    let modoCadastro = false;
+    const tabEntrar = document.getElementById('tabEntrar');
+    const tabCadastrar = document.getElementById('tabCadastrar');
+    const grpNome = document.getElementById('grpNome');
+    const btnSubmit = document.getElementById('btnSubmitAuth');
+    const authSubtitulo = document.getElementById('authSubtitulo');
+
+    tabEntrar.onclick = () => {
+      modoCadastro = false;
+      tabEntrar.classList.add('active');
+      tabCadastrar.classList.remove('active');
+      grpNome.style.display = 'none';
+      btnSubmit.textContent = 'Entrar na Conta';
+      authSubtitulo.textContent = 'Acesse sua conta para solicitar corridas';
+    };
+
+    tabCadastrar.onclick = () => {
+      modoCadastro = true;
+      tabCadastrar.classList.add('active');
+      tabEntrar.classList.remove('active');
+      grpNome.style.display = 'block';
+      btnSubmit.textContent = 'Criar Minha Conta';
+      authSubtitulo.textContent = 'Cadastre-se em segundos para começar';
+    };
+
+    document.getElementById('formAuth').onsubmit = async (e) => {
+      e.preventDefault();
+      const identificador = document.getElementById('campoIdentificador').value.trim();
+      const senha = document.getElementById('campoSenha').value.trim();
+      const nome = document.getElementById('campoNome').value.trim();
+
+      const rota = modoCadastro ? '/api/usuarios/cadastro' : '/api/usuarios/login';
+      const payload = modoCadastro 
+        ? { nome, emailOuTelefone: identificador, senha, role: 'cliente' }
+        : { emailOuTelefone: identificador, senha };
+
+      try {
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'Processando...';
+
+        const resp = await fetch(`${API_URL}${rota}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.erro || 'Falha na autenticação.');
+
+        localStorage.setItem('huby_token', data.token);
+        localStorage.setItem('huby_user_id', data.usuario.id);
+        localStorage.setItem('huby_user_name', data.usuario.nome || 'Passageiro');
+        localStorage.setItem('huby_user_phone', identificador);
+        localStorage.setItem('huby_user_role', data.usuario.role || 'cliente');
+
+        window.location.replace('./index.html');
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = modoCadastro ? 'Criar Minha Conta' : 'Entrar na Conta';
+      }
+    };
+  </script>
 </body>
 </html>

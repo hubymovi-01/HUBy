@@ -90,6 +90,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 8. Modal de Avaliação
   configurarModalAvaliacao();
+
+  // Registo do Service Worker PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
+  }
+
+  // Ouvintes do Modal de Pagamentos
+  document.getElementById('menuItemPagamentos')?.addEventListener('click', () => {
+    fecharDrawer();
+    const modal = document.getElementById('modalPagamento');
+    if (modal) modal.style.display = 'flex';
+  });
+
+  document.getElementById('btnFecharPagamento')?.addEventListener('click', () => {
+    const modal = document.getElementById('modalPagamento');
+    if (modal) modal.style.display = 'none';
+  });
+
+  document.getElementById('btnCopiarPix')?.addEventListener('click', () => {
+    const input = document.getElementById('chavePixInput');
+    if (input) {
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      alert('Chave Pix copiada com sucesso!');
+    }
+  });
 });
 
 function configurarDrawerMenu() {
