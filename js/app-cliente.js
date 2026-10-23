@@ -7,6 +7,7 @@ let rotaAtual = null;
 let pedidoAtivoId = null;
 let intervalPolling = null;
 let categoriaSelecionada = 'carro';
+let markerMotoristaAaminho = null;
 
 let corridaParaAvaliarId = null;
 let notaSelecionada = 5;
@@ -119,6 +120,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       navigator.clipboard.writeText(input.value);
       alert('Chave Pix copiada com sucesso!');
     }
+  });
+
+  // Limpeza de polling ao descarregar a página
+  window.addEventListener('beforeunload', () => {
+    if (intervalPolling) clearInterval(intervalPolling);
   });
 });
 
@@ -266,8 +272,11 @@ async function submeterPedido() {
   const clienteId = localStorage.getItem('huby_user_id');
   const novoId = 'ped_' + Date.now().toString(36);
 
-  // Garante que o cálculo usa as tarifas mais recentes com o multiplicador de pico
   const precoInfo = calcularPreco(categoriaSelecionada, rotaAtual.distanciaKm);
+
+  // Coordenadas reais de origem obtidas do GPS ativo
+  const latOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
+  const lngOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
 
   const payload = {
     id: novoId,
@@ -275,8 +284,8 @@ async function submeterPedido() {
     tipo: categoriaSelecionada,
     subTipoId: categoriaSelecionada,
     subTipoLabel: precoInfo.categoria,
-    origem: 'Local de Partida',
-    destino: `Lat: ${coordsDestino[0].toFixed(4)}, Lng: ${coordsDestino[1].toFixed(4)}`,
+    origem: `Partida (${latOrig}, ${lngOrig})`,
+    destino: `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`,
     coordsOrigem: hubyMapa.coordsOrigem,
     coordsDestino: coordsDestino,
     distanciaKm: rotaAtual.distanciaKm,
@@ -349,6 +358,18 @@ function iniciarPollingStatus() {
           <strong>Veículo:</strong> ${pedido.motorista_veiculo || ''} (${pedido.motorista_placa || ''})<br>
           <strong>Contato:</strong> ${pedido.motorista_telefone || 'Disponível no app'}
         `;
+
+        // Desenha ou posiciona o pino do motorista a caminho no mapa
+        if (hubyMapa && hubyMapa.map && typeof L !== 'undefined' && !markerMotoristaAaminho) {
+          const iconeCondutor = L.divIcon({
+            className: 'huby-pin-motorista',
+            html: '<div style="width:24px;height:24px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(16,185,129,0.8);font-size:12px;">🚘</div>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
+          });
+          markerMotoristaAaminho = L.marker(hubyMapa.coordsOrigem, { icon: iconeCondutor }).addTo(hubyMapa.map);
+        }
+
         const btn = document.getElementById('btnPedirHuby');
         if (btn) btn.style.display = 'none';
       } else if (pedido.status === 'concluido') {
@@ -443,6 +464,10 @@ function resetarPainelCliente() {
   if (hubyMapa && hubyMapa.markerDestino && hubyMapa.map) {
     hubyMapa.map.removeLayer(hubyMapa.markerDestino);
     hubyMapa.markerDestino = null;
+  }
+  if (markerMotoristaAaminho && hubyMapa && hubyMapa.map) {
+    hubyMapa.map.removeLayer(markerMotoristaAaminho);
+    markerMotoristaAaminho = null;
   }
 
   const cardStatus = document.getElementById('cardStatusViagem');
