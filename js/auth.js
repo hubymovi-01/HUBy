@@ -5,18 +5,19 @@ let roleAtual = 'cliente';
 document.addEventListener('DOMContentLoaded', () => {
   const btnRoleCliente = document.getElementById('btnRoleCliente');
   const btnRoleMotorista = document.getElementById('btnRoleMotorista');
+  const roleSelector = document.getElementById('roleSelectorContainer');
   const secaoMotorista = document.getElementById('secaoMotoristaVeiculo');
   const secaoSegurancaPassageiro = document.getElementById('secaoSegurancaPassageiro');
   const grpDataNascPassageiro = document.getElementById('grpDataNascPassageiro');
   const txtSubtitulo = document.getElementById('txtSubtitulo');
   const btnSubmit = document.getElementById('btnSubmeterCadastro');
   const alertaBox = document.getElementById('alertaBox');
+  const linkLoginDireto = document.getElementById('linkLoginDireto');
 
-  // Alternador de Perfis (Passageiro vs Motorista)
-  btnRoleCliente?.addEventListener('click', () => {
+  function ativarCliente() {
     roleAtual = 'cliente';
-    btnRoleCliente.classList.add('active');
-    btnRoleMotorista.classList.remove('active');
+    btnRoleCliente?.classList.add('active');
+    btnRoleMotorista?.classList.remove('active');
 
     if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'block';
     if (grpDataNascPassageiro) grpDataNascPassageiro.style.display = 'block';
@@ -24,24 +25,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     txtSubtitulo.textContent = 'Crie a sua conta para solicitar viagens instantâneas';
     btnSubmit.querySelector('span').textContent = 'Criar Conta de Passageiro';
+    if (linkLoginDireto) linkLoginDireto.href = './login.html?perfil=cliente';
+    localStorage.setItem('huby_tipo_acesso', 'cliente');
     esconderAlerta();
-  });
+  }
 
-  btnRoleMotorista?.addEventListener('click', () => {
+  function ativarMotorista() {
     roleAtual = 'motorista';
-    btnRoleMotorista.classList.add('active');
-    btnRoleCliente.classList.remove('active');
+    btnRoleMotorista?.classList.add('active');
+    btnRoleCliente?.classList.remove('active');
 
     if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'none';
     if (grpDataNascPassageiro) grpDataNascPassageiro.style.display = 'none';
     if (secaoMotorista) secaoMotorista.style.display = 'block';
 
-    txtSubtitulo.textContent = 'Cadastre seu veículo e receba 85% líquido por corrida';
+    // Texto sem porcentagem
+    txtSubtitulo.textContent = 'Cadastre seu veículo, defina seus horários e dirija com liberdade';
     btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
+    if (linkLoginDireto) linkLoginDireto.href = './login.html?perfil=motorista';
+    localStorage.setItem('huby_tipo_acesso', 'motorista');
     esconderAlerta();
-  });
+  }
 
-  // Máscara de CPF (000.000.000-00)
+  btnRoleCliente?.addEventListener('click', ativarCliente);
+  btnRoleMotorista?.addEventListener('click', ativarMotorista);
+
+  // Leitura do perfil vindo da URL
+  const urlParams = new URLSearchParams(window.location.search);
+  const perfilEscolhido = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
+
+  if (perfilEscolhido === 'motorista') {
+    ativarMotorista();
+  } else {
+    ativarCliente();
+  }
+
+  if (urlParams.get('perfil') && roleSelector) {
+    roleSelector.style.display = 'none';
+  }
+
+  // Máscaras de CPF, Telefone e Emergência
   document.getElementById('cadCpf')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/(\d{3})(\d)/, '$1.$2');
@@ -50,7 +73,6 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.value = v;
   });
 
-  // Máscara de Telefone Principal ((00) 00000-0000)
   document.getElementById('cadTelefone')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
@@ -58,7 +80,6 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.value = v;
   });
 
-  // Máscara de Telefone de Emergência ((00) 00000-0000)
   document.getElementById('cadEmergenciaTelefone')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
@@ -66,12 +87,10 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.value = v;
   });
 
-  // Formatação de Placa
   document.getElementById('cadPlaca')?.addEventListener('input', (e) => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
   });
 
-  // Botão Mostrar/Ocultar Senha
   const btnToggle = document.getElementById('btnToggleSenha');
   const inSenha = document.getElementById('cadSenha');
   btnToggle?.addEventListener('click', () => {
@@ -80,7 +99,6 @@ document.addEventListener('DOMContentLoaded', () => {
     btnToggle.textContent = isPass ? '🔒' : '👁️';
   });
 
-  // Utilitário para converter foto em Base64
   const converterParaBase64 = (arquivo) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -90,7 +108,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   };
 
-  // Submissão do Formulário
   document.getElementById('formCadastroHuby')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     esconderAlerta();
@@ -120,7 +137,6 @@ document.addEventListener('DOMContentLoaded', () => {
       role: roleAtual
     };
 
-    // Validações específicas do Passageiro
     if (roleAtual === 'cliente') {
       const dataNascCliente = document.getElementById('cadDataNascCliente')?.value;
       const emergenciaNome = document.getElementById('cadEmergenciaNome')?.value.trim();
@@ -141,7 +157,6 @@ document.addEventListener('DOMContentLoaded', () => {
       payload.contatoEmergenciaTelefone = emergenciaTel;
     }
 
-    // Validações específicas do Motorista Parceiro
     if (roleAtual === 'motorista') {
       const cnh = document.getElementById('cadCnh')?.value.trim();
       const dataNascMotorista = document.getElementById('cadDataNascMotorista')?.value;
@@ -175,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
           payload.fotoVeiculo = await converterParaBase64(fileInput.files[0]);
         } catch (errFoto) {
-          console.warn('Erro ao carregar foto do veículo:', errFoto);
+          console.warn('Erro na conversão da foto do veículo:', errFoto);
         }
       }
     }
@@ -206,6 +221,10 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('huby_user_role', data.usuario.role);
       if (data.usuario.telefone) {
         localStorage.setItem('huby_user_phone', data.usuario.telefone);
+      }
+      if (payload.contatoEmergenciaNome) {
+        localStorage.setItem('huby_emergencia_nome', payload.contatoEmergenciaNome);
+        localStorage.setItem('huby_emergencia_tel', payload.contatoEmergenciaTelefone);
       }
 
       exibirAlerta('Conta criada com sucesso! Redirecionando...', 'success');

@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Iniciar Sessão • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
@@ -21,7 +24,7 @@
         <p id="txtSubtituloLogin" class="auth-desc">Inicie sessão para solicitar corridas</p>
       </header>
 
-      <!-- SELETOR DE PERFIL: PASSAGEIRO VS MOTORISTA -->
+      <!-- SELETOR DE PERFIL -->
       <div class="role-selector" id="roleSelectorContainer">
         <button type="button" id="btnLoginRoleCliente" class="btn-role active">
           <span class="role-icon">👤</span>
@@ -73,13 +76,12 @@
         </button>
       </form>
 
-      <!-- NAVEGAÇÃO DE RODAPÉ (ÚNICA E LIMPA) -->
+      <!-- NAVEGAÇÃO DE RODAPÉ -->
       <footer class="auth-footer-nav">
         <span>Novo no HUBy?</span>
         <a href="./cadastro.html" id="linkCriarConta">Criar nova conta</a>
       </footer>
 
-      <!-- RETORNO PARA TROCA DE PERFIL -->
       <div style="text-align: center; margin-top: 16px;">
         <a href="./welcome.html" style="color: #64748B; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
           <span>←</span> Escolher outro perfil
@@ -107,39 +109,37 @@
     const alertaBox = document.getElementById('alertaLoginBox');
     const linkCriarConta = document.getElementById('linkCriarConta');
 
-    // Funções de alternância de perfil
     function setModoCliente() {
       roleLoginAtual = 'cliente';
-      btnRoleCliente.classList.add('active');
-      btnRoleMotorista.classList.remove('active');
+      btnRoleCliente?.classList.add('active');
+      btnRoleMotorista?.classList.remove('active');
       txtSubtitulo.textContent = 'Inicie sessão para solicitar viagens';
       lblIdentificador.textContent = 'E-mail, Telefone ou CPF';
       icoIdentificador.textContent = '✉️';
       inputIdentificador.placeholder = 'Digite seu e-mail, telefone ou CPF';
       btnSubmit.querySelector('span').textContent = 'Entrar como Passageiro';
-      linkCriarConta.href = './cadastro.html?perfil=cliente';
+      if (linkCriarConta) linkCriarConta.href = './cadastro.html?perfil=cliente';
       localStorage.setItem('huby_tipo_acesso', 'cliente');
       esconderAlerta();
     }
 
     function setModoMotorista() {
       roleLoginAtual = 'motorista';
-      btnRoleMotorista.classList.add('active');
-      btnRoleCliente.classList.remove('active');
+      btnRoleMotorista?.classList.add('active');
+      btnRoleCliente?.classList.remove('active');
       txtSubtitulo.textContent = 'Aceda ao radar de viagens e faça parte da rede';
       lblIdentificador.textContent = 'CNH, Telefone ou E-mail';
       icoIdentificador.textContent = '🪪';
       inputIdentificador.placeholder = 'Digite a sua CNH, telefone ou e-mail';
       btnSubmit.querySelector('span').textContent = 'Entrar como Motorista Parceiro';
-      linkCriarConta.href = './cadastro.html?perfil=motorista';
+      if (linkCriarConta) linkCriarConta.href = './cadastro.html?perfil=motorista';
       localStorage.setItem('huby_tipo_acesso', 'motorista');
       esconderAlerta();
     }
 
-    btnRoleCliente.onclick = setModoCliente;
-    btnRoleMotorista.onclick = setModoMotorista;
+    btnRoleCliente?.addEventListener('click', setModoCliente);
+    btnRoleMotorista?.addEventListener('click', setModoMotorista);
 
-    // Leitura do perfil vindo do welcome.html
     const urlParams = new URLSearchParams(window.location.search);
     const perfilParam = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso');
 
@@ -149,20 +149,17 @@
       setModoCliente();
     }
 
-    // Se o usuário veio pelo onboarding com perfil definido, oculta o seletor duplicado
     if (perfilParam && roleSelector) {
       roleSelector.style.display = 'none';
     }
 
-    // Alternar visibilidade da senha
-    btnToggleSenha.onclick = () => {
+    btnToggleSenha?.addEventListener('click', () => {
       const isPass = inputSenha.type === 'password';
       inputSenha.type = isPass ? 'text' : 'password';
       btnToggleSenha.textContent = isPass ? '🔒' : '👁️';
-    };
+    });
 
-    // Submissão do formulário
-    document.getElementById('formLoginHuby').onsubmit = async (e) => {
+    document.getElementById('formLoginHuby')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
 
@@ -176,7 +173,7 @@
 
       try {
         btnSubmit.disabled = true;
-        btnSubmit.querySelector('span').textContent = 'A autenticar credenciais...';
+        btnSubmit.querySelector('span').textContent = 'A autenticar...';
 
         const resp = await fetch(`${API_URL}/api/usuarios/login`, {
           method: 'POST',
@@ -190,7 +187,7 @@
 
         const contentType = resp.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Servidor a iniciar no Render. Aguarde 20 segundos e tente de novo.');
+          throw new Error('Servidor a inicializar no Render. Aguarde 20 segundos e tente de novo.');
         }
 
         const data = await resp.json();
@@ -206,7 +203,7 @@
           localStorage.setItem('huby_user_phone', data.usuario.telefone);
         }
 
-        exibirAlerta('Sessão iniciada com sucesso! A carregar...', 'success');
+        exibirAlerta('Sessão iniciada com sucesso!', 'success');
 
         setTimeout(() => {
           if (data.usuario.role === 'motorista') {
@@ -224,15 +221,17 @@
           ? 'Entrar como Passageiro'
           : 'Entrar como Motorista Parceiro';
       }
-    };
+    });
 
     function exibirAlerta(msg, tipo) {
+      if (!alertaBox) return;
       alertaBox.textContent = msg;
       alertaBox.className = `auth-alert ${tipo}`;
       alertaBox.style.display = 'block';
     }
 
     function esconderAlerta() {
+      if (!alertaBox) return;
       alertaBox.style.display = 'none';
     }
   </script>
