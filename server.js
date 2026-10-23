@@ -143,7 +143,12 @@ async function inicializarBanco() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_aprovacao TEXT DEFAULT 'aprovado';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS saldo_carteira NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS motivo_recusa TEXT;`;
-
+    // No inicializarBanco() adicione:
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS email TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cpf TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS telefone TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_crlv_url TEXT;`;
     await sql`
       CREATE TABLE IF NOT EXISTS pedidos (
         id TEXT PRIMARY KEY,
