@@ -13,11 +13,11 @@ export class HubyMapa {
     this.circlePrecisao = null;
     this.markerDestino = null;
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460];
+    this.coordsOrigem = [-8.3580, -42.2460]; // Ponto de contingência caso não haja conexão
     this.coordsDestino = null;
     this.watchId = null;
     this.onClickDestinoCallback = null;
-    this.jaCentralizouGPS = false; // Garante centralização assim que o GPS real responder
+    this.jaCentralizouGPS = false;
   }
 
   inicializar(onClickDestino = null) {
@@ -54,7 +54,6 @@ export class HubyMapa {
     tiles.on('load', aplicarDark);
     setTimeout(aplicarDark, 200);
 
-    this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
     this.invalidarTamanho();
 
     if (onClickDestino) {
@@ -66,7 +65,7 @@ export class HubyMapa {
       });
     }
 
-    // Inicia a captura imediata e agressiva do GPS real
+    // Busca imediata da posição verdadeira
     this.obterGPSReal();
   }
 
@@ -138,62 +137,78 @@ export class HubyMapa {
     }
   }
 
-  // Captura direta com recálculo e centralização forçada
-  obterGPSReal(callbackSucesso) {
+  // Captura direta com fallback automático caso o GPS do satélite demore
+  async obterGPSReal(callbackSucesso) {
+    const aplicarCoordenadas = (lat, lng, precisao = null) => {
+      this.definirOrigem(lat, lng, precisao);
+      if (this.map) {
+        this.map.setView([lat, lng], 17);
+        this.invalidarTamanho();
+      }
+      this.jaCentralizouGPS = true;
+      if (callbackSucesso) callbackSucesso({ lat, lng });
+    };
+
+    // Fallback rápido via rede se o GPS nativo falhar ou demorar
+    const fallbackRede = async () => {
+      if (this.jaCentralizouGPS) return;
+      try {
+        const resp = await fetch('https://ipapi.co/json/');
+        const dados = await resp.json();
+        if (dados && dados.latitude && dados.longitude && !this.jaCentralizouGPS) {
+          aplicarCoordenadas(dados.latitude, dados.longitude, 200);
+        }
+      } catch (e) {
+        console.warn('Fallback IP indisponível:', e);
+      }
+    };
+
     if (!('geolocation' in navigator)) {
-      alert('Geolocalização não é suportada pelo seu navegador.');
+      await fallbackRede();
       return;
     }
 
+    const timerFallback = setTimeout(fallbackRede, 4000);
+
     const opcoesGPS = {
-      enableHighAccuracy: true, // Força chip de GPS e satélite
-      timeout: 12000,
-      maximumAge: 0             // Impede uso de cache antigo
+      enableHighAccuracy: true,
+      timeout: 8000,
+      maximumAge: 0
     };
 
-    // 1. Tenta fixar a posição imediata
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude, longitude, accuracy } = pos.coords;
-        this.coordsOrigem = [latitude, longitude];
-        this.definirOrigem(latitude, longitude, accuracy);
-
-        if (this.map) {
-          this.map.setView([latitude, longitude], 17, { animate: true });
-          this.invalidarTamanho();
-        }
-
-        this.jaCentralizouGPS = true;
-        if (callbackSucesso) callbackSucesso({ lat: latitude, lng: longitude });
+        clearTimeout(timerFallback);
+        aplicarCoordenadas(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
       },
-      (err) => {
-        console.warn('getCurrentPosition aviso:', err.message);
+      async (err) => {
+        console.warn('GPS primário falhou, acionando fallback:', err.message);
+        await fallbackRede();
       },
       opcoesGPS
     );
 
-    // 2. Mantém o satélite acompanhando e ajusta a tela na primeira leitura válida
+    // Mantém o satélite acompanhando para refinar para o metro exato
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
 
     this.watchId = navigator.geolocation.watchPosition(
       async (pos) => {
+        clearTimeout(timerFallback);
         const { latitude, longitude, accuracy } = pos.coords;
 
         this.definirOrigem(latitude, longitude, accuracy);
 
-        // Se ainda não centralizou onde a pessoa realmente está, voa a câmera para lá
         if (!this.jaCentralizouGPS && this.map) {
-          this.map.flyTo([latitude, longitude], 17, { duration: 1.2 });
+          this.map.flyTo([latitude, longitude], 17, { duration: 1.0 });
           this.jaCentralizouGPS = true;
         }
 
-        // Se já tinha destino selecionado, recalcula a rota com a partida atualizada
         if (this.coordsDestino && this.onClickDestinoCallback) {
           const rota = await this.calcularRota([latitude, longitude], this.coordsDestino);
           this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
         }
       },
-      (err) => console.warn('watchPosition aviso:', err.message),
+      (err) => console.warn('Acompanhamento GPS contínuo:', err.message),
       opcoesGPS
     );
   }
