@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * OpenStreetMap + GPS Real Progressivo (Imediato por Rede + Satélite de Alta Precisão)
+ * OpenStreetMap + Correção de Tela Preta + GPS em Tempo Real
  * ============================================================================
  */
 
@@ -13,7 +13,7 @@ export class HubyMapa {
     this.circlePrecisao = null;
     this.markerDestino = null;
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460]; // Ponto de contingência estrito
+    this.coordsOrigem = [-8.3580, -42.2460];
     this.coordsDestino = null;
     this.watchId = null;
     this.onClickDestinoCallback = null;
@@ -34,27 +34,33 @@ export class HubyMapa {
     this.jaCentralizouGPS = false;
     this.onClickDestinoCallback = onClickDestino;
 
+    // Inicialização direta do Leaflet
     this.map = L.map(this.containerId, {
       zoomControl: false,
       attributionControl: false
     }).setView(this.coordsOrigem, 16);
 
-    const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // Tiles oficiais do OpenStreetMap
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       minZoom: 3,
       crossOrigin: true
     }).addTo(this.map);
 
-    const aplicarDark = () => {
+    // Filtro Dark seguro sem quebrar o canvas
+    const aplicarEstiloDark = () => {
       const pane = container.querySelector('.leaflet-tile-pane');
       if (pane) {
-        pane.style.filter = 'brightness(0.6) invert(1) contrast(1.3) hue-rotate(200deg) saturate(0.3)';
+        pane.style.filter = 'brightness(0.7) invert(1) contrast(1.2) hue-rotate(200deg) saturate(0.3)';
       }
     };
-    tiles.on('load', aplicarDark);
-    setTimeout(aplicarDark, 200);
+    aplicarEstiloDark();
 
+    // Elimina a tela preta recalculando o tamanho em múltiplos intervalos
     this.invalidarTamanho();
+    setTimeout(() => this.invalidarTamanho(), 100);
+    setTimeout(() => this.invalidarTamanho(), 300);
+    setTimeout(() => this.invalidarTamanho(), 600);
 
     if (onClickDestino) {
       this.map.on('click', async (e) => {
@@ -65,15 +71,15 @@ export class HubyMapa {
       });
     }
 
-    // Dispara a busca real de localização imediatamente
-    this.obterGPSReal();
+    // Captura da localização real após estabilização do mapa
+    setTimeout(() => {
+      this.obterGPSReal();
+    }, 250);
   }
 
   invalidarTamanho() {
     if (this.map) {
-      requestAnimationFrame(() => this.map.invalidateSize());
-      setTimeout(() => { if (this.map) this.map.invalidateSize(); }, 150);
-      setTimeout(() => { if (this.map) this.map.invalidateSize(); }, 500);
+      this.map.invalidateSize();
     }
   }
 
@@ -85,13 +91,13 @@ export class HubyMapa {
       html: `
         <div style="position:relative;width:24px;height:24px;">
           <div style="position:absolute;inset:0;background:#10B981;border-radius:50%;opacity:0.4;animation:hubyPulse 1.8s infinite ease-out;"></div>
-          <div style="position:absolute;inset:4px;background:#10B981;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 0 14px rgba(16,185,129,0.9);"></div>
+          <div style="position:absolute;inset:4px;background:#10B981;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 0 12px rgba(16,185,129,0.9);"></div>
         </div>
         <style>
           @keyframes hubyPulse {
             0% { transform: scale(0.9); opacity: 0.7; }
-            70% { transform: scale(2.4); opacity: 0; }
-            100% { transform: scale(2.4); opacity: 0; }
+            70% { transform: scale(2.2); opacity: 0; }
+            100% { transform: scale(2.2); opacity: 0; }
           }
         </style>
       `,
@@ -137,20 +143,15 @@ export class HubyMapa {
     }
   }
 
-  // Captura progressiva: primeiro instantânea por rede, depois satélite preciso
   obterGPSReal(callbackSucesso) {
-    if (!('geolocation' in navigator)) {
-      alert('Geolocalização não é suportada pelo seu dispositivo.');
-      return;
-    }
+    if (!('geolocation' in navigator)) return;
 
     const aplicarPosicao = (pos) => {
       const { latitude, longitude, accuracy } = pos.coords;
-      this.coordsOrigem = [latitude, longitude];
       this.definirOrigem(latitude, longitude, accuracy);
 
       if (this.map) {
-        this.map.flyTo([latitude, longitude], 17, { duration: 1.2 });
+        this.map.setView([latitude, longitude], 17);
         this.invalidarTamanho();
       }
 
@@ -158,41 +159,32 @@ export class HubyMapa {
       if (callbackSucesso) callbackSucesso({ lat: latitude, lng: longitude });
     };
 
-    // 1. Passo Rápido: Pega localização imediata por torres de celular / Wi-Fi
+    // 1. Posicionamento rápido por rede
     navigator.geolocation.getCurrentPosition(
       aplicarPosicao,
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) {
-          alert('Localização desativada ou bloqueada. Toque no cadeado junto ao link do site e autorize o acesso à sua Localização.');
-        } else {
-          console.warn('Tentativa 1 (Rede) falhou, aguardando satélite...', err.message);
-        }
-      },
-      { enableHighAccuracy: false, timeout: 6000, maximumAge: 10000 }
+      (err) => console.warn('Aviso GPS rápido:', err.message),
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 10000 }
     );
 
-    // 2. Passo Contínuo: Calibra com o chip GPS do satélite e refina a coordenada exata
+    // 2. Satélite de alta precisão contínuo
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
 
     this.watchId = navigator.geolocation.watchPosition(
       async (pos) => {
         const { latitude, longitude, accuracy } = pos.coords;
-
         this.definirOrigem(latitude, longitude, accuracy);
 
-        // Se ainda não moveu o mapa para você, move agora
         if (!this.jaCentralizouGPS && this.map) {
           this.map.flyTo([latitude, longitude], 17, { duration: 1.0 });
           this.jaCentralizouGPS = true;
         }
 
-        // Recalcula rota se já escolheu o destino
         if (this.coordsDestino && this.onClickDestinoCallback) {
           const rota = await this.calcularRota([latitude, longitude], this.coordsDestino);
           this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
         }
       },
-      (err) => console.warn('Monitoramento contínuo GPS:', err.message),
+      (err) => console.warn('Acompanhamento GPS contínuo:', err.message),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
