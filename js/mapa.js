@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO DEFINITIVO - Correção do GPS Mobile (Sem Concorrência)
+ * DIAGNÓSTICO ATIVO - Força Alta Precisão e Exibe Alertas
  * ============================================================================
  */
 
@@ -13,12 +13,9 @@ export class HubyMapa {
     this.circlePrecisao = null;
     this.markerDestino = null;
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460]; // Contingência (São João do Piauí)
+    this.coordsOrigem = [-8.3580, -42.2460];
     this.coordsDestino = null;
-    this.watchId = null;
     this.onClickDestinoCallback = null;
-    this.gpsFixo = false;
-    this.buscandoGPS = false; // Trava contra chamadas duplas no telemóvel
   }
 
   inicializar(onClickDestino = null) {
@@ -27,18 +24,12 @@ export class HubyMapa {
     if (!container) return;
 
     if (this.map) {
-      if (this.watchId !== null && navigator.geolocation) {
-        navigator.geolocation.clearWatch(this.watchId);
-      }
       this.map.remove();
       this.map = null;
     }
 
-    this.gpsFixo = false;
-    this.buscandoGPS = false;
     this.onClickDestinoCallback = onClickDestino;
 
-    // Inicia o mapa na contingência silenciosamente, MAS NÃO DESENHA O PINO AINDA
     this.map = L.map(this.containerId, {
       zoomControl: false,
       attributionControl: false
@@ -70,12 +61,8 @@ export class HubyMapa {
       });
     }
 
-    // Se passarem 5 segundos e o GPS não responder, coloca o pino de contingência para o app não parar
-    setTimeout(() => {
-      if (!this.gpsFixo && !this.markerOrigem) {
-        this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
-      }
-    }, 5000);
+    // Chama o GPS de diagnóstico assim que abre o mapa
+    this.obterGPSReal();
   }
 
   invalidarTamanho() {
@@ -144,94 +131,50 @@ export class HubyMapa {
     }
   }
 
-  obterGPS(callbackSucesso) {
+  obterGPSReal(callbackSucesso) {
     if (!('geolocation' in navigator)) {
-      alert('Geolocalização não suportada no navegador.');
-      if (!this.markerOrigem) this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
+      alert('O seu telemóvel não suporta GPS pelo navegador.');
       return;
     }
 
-    // TRAVA CRÍTICA: Se já está a pedir o GPS, não permite pedir outra vez em simultâneo
-    if (this.buscandoGPS) return;
-    this.buscandoGPS = true;
-
-    const aplicarPosicao = (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const precisao = pos.coords.accuracy;
-
-      this.coordsOrigem = [lat, lng];
-      this.definirOrigem(lat, lng, precisao);
-
-      // Centraliza se for a primeira vez OU se o utilizador carregou no botão de recentralizar
-      if (!this.gpsFixo || callbackSucesso) {
-        if (this.map) {
-          this.map.flyTo([lat, lng], 17, { duration: 1.2 });
-          this.invalidarTamanho();
-        }
-      }
-
-      this.gpsFixo = true;
-      this.buscandoGPS = false; // Liberta a trava
-      
-      if (callbackSucesso) callbackSucesso({ lat, lng });
+    // FORÇA MÁXIMA PARA O CHIP DO GPS
+    const opcoesGPS = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
     };
 
-    const tratarErro = (err) => {
-      console.warn('GPS Alta Precisão Falhou:', err.message);
-      
-      // Se o satélite demorar (como dentro de casa), cai para o fallback do Wi-Fi/4G
-      navigator.geolocation.getCurrentPosition(
-        aplicarPosicao,
-        (err2) => {
-          this.buscandoGPS = false;
-          console.warn('GPS Fallback Falhou:', err2.message);
-          
-          if (!this.markerOrigem) {
-            this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
-          }
-
-          if (err2.code === 1) { // 1 = PERMISSION_DENIED
-             alert('Acesso à localização negado. Ative o GPS no telemóvel e dê permissão ao navegador no cadeado lá em cima.');
-          }
-        },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
-      );
-    };
-
-    // 1. Pede a localização real ao telemóvel
     navigator.geolocation.getCurrentPosition(
-      aplicarPosicao,
-      tratarErro,
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
-
-    // 2. Inicia o Watcher para atualizar enquanto o cliente/motorista anda pela rua
-    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
-    
-    this.watchId = navigator.geolocation.watchPosition(
-      async (pos) => {
+      (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         const precisao = pos.coords.accuracy;
 
+        // ALERTA DE DIAGNÓSTICO: Vai mostrar o que o telemóvel enviou
+        alert(`O telemóvel encontrou a localização!\nPrecisão: ${precisao.toFixed(0)} metros.\n(Se a precisão for maior que 1000m, o telemóvel está a usar a antena 4G e não o satélite).`);
+
         this.definirOrigem(lat, lng, precisao);
-        
-        // Se a primeira chamada falhou e o watch o apanhou agora, centra o ecrã
-        if (!this.gpsFixo && this.map) {
-          this.map.flyTo([lat, lng], 17, { duration: 1.2 });
-          this.gpsFixo = true;
+
+        if (this.map) {
+          this.map.flyTo([lat, lng], 17, { duration: 1.5 });
+          this.invalidarTamanho();
         }
 
-        // Recalcula rota em tempo real se já tiver clicado no destino
-        if (this.coordsDestino && this.onClickDestinoCallback) {
-          const rota = await this.calcularRota([lat, lng], this.coordsDestino);
-          this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
-        }
+        if (callbackSucesso) callbackSucesso({ lat, lng });
       },
-      (err) => console.warn('Aviso Watch GPS (Pode ignorar):', err.message),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      (err) => {
+        let motivo = err.message;
+        if (err.code === 1) motivo = "Permissão Negada";
+        if (err.code === 2) motivo = "Sinal Indisponível";
+        if (err.code === 3) motivo = "Timeout (Demorou muito a achar o satélite)";
+        alert(`Falha ao obter GPS.\nMotivo: ${motivo}`);
+      },
+      opcoesGPS
     );
+  }
+
+  obterGPS(callbackSucesso) {
+    this.obterGPSReal(callbackSucesso);
   }
 
   async buscarEndereco(texto) {
