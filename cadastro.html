@@ -16,7 +16,7 @@
       
       <!-- TOPO / MARCA -->
       <header class="auth-header">
-        <div class="auth-badge">Plataforma de Mobilidade 2.0</div>
+        <div class="auth-badge">Plataforma de Mobilidade Segura</div>
         <h1 class="auth-brand">HUB<span>y</span></h1>
         <p id="txtSubtitulo" class="auth-desc">Crie a sua conta para solicitar viagens instantâneas</p>
       </header>
@@ -39,8 +39,8 @@
       <!-- FORMULÁRIO UNIFICADO -->
       <form id="formCadastroHuby" class="auth-form" novalidate>
         
-        <!-- SECÇÃO 1: DADOS PESSOAIS -->
-        <div class="form-section-tag">Informações Pessoais</div>
+        <!-- SECÇÃO 1: DADOS PESSOAIS DO USUÁRIO -->
+        <div class="form-section-tag">Identificação & Documentação</div>
 
         <div class="input-group">
           <label for="cadNome">Nome Completo</label>
@@ -59,6 +59,16 @@
             </div>
           </div>
 
+          <div class="input-group" id="grpDataNascPassageiro">
+            <label for="cadDataNascCliente">Data de Nascimento</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📅</span>
+              <input type="date" id="cadDataNascCliente" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-row">
           <div class="input-group">
             <label for="cadTelefone">WhatsApp / Telefone</label>
             <div class="input-wrapper">
@@ -66,17 +76,40 @@
               <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
             </div>
           </div>
-        </div>
 
-        <div class="input-group">
-          <label for="cadEmail">E-mail</label>
-          <div class="input-wrapper">
-            <span class="input-ico">✉️</span>
-            <input type="email" id="cadEmail" placeholder="seuemail@exemplo.com" required>
+          <div class="input-group">
+            <label for="cadEmail">E-mail</label>
+            <div class="input-wrapper">
+              <span class="input-ico">✉️</span>
+              <input type="email" id="cadEmail" placeholder="seuemail@exemplo.com" required>
+            </div>
           </div>
         </div>
 
-        <!-- SECÇÃO 2: DADOS DO PARCEIRO E VEÍCULO (EXCLUSIVO MOTORISTA) -->
+        <!-- SECÇÃO 2: CONTATO DE CONFIANÇA / EMERGÊNCIA (EXCLUSIVO PASSAGEIRO) -->
+        <div id="secaoSegurancaPassageiro">
+          <div class="form-section-tag highlight">Segurança & Contato de Confiança</div>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label for="cadEmergenciaNome">Nome do Contato</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🛡️</span>
+                <input type="text" id="cadEmergenciaNome" placeholder="Ex: Mãe, Pai, Cônjuge" required>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="cadEmergenciaTelefone">Telefone de Emergência</label>
+              <div class="input-wrapper">
+                <span class="input-ico">📞</span>
+                <input type="tel" id="cadEmergenciaTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECÇÃO 3: DADOS DO PARCEIRO E VEÍCULO (EXCLUSIVO MOTORISTA) -->
         <div id="secaoMotoristaVeiculo" class="motorista-specs-box" style="display: none;">
           <div class="form-section-tag highlight">Validação de Habilitação & Veículo</div>
 
@@ -90,10 +123,10 @@
             </div>
 
             <div class="input-group">
-              <label for="cadDataNasc">Data de Nascimento</label>
+              <label for="cadDataNascMotorista">Data de Nascimento</label>
               <div class="input-wrapper">
                 <span class="input-ico">📅</span>
-                <input type="date" id="cadDataNasc">
+                <input type="date" id="cadDataNascMotorista">
               </div>
             </div>
           </div>
@@ -138,8 +171,8 @@
           </div>
         </div>
 
-        <!-- SECÇÃO 3: CREDENCIAIS -->
-        <div class="form-section-tag">Segurança</div>
+        <!-- SECÇÃO 4: CREDENCIAIS -->
+        <div class="form-section-tag">Segurança de Acesso</div>
 
         <div class="input-group">
           <label for="cadSenha">Palavra-passe</label>

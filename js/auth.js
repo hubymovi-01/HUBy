@@ -6,16 +6,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRoleCliente = document.getElementById('btnRoleCliente');
   const btnRoleMotorista = document.getElementById('btnRoleMotorista');
   const secaoMotorista = document.getElementById('secaoMotoristaVeiculo');
+  const secaoSegurancaPassageiro = document.getElementById('secaoSegurancaPassageiro');
+  const grpDataNascPassageiro = document.getElementById('grpDataNascPassageiro');
   const txtSubtitulo = document.getElementById('txtSubtitulo');
   const btnSubmit = document.getElementById('btnSubmeterCadastro');
   const alertaBox = document.getElementById('alertaBox');
 
-  // Alternador de Perfis
+  // Alternador de Perfis (Passageiro vs Motorista)
   btnRoleCliente?.addEventListener('click', () => {
     roleAtual = 'cliente';
     btnRoleCliente.classList.add('active');
     btnRoleMotorista.classList.remove('active');
-    secaoMotorista.style.display = 'none';
+
+    if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'block';
+    if (grpDataNascPassageiro) grpDataNascPassageiro.style.display = 'block';
+    if (secaoMotorista) secaoMotorista.style.display = 'none';
+
     txtSubtitulo.textContent = 'Crie a sua conta para solicitar viagens instantâneas';
     btnSubmit.querySelector('span').textContent = 'Criar Conta de Passageiro';
     esconderAlerta();
@@ -25,13 +31,17 @@ document.addEventListener('DOMContentLoaded', () => {
     roleAtual = 'motorista';
     btnRoleMotorista.classList.add('active');
     btnRoleCliente.classList.remove('active');
-    secaoMotorista.style.display = 'block';
+
+    if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'none';
+    if (grpDataNascPassageiro) grpDataNascPassageiro.style.display = 'none';
+    if (secaoMotorista) secaoMotorista.style.display = 'block';
+
     txtSubtitulo.textContent = 'Cadastre seu veículo e receba 85% líquido por corrida';
     btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
     esconderAlerta();
   });
 
-  // Máscara de CPF
+  // Máscara de CPF (000.000.000-00)
   document.getElementById('cadCpf')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/(\d{3})(\d)/, '$1.$2');
@@ -40,8 +50,16 @@ document.addEventListener('DOMContentLoaded', () => {
     e.target.value = v;
   });
 
-  // Máscara de Telefone
+  // Máscara de Telefone Principal ((00) 00000-0000)
   document.getElementById('cadTelefone')?.addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '');
+    v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
+    v = v.replace(/(\d)(\d{4})$/, '$1-$2');
+    e.target.value = v;
+  });
+
+  // Máscara de Telefone de Emergência ((00) 00000-0000)
+  document.getElementById('cadEmergenciaTelefone')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
     v = v.replace(/(\d)(\d{4})$/, '$1-$2');
@@ -102,12 +120,34 @@ document.addEventListener('DOMContentLoaded', () => {
       role: roleAtual
     };
 
+    // Validações específicas do Passageiro
+    if (roleAtual === 'cliente') {
+      const dataNascCliente = document.getElementById('cadDataNascCliente')?.value;
+      const emergenciaNome = document.getElementById('cadEmergenciaNome')?.value.trim();
+      const emergenciaTel = document.getElementById('cadEmergenciaTelefone')?.value.trim();
+
+      if (!dataNascCliente) {
+        exibirAlerta('Informe a sua data de nascimento.', 'error');
+        return;
+      }
+
+      if (!emergenciaNome || !emergenciaTel) {
+        exibirAlerta('Indique o nome e o telefone do seu contato de emergência.', 'error');
+        return;
+      }
+
+      payload.dataNascimento = dataNascCliente;
+      payload.contatoEmergenciaNome = emergenciaNome;
+      payload.contatoEmergenciaTelefone = emergenciaTel;
+    }
+
+    // Validações específicas do Motorista Parceiro
     if (roleAtual === 'motorista') {
-      const cnh = document.getElementById('cadCnh').value.trim();
-      const dataNasc = document.getElementById('cadDataNasc').value;
-      const modelo = document.getElementById('cadModelo').value.trim();
-      const placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
-      const categoria = document.getElementById('cadCategoriaVeiculo').value;
+      const cnh = document.getElementById('cadCnh')?.value.trim();
+      const dataNascMotorista = document.getElementById('cadDataNascMotorista')?.value;
+      const modelo = document.getElementById('cadModelo')?.value.trim();
+      const placa = document.getElementById('cadPlaca')?.value.trim().toUpperCase();
+      const categoria = document.getElementById('cadCategoriaVeiculo')?.value;
       const fileInput = document.getElementById('cadFotoVeiculo');
 
       if (!cnh || cnh.replace(/\D/g, '').length !== 11) {
@@ -115,7 +155,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (!dataNasc) {
+      if (!dataNascMotorista) {
         exibirAlerta('Informe a sua data de nascimento para validação de idade.', 'error');
         return;
       }
@@ -126,12 +166,12 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       payload.cnh = cnh;
-      payload.dataNascimento = dataNasc;
+      payload.dataNascimento = dataNascMotorista;
       payload.veiculo_modelo = modelo;
       payload.veiculo_placa = placa;
       payload.categoria_veiculo = categoria;
 
-      if (fileInput.files && fileInput.files[0]) {
+      if (fileInput?.files && fileInput.files[0]) {
         try {
           payload.fotoVeiculo = await converterParaBase64(fileInput.files[0]);
         } catch (errFoto) {
@@ -142,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       btnSubmit.disabled = true;
-      btnSubmit.querySelector('span').textContent = 'Validando e registando...';
+      btnSubmit.querySelector('span').textContent = 'Validando dados e registrando...';
 
       const resp = await fetch(`${API_URL}/api/usuarios/cadastro`, {
         method: 'POST',
@@ -164,6 +204,9 @@ document.addEventListener('DOMContentLoaded', () => {
       localStorage.setItem('huby_user_id', data.usuario.id);
       localStorage.setItem('huby_user_name', data.usuario.nome);
       localStorage.setItem('huby_user_role', data.usuario.role);
+      if (data.usuario.telefone) {
+        localStorage.setItem('huby_user_phone', data.usuario.telefone);
+      }
 
       exibirAlerta('Conta criada com sucesso! Redirecionando...', 'success');
 
