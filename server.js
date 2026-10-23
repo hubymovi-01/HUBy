@@ -34,12 +34,13 @@ const sql = neon(process.env.DATABASE_URL);
 
 // Middleware para validação do Token JWT
 export function autenticarToken(req, res, next) {
+  // Suporte a token via Header ou Query param (necessário para downloads diretos como CSV)
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
+  const token = authHeader ? (authHeader.split(' ')[1] || authHeader) : req.query.token;
+
+  if (!token) {
     return res.status(401).json({ erro: 'Acesso negado: token não fornecido.' });
   }
-
-  const token = authHeader.split(' ')[1] || authHeader;
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -131,7 +132,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // Garante colunas de segurança caso a tabela já existisse
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contato_emergencia_nome TEXT;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS contato_emergencia_tel TEXT;`;
@@ -202,6 +202,45 @@ async function inicializarBanco() {
         comentario TEXT,
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
+    `;
+
+    // Tabela de Configurações Dinâmicas e Tarifas
+    await sql`
+      CREATE TABLE IF NOT EXISTS configuracoes_plataforma (
+        chave TEXT PRIMARY KEY,
+        valor JSONB NOT NULL,
+        atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Tabela de Solicitações de Saque Pix dos Condutores
+    await sql`
+      CREATE TABLE IF NOT EXISTS saques_motoristas (
+        id SERIAL PRIMARY KEY,
+        motorista_id TEXT NOT NULL,
+        motorista_nome TEXT NOT NULL,
+        chave_pix TEXT NOT NULL,
+        tipo_chave TEXT DEFAULT 'cpf',
+        valor NUMERIC(10,2) NOT NULL,
+        status TEXT DEFAULT 'pendente',
+        comprovante_url TEXT,
+        motivo_recusa TEXT,
+        solicitado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        pago_em TIMESTAMP
+      );
+    `;
+
+    // Inserção das tarifas padrão se ainda não existirem
+    await sql`
+      INSERT INTO configuracoes_plataforma (chave, valor)
+      VALUES ('tarifas', '{
+        "carro": {"base": 6.5, "km": 2.2, "min": 10},
+        "moto": {"base": 4.0, "km": 1.5, "min": 7},
+        "flash_moto": {"base": 5.0, "km": 1.8, "min": 8},
+        "cargo_pickup": {"base": 35.0, "km": 4.5, "min": 45},
+        "multiplicador_pico": 1.0
+      }'::jsonb)
+      ON CONFLICT (chave) DO NOTHING;
     `;
 
     console.log('Tabelas sincronizadas no Neon PostgreSQL.');
@@ -710,7 +749,138 @@ app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 4. PAINEL ADMINISTRATIVO & GESTÃO (PROTEGIDO POR ROLE ADMIN)
+// 4. CONFIGURAÇÕES DINÂMICAS & TARIFAS (ACESSO PÚBLICO E ADMIN)
+// ============================================================================
+
+app.get('/api/config/tarifas', async (req, res) => {
+  try {
+    const reg = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+    if (reg.length === 0) return res.status(404).json({ erro: 'Tarifas não localizadas.' });
+    res.json(reg[0].valor);
+  } catch (err) {
+    console.error('Erro ao obter tarifas:', err);
+    res.status(500).json({ erro: 'Falha ao obter tarifas.' });
+  }
+});
+
+app.put('/api/admin/tarifas', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
+    }
+
+    const novasTarifas = req.body;
+
+    await sql`
+      UPDATE configuracoes_plataforma
+      SET valor = ${JSON.stringify(novasTarifas)}::jsonb,
+          atualizado_em = CURRENT_TIMESTAMP
+      WHERE chave = 'tarifas';
+    `;
+
+    res.json({ sucesso: true, mensagem: 'Tarifas atualizadas com sucesso!' });
+  } catch (err) {
+    console.error('Erro ao atualizar tarifas:', err);
+    res.status(500).json({ erro: 'Falha ao atualizar tarifas.' });
+  }
+});
+
+// ============================================================================
+// 5. SAQUES PIX (REPASSE DE 85% PARA PARCEIROS)
+// ============================================================================
+
+app.post('/api/motoristas/saques', autenticarToken, async (req, res) => {
+  try {
+    const motoristaId = req.usuario.id;
+    const { chavePix, tipoChave, valor } = req.body;
+    const valorSaque = Number(valor);
+
+    if (!chavePix || !valorSaque || valorSaque <= 0) {
+      return res.status(400).json({ erro: 'Indique a chave Pix e um valor válido.' });
+    }
+
+    const mot = await sql`SELECT nome, saldo_carteira FROM motoristas WHERE id = ${motoristaId} LIMIT 1;`;
+    if (mot.length === 0) return res.status(404).json({ erro: 'Motorista não encontrado.' });
+
+    const saldoAtual = Number(mot[0].saldo_carteira || 0);
+    if (valorSaque > saldoAtual) {
+      return res.status(400).json({ erro: 'Saldo insuficiente para este saque.' });
+    }
+
+    await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira - ${valorSaque} WHERE id = ${motoristaId};`;
+
+    await sql`
+      INSERT INTO saques_motoristas (motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status)
+      VALUES (${motoristaId}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'cpf'}, ${valorSaque}, 'pendente');
+    `;
+
+    res.status(201).json({ sucesso: true, mensagem: 'Pedido de saque Pix enviado com sucesso!' });
+  } catch (err) {
+    console.error('Erro na solicitação de saque:', err);
+    res.status(500).json({ erro: 'Falha ao processar solicitação de saque.' });
+  }
+});
+
+app.get('/api/admin/saques', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
+    }
+
+    const saques = await sql`
+      SELECT id, motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, solicitado_em, pago_em
+      FROM saques_motoristas
+      ORDER BY solicitado_em DESC
+      LIMIT 50;
+    `;
+    res.json(saques);
+  } catch (err) {
+    console.error('Erro ao listar saques:', err);
+    res.status(500).json({ erro: 'Falha ao listar saques.' });
+  }
+});
+
+app.put('/api/admin/saques/:id/processar', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
+    }
+
+    const { id } = req.params;
+    const { status, motivo } = req.body;
+
+    const saqueReg = await sql`SELECT * FROM saques_motoristas WHERE id = ${id} LIMIT 1;`;
+    if (saqueReg.length === 0) return res.status(404).json({ erro: 'Saque não localizado.' });
+
+    const saque = saqueReg[0];
+    if (saque.status !== 'pendente') {
+      return res.status(400).json({ erro: 'Este pedido já foi finalizado anteriormente.' });
+    }
+
+    if (status === 'pago') {
+      await sql`
+        UPDATE saques_motoristas
+        SET status = 'pago', pago_em = CURRENT_TIMESTAMP
+        WHERE id = ${id};
+      `;
+    } else if (status === 'recusado') {
+      await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira + ${saque.valor} WHERE id = ${saque.motorista_id};`;
+      await sql`
+        UPDATE saques_motoristas
+        SET status = 'recusado', motivo_recusa = ${motivo || 'Dados bancários inconsistentes'}
+        WHERE id = ${id};
+      `;
+    }
+
+    res.json({ sucesso: true, mensagem: `Saque marcado como ${status}.` });
+  } catch (err) {
+    console.error('Erro ao processar saque:', err);
+    res.status(500).json({ erro: 'Falha ao processar saque.' });
+  }
+});
+
+// ============================================================================
+// 6. PAINEL ADMINISTRATIVO, TRIAGEM, FROTAS & CSV
 // ============================================================================
 
 app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
@@ -739,10 +909,10 @@ app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
     `;
 
     const ultimasChamadas = await sql`
-      SELECT id, status, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
+      SELECT id, status, tipo, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
       FROM pedidos
       ORDER BY criado_em DESC
-      LIMIT 15;
+      LIMIT 20;
     `;
 
     res.json({
@@ -761,7 +931,7 @@ app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
   }
 });
 
-// Rota de listagem da frota de parceiros para o painel admin
+// Rota de listagem da frota de parceiros (com foto do veículo para preview)
 app.get('/api/admin/motoristas', autenticarToken, async (req, res) => {
   try {
     if (req.usuario.role !== 'admin') {
@@ -771,7 +941,7 @@ app.get('/api/admin/motoristas', autenticarToken, async (req, res) => {
     const motoristas = await sql`
       SELECT id, nome, email, telefone, cnh_numero AS cnh, 
              categoria AS categoria_veiculo, veiculo_modelo, veiculo_placa,
-             saldo_carteira, status_aprovacao, avaliacao_media, criado_em
+             doc_crlv_url, saldo_carteira, status_aprovacao, avaliacao_media, criado_em
       FROM motoristas
       ORDER BY criado_em DESC;
     `;
@@ -780,6 +950,72 @@ app.get('/api/admin/motoristas', autenticarToken, async (req, res) => {
   } catch (err) {
     console.error('Erro ao consultar motoristas:', err);
     res.status(500).json({ erro: 'Falha ao obter lista de parceiros.' });
+  }
+});
+
+// Triagem e moderação do parceiro (Aprovar / Recusar / Suspender)
+app.put('/api/admin/motoristas/:id/triagem', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
+    }
+
+    const { id } = req.params;
+    const { acao, motivo } = req.body;
+
+    if (!['aprovar', 'recusar'].includes(acao)) {
+      return res.status(400).json({ erro: 'Ação inválida. Utilize aprovar ou recusar.' });
+    }
+
+    const novoStatus = acao === 'aprovar' ? 'aprovado' : 'recusado';
+    const motivoRecusa = acao === 'recusar' ? (motivo || 'Documentação ou perfil em desacordo.') : null;
+
+    const mot = await sql`
+      UPDATE motoristas
+      SET status_aprovacao = ${novoStatus},
+          motivo_recusa = ${motivoRecusa}
+      WHERE id = ${id}
+      RETURNING id, nome, status_aprovacao, motivo_recusa;
+    `;
+
+    if (mot.length === 0) {
+      return res.status(404).json({ erro: 'Motorista não encontrado.' });
+    }
+
+    res.json({ sucesso: true, motorista: mot[0] });
+  } catch (err) {
+    console.error('Erro na triagem:', err);
+    res.status(500).json({ erro: 'Falha ao processar triagem.' });
+  }
+});
+
+// Exportação de Relatório Contábil em CSV
+app.get('/api/admin/relatorios/corridas.csv', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso negado: restrito à administração.' });
+    }
+
+    const registros = await sql`
+      SELECT id, criado_em, sub_tipo_label, distancia_km, valor_total,
+             ROUND(valor_total * 0.85, 2) AS repasse_motorista,
+             ROUND(valor_total * 0.15, 2) AS taxa_huby,
+             motorista_nome, status
+      FROM pedidos
+      ORDER BY criado_em DESC;
+    `;
+
+    let csv = 'ID;Data;Categoria;Distancia_KM;Valor_Bruto;Repasse_85;Taxa_15;Motorista;Status\n';
+    registros.forEach(r => {
+      csv += `"${r.id}";"${new Date(r.criado_em).toISOString()}";"${r.sub_tipo_label || ''}";"${r.distancia_km || 0}";"${r.valor_total || 0}";"${r.repasse_motorista || 0}";"${r.taxa_huby || 0}";"${r.motorista_nome || ''}";"${r.status || ''}"\n`;
+    });
+
+    res.header('Content-Type', 'text/csv; charset=utf-8');
+    res.attachment(`huby-relatorio-corridas-${Date.now()}.csv`);
+    return res.send(csv);
+  } catch (err) {
+    console.error('Erro ao gerar CSV:', err);
+    res.status(500).json({ erro: 'Falha ao gerar relatório.' });
   }
 });
 

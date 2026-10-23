@@ -3,10 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>HUBy • Centro Executivo de Operações</title>
+  <title>HUBy • Centro de Controlo Executivo Master</title>
   <link rel="stylesheet" href="./css/base.css">
-  
-  <!-- CHART.JS VIA CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- GUARDA DE ENTRADA EXECUTIVA (JWT / RBAC) -->
@@ -60,7 +58,7 @@
     }
 
     .admin-container {
-      max-width: 1240px;
+      max-width: 1260px;
       margin: 0 auto;
       padding: 24px 20px 80px;
     }
@@ -107,7 +105,8 @@
     .top-actions {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .btn-nav-glass {
@@ -138,14 +137,12 @@
       box-shadow: 0 4px 14px var(--emerald-glow);
     }
 
-    .btn-emerald:hover {
-      background: #059669;
-    }
+    .btn-emerald:hover { background: #059669; }
 
     /* GRID DE MÉTRICAS */
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
       gap: 16px;
       margin-bottom: 28px;
     }
@@ -184,7 +181,7 @@
     }
 
     .metric-val {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 900;
       letter-spacing: -0.5px;
       margin: 0 0 6px;
@@ -236,7 +233,7 @@
       height: 280px;
     }
 
-    /* TABELAS EXECUTIVAS */
+    /* CARDS DE SEÇÃO / TABELAS */
     .section-panel {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -260,6 +257,71 @@
       font-weight: 800;
       margin: 0;
       color: #FFF;
+    }
+
+    /* GESTÃO DE TARIFAS (INPUTS DINÂMICOS) */
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .price-cat-box {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .price-cat-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: #FFF;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .price-row-inputs {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+
+    .price-field label {
+      display: block;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+
+    .price-field input {
+      width: 100%;
+      background: #080B11;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 6px 8px;
+      color: #FFF;
+      font-size: 13px;
+      font-weight: 700;
+      box-sizing: border-box;
+    }
+
+    .peak-multiplier-box {
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
     }
 
     .table-responsive {
@@ -305,7 +367,7 @@
       letter-spacing: 0.5px;
     }
 
-    .badge-concluido, .badge-aprovado {
+    .badge-concluido, .badge-aprovado, .badge-pago {
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid rgba(16, 185, 129, 0.3);
       color: var(--emerald);
@@ -323,7 +385,6 @@
       color: var(--rose);
     }
 
-    /* BOTÕES DE CONTROLE RÁPIDO DO MOTORISTA */
     .btn-table-action {
       padding: 6px 12px;
       border-radius: 8px;
@@ -339,11 +400,7 @@
       color: var(--emerald);
       border: 1px solid rgba(16, 185, 129, 0.4);
     }
-
-    .btn-approve:hover {
-      background: var(--emerald);
-      color: #032017;
-    }
+    .btn-approve:hover { background: var(--emerald); color: #032017; }
 
     .btn-suspend {
       background: rgba(244, 63, 94, 0.15);
@@ -351,10 +408,38 @@
       border: 1px solid rgba(244, 63, 94, 0.3);
       margin-left: 6px;
     }
+    .btn-suspend:hover { background: var(--rose); color: #FFF; }
 
-    .btn-suspend:hover {
-      background: var(--rose);
-      color: #FFF;
+    /* MODAL DE FOTO DO VEÍCULO */
+    .modal-preview-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(10px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+
+    .modal-preview-card {
+      background: #0F1422;
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      max-width: 500px;
+      width: 100%;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .modal-preview-img {
+      width: 100%;
+      max-height: 350px;
+      object-fit: cover;
+      border-radius: 12px;
+      margin: 14px 0;
+      border: 1px solid var(--card-border);
     }
   </style>
 </head>
@@ -362,17 +447,18 @@
 
   <div class="admin-container">
     
-    <!-- CABEÇALHO SUPERIOR -->
+    <!-- TOPO DE COMANDO -->
     <header class="top-header">
       <div class="brand-title">
         <div class="brand-logo">HUB<span>y</span></div>
-        <span class="tag-adm">Controle Executivo Master</span>
+        <span class="tag-adm">Controlo Executivo Mestre</span>
       </div>
 
       <div class="top-actions">
         <a href="./index.html" class="btn-nav-glass">← Voltar ao App</a>
+        <button id="btnExportarCsv" class="btn-nav-glass">📊 Exportar CSV</button>
         <button id="btnSincronizar" class="btn-nav-glass btn-emerald">
-          <span>🔄 Atualizar Dashboard</span>
+          <span>🔄 Atualizar Dados</span>
         </button>
       </div>
     </header>
@@ -386,40 +472,38 @@
       </div>
 
       <div class="metric-card cyan">
-        <div class="metric-tag">Receita HUBy (Taxa 15%)</div>
+        <div class="metric-tag">Receita HUBy (15%)</div>
         <div class="metric-val" id="metricLiquido" style="color: var(--cyan);">R$ 0,00</div>
-        <div class="metric-sub">Retenção de lucro da plataforma</div>
+        <div class="metric-sub">Retenção líquida da plataforma</div>
       </div>
 
       <div class="metric-card amber">
-        <div class="metric-tag">Repasse Parceiros (85%)</div>
+        <div class="metric-tag">Repasse Motoristas (85%)</div>
         <div class="metric-val" id="metricRepasse" style="color: var(--amber);">R$ 0,00</div>
-        <div class="metric-sub">Líquido destinado aos condutores</div>
+        <div class="metric-sub">Ganhos destinados aos condutores</div>
       </div>
 
       <div class="metric-card purple">
-        <div class="metric-tag">Operação em Aberto</div>
+        <div class="metric-tag">Corridas no Radar</div>
         <div class="metric-val" id="metricRadar" style="color: var(--purple);">0</div>
-        <div class="metric-sub">Chamadas ativas no radar</div>
+        <div class="metric-sub">Chamadas pendentes ativas</div>
       </div>
     </section>
 
-    <!-- ÁREA DE GRÁFICOS INTERATIVOS CHART.JS -->
+    <!-- GRÁFICOS INTERATIVOS -->
     <section class="charts-grid">
-      <!-- GRÁFICO 1: EVOLUÇÃO FINANCEIRA -->
       <div class="chart-panel">
         <div class="chart-panel-header">
-          <h3>Evolução Financeira (Bruto vs HUBy 15%)</h3>
+          <h3>Balanço Financeiro Global</h3>
         </div>
         <div class="chart-container-box">
           <canvas id="chartFinanceiro"></canvas>
         </div>
       </div>
 
-      <!-- GRÁFICO 2: DISTRIBUIÇÃO POR CATEGORIA -->
       <div class="chart-panel">
         <div class="chart-panel-header">
-          <h3>Corridas por Categoria</h3>
+          <h3>Modalidades Atendidas</h3>
         </div>
         <div class="chart-container-box">
           <canvas id="chartCategorias"></canvas>
@@ -427,58 +511,206 @@
       </div>
     </section>
 
-    <!-- SEÇÃO DE GESTÃO E APROVAÇÃO DA FROTA -->
+    <!-- 1. GESTÃO DINÂMICA DE TARIFAS -->
     <section class="section-panel">
       <div class="panel-header-row">
-        <h3>Gestão da Frota de Motoristas Parceiros</h3>
+        <div>
+          <h3>Gestão Dinâmica de Tarifas</h3>
+          <small style="color: var(--text-sec);">Altere as tarifas em tempo real sem mexer no código-fonte</small>
+        </div>
+        <button id="btnSalvarTarifas" class="btn-nav-glass btn-emerald">💾 Gravar Tarifas</button>
+      </div>
+
+      <div class="pricing-grid">
+        <!-- Carro -->
+        <div class="price-cat-box">
+          <div class="price-cat-title">🚗 HUBy Carro</div>
+          <div class="price-row-inputs">
+            <div class="price-field">
+              <label>Base (R$)</label>
+              <input type="number" step="0.5" id="tarifa_carro_base" value="6.5">
+            </div>
+            <div class="price-field">
+              <label>Por Km (R$)</label>
+              <input type="number" step="0.1" id="tarifa_carro_km" value="2.2">
+            </div>
+            <div class="price-field">
+              <label>Mínimo (R$)</label>
+              <input type="number" step="1" id="tarifa_carro_min" value="10">
+            </div>
+          </div>
+        </div>
+
+        <!-- Moto -->
+        <div class="price-cat-box">
+          <div class="price-cat-title">🏍️ HUBy Moto</div>
+          <div class="price-row-inputs">
+            <div class="price-field">
+              <label>Base (R$)</label>
+              <input type="number" step="0.5" id="tarifa_moto_base" value="4.0">
+            </div>
+            <div class="price-field">
+              <label>Por Km (R$)</label>
+              <input type="number" step="0.1" id="tarifa_moto_km" value="1.5">
+            </div>
+            <div class="price-field">
+              <label>Mínimo (R$)</label>
+              <input type="number" step="1" id="tarifa_moto_min" value="7">
+            </div>
+          </div>
+        </div>
+
+        <!-- Flash -->
+        <div class="price-cat-box">
+          <div class="price-cat-title">⚡ Flash Moto (Entregas)</div>
+          <div class="price-row-inputs">
+            <div class="price-field">
+              <label>Base (R$)</label>
+              <input type="number" step="0.5" id="tarifa_flash_base" value="5.0">
+            </div>
+            <div class="price-field">
+              <label>Por Km (R$)</label>
+              <input type="number" step="0.1" id="tarifa_flash_km" value="1.8">
+            </div>
+            <div class="price-field">
+              <label>Mínimo (R$)</label>
+              <input type="number" step="1" id="tarifa_flash_min" value="8">
+            </div>
+          </div>
+        </div>
+
+        <!-- Frete -->
+        <div class="price-cat-box">
+          <div class="price-cat-title">📦 Frete & Pickups</div>
+          <div class="price-row-inputs">
+            <div class="price-field">
+              <label>Base (R$)</label>
+              <input type="number" step="1" id="tarifa_cargo_base" value="35.0">
+            </div>
+            <div class="price-field">
+              <label>Por Km (R$)</label>
+              <input type="number" step="0.5" id="tarifa_cargo_km" value="4.5">
+            </div>
+            <div class="price-field">
+              <label>Mínimo (R$)</label>
+              <input type="number" step="1" id="tarifa_cargo_min" value="45">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tarifa Dinâmica / Chuva / Pico -->
+      <div class="peak-multiplier-box">
+        <div>
+          <strong style="color: #F59E0B;">⚡ Multiplicador de Horário de Pico / Chuva</strong>
+          <p style="margin: 4px 0 0; font-size: 12px; color: var(--text-sec);">
+            Multiplica todas as corridas na cidade automaticamente (1.0 = Normal, 1.3 = +30%, 1.5 = +50%).
+          </p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="number" step="0.1" min="1.0" max="3.0" id="tarifa_multiplicador" value="1.0" style="width: 80px; background: #080B11; border: 1px solid var(--card-border); color: #FFF; padding: 8px; border-radius: 8px; font-weight: 800; text-align: center;">
+          <button id="btnAplicarPico" class="btn-nav-glass btn-emerald" style="padding: 8px 14px;">Aplicar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. SOLICITAÇÕES DE SAQUE PIX (LIQUIDAÇÃO) -->
+    <section class="section-panel">
+      <div class="panel-header-row">
+        <div>
+          <h3>Solicitações de Saque Pix dos Condutores</h3>
+          <small style="color: var(--text-sec);">Repasse líquido de 85% solicitado pelos parceiros</small>
+        </div>
       </div>
 
       <div class="table-responsive">
         <table>
           <thead>
             <tr>
-              <th>Parceiro</th>
-              <th>CNH Registrada</th>
-              <th>Veículo & Placa</th>
-              <th>Modalidade</th>
-              <th>Saldo em Carteira</th>
-              <th>Status Atual</th>
-              <th>Ação Imediata</th>
+              <th>ID</th>
+              <th>Condutor</th>
+              <th>Chave Pix</th>
+              <th>Valor Solicitado</th>
+              <th>Data</th>
+              <th>Status</th>
+              <th>Ações</th>
             </tr>
           </thead>
-          <tbody id="tabelaFrotaBody">
-            <tr><td colspan="7" style="text-align: center; color: var(--text-sec);">Carregando parceiros cadastrados...</td></tr>
+          <tbody id="tabelaSaquesBody">
+            <tr><td colspan="7" style="text-align: center; color: var(--text-sec);">A carregar pedidos de saque...</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- SEÇÃO DE MONITORAMENTO DE CORRIDAS RECENTES -->
+    <!-- 3. GESTÃO E APROVAÇÃO DA FROTA -->
     <section class="section-panel">
       <div class="panel-header-row">
-        <h3>Monitoramento de Corridas em Tempo Real</h3>
+        <div>
+          <h3>Frota de Condutores Parceiros</h3>
+          <small style="color: var(--text-sec);">Validação de documentos, fotos e suspensão imediata</small>
+        </div>
       </div>
 
       <div class="table-responsive">
         <table>
           <thead>
             <tr>
-              <th>ID da Corrida</th>
+              <th>Condutor</th>
+              <th>Documento CNH</th>
+              <th>Veículo & Placa</th>
               <th>Categoria</th>
-              <th>Distância Estimada</th>
-              <th>Valor Total</th>
+              <th>Saldo em Carteira</th>
+              <th>Status</th>
+              <th>Foto do Veículo</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaFrotaBody">
+            <tr><td colspan="8" style="text-align: center; color: var(--text-sec);">A carregar parceiros...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 4. MONITORAMENTO EM TEMPO REAL -->
+    <section class="section-panel">
+      <div class="panel-header-row">
+        <div>
+          <h3>Monitoramento Operacional de Viagens</h3>
+          <small style="color: var(--text-sec);">Últimas corridas solicitadas e finalizadas</small>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>ID Pedido</th>
+              <th>Categoria</th>
+              <th>Distância</th>
+              <th>Valor Bruto</th>
               <th>Taxa 15%</th>
-              <th>Condutor Atribuído</th>
+              <th>Condutor</th>
               <th>Status</th>
             </tr>
           </thead>
           <tbody id="tabelaCorridasBody">
-            <tr><td colspan="7" style="text-align: center; color: var(--text-sec);">Consultando últimas chamadas...</td></tr>
+            <tr><td colspan="7" style="text-align: center; color: var(--text-sec);">A consultar viagens...</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
+  </div>
+
+  <!-- MODAL DE VISUALIZAÇÃO DE FOTO DO VEÍCULO -->
+  <div id="modalPreviewFoto" class="modal-preview-backdrop">
+    <div class="modal-preview-card">
+      <h3 style="margin: 0; color: #FFF;">Comprovativo de Veículo</h3>
+      <img id="imgPreviewVeiculo" class="modal-preview-img" src="" alt="Veículo">
+      <button type="button" id="btnFecharModalPreview" class="btn-nav-glass" style="width: 100%;">Fechar</button>
+    </div>
   </div>
 
   <script type="module" src="./js/admin.js"></script>
