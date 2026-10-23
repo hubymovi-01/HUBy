@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * OpenStreetMap 100% Livre de Chaves + GPS Real com Centralização Automática
+ * OpenStreetMap + GPS Real Progressivo (Imediato por Rede + Satélite de Alta Precisão)
  * ============================================================================
  */
 
@@ -13,7 +13,7 @@ export class HubyMapa {
     this.circlePrecisao = null;
     this.markerDestino = null;
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460]; // Ponto de contingência caso não haja conexão
+    this.coordsOrigem = [-8.3580, -42.2460]; // Ponto de contingência estrito
     this.coordsDestino = null;
     this.watchId = null;
     this.onClickDestinoCallback = null;
@@ -65,7 +65,7 @@ export class HubyMapa {
       });
     }
 
-    // Busca imediata da posição verdadeira
+    // Dispara a busca real de localização imediatamente
     this.obterGPSReal();
   }
 
@@ -83,9 +83,9 @@ export class HubyMapa {
     const icon = L.divIcon({
       className: 'huby-pin-origem',
       html: `
-        <div style="position:relative;width:22px;height:22px;">
+        <div style="position:relative;width:24px;height:24px;">
           <div style="position:absolute;inset:0;background:#10B981;border-radius:50%;opacity:0.4;animation:hubyPulse 1.8s infinite ease-out;"></div>
-          <div style="position:absolute;inset:4px;background:#10B981;border:2.5px solid #FFFFFF;border-radius:50%;box-shadow:0 0 12px rgba(16,185,129,0.9);"></div>
+          <div style="position:absolute;inset:4px;background:#10B981;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 0 14px rgba(16,185,129,0.9);"></div>
         </div>
         <style>
           @keyframes hubyPulse {
@@ -95,8 +95,8 @@ export class HubyMapa {
           }
         </style>
       `,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
     });
 
     if (this.markerOrigem) {
@@ -137,79 +137,63 @@ export class HubyMapa {
     }
   }
 
-  // Captura direta com fallback automático caso o GPS do satélite demore
-  async obterGPSReal(callbackSucesso) {
-    const aplicarCoordenadas = (lat, lng, precisao = null) => {
-      this.definirOrigem(lat, lng, precisao);
-      if (this.map) {
-        this.map.setView([lat, lng], 17);
-        this.invalidarTamanho();
-      }
-      this.jaCentralizouGPS = true;
-      if (callbackSucesso) callbackSucesso({ lat, lng });
-    };
-
-    // Fallback rápido via rede se o GPS nativo falhar ou demorar
-    const fallbackRede = async () => {
-      if (this.jaCentralizouGPS) return;
-      try {
-        const resp = await fetch('https://ipapi.co/json/');
-        const dados = await resp.json();
-        if (dados && dados.latitude && dados.longitude && !this.jaCentralizouGPS) {
-          aplicarCoordenadas(dados.latitude, dados.longitude, 200);
-        }
-      } catch (e) {
-        console.warn('Fallback IP indisponível:', e);
-      }
-    };
-
+  // Captura progressiva: primeiro instantânea por rede, depois satélite preciso
+  obterGPSReal(callbackSucesso) {
     if (!('geolocation' in navigator)) {
-      await fallbackRede();
+      alert('Geolocalização não é suportada pelo seu dispositivo.');
       return;
     }
 
-    const timerFallback = setTimeout(fallbackRede, 4000);
+    const aplicarPosicao = (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      this.coordsOrigem = [latitude, longitude];
+      this.definirOrigem(latitude, longitude, accuracy);
 
-    const opcoesGPS = {
-      enableHighAccuracy: true,
-      timeout: 8000,
-      maximumAge: 0
+      if (this.map) {
+        this.map.flyTo([latitude, longitude], 17, { duration: 1.2 });
+        this.invalidarTamanho();
+      }
+
+      this.jaCentralizouGPS = true;
+      if (callbackSucesso) callbackSucesso({ lat: latitude, lng: longitude });
     };
 
+    // 1. Passo Rápido: Pega localização imediata por torres de celular / Wi-Fi
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        clearTimeout(timerFallback);
-        aplicarCoordenadas(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy);
+      aplicarPosicao,
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          alert('Localização desativada ou bloqueada. Toque no cadeado junto ao link do site e autorize o acesso à sua Localização.');
+        } else {
+          console.warn('Tentativa 1 (Rede) falhou, aguardando satélite...', err.message);
+        }
       },
-      async (err) => {
-        console.warn('GPS primário falhou, acionando fallback:', err.message);
-        await fallbackRede();
-      },
-      opcoesGPS
+      { enableHighAccuracy: false, timeout: 6000, maximumAge: 10000 }
     );
 
-    // Mantém o satélite acompanhando para refinar para o metro exato
+    // 2. Passo Contínuo: Calibra com o chip GPS do satélite e refina a coordenada exata
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
 
     this.watchId = navigator.geolocation.watchPosition(
       async (pos) => {
-        clearTimeout(timerFallback);
         const { latitude, longitude, accuracy } = pos.coords;
 
         this.definirOrigem(latitude, longitude, accuracy);
 
+        // Se ainda não moveu o mapa para você, move agora
         if (!this.jaCentralizouGPS && this.map) {
           this.map.flyTo([latitude, longitude], 17, { duration: 1.0 });
           this.jaCentralizouGPS = true;
         }
 
+        // Recalcula rota se já escolheu o destino
         if (this.coordsDestino && this.onClickDestinoCallback) {
           const rota = await this.calcularRota([latitude, longitude], this.coordsDestino);
           this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
         }
       },
-      (err) => console.warn('Acompanhamento GPS contínuo:', err.message),
-      opcoesGPS
+      (err) => console.warn('Monitoramento contínuo GPS:', err.message),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
 
