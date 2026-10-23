@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * OpenStreetMap + Localização Real Obrigatória com Fallback e Diagnóstico
+ * OpenStreetMap + Localizador Nativo Mobile do Leaflet
  * ============================================================================
  */
 
@@ -13,11 +13,10 @@ export class HubyMapa {
     this.circlePrecisao = null;
     this.markerDestino = null;
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460]; // Ponto de contingência se o GPS falhar
+    this.coordsOrigem = [-8.3580, -42.2460];
     this.coordsDestino = null;
-    this.watchId = null;
     this.onClickDestinoCallback = null;
-    this.jaCentralizouGPS = false;
+    this.localizacaoEncontrada = false;
   }
 
   inicializar(onClickDestino = null) {
@@ -26,14 +25,15 @@ export class HubyMapa {
     if (!container) return;
 
     if (this.map) {
-      if (this.watchId !== null) navigator.geolocation?.clearWatch(this.watchId);
+      this.map.stopLocate();
       this.map.remove();
       this.map = null;
     }
 
-    this.jaCentralizouGPS = false;
+    this.localizacaoEncontrada = false;
     this.onClickDestinoCallback = onClickDestino;
 
+    // Inicializa o mapa
     this.map = L.map(this.containerId, {
       zoomControl: false,
       attributionControl: false
@@ -55,6 +55,39 @@ export class HubyMapa {
 
     this.invalidarTamanho();
     setTimeout(() => this.invalidarTamanho(), 200);
+    setTimeout(() => this.invalidarTamanho(), 600);
+
+    // Eventos nativos de geolocalização do Leaflet para mobile
+    this.map.on('locationfound', (e) => {
+      const lat = e.latlng.lat;
+      const lng = e.latlng.lng;
+      const radius = e.accuracy;
+
+      this.coordsOrigem = [lat, lng];
+      this.definirOrigem(lat, lng, radius);
+
+      if (!this.localizacaoEncontrada) {
+        this.map.setView([lat, lng], 17);
+        this.localizacaoEncontrada = true;
+      }
+
+      if (this.coordsDestino && this.onClickDestinoCallback) {
+        this.calcularRota([lat, lng], this.coordsDestino).then((rota) => {
+          this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
+        });
+      }
+    });
+
+    this.map.on('locationerror', (e) => {
+      console.warn('Leaflet locate erro:', e.message);
+      // Tentativa direta sem forçar satélite
+      navigator.geolocation?.getCurrentPosition((pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        this.coordsOrigem = [latitude, longitude];
+        this.definirOrigem(latitude, longitude, accuracy);
+        this.map.setView([latitude, longitude], 17);
+      }, null, { enableHighAccuracy: false, timeout: 10000 });
+    });
 
     if (onClickDestino) {
       this.map.on('click', async (e) => {
@@ -65,8 +98,8 @@ export class HubyMapa {
       });
     }
 
-    // Solicita a localização real imediatamente
-    this.obterGPSReal();
+    // Ativa o rastreador mobile contínuo do Leaflet
+    this.obterGPS();
   }
 
   invalidarTamanho() {
@@ -135,66 +168,21 @@ export class HubyMapa {
     }
   }
 
- obterGPSReal(callbackSucesso) {
-    if (!('geolocation' in navigator)) {
-      alert('Geolocalização não suportada neste dispositivo.');
-      return;
-    }
-
-    const aplicarPosicao = (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      const precisao = pos.coords.accuracy;
-
-      this.coordsOrigem = [lat, lng];
-      this.definirOrigem(lat, lng, precisao);
-
-      if (this.map) {
-        // Voa a câmera diretamente para onde o celular está
-        this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.2 });
-        this.invalidarTamanho();
-      }
-
-      this.jaCentralizouGPS = true;
-      if (callbackSucesso) callbackSucesso({ lat, lng });
-    };
-
-    const tratarErro = (err) => {
-      console.warn('Tentativa GPS primária falhou no celular:', err.message);
-      
-      // Fallback para celular com sinal fraco de satélite (usa antenas 4G/Wi-Fi)
-      navigator.geolocation.getCurrentPosition(
-        aplicarPosicao,
-        (err2) => {
-          console.warn('GPS fallback também falhou:', err2.message);
-          if (err.code === 1) {
-            alert('Atenção: A permissão de localização precisa está desativada no seu celular para este site.');
-          }
-        },
-        { enableHighAccuracy: false, timeout: 10000, maximumAge: 0 }
-      );
-    };
-
-    // No celular, chamamos o watchPosition direto com alta precisão
-    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
-
-    this.watchId = navigator.geolocation.watchPosition(
-      aplicarPosicao,
-      tratarErro,
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
-    );
-
-    // Disparo imediato para não esperar o primeiro ciclo do satélite
-    navigator.geolocation.getCurrentPosition(
-      aplicarPosicao,
-      tratarErro,
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
-  }
-  
   obterGPS(callbackSucesso) {
-    this.jaCentralizouGPS = false;
-    this.obterGPSReal(callbackSucesso);
+    if (!this.map) return;
+
+    // Dispara o localizador oficial otimizado do Leaflet para Mobile
+    this.map.locate({
+      setView: true,
+      maxZoom: 17,
+      watch: true,
+      enableHighAccuracy: true,
+      timeout: 10000
+    });
+
+    if (callbackSucesso && this.localizacaoEncontrada) {
+      callbackSucesso({ lat: this.coordsOrigem[0], lng: this.coordsOrigem[1] });
+    }
   }
 
   async buscarEndereco(texto) {
