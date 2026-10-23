@@ -14,15 +14,15 @@
   <main class="auth-container">
     <div class="auth-card">
       
-      <!-- TOPO / MARCA -->
+      <!-- CABEÇALHO DA MARCA -->
       <header class="auth-header">
-        <div class="auth-badge">Plataforma de Mobilidade Segura</div>
+        <div class="auth-badge" id="badgeCadastro">Plataforma de Mobilidade Segura</div>
         <h1 class="auth-brand">HUB<span>y</span></h1>
         <p id="txtSubtitulo" class="auth-desc">Crie a sua conta para solicitar viagens instantâneas</p>
       </header>
 
-      <!-- SELETOR DE PERFIL: PASSAGEIRO VS MOTORISTA -->
-      <div class="role-selector">
+      <!-- SELETOR DE PERFIL (PASSAGEIRO VS MOTORISTA) -->
+      <div class="role-selector" id="roleSelectorContainer">
         <button type="button" id="btnRoleCliente" class="btn-role active">
           <span class="role-icon">👤</span>
           <span class="role-name">Passageiro</span>
@@ -188,14 +188,34 @@
         </button>
       </form>
 
+      <!-- NAVEGAÇÃO DE RODAPÉ -->
       <footer class="auth-footer-nav">
         <span>Já tem registo efetuado?</span>
-        <a href="./login.html">Iniciar sessão</a>
+        <a href="./login.html" id="linkLoginDireto">Iniciar sessão</a>
       </footer>
+
+      <div style="text-align: center; margin-top: 14px; display: flex; justify-content: center; gap: 15px;">
+        <a href="./welcome.html" style="color: var(--text-dim); text-decoration: none; font-size: 12px; font-weight: 700;">
+          ← Mudar Perfil
+        </a>
+        <span style="color: var(--border-steel);">•</span>
+        <a href="./index.html" style="color: var(--text-dim); text-decoration: none; font-size: 12px; font-weight: 700;">
+          Mapa
+        </a>
+      </div>
 
     </div>
   </main>
 
+  <script type="module">
+    // Ajuste imediato do link de login com o perfil da URL
+    const params = new URLSearchParams(window.location.search);
+    const perfil = params.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
+    const linkLogin = document.getElementById('linkLoginDireto');
+    if (linkLogin) {
+      linkLogin.href = `./login.html?perfil=${perfil}`;
+    }
+  </script>
   <script type="module" src="./js/auth.js"></script>
 </body>
 </html>

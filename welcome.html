@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Bem-vindo ao HUBy</title>
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/auth.css">
+  <style>
+    .onboarding-slider {
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+    }
+
+    .onboarding-step {
+      display: none;
+      animation: fadeIn 0.3s ease forwards;
+    }
+
+    .onboarding-step.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .role-selection-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .card-choice {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 18px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: left;
+    }
+
+    .card-choice:hover,
+    .card-choice:active {
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.08);
+      transform: scale(0.99);
+    }
+
+    .card-choice-icon {
+      width: 52px;
+      height: 52px;
+      background: #151D2C;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      flex-shrink: 0;
+    }
+
+    .card-choice-info h3 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      color: #FFF;
+    }
+
+    .card-choice-info p {
+      margin: 4px 0 0;
+      font-size: 12px;
+      color: #94A3B8;
+      line-height: 1.35;
+    }
+
+    .indicator-dots {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.2);
+      transition: all 0.3s ease;
+    }
+
+    .dot.active {
+      width: 24px;
+      background: #10B981;
+    }
+  </style>
+</head>
+<body class="auth-body">
+
+  <div class="auth-ambient-glow"></div>
+
+  <main class="auth-container">
+    <div class="auth-card">
+
+      <!-- PASSO 1: APRESENTAÇÃO INICIAL -->
+      <section id="step1" class="onboarding-step active">
+        <header class="auth-header">
+          <div class="auth-badge">Mobilidade Inteligente</div>
+          <h1 class="auth-brand">HUB<span>y</span></h1>
+          <p class="auth-desc" style="font-size: 14px; line-height: 1.4; margin-top: 10px;">
+            A sua plataforma integrada para viagens diárias, entregas rápidas e fretes com máxima conveniência e segurança.
+          </p>
+        </header>
+
+        <div style="text-align: center; margin: 26px 0;">
+          <div style="font-size: 64px; margin-bottom: 10px;">🏙️⚡</div>
+          <p style="color: #64748B; font-size: 13px; margin: 0;">Prático, moderno e transparente.</p>
+        </div>
+
+        <button type="button" id="btnAvancar" class="btn-primary-action">
+          <span>Começar Agora →</span>
+        </button>
+
+        <div class="indicator-dots">
+          <div class="dot active"></div>
+          <div class="dot"></div>
+        </div>
+      </section>
+
+      <!-- PASSO 2: ESCOLHA DO PERFIL -->
+      <section id="step2" class="onboarding-step">
+        <header class="auth-header">
+          <div class="auth-badge">Personalização</div>
+          <h2 style="font-size: 24px; font-weight: 900; margin: 6px 0 0; color: #FFF;">Como quer usar o HUBy?</h2>
+          <p class="auth-desc">Selecione o seu objetivo para continuar</p>
+        </header>
+
+        <div class="role-selection-grid">
+          <!-- OPÇÃO PASSAGEIRO -->
+          <div class="card-choice" id="escolhaPassageiro">
+            <div class="card-choice-icon">👤</div>
+            <div class="card-choice-info">
+              <h3>Sou Passageiro</h3>
+              <p>Viagens rápidas, entregas no próprio dia e transporte seguro na palma da mão.</p>
+            </div>
+          </div>
+
+          <!-- OPÇÃO MOTORISTA PARCEIRO -->
+          <div class="card-choice" id="escolhaMotorista">
+            <div class="card-choice-icon">🚘</div>
+            <div class="card-choice-info">
+              <h3>Quero ser Motorista Parceiro</h3>
+              <p>Conduza no seu próprio ritmo, conquiste a sua independência e faça parte da nossa rede de parceiros.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 12px;">
+          <button type="button" id="btnVoltarStep1" style="background: none; border: none; color: #64748B; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 12px;">
+            ← Voltar
+          </button>
+        </div>
+
+        <div class="indicator-dots">
+          <div class="dot"></div>
+          <div class="dot active"></div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    const step1 = document.getElementById('step1');
+    const step2 = document.getElementById('step2');
+    const btnAvancar = document.getElementById('btnAvancar');
+    const btnVoltar = document.getElementById('btnVoltarStep1');
+    const escolhaPassageiro = document.getElementById('escolhaPassageiro');
+    const escolhaMotorista = document.getElementById('escolhaMotorista');
+
+    // Se o utilizador já tiver sessão iniciada, redireciona de imediato
+    const token = localStorage.getItem('huby_token');
+    const role = localStorage.getItem('huby_user_role');
+    if (token) {
+      if (role === 'motorista') {
+        window.location.replace('./motorista.html');
+      } else {
+        window.location.replace('./index.html');
+      }
+    }
+
+    btnAvancar.onclick = () => {
+      step1.classList.remove('active');
+      step2.classList.add('active');
+    };
+
+    btnVoltar.onclick = () => {
+      step2.classList.remove('active');
+      step1.classList.add('active');
+    };
+
+    escolhaPassageiro.onclick = () => {
+      localStorage.setItem('huby_tipo_acesso', 'cliente');
+      window.location.href = './login.html?perfil=cliente';
+    };
+
+    escolhaMotorista.onclick = () => {
+      localStorage.setItem('huby_tipo_acesso', 'motorista');
+      window.location.href = './login.html?perfil=motorista';
+    };
+  </script>
+</body>
+</html>

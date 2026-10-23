@@ -6,7 +6,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <!-- Ligação do PWA Manifest e Cor de Tema da Barra do Telemóvel -->
+  <!-- PWA Manifest e Configurações Mobile -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0B0F19">
   <meta name="mobile-web-app-capable" content="yes">
@@ -22,34 +22,59 @@
   <link rel="stylesheet" href="./css/cliente.css?v=2.0.2">
 
   <style>
-    /* DESAPARECIMENTO 100% GARANTIDO POR CSS PURO (Sem depender de scripts) */
+    /* DESAPARECIMENTO GARANTIDO DA SPLASH */
     #hubySplash {
       animation: encerrarSplashHUBy 0.4s ease 1.2s forwards !important;
     }
 
     @keyframes encerrarSplashHUBy {
-      0% {
-        opacity: 1;
-        visibility: visible;
-        pointer-events: all;
-      }
-      99% {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-      }
-      100% {
-        opacity: 0;
-        visibility: hidden;
-        display: none !important;
-        pointer-events: none;
-      }
+      0% { opacity: 1; visibility: visible; pointer-events: all; }
+      99% { opacity: 0; visibility: hidden; pointer-events: none; }
+      100% { opacity: 0; visibility: hidden; display: none !important; pointer-events: none; }
+    }
+
+    /* BOTÃO FLUTUANTE DE EMERGÊNCIA / SOS */
+    .btn-floating-sos {
+      position: absolute;
+      bottom: 235px;
+      right: 18px;
+      width: 44px;
+      height: 44px;
+      background: rgba(17, 24, 39, 0.9);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      border-radius: 50%;
+      color: #EF4444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+      z-index: 800;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    }
+    .btn-floating-sos:active {
+      transform: scale(0.92);
+      border-color: #EF4444;
+      background: rgba(239, 68, 68, 0.15);
     }
   </style>
+
+  <!-- VERIFICAÇÃO DE PRIMEIRO ACESSO / ONBOARDING -->
+  <script>
+    (function() {
+      const token = localStorage.getItem('huby_token');
+      const perfilEscolhido = localStorage.getItem('huby_tipo_acesso');
+      // Se não está logado e nunca passou pela tela de boas-vindas, vai para o welcome
+      if (!token && !perfilEscolhido) {
+        window.location.replace('./welcome.html');
+      }
+    })();
+  </script>
 </head>
 <body class="client-viewport">
 
-  <!-- 1. SPLASH SCREEN COM AUTO-FECHAMENTO NATIVO E TOQUE DE ESCAPE -->
+  <!-- 1. SPLASH SCREEN NATIVA -->
   <div id="hubySplash" class="splash-screen" onclick="this.style.display='none'">
     <div class="splash-content">
       <div class="splash-logo">
@@ -60,7 +85,6 @@
     </div>
   </div>
 
-  <!-- SCRIPT DE SEGURANÇA IMEDIATO EM LINHA -->
   <script>
     (function() {
       function fecharSplashSeguro() {
@@ -79,7 +103,7 @@
   <!-- 2. MAPA LEAFLET -->
   <div id="mapaCliente"></div>
 
-  <!-- 3. BARRA SUPERIOR FLUTUANTE COM BOTÃO DO MENU -->
+  <!-- 3. BARRA SUPERIOR FLUTUANTE -->
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
       <span></span>
@@ -121,7 +145,14 @@
         <span class="d-icon">💳</span>
         <div class="d-info">
           <strong>Formas de Pagamento</strong>
-          <small>Pix, Cartão e Saldo</small>
+          <small>Pix, Cartão e Dinheiro</small>
+        </div>
+      </a>
+      <a href="#" id="menuItemSeguranca" class="drawer-item">
+        <span class="d-icon">🛡️</span>
+        <div class="d-info">
+          <strong>Contato de Segurança</strong>
+          <small>Compartilhar trajeto e emergência</small>
         </div>
       </a>
       <a href="./motorista.html" class="drawer-item highlight-driver">
@@ -147,7 +178,14 @@
     </div>
   </aside>
 
-  <!-- 5. BOTÃO GPS FLUTUANTE -->
+  <!-- 5. BOTÃO FLUTUANTE DE SEGURANÇA (SOS / COMPARTILHAR) -->
+  <button type="button" id="btnSOSRapido" class="btn-floating-sos" aria-label="Segurança e Emergência" title="Segurança da Viagem">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+    </svg>
+  </button>
+
+  <!-- 6. BOTÃO GPS FLUTUANTE -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
@@ -158,7 +196,7 @@
     </svg>
   </button>
 
-  <!-- 6. DOCK INFERIOR (BOTTOM SHEET) -->
+  <!-- 7. DOCK INFERIOR (BOTTOM SHEET) -->
   <section class="client-dock-sheet">
     <div class="sheet-drag-handle"></div>
 
@@ -212,6 +250,33 @@
     </button>
   </section>
 
+  <!-- MODAL DE CONTATO DE SEGURANÇA / SOS -->
+  <div id="modalSeguranca" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <div class="modal-header-row">
+        <h3>Segurança na Viagem</h3>
+        <button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
+      </div>
+
+      <div style="text-align: left; margin: 12px 0;">
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">
+          Seu contato de confiança recebe sua rota em tempo real e pode acompanhar seu deslocamento.
+        </p>
+
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+          <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">
+            Nenhum contato cadastrado
+          </div>
+        </div>
+
+        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          <span>📲 Compartilhar Rota no WhatsApp</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL DE HISTÓRICO DE VIAGENS -->
   <div id="modalHistorico" class="modal-backdrop" style="display: none;">
     <div class="modal-card modal-wide">
@@ -253,7 +318,6 @@
       </div>
 
       <div class="payment-methods-list">
-        <!-- Método Pix -->
         <div class="payment-method-card active-method">
           <div class="method-header">
             <span class="m-icon">💠</span>
@@ -265,7 +329,6 @@
           <span class="badge-active">Padrão</span>
         </div>
 
-        <!-- Método Dinheiro / Maquininha -->
         <div class="payment-method-card">
           <div class="method-header">
             <span class="m-icon">💵</span>
@@ -277,7 +340,6 @@
         </div>
       </div>
 
-      <!-- Área de Saldo e Recarga -->
       <div class="pix-charge-box">
         <span class="charge-title">Chave Pix HUBy para recarga rápida:</span>
         <div class="pix-key-row">
@@ -291,5 +353,46 @@
   <!-- Scripts -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/app-cliente.js?v=2.0.2"></script>
+  
+  <!-- Script de Acionamento da Modal de Segurança -->
+  <script type="module">
+    const modalSeg = document.getElementById('modalSeguranca');
+    const btnSOS = document.getElementById('btnSOSRapido');
+    const btnMenuSeg = document.getElementById('menuItemSeguranca');
+    const btnFecharSeg = document.getElementById('btnFecharSeguranca');
+    const infoContato = document.getElementById('infoContatoSeguranca');
+    const btnZap = document.getElementById('btnCompartilharRotaZap');
+
+    function abrirModalSeguranca() {
+      const nomeEmergencia = localStorage.getItem('huby_emergencia_nome') || 'Não informado';
+      const telEmergencia = localStorage.getItem('huby_emergencia_tel') || '';
+
+      if (infoContato) {
+        infoContato.innerHTML = telEmergencia 
+          ? `<strong>${nomeEmergencia}</strong><br><span style="font-size: 13px; color: #10B981;">${telEmergencia}</span>`
+          : 'Nenhum contato registrado. Atualize seu cadastro.';
+      }
+
+      if (modalSeg) modalSeg.style.display = 'flex';
+    }
+
+    btnSOS?.addEventListener('click', abrirModalSeguranca);
+    btnMenuSeg?.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('menuBackdrop')?.click();
+      abrirModalSeguranca();
+    });
+
+    btnFecharSeg?.addEventListener('click', () => {
+      if (modalSeg) modalSeg.style.display = 'none';
+    });
+
+    btnZap?.addEventListener('click', () => {
+      const tel = (localStorage.getItem('huby_emergencia_tel') || '').replace(/\D/g, '');
+      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto ou entre em contato em caso de emergência.`);
+      const link = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
+      window.open(link, '_blank');
+    });
+  </script>
 </body>
 </html>

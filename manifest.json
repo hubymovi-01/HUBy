@@ -1,11 +1,13 @@
 {
   "name": "HUBy Mobilidade",
   "short_name": "HUBy",
-  "start_url": "./index.html",
+  "start_url": "./welcome.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0B0F19",
   "theme_color": "#0B0F19",
   "orientation": "portrait",
+  "description": "Plataforma integrada de mobilidade urbana, viagens rápidas, entregas e fretes.",
   "icons": [
     {
       "src": "img/icon-192.png",
