@@ -487,14 +487,48 @@ app.post('/api/pedidos', async (req, res) => {
   }
 });
 
+// FILTRO ESTRITO POR CATEGORIA DE VEÍCULO DO MOTORISTA
 app.get('/api/pedidos/pendentes', async (req, res) => {
   try {
-    const pedidos = await sql`
-      SELECT * FROM pedidos 
-      WHERE status = 'pendente' 
-      ORDER BY criado_em DESC 
-      LIMIT 20
-    `;
+    const { categoria } = req.query;
+
+    let pedidos;
+    if (categoria) {
+      if (categoria === 'moto') {
+        pedidos = await sql`
+          SELECT * FROM pedidos 
+          WHERE status = 'pendente' 
+            AND tipo IN ('moto', 'flash_moto')
+          ORDER BY criado_em DESC 
+          LIMIT 20;
+        `;
+      } else if (categoria === 'cargo_pickup' || categoria === 'frete') {
+        pedidos = await sql`
+          SELECT * FROM pedidos 
+          WHERE status = 'pendente' 
+            AND tipo IN ('cargo_pickup', 'frete')
+          ORDER BY criado_em DESC 
+          LIMIT 20;
+        `;
+      } else {
+        // Carro padrão
+        pedidos = await sql`
+          SELECT * FROM pedidos 
+          WHERE status = 'pendente' 
+            AND tipo = 'carro'
+          ORDER BY criado_em DESC 
+          LIMIT 20;
+        `;
+      }
+    } else {
+      pedidos = await sql`
+        SELECT * FROM pedidos 
+        WHERE status = 'pendente' 
+        ORDER BY criado_em DESC 
+        LIMIT 20;
+      `;
+    }
+
     res.json(pedidos);
   } catch (error) {
     console.error('Erro ao consultar pedidos pendentes:', error);
@@ -770,7 +804,7 @@ app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
   try {
     const motoristaId = req.usuario.id;
     const mot = await sql`
-      SELECT id, nome, saldo_carteira, status_aprovacao, motivo_recusa 
+      SELECT id, nome, email, telefone, cpf, cnh_numero, categoria, veiculo_modelo, veiculo_placa, saldo_carteira, status_aprovacao, motivo_recusa 
       FROM motoristas 
       WHERE id = ${motoristaId} 
       LIMIT 1;

@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * OpenStreetMap 100% Livre de Chaves + Roteamento OSRM
+ * OpenStreetMap 100% Livre de Chaves + Roteamento OSRM + GPS Contínuo
  * ============================================================================
  */
 
@@ -10,10 +10,13 @@ export class HubyMapa {
     this.containerId = containerId;
     this.map = null;
     this.markerOrigem = null;
+    this.circlePrecisao = null;
     this.markerDestino = null;
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460]; // São João do Piauí
+    this.coordsOrigem = [-8.3580, -42.2460]; // Padrão São João do Piauí
     this.coordsDestino = null;
+    this.watchId = null;
+    this.onClickDestinoCallback = null;
   }
 
   inicializar(onClickDestino = null) {
@@ -22,23 +25,25 @@ export class HubyMapa {
     if (!container) return;
 
     if (this.map) {
+      if (this.watchId !== null) navigator.geolocation?.clearWatch(this.watchId);
       this.map.remove();
       this.map = null;
     }
+
+    this.onClickDestinoCallback = onClickDestino;
 
     this.map = L.map(this.containerId, {
       zoomControl: false,
       attributionControl: false
     }).setView(this.coordsOrigem, 16);
 
-    // Tiles oficiais gratuitos do OpenStreetMap (sem chave de API)
+    // Tiles oficiais gratuitos do OpenStreetMap
     const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       minZoom: 3,
       crossOrigin: true
     }).addTo(this.map);
 
-    // Efeito Dark equilibrado (as ruas continuam nítidas sem marcas d'água)
     const aplicarDark = () => {
       const pane = container.querySelector('.leaflet-tile-pane');
       if (pane) {
@@ -59,6 +64,9 @@ export class HubyMapa {
         onClickDestino(rota, { lat, lng });
       });
     }
+
+    // Inicia monitoramento ativo do GPS do dispositivo
+    this.iniciarMonitoramentoGPS();
   }
 
   invalidarTamanho() {
@@ -69,19 +77,48 @@ export class HubyMapa {
     }
   }
 
-  definirOrigem(lat, lng) {
+  definirOrigem(lat, lng, precisaoMetros = null) {
     this.coordsOrigem = [lat, lng];
+
     const icon = L.divIcon({
       className: 'huby-pin-origem',
-      html: '<div style="width:16px;height:16px;background:#10B981;border:3px solid #FFF;border-radius:50%;box-shadow:0 0 12px rgba(16,185,129,0.9);"></div>',
-      iconSize: [16, 16],
-      iconAnchor: [8, 8]
+      html: `
+        <div style="position:relative;width:20px;height:20px;">
+          <div style="position:absolute;inset:0;background:#10B981;border-radius:50%;opacity:0.35;animation:hubyPulse 1.8s infinite ease-out;"></div>
+          <div style="position:absolute;inset:3px;background:#10B981;border:2.5px solid #FFFFFF;border-radius:50%;box-shadow:0 0 10px rgba(16,185,129,0.9);"></div>
+        </div>
+        <style>
+          @keyframes hubyPulse {
+            0% { transform: scale(0.9); opacity: 0.6; }
+            70% { transform: scale(2.2); opacity: 0; }
+            100% { transform: scale(2.2); opacity: 0; }
+          }
+        </style>
+      `,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
     });
 
     if (this.markerOrigem) {
       this.markerOrigem.setLatLng([lat, lng]);
     } else if (this.map) {
       this.markerOrigem = L.marker([lat, lng], { icon }).addTo(this.map);
+    }
+
+    // Círculo de precisão do GPS (opcional)
+    if (precisaoMetros && precisaoMetros > 0 && this.map) {
+      const raioLimitado = Math.min(precisaoMetros, 100);
+      if (this.circlePrecisao) {
+        this.circlePrecisao.setLatLng([lat, lng]).setRadius(raioLimitado);
+      } else {
+        this.circlePrecisao = L.circle([lat, lng], {
+          radius: raioLimitado,
+          color: '#10B981',
+          weight: 1,
+          fillColor: '#10B981',
+          fillOpacity: 0.08
+        }).addTo(this.map);
+      }
     }
   }
 
@@ -101,17 +138,48 @@ export class HubyMapa {
     }
   }
 
+  // Rastreamento Contínuo: calibra com satélites em segundo plano
+  iniciarMonitoramentoGPS() {
+    if (!('geolocation' in navigator)) return;
+
+    const opcoesGPS = {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    };
+
+    this.watchId = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const mudancaSignificativa = Math.abs(this.coordsOrigem[0] - latitude) > 0.0001 ||
+                                    Math.abs(this.coordsOrigem[1] - longitude) > 0.0001;
+
+        this.definirOrigem(latitude, longitude, accuracy);
+
+        // Se já havia um destino escolhido, recalcula o trajeto com o novo ponto de GPS
+        if (this.coordsDestino && mudancaSignificativa && this.onClickDestinoCallback) {
+          const rota = await this.calcularRota([latitude, longitude], this.coordsDestino);
+          this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
+        }
+      },
+      (err) => console.warn('Monitoramento GPS:', err.message),
+      opcoesGPS
+    );
+  }
+
+  // Disparo sob demanda (ex: ao clicar no botão "Recenter / GPS")
   obterGPS(callbackSucesso) {
     if (!('geolocation' in navigator)) return;
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude, longitude } = pos.coords;
-        this.definirOrigem(latitude, longitude);
-        if (this.map) this.map.setView([latitude, longitude], 16, { animate: true });
+        const { latitude, longitude, accuracy } = pos.coords;
+        this.definirOrigem(latitude, longitude, accuracy);
+        if (this.map) this.map.setView([latitude, longitude], 17, { animate: true });
         this.invalidarTamanho();
         if (callbackSucesso) callbackSucesso({ lat: latitude, lng: longitude });
       },
-      (err) => console.warn('GPS:', err.message),
+      (err) => console.warn('GPS sob demanda:', err.message),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }

@@ -6,6 +6,7 @@ let pedidoAceitoAtual = null;
 let intervalRadar = null;
 let chamadasAnterioresIds = new Set();
 let statusAprovacaoAtual = 'aprovado';
+let categoriaMotorista = 'carro'; // Padrão de contingência até carregar o perfil
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
@@ -36,10 +37,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. Configura modal de saque Pix
   configurarModalSaquePix();
 
-  // 3. Carregar saldo e checar aprovação
+  // 3. Carregar saldo, checar aprovação e identificar categoria (carro, moto, frete)
   await atualizarPerfilESaldo();
 
-  // 4. Se aprovado, liga o radar de chamadas
+  // 4. Se aprovado, liga o radar de chamadas filtrado por categoria
   if (statusAprovacaoAtual === 'aprovado') {
     iniciarRadarChamadas();
   }
@@ -93,6 +94,7 @@ async function atualizarPerfilESaldo() {
 
     const dados = await resp.json();
     statusAprovacaoAtual = dados.status_aprovacao || 'aprovado';
+    categoriaMotorista = dados.categoria || 'carro'; // Salva a categoria registrada
 
     const saldoEl = document.getElementById('saldoCarteiraValor') || document.getElementById('txtSaldoMotorista');
     if (saldoEl) {
@@ -182,7 +184,8 @@ function iniciarRadarChamadas() {
     if (pedidoAceitoAtual || statusAprovacaoAtual !== 'aprovado') return;
 
     try {
-      const resp = await fetch(`${API_URL}/api/pedidos/pendentes`);
+      // Envia a categoria para filtrar apenas viagens compatíveis com o veículo cadastrado
+      const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(categoriaMotorista)}`);
       if (!resp.ok) return;
 
       const pedidos = await resp.json();
@@ -211,7 +214,6 @@ function renderizarRadar(pedidos) {
     return;
   }
 
-  // Template string corrigido
   feedEl.innerHTML = pedidos.map(p => `
     <div class="order-card">
       <div class="order-card-header">
