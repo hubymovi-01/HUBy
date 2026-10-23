@@ -68,7 +68,6 @@ function validarNumeroCPF(cpf) {
   return resto === parseInt(cpf.charAt(10), 10);
 }
 
-// Aceita 11 dígitos numéricos para flexibilidade de testes
 function validarNumeroCNH(cnh) {
   cnh = String(cnh).replace(/\D/g, '');
   return cnh.length === 11;
@@ -86,7 +85,7 @@ function calcularIdade(dataNascStr) {
   return idade;
 }
 
-// Sincronização e migração inicial das tabelas no Neon PostgreSQL
+// Sincronização e criação das tabelas no Neon PostgreSQL
 async function inicializarBanco() {
   try {
     await sql`
@@ -117,7 +116,7 @@ async function inicializarBanco() {
         telefone TEXT UNIQUE,
         cpf TEXT UNIQUE,
         data_nascimento DATE,
-        senha_hash TEXT,
+        senha_hash TEXT NOT NULL,
         cnh_numero TEXT NOT NULL,
         categoria TEXT DEFAULT 'carro',
         veiculo_modelo TEXT NOT NULL,
@@ -135,20 +134,16 @@ async function inicializarBanco() {
       );
     `;
 
-    // Garante todas as colunas necessárias na tabela motoristas
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cpf TEXT;`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_crlv_url TEXT;`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_cnh_url TEXT;`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_aprovacao TEXT DEFAULT 'aprovado';`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS saldo_carteira NUMERIC(10,2) DEFAULT 0.00;`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS motivo_recusa TEXT;`;
-    // No inicializarBanco() adicione:
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS email TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cpf TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS data_nascimento DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS telefone TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_crlv_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_cnh_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_aprovacao TEXT DEFAULT 'aprovado';`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS saldo_carteira NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS motivo_recusa TEXT;`;
+
     await sql`
       CREATE TABLE IF NOT EXISTS pedidos (
         id TEXT PRIMARY KEY,
@@ -266,9 +261,7 @@ const processarCadastro = async (req, res) => {
       return res.status(400).json({ erro: 'Cadastro negado: É obrigatório ser maior de 18 anos.' });
     }
 
-    // Normalização da data para o formato DATE (YYYY-MM-DD)
     const dataNascSql = dataNascimento ? String(dataNascimento).slice(0, 10) : null;
-
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(String(senha), salt);
 
@@ -347,7 +340,6 @@ const processarCadastro = async (req, res) => {
     if (err.message && err.message.includes('unique constraint')) {
       return res.status(409).json({ erro: 'Este e-mail, telefone ou CPF já está registrado.' });
     }
-    // Retorna a mensagem real da falha
     res.status(500).json({ erro: `Erro no Banco: ${err.message}` });
   }
 };

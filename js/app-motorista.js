@@ -17,27 +17,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Inicializa o mapa Leaflet no contentor #mapaMotorista
-  hubyMapa = new HubyMapa('mapaMotorista');
-  hubyMapa.inicializar();
+  // 1. Inicializa o mapa Leaflet
+  try {
+    hubyMapa = new HubyMapa('mapaMotorista');
+    hubyMapa.inicializar();
 
-  // Forçar o Leaflet a recalcular as dimensões para eliminar tela preta
-  setTimeout(() => {
-    if (hubyMapa && hubyMapa.map) {
-      hubyMapa.map.invalidateSize();
-    }
-  }, 200);
+    setTimeout(() => {
+      if (hubyMapa && hubyMapa.map) {
+        hubyMapa.map.invalidateSize();
+      }
+    }, 200);
 
-  // 2. Carregar saldo e validar credenciamento
+    hubyMapa.obterGPS();
+  } catch (err) {
+    console.warn('Erro ao inicializar mapa do motorista:', err);
+  }
+
+  // 2. Configura modal de saque Pix
+  configurarModalSaquePix();
+
+  // 3. Carregar saldo e checar aprovação
   await atualizarPerfilESaldo();
 
-  // 3. Se aprovado, liga o radar de chamadas
+  // 4. Se aprovado, liga o radar de chamadas
   if (statusAprovacaoAtual === 'aprovado') {
     iniciarRadarChamadas();
   }
 });
 
-// Emissor sonoro nativo via Web Audio API (sem dependência de arquivos externos)
+// Emissor sonoro nativo via Web Audio API + Vibração
 function tocarAlertaSonoro() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -57,8 +65,8 @@ function tocarAlertaSonoro() {
       osc.stop(audioCtx.currentTime + inicio + duracao);
     };
 
-    tocarTom(880, 0, 0.15);       // Nota A5
-    tocarTom(1174.66, 0.18, 0.25); // Nota D6
+    tocarTom(880, 0, 0.15);
+    tocarTom(1174.66, 0.18, 0.25);
 
     if (navigator.vibrate) {
       navigator.vibrate([200, 100, 200]);
@@ -74,22 +82,28 @@ async function atualizarPerfilESaldo() {
     const resp = await fetch(`${API_URL}/api/motoristas/meu-saldo`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!resp.ok) return;
+
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        localStorage.clear();
+        window.location.replace('./login.html');
+      }
+      return;
+    }
 
     const dados = await resp.json();
     statusAprovacaoAtual = dados.status_aprovacao || 'aprovado';
 
-    const saldoEl = document.getElementById('saldoCarteiraValor');
+    const saldoEl = document.getElementById('saldoCarteiraValor') || document.getElementById('txtSaldoMotorista');
     if (saldoEl) {
       saldoEl.textContent = `R$ ${Number(dados.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
     }
 
-    // Se estiver pendente ou recusado, bloqueia a busca
     if (statusAprovacaoAtual !== 'aprovado') {
       const feedEl = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
       if (feedEl) {
         feedEl.innerHTML = `
-          <div class="dock-empty" style="color: #F59E0B; padding: 18px;">
+          <div class="dock-empty" style="color: #F59E0B; padding: 18px; text-align: center;">
             <strong>Acesso em Análise (${statusAprovacaoAtual.toUpperCase()})</strong>
             <p style="font-size: 12px; margin-top: 6px; color: #8F9CAE;">
               ${dados.motivo_recusa || 'Seus documentos estão em triagem pela administração. Você será notificado assim que aprovado.'}
@@ -101,6 +115,64 @@ async function atualizarPerfilESaldo() {
   } catch (err) {
     console.warn('Erro ao carregar perfil do motorista:', err);
   }
+}
+
+// Configuração do Modal e Envio do Pedido de Saque Pix
+function configurarModalSaquePix() {
+  const modalSaque = document.getElementById('modalSaquePix');
+  const btnAbrirSaque = document.getElementById('btnAbrirModalSaque');
+  const btnFecharSaque = document.getElementById('btnFecharModalSaque');
+  const btnConfirmarSaque = document.getElementById('btnConfirmarSaquePix');
+
+  btnAbrirSaque?.addEventListener('click', () => {
+    if (modalSaque) modalSaque.style.display = 'flex';
+  });
+
+  btnFecharSaque?.addEventListener('click', () => {
+    if (modalSaque) modalSaque.style.display = 'none';
+  });
+
+  btnConfirmarSaque?.addEventListener('click', async () => {
+    const token = localStorage.getItem('huby_token');
+    const chavePix = document.getElementById('saqueChavePix')?.value.trim();
+    const tipoChave = document.getElementById('saqueTipoChave')?.value || 'cpf';
+    const valor = Number(document.getElementById('saqueValor')?.value);
+
+    if (!chavePix || !valor || valor <= 0) {
+      alert('Informe uma chave Pix válida e o valor desejado.');
+      return;
+    }
+
+    try {
+      btnConfirmarSaque.disabled = true;
+      btnConfirmarSaque.textContent = 'Enviando...';
+
+      const resp = await fetch(`${API_URL}/api/motoristas/saques`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ chavePix, tipoChave, valor })
+      });
+
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.erro || 'Falha ao solicitar saque.');
+
+      alert('Solicitação de Saque Pix enviada com sucesso! Aguarde a liquidação.');
+      if (modalSaque) modalSaque.style.display = 'none';
+
+      const inValor = document.getElementById('saqueValor');
+      if (inValor) inValor.value = '';
+
+      await atualizarPerfilESaldo();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btnConfirmarSaque.disabled = false;
+      btnConfirmarSaque.textContent = 'Confirmar Saque';
+    }
+  });
 }
 
 function iniciarRadarChamadas() {
@@ -115,7 +187,6 @@ function iniciarRadarChamadas() {
 
       const pedidos = await resp.json();
 
-      // Identifica chamadas inéditas para tocar o alerta sonoro
       const idsAtuais = pedidos.map(p => p.id);
       const existeNovaChamada = idsAtuais.some(id => !chamadasAnterioresIds.has(id));
 
@@ -140,10 +211,11 @@ function renderizarRadar(pedidos) {
     return;
   }
 
+  // Template string corrigido
   feedEl.innerHTML = pedidos.map(p => `
     <div class="order-card">
       <div class="order-card-header">
-        <span class="order-badge">${p.sub_tipo_label || 'HUBy'} • #${String(p.id).slice(-4)}</span>
+        <span class="order-badge">${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}</span>
         <span class="order-price">R$ ${Number(p.valor_total).toFixed(2).replace('.', ',')}</span>
       </div>
       <div class="order-route">
