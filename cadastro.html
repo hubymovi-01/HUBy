@@ -3,52 +3,145 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Registar - HUBy</title>
+  <title>Registar • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
 </head>
-<body>
+<body class="auth-body">
 
-  <main class="auth-viewport">
+  <div class="auth-ambient-glow"></div>
+
+  <main class="auth-container">
     <div class="auth-card">
-      <header class="auth-brand">
-        <h1>HUB<span>y</span></h1>
-        <p>Crie a sua conta de passageiro</p>
+      
+      <!-- TOPO / MARCA -->
+      <header class="auth-header">
+        <div class="auth-badge">Plataforma de Mobilidade 2.0</div>
+        <h1 class="auth-brand">HUB<span>y</span></h1>
+        <p id="txtSubtitulo" class="auth-desc">Crie a sua conta para solicitar viagens instantâneas</p>
       </header>
 
-      <form id="formCadastroCliente" class="auth-form">
-        <div class="input-block">
+      <!-- SELETOR DE PERFIL: PASSAGEIRO VS MOTORISTA -->
+      <div class="role-selector">
+        <button type="button" id="btnRoleCliente" class="btn-role active">
+          <span class="role-icon">👤</span>
+          <span class="role-name">Passageiro</span>
+        </button>
+        <button type="button" id="btnRoleMotorista" class="btn-role">
+          <span class="role-icon">🚘</span>
+          <span class="role-name">Motorista Parceiro</span>
+        </button>
+      </div>
+
+      <!-- ALERTA / FEEDBACK EMBUTIDO -->
+      <div id="alertaBox" class="auth-alert" style="display: none;"></div>
+
+      <!-- FORMULÁRIO UNIFICADO -->
+      <form id="formCadastroHuby" class="auth-form" novalidate>
+        
+        <!-- SECÇÃO 1: DADOS PESSOAIS -->
+        <div class="form-section-tag">Informações Pessoais</div>
+
+        <div class="input-group">
           <label for="cadNome">Nome Completo</label>
-          <input type="text" id="cadNome" placeholder="O seu nome e apelido" required>
+          <div class="input-wrapper">
+            <span class="input-ico">🪪</span>
+            <input type="text" id="cadNome" placeholder="Seu nome completo" required>
+          </div>
         </div>
 
-        <div class="input-block">
+        <div class="input-row">
+          <div class="input-group">
+            <label for="cadCpf">CPF</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📄</span>
+              <input type="tel" id="cadCpf" placeholder="000.000.000-00" maxlength="14" required>
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="cadTelefone">WhatsApp / Telefone</label>
+            <div class="input-wrapper">
+              <span class="input-ico">📱</span>
+              <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="input-group">
           <label for="cadEmail">E-mail</label>
-          <input type="email" id="cadEmail" placeholder="exemplo@email.com" required>
+          <div class="input-wrapper">
+            <span class="input-ico">✉️</span>
+            <input type="email" id="cadEmail" placeholder="seuemail@exemplo.com" required>
+          </div>
         </div>
 
-        <div class="input-block">
-          <label for="cadTelefone">Telemóvel / WhatsApp</label>
-          <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" required>
+        <!-- SECÇÃO 2: DADOS DO VEÍCULO (EXCLUSIVO MOTORISTA) -->
+        <div id="secaoMotoristaVeiculo" class="motorista-specs-box" style="display: none;">
+          <div class="form-section-tag highlight">Dados de Parceiro & Veículo</div>
+
+          <div class="input-group">
+            <label for="cadCnh">Número da CNH</label>
+            <div class="input-wrapper">
+              <span class="input-ico">🪪</span>
+              <input type="tel" id="cadCnh" placeholder="Número do registo da CNH" maxlength="12">
+            </div>
+          </div>
+
+          <div class="input-group">
+            <label for="cadCategoriaVeiculo">Categoria de Operação</label>
+            <div class="input-wrapper">
+              <span class="input-ico">🚦</span>
+              <select id="cadCategoriaVeiculo">
+                <option value="carro">Carro (HUBy Pop)</option>
+                <option value="moto">Moto (HUBy Moto)</option>
+                <option value="flash_moto">Flash (Entregas Pequenas)</option>
+                <option value="cargo_pickup">Frete (Pickups & Utilitários)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <div class="input-group">
+              <label for="cadModelo">Modelo do Veículo</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🚗</span>
+                <input type="text" id="cadModelo" placeholder="Ex: Onix 1.0">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label for="cadPlaca">Placa</label>
+              <div class="input-wrapper">
+                <span class="input-ico">🏷️</span>
+                <input type="text" id="cadPlaca" placeholder="ABC1D23" maxlength="8" style="text-transform: uppercase;">
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="input-block">
-          <label for="cadCpf">CPF</label>
-          <input type="tel" id="cadCpf" placeholder="000.000.000-00">
-        </div>
+        <!-- SECÇÃO 3: CREDENCIAIS -->
+        <div class="form-section-tag">Segurança</div>
 
-        <div class="input-block">
+        <div class="input-group">
           <label for="cadSenha">Palavra-passe</label>
-          <input type="password" id="cadSenha" placeholder="Mínimo 6 carateres" minlength="6" required>
+          <div class="input-wrapper">
+            <span class="input-ico">🔒</span>
+            <input type="password" id="cadSenha" placeholder="Mínimo 6 carateres" minlength="6" required>
+            <button type="button" id="btnToggleSenha" class="btn-toggle-eye" aria-label="Ver palavra-passe">👁️</button>
+          </div>
         </div>
 
-        <button type="submit" class="btn-auth-submit" id="btnSubmeterCadastro">Criar Conta</button>
+        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action">
+          <span>Criar Conta de Passageiro</span>
+        </button>
       </form>
 
-      <footer class="auth-footer">
-        <span>Já tem conta?</span>
+      <footer class="auth-footer-nav">
+        <span>Já tem registo efetuado?</span>
         <a href="./login.html">Iniciar sessão</a>
       </footer>
+
     </div>
   </main>
 
