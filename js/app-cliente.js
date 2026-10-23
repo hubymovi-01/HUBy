@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 2. Sincroniza tarifas do servidor e multiplicador de pico em tempo real
   await sincronizarTarifasServidor();
 
-  // 3. Inicializar o Mapa Leaflet com tratamento de erro
+  // 3. Inicializar o Mapa Leaflet com prioridade de Geolocalização
   try {
     hubyMapa = new HubyMapa('mapaCliente');
     hubyMapa.inicializar(async (rota, coords) => {
@@ -41,15 +41,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       atualizarResumoValores();
     });
 
+    // Invalidação forçada do tamanho para evitar corte de tela
     setTimeout(() => {
       if (hubyMapa && hubyMapa.map) {
         hubyMapa.map.invalidateSize();
       }
-    }, 300);
+    }, 250);
 
-    // Dispara a captura de GPS garantindo que o mapa e os dados da tela sincronizem
+    // Obtém o GPS real do cliente e centraliza a câmera
     hubyMapa.obterGPS((posicaoReal) => {
-      console.log('Localização real do cliente fixada:', posicaoReal);
+      console.log('GPS do cliente confirmado:', posicaoReal);
       if (coordsDestino && hubyMapa) {
         hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
           rotaAtual = rota;
@@ -57,7 +58,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       }
     });
-
   } catch (err) {
     console.error('Erro ao inicializar mapa:', err);
   }
