@@ -34,7 +34,6 @@ const sql = neon(process.env.DATABASE_URL);
 
 // Middleware para validação do Token JWT
 export function autenticarToken(req, res, next) {
-  // Suporte a token via Header ou Query param (necessário para downloads diretos como CSV)
   const authHeader = req.headers.authorization;
   const token = authHeader ? (authHeader.split(' ')[1] || authHeader) : req.query.token;
 
@@ -204,7 +203,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // Tabela de Configurações Dinâmicas e Tarifas
     await sql`
       CREATE TABLE IF NOT EXISTS configuracoes_plataforma (
         chave TEXT PRIMARY KEY,
@@ -213,7 +211,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // Tabela de Solicitações de Saque Pix dos Condutores
     await sql`
       CREATE TABLE IF NOT EXISTS saques_motoristas (
         id SERIAL PRIMARY KEY,
@@ -230,7 +227,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // Inserção das tarifas padrão se ainda não existirem
     await sql`
       INSERT INTO configuracoes_plataforma (chave, valor)
       VALUES ('tarifas', '{
@@ -326,7 +322,6 @@ const processarCadastro = async (req, res) => {
       });
     }
 
-    // Registo de Passageiro
     const novoId = 'usr_' + Date.now().toString(36);
     const resultado = await sql`
       INSERT INTO usuarios (
@@ -381,7 +376,6 @@ const processarLogin = async (req, res) => {
     const idLimpo = String(identificador).trim().toLowerCase();
     const idNumeros = String(identificador).replace(/\D/g, '');
 
-    // Login de Condutor Parceiro
     if (perfilDesejado === 'motorista') {
       const motoristas = await sql`
         SELECT * FROM motoristas
@@ -425,7 +419,6 @@ const processarLogin = async (req, res) => {
       });
     }
 
-    // Login de Passageiro / Admin
     const usuarios = await sql`
       SELECT * FROM usuarios
       WHERE LOWER(TRIM(email)) = ${idLimpo}
@@ -786,9 +779,32 @@ app.put('/api/admin/tarifas', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 5. SAQUES PIX (REPASSE DE 85% PARA PARCEIROS)
+// 5. CARTEIRA E SAQUES PIX DO MOTORISTA
 // ============================================================================
 
+// Endpoint consultado pelo app-motorista.js para carregar saldo e credencial
+app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
+  try {
+    const motoristaId = req.usuario.id;
+    const mot = await sql`
+      SELECT id, nome, saldo_carteira, status_aprovacao, motivo_recusa 
+      FROM motoristas 
+      WHERE id = ${motoristaId} 
+      LIMIT 1;
+    `;
+
+    if (mot.length === 0) {
+      return res.status(404).json({ erro: 'Motorista parceiro não localizado.' });
+    }
+
+    res.json(mot[0]);
+  } catch (err) {
+    console.error('Erro ao consultar saldo individual:', err);
+    res.status(500).json({ erro: 'Falha ao consultar saldo.' });
+  }
+});
+
+// Solicitação atômica de Saque Pix
 app.post('/api/motoristas/saques', autenticarToken, async (req, res) => {
   try {
     const motoristaId = req.usuario.id;
@@ -796,25 +812,31 @@ app.post('/api/motoristas/saques', autenticarToken, async (req, res) => {
     const valorSaque = Number(valor);
 
     if (!chavePix || !valorSaque || valorSaque <= 0) {
-      return res.status(400).json({ erro: 'Indique a chave Pix e um valor válido.' });
+      return res.status(400).json({ erro: 'Indique a chave Pix e um valor numérico válido.' });
     }
 
-    const mot = await sql`SELECT nome, saldo_carteira FROM motoristas WHERE id = ${motoristaId} LIMIT 1;`;
-    if (mot.length === 0) return res.status(404).json({ erro: 'Motorista não encontrado.' });
+    // Débito atômico direto na carteira condicionado ao saldo suficiente
+    const debito = await sql`
+      UPDATE motoristas 
+      SET saldo_carteira = saldo_carteira - ${valorSaque} 
+      WHERE id = ${motoristaId} AND saldo_carteira >= ${valorSaque}
+      RETURNING nome, saldo_carteira;
+    `;
 
-    const saldoAtual = Number(mot[0].saldo_carteira || 0);
-    if (valorSaque > saldoAtual) {
-      return res.status(400).json({ erro: 'Saldo insuficiente para este saque.' });
+    if (debito.length === 0) {
+      return res.status(400).json({ erro: 'Saldo insuficiente para realizar este saque.' });
     }
-
-    await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira - ${valorSaque} WHERE id = ${motoristaId};`;
 
     await sql`
       INSERT INTO saques_motoristas (motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status)
-      VALUES (${motoristaId}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'cpf'}, ${valorSaque}, 'pendente');
+      VALUES (${motoristaId}, ${debito[0].nome}, ${String(chavePix).trim()}, ${tipoChave || 'cpf'}, ${valorSaque}, 'pendente');
     `;
 
-    res.status(201).json({ sucesso: true, mensagem: 'Pedido de saque Pix enviado com sucesso!' });
+    res.status(201).json({ 
+      sucesso: true, 
+      mensagem: 'Pedido de saque Pix enviado com sucesso!',
+      novoSaldo: debito[0].saldo_carteira 
+    });
   } catch (err) {
     console.error('Erro na solicitação de saque:', err);
     res.status(500).json({ erro: 'Falha ao processar solicitação de saque.' });
@@ -931,7 +953,6 @@ app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
   }
 });
 
-// Rota de listagem da frota de parceiros (com foto do veículo para preview)
 app.get('/api/admin/motoristas', autenticarToken, async (req, res) => {
   try {
     if (req.usuario.role !== 'admin') {
@@ -953,7 +974,6 @@ app.get('/api/admin/motoristas', autenticarToken, async (req, res) => {
   }
 });
 
-// Triagem e moderação do parceiro (Aprovar / Recusar / Suspender)
 app.put('/api/admin/motoristas/:id/triagem', autenticarToken, async (req, res) => {
   try {
     if (req.usuario.role !== 'admin') {
@@ -989,7 +1009,6 @@ app.put('/api/admin/motoristas/:id/triagem', autenticarToken, async (req, res) =
   }
 });
 
-// Exportação de Relatório Contábil em CSV
 app.get('/api/admin/relatorios/corridas.csv', autenticarToken, async (req, res) => {
   try {
     if (req.usuario.role !== 'admin') {
@@ -1023,5 +1042,5 @@ app.get('/api/admin/relatorios/corridas.csv', autenticarToken, async (req, res) 
 // INICIALIZAÇÃO DO SERVIDOR (ÚLTIMA LINHA)
 // ============================================================================
 app.listen(port, () => {
-  console.log(`Servidor HUBy huby ativo na porta ${port}`);
+  console.log(`Servidor HUBy ativo na porta ${port}`);
 });

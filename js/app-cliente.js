@@ -1,4 +1,4 @@
-import { API_URL, CATEGORIAS, calcularPreco } from './config.js';
+import { API_URL, CATEGORIAS, calcularPreco, sincronizarTarifasServidor, MULTIPLICADOR_PICO } from './config.js';
 import { HubyMapa } from './mapa.js';
 
 let hubyMapa = null;
@@ -11,7 +11,7 @@ let categoriaSelecionada = 'carro';
 let corridaParaAvaliarId = null;
 let notaSelecionada = 5;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // 1. Garante a remoção da Splash Screen
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -21,7 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 400);
   }
 
-  // 2. Inicializar o Mapa Leaflet com tratamento de erro
+  // 2. Sincroniza tarifas do servidor e multiplicador de pico em tempo real
+  await sincronizarTarifasServidor();
+
+  // 3. Inicializar o Mapa Leaflet com tratamento de erro
   try {
     hubyMapa = new HubyMapa('mapaCliente');
     hubyMapa.inicializar(async (rota, coords) => {
@@ -48,16 +51,16 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('Erro ao inicializar mapa:', err);
   }
 
-  // 3. Botão GPS Recenter
+  // 4. Botão GPS Recenter
   document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
     if (hubyMapa) hubyMapa.obterGPS();
   });
 
-  // 4. Drawer / Menu Lateral e Checagem do Admin
+  // 5. Drawer / Menu Lateral e Checagem do Admin
   configurarDrawerMenu();
   verificarAcessoAdminMenu();
 
-  // 5. Histórico Modal
+  // 6. Histórico Modal
   document.getElementById('btnNavViagens')?.addEventListener('click', carregarEExibirHistoricoModal);
   document.getElementById('menuItemViagens')?.addEventListener('click', () => {
     fecharDrawer();
@@ -68,7 +71,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modal) modal.style.display = 'none';
   });
 
-  // 6. Seleção de Categorias
+  // 7. Seleção de Categorias
   const chips = document.querySelectorAll('.category-chip');
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -80,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // 7. Botão Pedir / Cancelar HUBy
+  // 8. Botão Pedir / Cancelar HUBy
   document.getElementById('btnPedirHuby')?.addEventListener('click', () => {
     if (pedidoAtivoId) {
       cancelarBusca();
@@ -89,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // 8. Modal de Avaliação
+  // 9. Modal de Avaliação
   configurarModalAvaliacao();
 
   // Registo do Service Worker PWA
@@ -244,8 +247,13 @@ function atualizarResumoValores() {
   const txtDist = document.getElementById('txtDistanciaEstimada');
   const txtPreco = document.getElementById('txtPrecoEstimado');
 
-  if (txtDist) txtDist.textContent = `${km} km • ${rotaAtual.duracaoMin} min`;
-  if (txtPreco) txtPreco.textContent = precoCalculado.formatado;
+  if (txtDist) {
+    const dinamicaInfo = MULTIPLICADOR_PICO > 1.0 ? ` • ⚡ Dinâmica ${MULTIPLICADOR_PICO}x` : '';
+    txtDist.textContent = `${km} km • ${rotaAtual.duracaoMin} min${dinamicaInfo}`;
+  }
+  if (txtPreco) {
+    txtPreco.textContent = precoCalculado.formatado;
+  }
 }
 
 async function submeterPedido() {
@@ -258,6 +266,7 @@ async function submeterPedido() {
   const clienteId = localStorage.getItem('huby_user_id');
   const novoId = 'ped_' + Date.now().toString(36);
 
+  // Garante que o cálculo usa as tarifas mais recentes com o multiplicador de pico
   const precoInfo = calcularPreco(categoriaSelecionada, rotaAtual.distanciaKm);
 
   const payload = {

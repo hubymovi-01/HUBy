@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Registar • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
@@ -16,12 +19,12 @@
       
       <!-- CABEÇALHO DA MARCA -->
       <header class="auth-header">
-        <div class="auth-badge" id="badgeCadastro">Plataforma de Mobilidade Segura</div>
+        <div class="auth-badge" id="badgeCadastro">Acesso Seguro HUBy</div>
         <h1 class="auth-brand">HUB<span>y</span></h1>
         <p id="txtSubtitulo" class="auth-desc">Crie a sua conta para solicitar viagens instantâneas</p>
       </header>
 
-      <!-- SELETOR DE PERFIL (PASSAGEIRO VS MOTORISTA) -->
+      <!-- SELETOR DE PERFIL -->
       <div class="role-selector" id="roleSelectorContainer">
         <button type="button" id="btnRoleCliente" class="btn-role active">
           <span class="role-icon">👤</span>
@@ -36,17 +39,17 @@
       <!-- ALERTA / FEEDBACK EMBUTIDO -->
       <div id="alertaBox" class="auth-alert" style="display: none;"></div>
 
-      <!-- FORMULÁRIO UNIFICADO -->
+      <!-- FORMULÁRIO UNIFICADO (novalidate garante o controle pelo js/auth.js) -->
       <form id="formCadastroHuby" class="auth-form" novalidate>
         
-        <!-- SECÇÃO 1: DADOS PESSOAIS DO USUÁRIO -->
+        <!-- SECÇÃO 1: DADOS GERAIS -->
         <div class="form-section-tag">Identificação & Documentação</div>
 
         <div class="input-group">
           <label for="cadNome">Nome Completo</label>
           <div class="input-wrapper">
             <span class="input-ico">🪪</span>
-            <input type="text" id="cadNome" placeholder="Seu nome completo" required>
+            <input type="text" id="cadNome" placeholder="Seu nome completo" autocomplete="name" required>
           </div>
         </div>
 
@@ -55,15 +58,16 @@
             <label for="cadCpf">CPF</label>
             <div class="input-wrapper">
               <span class="input-ico">📄</span>
-              <input type="tel" id="cadCpf" placeholder="000.000.000-00" maxlength="14" required>
+              <input type="tel" id="cadCpf" placeholder="000.000.000-00" maxlength="14" autocomplete="off" required>
             </div>
           </div>
 
-          <div class="input-group" id="grpDataNascPassageiro">
-            <label for="cadDataNascCliente">Data de Nascimento</label>
+          <!-- Data de Nascimento Compartilhada (usada tanto por passageiro quanto por motorista) -->
+          <div class="input-group" id="grpDataNasc">
+            <label for="cadDataNascimento">Data de Nascimento</label>
             <div class="input-wrapper">
               <span class="input-ico">📅</span>
-              <input type="date" id="cadDataNascCliente" required>
+              <input type="date" id="cadDataNascimento" required>
             </div>
           </div>
         </div>
@@ -73,7 +77,7 @@
             <label for="cadTelefone">WhatsApp / Telefone</label>
             <div class="input-wrapper">
               <span class="input-ico">📱</span>
-              <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+              <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" autocomplete="tel" required>
             </div>
           </div>
 
@@ -81,12 +85,12 @@
             <label for="cadEmail">E-mail</label>
             <div class="input-wrapper">
               <span class="input-ico">✉️</span>
-              <input type="email" id="cadEmail" placeholder="seuemail@exemplo.com" required>
+              <input type="email" id="cadEmail" placeholder="seuemail@exemplo.com" autocomplete="email" required>
             </div>
           </div>
         </div>
 
-        <!-- SECÇÃO 2: CONTATO DE CONFIANÇA / EMERGÊNCIA (EXCLUSIVO PASSAGEIRO) -->
+        <!-- SECÇÃO 2: CONTATO DE CONFIANÇA (EXCLUSIVO PASSAGEIRO) -->
         <div id="secaoSegurancaPassageiro">
           <div class="form-section-tag highlight">Segurança & Contato de Confiança</div>
 
@@ -95,7 +99,7 @@
               <label for="cadEmergenciaNome">Nome do Contato</label>
               <div class="input-wrapper">
                 <span class="input-ico">🛡️</span>
-                <input type="text" id="cadEmergenciaNome" placeholder="Ex: Mãe, Pai, Cônjuge" required>
+                <input type="text" id="cadEmergenciaNome" placeholder="Ex: Mãe, Pai, Cônjuge">
               </div>
             </div>
 
@@ -103,31 +107,21 @@
               <label for="cadEmergenciaTelefone">Telefone de Emergência</label>
               <div class="input-wrapper">
                 <span class="input-ico">📞</span>
-                <input type="tel" id="cadEmergenciaTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+                <input type="tel" id="cadEmergenciaTelefone" placeholder="(00) 00000-0000" maxlength="15">
               </div>
             </div>
           </div>
         </div>
 
-        <!-- SECÇÃO 3: DADOS DO PARCEIRO E VEÍCULO (EXCLUSIVO MOTORISTA) -->
+        <!-- SECÇÃO 3: DADOS DO VEÍCULO (EXCLUSIVO MOTORISTA) -->
         <div id="secaoMotoristaVeiculo" class="motorista-specs-box" style="display: none;">
           <div class="form-section-tag highlight">Validação de Habilitação & Veículo</div>
 
-          <div class="input-row">
-            <div class="input-group">
-              <label for="cadCnh">Número da CNH (11 dígitos)</label>
-              <div class="input-wrapper">
-                <span class="input-ico">🪪</span>
-                <input type="tel" id="cadCnh" placeholder="Ex: 01234567890" maxlength="11">
-              </div>
-            </div>
-
-            <div class="input-group">
-              <label for="cadDataNascMotorista">Data de Nascimento</label>
-              <div class="input-wrapper">
-                <span class="input-ico">📅</span>
-                <input type="date" id="cadDataNascMotorista">
-              </div>
+          <div class="input-group">
+            <label for="cadCnh">Número da CNH (11 dígitos)</label>
+            <div class="input-wrapper">
+              <span class="input-ico">🪪</span>
+              <input type="tel" id="cadCnh" placeholder="Digite apenas os números da CNH" maxlength="11" autocomplete="off">
             </div>
           </div>
 
@@ -163,11 +157,12 @@
           </div>
 
           <div class="input-group">
-            <label for="cadFotoVeiculo">Foto do Veículo (Carro ou Moto)</label>
+            <label for="cadFotoVeiculo">Foto do Veículo (Opcional no cadastro)</label>
             <div class="input-wrapper">
               <span class="input-ico">📸</span>
               <input type="file" id="cadFotoVeiculo" accept="image/*" style="padding-left: 40px;">
             </div>
+            <small style="color: #64748B; font-size: 11px; margin-top: 4px; display: block;">Formatos aceitos: JPG, PNG (máx. 4MB)</small>
           </div>
         </div>
 
@@ -178,7 +173,7 @@
           <label for="cadSenha">Palavra-passe</label>
           <div class="input-wrapper">
             <span class="input-ico">🔒</span>
-            <input type="password" id="cadSenha" placeholder="Mínimo 6 carateres" minlength="6" required>
+            <input type="password" id="cadSenha" placeholder="Mínimo 6 carateres" minlength="6" autocomplete="new-password" required>
             <button type="button" id="btnToggleSenha" class="btn-toggle-eye" aria-label="Ver palavra-passe">👁️</button>
           </div>
         </div>
@@ -194,28 +189,15 @@
         <a href="./login.html" id="linkLoginDireto">Iniciar sessão</a>
       </footer>
 
-      <div style="text-align: center; margin-top: 14px; display: flex; justify-content: center; gap: 15px;">
-        <a href="./welcome.html" style="color: var(--text-dim); text-decoration: none; font-size: 12px; font-weight: 700;">
-          ← Mudar Perfil
-        </a>
-        <span style="color: var(--border-steel);">•</span>
-        <a href="./index.html" style="color: var(--text-dim); text-decoration: none; font-size: 12px; font-weight: 700;">
-          Mapa
+      <div style="text-align: center; margin-top: 16px;">
+        <a href="./welcome.html" style="color: #64748B; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+          <span>←</span> Escolher outro perfil
         </a>
       </div>
 
     </div>
   </main>
 
-  <script type="module">
-    // Ajuste imediato do link de login com o perfil da URL
-    const params = new URLSearchParams(window.location.search);
-    const perfil = params.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
-    const linkLogin = document.getElementById('linkLoginDireto');
-    if (linkLogin) {
-      linkLogin.href = `./login.html?perfil=${perfil}`;
-    }
-  </script>
   <script type="module" src="./js/auth.js"></script>
 </body>
 </html>
