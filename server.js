@@ -11,17 +11,23 @@ const app = express();
 const port = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'huby_jwt_secret_key_prod_2026_xpto';
 
-// Configuração ampla de CORS
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// 1. TRATAMENTO EXPLÍCITO DE CORS & PREFLIGHT OPTIONS
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
 
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
 if (!process.env.DATABASE_URL) {
-  console.warn('AVISO CRÍTICO: DATABASE_URL não definida nas variáveis de ambiente.');
+  console.warn('AVISO: DATABASE_URL não definida nas variáveis de ambiente.');
 }
 
 const sql = neon(process.env.DATABASE_URL);
@@ -44,7 +50,7 @@ export function autenticarToken(req, res, next) {
   }
 }
 
-// Inicialização automática das tabelas essenciais no Neon
+// Sincronização inicial das tabelas no Neon PostgreSQL
 async function inicializarBanco() {
   try {
     await sql`
@@ -76,6 +82,9 @@ async function inicializarBanco() {
         saldo_carteira NUMERIC(10,2) DEFAULT 0.00,
         status_online BOOLEAN DEFAULT FALSE,
         status_aprovacao TEXT DEFAULT 'aprovado',
+        motivo_recusa TEXT,
+        doc_cnh_url TEXT,
+        doc_crlv_url TEXT,
         avaliacao_media NUMERIC(3,2) DEFAULT 5.00,
         total_avaliacoes INT DEFAULT 0,
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -124,24 +133,24 @@ async function inicializarBanco() {
       );
     `;
 
-    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
+    console.log('Tabelas verificadas no Neon PostgreSQL.');
   } catch (e) {
-    console.error('Aviso ao sincronizar tabelas:', e.message);
+    console.error('Erro na sincronização de tabelas:', e.message);
   }
 }
 inicializarBanco();
 
-// Verificação de saúde da API
+// Rota de verificação de integridade da API
 app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online', versao: '2.0.0', banco: 'Neon PostgreSQL' });
 });
 
 // ============================================================================
-// 1. AUTENTICAÇÃO UNIFICADA: PASSAGEIROS & MOTORISTAS
+// 1. AUTENTICAÇÃO UNIFICADA (PASSAGEIROS & CONDUTORES)
 // ============================================================================
 
-// CADASTRO (Atende /api/usuarios/cadastro e /api/auth/cadastro)
-const handlerCadastro = async (req, res) => {
+// Handler de Cadastro Unificado (atende /api/auth/cadastro e /api/usuarios/cadastro)
+const processarCadastro = async (req, res) => {
   try {
     const {
       nome, email, telefone, cpf, senha, role = 'cliente',
@@ -160,7 +169,7 @@ const handlerCadastro = async (req, res) => {
 
     if (role === 'motorista') {
       if (!cnh || !veiculo_placa || !veiculo_modelo) {
-        return res.status(400).json({ erro: 'Para motorista parceiro, informe CNH, Modelo e Placa.' });
+        return res.status(400).json({ erro: 'Para parceiros condutores, informe CNH, Modelo e Placa.' });
       }
 
       const cnhLimpa = String(cnh).replace(/\D/g, '');
@@ -192,7 +201,7 @@ const handlerCadastro = async (req, res) => {
       });
     }
 
-    // Cadastro de Passageiro
+    // Registo de Passageiro
     const novoId = 'usr_' + Date.now().toString(36);
     const resultado = await sql`
       INSERT INTO usuarios (id, nome, email, telefone, cpf, senha_hash, role)
@@ -213,50 +222,50 @@ const handlerCadastro = async (req, res) => {
       usuario: utilizadorCriado
     });
   } catch (err) {
-    console.error('Erro no registo de utilizador:', err);
+    console.error('Erro no registo:', err);
     if (err.message && err.message.includes('unique constraint')) {
-      return res.status(409).json({ erro: 'Este e-mail, telefone ou CPF já está cadastrado.' });
+      return res.status(409).json({ erro: 'Este e-mail, telefone ou CPF já está registado.' });
     }
     res.status(500).json({ erro: 'Falha ao concluir registo na base de dados.' });
   }
 };
 
-app.post('/api/usuarios/cadastro', handlerCadastro);
-app.post('/api/auth/cadastro', handlerCadastro);
+app.post('/api/auth/cadastro', processarCadastro);
+app.post('/api/usuarios/cadastro', processarCadastro);
 
-// LOGIN (Atende /api/usuarios/login e /api/auth/login)
-const handlerLogin = async (req, res) => {
+// Handler de Login Unificado (atende /api/auth/login e /api/usuarios/login)
+const processarLogin = async (req, res) => {
   try {
     const identificador = req.body.identificador || req.body.emailOuTelefone || req.body.email;
     const senha = req.body.senha;
     const perfilDesejado = req.body.perfilDesejado || 'cliente';
 
     if (!identificador || !senha) {
-      return res.status(400).json({ erro: 'Indique seu acesso (E-mail, Telefone ou CPF) e a senha.' });
+      return res.status(400).json({ erro: 'Indique os dados de acesso e a palavra-passe.' });
     }
 
     const idLimpo = String(identificador).trim().toLowerCase();
     const idNumeros = String(identificador).replace(/\D/g, '');
 
-    // 1. Se estiver tentando logar na aba de Motorista
+    // Login de Condutor Parceiro
     if (perfilDesejado === 'motorista') {
       const motoristas = await sql`
         SELECT * FROM motoristas
         WHERE LOWER(TRIM(email)) = ${idLimpo}
-           OR regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros}
-           OR regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros}
-           OR regexp_replace(cnh_numero, '\\D', '', 'g') = ${idNumeros}
+           OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+           OR (cpf IS NOT NULL AND regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+           OR (cnh_numero IS NOT NULL AND regexp_replace(cnh_numero, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
         LIMIT 1;
       `;
 
       if (motoristas.length === 0) {
-        return res.status(404).json({ erro: 'Condutor não encontrado. Verifique os dados ou crie sua conta de parceiro.' });
+        return res.status(404).json({ erro: 'Condutor parceiro não localizado.' });
       }
 
       const mot = motoristas[0];
       const senhaValida = await bcrypt.compare(String(senha), mot.senha_hash);
       if (!senhaValida) {
-        return res.status(401).json({ erro: 'Senha incorreta.' });
+        return res.status(401).json({ erro: 'Palavra-passe incorreta.' });
       }
 
       await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${mot.id};`;
@@ -282,23 +291,23 @@ const handlerLogin = async (req, res) => {
       });
     }
 
-    // 2. Login de Passageiro / Admin
+    // Login de Passageiro / Admin
     const usuarios = await sql`
       SELECT * FROM usuarios
       WHERE LOWER(TRIM(email)) = ${idLimpo}
-         OR regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros}
-         OR regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros}
+         OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+         OR (cpf IS NOT NULL AND regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
       LIMIT 1;
     `;
 
     if (usuarios.length === 0) {
-      return res.status(404).json({ erro: 'Usuário não cadastrado.' });
+      return res.status(404).json({ erro: 'Utilizador não localizado.' });
     }
 
     const usr = usuarios[0];
     const senhaValida = await bcrypt.compare(String(senha), usr.senha_hash);
     if (!senhaValida) {
-      return res.status(401).json({ erro: 'Senha incorreta.' });
+      return res.status(401).json({ erro: 'Palavra-passe incorreta.' });
     }
 
     const token = jwt.sign(
@@ -324,13 +333,61 @@ const handlerLogin = async (req, res) => {
   }
 };
 
-app.post('/api/usuarios/login', handlerLogin);
-app.post('/api/auth/login', handlerLogin);
+app.post('/api/auth/login', processarLogin);
+app.post('/api/usuarios/login', processarLogin);
 
-// ============================================================================
-// 2. PARCEIROS & ROTAS DE SALDO
-// ============================================================================
+// Login Legado do Condutor (via CNH e Placa direta)
+app.post('/api/motoristas/login', async (req, res) => {
+  try {
+    const cnh = req.body.cnh || req.body.cnh_numero;
+    const placa = req.body.placa || req.body.veiculo_placa;
 
+    if (!cnh || !placa) {
+      return res.status(400).json({ erro: 'Indique a CNH e a matrícula/placa do veículo.' });
+    }
+
+    const cnhLimpa = String(cnh).replace(/\D/g, '');
+    const placaLimpa = String(placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+    const resultado = await sql`
+      SELECT id, nome, categoria, veiculo_modelo, veiculo_placa, saldo_carteira
+      FROM motoristas
+      WHERE regexp_replace(cnh_numero, '\\D', '', 'g') = ${cnhLimpa}
+        AND UPPER(regexp_replace(veiculo_placa, '[^a-zA-Z0-9]', '', 'g')) = ${placaLimpa}
+      LIMIT 1;
+    `;
+
+    if (resultado.length === 0) {
+      return res.status(401).json({ erro: 'CNH ou Placa não localizados.' });
+    }
+
+    const motorista = resultado[0];
+    await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${motorista.id};`;
+
+    const token = jwt.sign(
+      { id: motorista.id, role: 'motorista', categoria: motorista.categoria },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      sucesso: true,
+      token,
+      motorista: {
+        id: motorista.id,
+        nome: motorista.nome,
+        categoria: motorista.categoria,
+        veiculo: `${motorista.veiculo_modelo} (${motorista.veiculo_placa})`,
+        saldo: motorista.saldo_carteira
+      }
+    });
+  } catch (err) {
+    console.error('Erro no login do motorista:', err);
+    res.status(500).json({ erro: 'Falha interna ao validar condutor.' });
+  }
+});
+
+// Consultar saldo da carteira do condutor
 app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
   try {
     const motoristaId = req.usuario.id;
@@ -353,7 +410,7 @@ app.get('/api/motoristas/meu-saldo', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 3. ROTAS DE PEDIDOS (ROTAS ESTÁTICAS ANTES DE /:id)
+// 2. GESTÃO DE PEDIDOS (ROTAS ESTÁTICAS)
 // ============================================================================
 
 app.post('/api/pedidos', async (req, res) => {
@@ -441,7 +498,7 @@ app.get('/api/pedidos/historico', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 4. ROTAS DE PEDIDOS COM PARÂMETRO DINÂMICO (:id)
+// 3. PEDIDOS DINÂMICOS (:id)
 // ============================================================================
 
 app.get('/api/pedidos/:id/status', async (req, res) => {
@@ -592,8 +649,73 @@ app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 5. AVALIAÇÕES E DOCUMENTOS
+// 4. DOCUMENTOS, TRIAGEM E AVALIAÇÕES
 // ============================================================================
+
+app.post('/api/motoristas/documentos', autenticarToken, async (req, res) => {
+  try {
+    const motoristaId = req.usuario.id;
+    const { docCnh, docCrlv } = req.body;
+
+    if (!docCnh || !docCrlv) {
+      return res.status(400).json({ erro: 'Forneça a foto da CNH e do CRLV.' });
+    }
+
+    const atualizado = await sql`
+      UPDATE motoristas
+      SET doc_cnh_url = ${docCnh},
+          doc_crlv_url = ${docCrlv},
+          status_aprovacao = 'pendente',
+          motivo_recusa = NULL
+      WHERE id = ${motoristaId}
+      RETURNING id, nome, status_aprovacao;
+    `;
+
+    res.json({
+      sucesso: true,
+      mensagem: 'Documentos submetidos para análise da equipe HUBy.',
+      motorista: atualizado[0]
+    });
+  } catch (err) {
+    console.error('Erro no upload de documentos:', err);
+    res.status(500).json({ erro: 'Falha ao registrar documentos.' });
+  }
+});
+
+app.put('/api/admin/motoristas/:id/triagem', autenticarToken, async (req, res) => {
+  try {
+    if (req.usuario.role !== 'admin') {
+      return res.status(403).json({ erro: 'Acesso restrito à administração.' });
+    }
+
+    const { id } = req.params;
+    const { acao, motivo } = req.body;
+
+    if (!['aprovar', 'recusar'].includes(acao)) {
+      return res.status(400).json({ erro: 'Ação inválida. Utilize aprovar ou recusar.' });
+    }
+
+    const novoStatus = acao === 'aprovar' ? 'aprovado' : 'recusado';
+    const motivoRecusa = acao === 'recusar' ? (motivo || 'Documentação em desacordo.') : null;
+
+    const mot = await sql`
+      UPDATE motoristas
+      SET status_aprovacao = ${novoStatus},
+          motivo_recusa = ${motivoRecusa}
+      WHERE id = ${id}
+      RETURNING id, nome, status_aprovacao, motivo_recusa;
+    `;
+
+    if (mot.length === 0) {
+      return res.status(404).json({ erro: 'Motorista não encontrado.' });
+    }
+
+    res.json({ sucesso: true, motorista: mot[0] });
+  } catch (err) {
+    console.error('Erro na triagem:', err);
+    res.status(500).json({ erro: 'Falha ao processar triagem.' });
+  }
+});
 
 app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
   try {
@@ -636,7 +758,7 @@ app.post('/api/pedidos/:id/avaliar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 6. PAINEL ADMINISTRATIVO
+// 5. PAINEL ADMINISTRATIVO & MÉTRICAS
 // ============================================================================
 
 app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
@@ -645,22 +767,50 @@ app.get('/api/admin/metricas', autenticarToken, async (req, res) => {
       return res.status(403).json({ erro: 'Acesso reservado à administração.' });
     }
 
-    const stats = await sql`
-      SELECT COUNT(id) AS total_corridas, COALESCE(SUM(valor_total), 0) AS faturamento
-      FROM pedidos WHERE status = 'concluido';
+    const statsFinanceiro = await sql`
+      SELECT 
+        COUNT(id) AS total_corridas_concluidas,
+        COALESCE(SUM(valor_total), 0) AS faturamento_bruto
+      FROM pedidos
+      WHERE status = 'concluido';
+    `;
+
+    const faturamentoBruto = Number(statsFinanceiro[0].faturamento_bruto || 0);
+    const receitaPlataforma = Number((faturamentoBruto * 0.15).toFixed(2));
+    const repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
+
+    const statsUsuarios = await sql`
+      SELECT 
+        (SELECT COUNT(*) FROM motoristas WHERE status_aprovacao = 'aprovado') AS motoristas_ativos,
+        (SELECT COUNT(*) FROM usuarios WHERE role = 'cliente') AS total_clientes,
+        (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente') AS chamadas_em_aberto;
+    `;
+
+    const ultimasChamadas = await sql`
+      SELECT id, status, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
+      FROM pedidos
+      ORDER BY criado_em DESC
+      LIMIT 15;
     `;
 
     res.json({
-      faturamentoBruto: Number(stats[0].faturamento || 0),
-      totalCorridas: Number(stats[0].total_corridas || 0)
+      faturamentoBruto,
+      receitaPlataforma,
+      repasseMotoristas,
+      totalCorridas: Number(statsFinanceiro[0].total_corridas_concluidas || 0),
+      motoristasAtivos: Number(statsUsuarios[0].motoristas_ativos || 0),
+      totalClientes: Number(statsUsuarios[0].total_clientes || 0),
+      chamadasEmAberto: Number(statsUsuarios[0].chamadas_em_aberto || 0),
+      ultimasChamadas
     });
   } catch (err) {
-    res.status(500).json({ erro: 'Erro nas métricas.' });
+    console.error('Erro nas métricas admin:', err);
+    res.status(500).json({ erro: 'Falha ao extrair métricas do sistema.' });
   }
 });
 
 // ============================================================================
-// INICIALIZAÇÃO DO SERVIDOR (ÚLTIMA LINHA OBRIGATÓRIA)
+// INICIALIZAÇÃO DO SERVIDOR (NA ÚLTIMA LINHA)
 // ============================================================================
 app.listen(port, () => {
   console.log(`Servidor HUBy 2.0 ativo na porta ${port}`);
