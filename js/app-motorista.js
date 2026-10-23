@@ -6,7 +6,7 @@ let pedidoAceitoAtual = null;
 let intervalRadar = null;
 let chamadasAnterioresIds = new Set();
 let statusAprovacaoAtual = 'aprovado';
-let categoriaMotorista = 'carro'; // Padrão de contingência até carregar o perfil
+let categoriaMotorista = 'carro';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Inicializa o mapa Leaflet
+  // 1. Inicializa o mapa Leaflet no motorista com recentralização forçada
   try {
     hubyMapa = new HubyMapa('mapaMotorista');
     hubyMapa.inicializar();
@@ -27,9 +27,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (hubyMapa && hubyMapa.map) {
         hubyMapa.map.invalidateSize();
       }
-    }, 200);
+    }, 250);
 
-    hubyMapa.obterGPS();
+    hubyMapa.obterGPS((pos) => {
+      console.log('GPS do motorista fixado com sucesso:', pos);
+    });
   } catch (err) {
     console.warn('Erro ao inicializar mapa do motorista:', err);
   }
@@ -44,6 +46,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (statusAprovacaoAtual === 'aprovado') {
     iniciarRadarChamadas();
   }
+
+  // 5. Limpeza de recursos ao fechar ou recarregar
+  window.addEventListener('beforeunload', () => {
+    if (intervalRadar) clearInterval(intervalRadar);
+    if (hubyMapa?.watchId !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(hubyMapa.watchId);
+    }
+  });
 });
 
 // Emissor sonoro nativo via Web Audio API + Vibração
@@ -94,7 +104,7 @@ async function atualizarPerfilESaldo() {
 
     const dados = await resp.json();
     statusAprovacaoAtual = dados.status_aprovacao || 'aprovado';
-    categoriaMotorista = dados.categoria || 'carro'; // Salva a categoria registrada
+    categoriaMotorista = dados.categoria || 'carro';
 
     const saldoEl = document.getElementById('saldoCarteiraValor') || document.getElementById('txtSaldoMotorista');
     if (saldoEl) {
@@ -184,7 +194,6 @@ function iniciarRadarChamadas() {
     if (pedidoAceitoAtual || statusAprovacaoAtual !== 'aprovado') return;
 
     try {
-      // Envia a categoria para filtrar apenas viagens compatíveis com o veículo cadastrado
       const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(categoriaMotorista)}`);
       if (!resp.ok) return;
 
