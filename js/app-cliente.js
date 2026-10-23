@@ -47,14 +47,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }, 300);
 
-    hubyMapa.obterGPS();
+    // Dispara a captura de GPS garantindo que o mapa e os dados da tela sincronizem
+    hubyMapa.obterGPS((posicaoReal) => {
+      console.log('Localização real do cliente fixada:', posicaoReal);
+      if (coordsDestino && hubyMapa) {
+        hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
+          rotaAtual = rota;
+          atualizarResumoValores();
+        });
+      }
+    });
+
   } catch (err) {
     console.error('Erro ao inicializar mapa:', err);
   }
 
-  // 4. Botão GPS Recenter
+  // 4. Botão GPS Recenter com resposta ativa
   document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
-    if (hubyMapa) hubyMapa.obterGPS();
+    if (hubyMapa) {
+      hubyMapa.obterGPS((posicaoReal) => {
+        if (coordsDestino) {
+          hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
+            rotaAtual = rota;
+            atualizarResumoValores();
+          });
+        }
+      });
+    }
   });
 
   // 5. Drawer / Menu Lateral e Checagem do Admin
@@ -359,7 +378,6 @@ function iniciarPollingStatus() {
           <strong>Contato:</strong> ${pedido.motorista_telefone || 'Disponível no app'}
         `;
 
-        // Desenha ou posiciona o pino do motorista a caminho no mapa
         if (hubyMapa && hubyMapa.map && typeof L !== 'undefined' && !markerMotoristaAaminho) {
           const iconeCondutor = L.divIcon({
             className: 'huby-pin-motorista',
