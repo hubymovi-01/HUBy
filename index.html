@@ -71,6 +71,15 @@
       }
     })();
   </script>
+  <script>
+    (function() {
+      const token = localStorage.getItem('huby_token');
+      // Se não tem login ativo, força ir para a tela de boas-vindas
+      if (!token) {
+        window.location.replace('./welcome.html');
+      }
+    })();
+  </script>
 </head>
 <body class="client-viewport">
 

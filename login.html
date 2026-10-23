@@ -22,7 +22,7 @@
       </header>
 
       <!-- SELETOR DE PERFIL: PASSAGEIRO VS MOTORISTA -->
-      <div class="role-selector">
+      <div class="role-selector" id="roleSelectorContainer">
         <button type="button" id="btnLoginRoleCliente" class="btn-role active">
           <span class="role-icon">👤</span>
           <span class="role-name">Passageiro</span>
@@ -33,7 +33,7 @@
         </button>
       </div>
 
-      <!-- ALERTA INTEGRADO (SEM ALERT NATIVO) -->
+      <!-- ALERTA INTEGRADO -->
       <div id="alertaLoginBox" class="auth-alert" style="display: none;"></div>
 
       <!-- FORMULÁRIO DE LOGIN -->
@@ -73,15 +73,16 @@
         </button>
       </form>
 
-      <!-- NAVEGAÇÃO DE RODAPÉ -->
+      <!-- NAVEGAÇÃO DE RODAPÉ (ÚNICA E LIMPA) -->
       <footer class="auth-footer-nav">
         <span>Novo no HUBy?</span>
-        <a href="./cadastro.html">Criar nova conta</a>
+        <a href="./cadastro.html" id="linkCriarConta">Criar nova conta</a>
       </footer>
 
-      <div style="text-align: center; margin-top: 14px;">
-        <a href="./index.html" style="color: var(--text-dim); text-decoration: none; font-size: 12px; font-weight: 700;">
-          ← Voltar ao Mapa
+      <!-- RETORNO PARA TROCA DE PERFIL -->
+      <div style="text-align: center; margin-top: 16px;">
+        <a href="./welcome.html" style="color: #64748B; text-decoration: none; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+          <span>←</span> Escolher outro perfil
         </a>
       </div>
 
@@ -93,9 +94,9 @@
 
     let roleLoginAtual = 'cliente';
 
-    
     const btnRoleCliente = document.getElementById('btnLoginRoleCliente');
     const btnRoleMotorista = document.getElementById('btnLoginRoleMotorista');
+    const roleSelector = document.getElementById('roleSelectorContainer');
     const txtSubtitulo = document.getElementById('txtSubtituloLogin');
     const lblIdentificador = document.getElementById('lblIdentificador');
     const icoIdentificador = document.getElementById('icoIdentificador');
@@ -104,40 +105,63 @@
     const btnToggleSenha = document.getElementById('btnToggleLoginSenha');
     const btnSubmit = document.getElementById('btnSubmeterLogin');
     const alertaBox = document.getElementById('alertaLoginBox');
+    const linkCriarConta = document.getElementById('linkCriarConta');
 
-    // 1. Alternador de Perfil
-    btnRoleCliente.onclick = () => {
+    // Funções de alternância de perfil
+    function setModoCliente() {
       roleLoginAtual = 'cliente';
       btnRoleCliente.classList.add('active');
       btnRoleMotorista.classList.remove('active');
-      txtSubtitulo.textContent = 'Inicie sessão para solicitar corridas';
+      txtSubtitulo.textContent = 'Inicie sessão para solicitar viagens';
       lblIdentificador.textContent = 'E-mail, Telefone ou CPF';
       icoIdentificador.textContent = '✉️';
-      inputIdentificador.placeholder = 'Digite o seu acesso';
+      inputIdentificador.placeholder = 'Digite seu e-mail, telefone ou CPF';
       btnSubmit.querySelector('span').textContent = 'Entrar como Passageiro';
+      linkCriarConta.href = './cadastro.html?perfil=cliente';
+      localStorage.setItem('huby_tipo_acesso', 'cliente');
       esconderAlerta();
-    };
+    }
 
-    btnRoleMotorista.onclick = () => {
+    function setModoMotorista() {
       roleLoginAtual = 'motorista';
       btnRoleMotorista.classList.add('active');
       btnRoleCliente.classList.remove('active');
-      txtSubtitulo.textContent = 'Aceda ao radar de corridas e gerencie os seus ganhos';
+      txtSubtitulo.textContent = 'Aceda ao radar de viagens e faça parte da rede';
       lblIdentificador.textContent = 'CNH, Telefone ou E-mail';
       icoIdentificador.textContent = '🪪';
       inputIdentificador.placeholder = 'Digite a sua CNH, telefone ou e-mail';
       btnSubmit.querySelector('span').textContent = 'Entrar como Motorista Parceiro';
+      linkCriarConta.href = './cadastro.html?perfil=motorista';
+      localStorage.setItem('huby_tipo_acesso', 'motorista');
       esconderAlerta();
-    };
+    }
 
-    // 2. Alternar visualização da senha
+    btnRoleCliente.onclick = setModoCliente;
+    btnRoleMotorista.onclick = setModoMotorista;
+
+    // Leitura do perfil vindo do welcome.html
+    const urlParams = new URLSearchParams(window.location.search);
+    const perfilParam = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso');
+
+    if (perfilParam === 'motorista') {
+      setModoMotorista();
+    } else {
+      setModoCliente();
+    }
+
+    // Se o usuário veio pelo onboarding com perfil definido, oculta o seletor duplicado
+    if (perfilParam && roleSelector) {
+      roleSelector.style.display = 'none';
+    }
+
+    // Alternar visibilidade da senha
     btnToggleSenha.onclick = () => {
       const isPass = inputSenha.type === 'password';
       inputSenha.type = isPass ? 'text' : 'password';
       btnToggleSenha.textContent = isPass ? '🔒' : '👁️';
     };
 
-    // 3. Submissão autenticada compatível com o server.js
+    // Submissão do formulário
     document.getElementById('formLoginHuby').onsubmit = async (e) => {
       e.preventDefault();
       esconderAlerta();
@@ -164,10 +188,9 @@
           })
         });
 
-        // Verificação se a resposta foi um HTML por erro de infraestrutura
         const contentType = resp.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Servidor indisponível ou a iniciar. Aguarde 20 segundos e tente de novo.');
+          throw new Error('Servidor a iniciar no Render. Aguarde 20 segundos e tente de novo.');
         }
 
         const data = await resp.json();
@@ -175,7 +198,6 @@
           throw new Error(data.erro || 'Falha ao validar credenciais.');
         }
 
-        // Armazenamento da sessão
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_id', data.usuario.id);
         localStorage.setItem('huby_user_name', data.usuario.nome);
