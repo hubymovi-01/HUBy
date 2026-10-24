@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * DIAGNÓSTICO ATIVO - Força Alta Precisão e Exibe Alertas
+ * DIAGNÓSTICO ATIVO - Código Completo e Corrigido
  * ============================================================================
  */
 
@@ -131,23 +131,19 @@ export class HubyMapa {
     }
   }
 
- obterGPSReal(callbackSucesso) {
-    if (!navigator.geolocation) {
-      alert("O seu telemóvel não suporta GPS pelo navegador.");
+  obterGPSReal(callbackSucesso) {
+    if (!('geolocation' in navigator)) {
+      alert('O seu telemóvel não suporta GPS pelo navegador.');
       return;
     }
-
-    // Avisa que a procura começou
-    console.log("A pedir localização ao telemóvel...");
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         const precisao = pos.coords.accuracy;
-        
-        // ALERTA DE SUCESSO - Vai mostrar as coordenadas exatas no ecrã
-        alert(`✅ SUCESSO!\nSatélite encontrou a sua rua.\nPrecisão: ${precisao} metros.`);
+
+        alert('✅ SUCESSO! Satélite encontrou a sua rua.\\nPrecisão: ' + precisao.toFixed(0) + ' metros.');
 
         this.coordsOrigem = [lat, lng];
         this.definirOrigem(lat, lng, precisao);
@@ -160,13 +156,12 @@ export class HubyMapa {
         if (callbackSucesso) callbackSucesso({ lat, lng });
       },
       (err) => {
-        // ALERTA DE FALHA - Vai mostrar exatamente quem bloqueou (Sistema, Navegador ou Timeout)
         let motivo = err.message;
         if (err.code === 1) motivo = "1 - Permissão Negada pelo Chrome/Safari";
         if (err.code === 2) motivo = "2 - Sinal de Satélite Indisponível";
         if (err.code === 3) motivo = "3 - Timeout (Demorou mais de 30 segundos)";
         
-        alert(`❌ ERRO NO TELEMÓVEL\nO telemóvel bloqueou o GPS.\nMotivo: ${motivo}`);
+        alert('❌ ERRO NO TELEMÓVEL\\nO telemóvel bloqueou o GPS.\\nMotivo: ' + motivo);
         
         if (!this.markerOrigem) {
           this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
@@ -174,8 +169,8 @@ export class HubyMapa {
       },
       {
         enableHighAccuracy: true,
-        timeout: 30000,     // Damos 30 segundos para o telemóvel encontrar o satélite
-        maximumAge: 60000   // Aceita uma localização apanhada há 1 minuto (ajuda a contornar o bloqueio)
+        timeout: 30000,
+        maximumAge: 60000
       }
     );
   }
