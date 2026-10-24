@@ -18,10 +18,9 @@
   
   <!-- Estilos Leaflet e Aplicação -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./css/base.css?v=2.0.5">
-  <link rel="stylesheet" href="./css/cliente.css?v=2.0.5">
+  <link rel="stylesheet" href="./css/base.css?v=2.1.2">
+  <link rel="stylesheet" href="./css/cliente.css?v=2.1.2">
 
-  <!-- A biblioteca do Leaflet TEM que carregar na Head para o telemóvel desenhar a div na hora -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
@@ -36,32 +35,33 @@
       100% { opacity: 0; visibility: hidden; display: none !important; pointer-events: none; }
     }
 
-    /* BOTÃO FLUTUANTE DE EMERGÊNCIA / SOS */
-    .btn-floating-sos {
+    /* BOTÃO FLUTUANTE DO GPS AJUSTADO */
+    .btn-floating-gps {
       position: absolute;
-      bottom: 235px;
+      bottom: 240px; /* Posicionado acima do dock inferior */
       right: 18px;
       width: 44px;
       height: 44px;
       background: rgba(17, 24, 39, 0.9);
-      border: 1px solid rgba(239, 68, 68, 0.4);
+      border: 1px solid rgba(16, 185, 129, 0.4);
       border-radius: 50%;
-      color: #EF4444;
+      color: #10B981;
       display: flex;
       align-items: center;
       justify-content: center;
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
-      z-index: 9999; /* Resolvido conflito de z-index no telemovel */
+      z-index: 9999;
       cursor: pointer;
       backdrop-filter: blur(8px);
       transition: all 0.2s ease;
     }
     
-    .btn-floating-gps {
-      z-index: 9999; /* Isola o GPS de qualquer painel inferior */
+    .btn-floating-gps:active {
+      transform: scale(0.92);
+      border-color: #10B981;
+      background: rgba(16, 185, 129, 0.15);
     }
 
-    /* Trava Absoluta do Ecrã do Leaflet no Telemóvel */
     #mapaCliente {
       position: absolute;
       top: 0;
@@ -74,7 +74,6 @@
     }
   </style>
 
-  <!-- VERIFICAÇÃO DE SESSÃO / ONBOARDING -->
   <script>
     (function() {
       const token = localStorage.getItem('huby_token');
@@ -87,7 +86,6 @@
 </head>
 <body class="client-viewport">
 
-  <!-- 1. SPLASH SCREEN NATIVA -->
   <div id="hubySplash" class="splash-screen" onclick="this.style.display='none'">
     <div class="splash-content">
       <div class="splash-logo">
@@ -98,10 +96,23 @@
     </div>
   </div>
 
-  <!-- 2. MAPA LEAFLET -->
+  <script>
+    (function() {
+      function fecharSplashSeguro() {
+        var el = document.getElementById('hubySplash');
+        if (el) {
+          el.style.opacity = '0';
+          setTimeout(function() {
+            if (el && el.parentNode) el.parentNode.removeChild(el);
+          }, 400);
+        }
+      }
+      setTimeout(fecharSplashSeguro, 1200);
+    })();
+  </script>
+
   <div id="mapaCliente"></div>
 
-  <!-- 3. BARRA SUPERIOR FLUTUANTE -->
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
       <span></span>
@@ -122,13 +133,10 @@
     </button>
   </header>
 
-  <!-- 4. MENU LATERAL DESLIZANTE (DRAWER) -->
   <div id="menuBackdrop" class="drawer-backdrop"></div>
   <aside id="drawerMenu" class="drawer-panel">
-    <!-- Cabeçalho do Perfil -->
     <div class="drawer-profile" id="drawerPerfilBox"></div>
 
-    <!-- Links de Navegação -->
     <nav class="drawer-nav">
       <a href="#" id="menuItemViagens" class="drawer-item">
         <span class="d-icon">📋</span>
@@ -166,7 +174,6 @@
         </div>
       </a>
 
-      <!-- ITEM EXCLUSIVO PARA ADMINISTRADOR -->
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
         <span class="d-icon">⚡</span>
         <div class="d-info">
@@ -182,14 +189,7 @@
     </div>
   </aside>
 
-  <!-- 5. BOTÃO FLUTUANTE DE SEGURANÇA (SOS / COMPARTILHAR) -->
-  <button type="button" id="btnSOSRapido" class="btn-floating-sos" aria-label="Segurança e Emergência" title="Segurança da Viagem">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-    </svg>
-  </button>
-
-  <!-- 6. BOTÃO GPS FLUTUANTE -->
+  <!-- BOTÃO FLUTUANTE DE GPS (BOTÃO SOS REMOVIDO) -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
@@ -200,7 +200,6 @@
     </svg>
   </button>
 
-  <!-- 7. DOCK INFERIOR (BOTTOM SHEET) -->
   <section class="client-dock-sheet" style="z-index: 50;">
     <div class="sheet-drag-handle"></div>
 
@@ -250,7 +249,7 @@
     </button>
   </section>
 
-  <!-- MODAIS (REMOVIDOS DE Z-INDEX BLOQUEANTE) -->
+  <!-- MODAL DE CONTATO DE SEGURANÇA (Agora acedido apenas pelo menu) -->
   <div id="modalSeguranca" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card">
       <div class="modal-header-row">
@@ -347,12 +346,10 @@
     </div>
   </div>
 
-  <!-- Scripts: Forçar a versão nova para limpar cache do PWA -->
-  <script type="module" src="./js/app-cliente.js?v=2.1.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=2.1.2"></script>
   
   <script type="module">
     const modalSeg = document.getElementById('modalSeguranca');
-    const btnSOS = document.getElementById('btnSOSRapido');
     const btnMenuSeg = document.getElementById('menuItemSeguranca');
     const btnFecharSeg = document.getElementById('btnFecharSeguranca');
     const infoContato = document.getElementById('infoContatoSeguranca');
@@ -371,7 +368,6 @@
       if (modalSeg) modalSeg.style.display = 'flex';
     }
 
-    btnSOS?.addEventListener('click', abrirModalSeguranca);
     btnMenuSeg?.addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('menuBackdrop')?.click();
