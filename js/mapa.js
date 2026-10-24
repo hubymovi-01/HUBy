@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * DIAGNÓSTICO ATIVO - Código Completo e Corrigido
+ * CÓDIGO FINAL - Bloqueio de Localização Falsa (Rede/Wi-Fi)
  * ============================================================================
  */
 
@@ -61,7 +61,6 @@ export class HubyMapa {
       });
     }
 
-    // Chama o GPS de diagnóstico assim que abre o mapa
     this.obterGPSReal();
   }
 
@@ -143,34 +142,37 @@ export class HubyMapa {
         const lng = pos.coords.longitude;
         const precisao = pos.coords.accuracy;
 
-        alert('✅ SUCESSO! Satélite encontrou a sua rua.\\nPrecisão: ' + precisao.toFixed(0) + ' metros.');
+        // SE A PRECISÃO FOR MAIOR QUE 150 METROS, É REDE E NÃO SATÉLITE!
+        if (precisao > 150) {
+          alert(`⚠️ SINAL DE GPS FRACO\n\nO telemóvel está a adivinhar a localização pela rede (Erro de ${precisao.toFixed(0)}m).\n\nLigue a "Localização Precisa" nas definições e vá para um local mais aberto.`);
+          
+          if (!this.markerOrigem) {
+            this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
+          }
+          return; // Aborta e não centraliza na localização errada
+        }
 
+        // Se chegou aqui, é o satélite real!
         this.coordsOrigem = [lat, lng];
         this.definirOrigem(lat, lng, precisao);
 
         if (this.map) {
-          this.map.flyTo([lat, lng], 17, { animate: false });
+          this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.5 });
           this.invalidarTamanho();
         }
 
         if (callbackSucesso) callbackSucesso({ lat, lng });
       },
       (err) => {
-        let motivo = err.message;
-        if (err.code === 1) motivo = "1 - Permissão Negada pelo Chrome/Safari";
-        if (err.code === 2) motivo = "2 - Sinal de Satélite Indisponível";
-        if (err.code === 3) motivo = "3 - Timeout (Demorou mais de 30 segundos)";
-        
-        alert('❌ ERRO NO TELEMÓVEL\\nO telemóvel bloqueou o GPS.\\nMotivo: ' + motivo);
-        
+        console.warn('Falha no GPS:', err.message);
         if (!this.markerOrigem) {
           this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
         }
       },
       {
         enableHighAccuracy: true,
-        timeout: 30000,
-        maximumAge: 60000
+        timeout: 20000,
+        maximumAge: 0
       }
     );
   }
