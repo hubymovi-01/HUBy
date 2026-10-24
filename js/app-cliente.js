@@ -13,7 +13,6 @@ let corridaParaAvaliarId = null;
 let notaSelecionada = 5;
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Garante a remoção da Splash Screen
   const splash = document.getElementById('hubySplash');
   if (splash) {
     splash.style.opacity = '0';
@@ -22,10 +21,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 400);
   }
 
-  // 2. Sincroniza tarifas do servidor e multiplicador de pico em tempo real
   await sincronizarTarifasServidor();
 
-  // 3. Inicializar o Mapa Leaflet com prioridade de Geolocalização
   try {
     hubyMapa = new HubyMapa('mapaCliente');
     hubyMapa.inicializar(async (rota, coords) => {
@@ -41,46 +38,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       atualizarResumoValores();
     });
 
-    // Invalidação forçada do tamanho para evitar corte de tela
     setTimeout(() => {
       if (hubyMapa && hubyMapa.map) {
         hubyMapa.map.invalidateSize();
       }
     }, 250);
 
-    // Obtém o GPS real do cliente e centraliza a câmera
-    hubyMapa.obterGPS((posicaoReal) => {
-      console.log('GPS do cliente confirmado:', posicaoReal);
-      if (coordsDestino && hubyMapa) {
-        hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
-          rotaAtual = rota;
-          atualizarResumoValores();
-        });
-      }
-    });
   } catch (err) {
     console.error('Erro ao inicializar mapa:', err);
   }
 
-  // 4. Botão GPS Recenter com resposta ativa
-  document.getElementById('btnLocalizarGPS')?.addEventListener('click', () => {
-    if (hubyMapa) {
-      hubyMapa.obterGPS((posicaoReal) => {
-        if (coordsDestino) {
-          hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
-            rotaAtual = rota;
-            atualizarResumoValores();
-          });
-        }
-      });
-    }
-  });
+  // BOTÃO GPS CORRIGIDO PARA ECRÃS TÁTEIS (TELEMOVEL)
+  const btnGPS = document.getElementById('btnLocalizarGPS');
+  if (btnGPS) {
+    btnGPS.addEventListener('click', (e) => {
+      e.preventDefault(); // Impede duplo clique no telemóvel
+      e.stopPropagation();
+      if (hubyMapa) {
+        hubyMapa.obterGPS((posicaoReal) => {
+          if (coordsDestino) {
+            hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
+              rotaAtual = rota;
+              atualizarResumoValores();
+            });
+          }
+        });
+      }
+    });
+  }
 
-  // 5. Drawer / Menu Lateral e Checagem do Admin
   configurarDrawerMenu();
   verificarAcessoAdminMenu();
 
-  // 6. Histórico Modal
   document.getElementById('btnNavViagens')?.addEventListener('click', carregarEExibirHistoricoModal);
   document.getElementById('menuItemViagens')?.addEventListener('click', () => {
     fecharDrawer();
@@ -91,7 +80,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modal) modal.style.display = 'none';
   });
 
-  // 7. Seleção de Categorias
   const chips = document.querySelectorAll('.category-chip');
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -103,7 +91,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 8. Botão Pedir / Cancelar HUBy
   document.getElementById('btnPedirHuby')?.addEventListener('click', () => {
     if (pedidoAtivoId) {
       cancelarBusca();
@@ -112,15 +99,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 9. Modal de Avaliação
   configurarModalAvaliacao();
 
-  // Registo do Service Worker PWA
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
   }
 
-  // Ouvintes do Modal de Pagamentos
   document.getElementById('menuItemPagamentos')?.addEventListener('click', () => {
     fecharDrawer();
     const modal = document.getElementById('modalPagamento');
@@ -141,13 +125,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // Limpeza de polling ao descarregar a página
   window.addEventListener('beforeunload', () => {
     if (intervalPolling) clearInterval(intervalPolling);
   });
 });
 
-// Exibe o botão de Admin no Drawer se a role autenticada for 'admin'
 function verificarAcessoAdminMenu() {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');

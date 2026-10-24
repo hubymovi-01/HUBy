@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO FINAL - Bloqueio de Localização Falsa (Rede/Wi-Fi)
+ * CÓDIGO FINAL - Rastreamento Contínuo em Tempo Real
  * ============================================================================
  */
 
@@ -15,7 +15,9 @@ export class HubyMapa {
     this.rotaLayer = null;
     this.coordsOrigem = [-8.3580, -42.2460];
     this.coordsDestino = null;
+    this.watchId = null;
     this.onClickDestinoCallback = null;
+    this.gpsFixo = false; // Controla se a câmara já voou para o cliente
   }
 
   inicializar(onClickDestino = null) {
@@ -24,11 +26,15 @@ export class HubyMapa {
     if (!container) return;
 
     if (this.map) {
+      if (this.watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(this.watchId);
+      }
       this.map.remove();
       this.map = null;
     }
 
     this.onClickDestinoCallback = onClickDestino;
+    this.gpsFixo = false;
 
     this.map = L.map(this.containerId, {
       zoomControl: false,
@@ -61,6 +67,7 @@ export class HubyMapa {
       });
     }
 
+    // Liga o rastreio contínuo
     this.obterGPSReal();
   }
 
@@ -130,45 +137,42 @@ export class HubyMapa {
     }
   }
 
-  obterGPSReal(callbackSucesso) {
-    if (!('geolocation' in navigator)) {
-      alert('O seu telemóvel não suporta GPS pelo navegador.');
-      return;
-    }
+  obterGPSReal(callbackSucesso = null) {
+    if (!('geolocation' in navigator)) return;
 
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const precisao = pos.coords.accuracy;
+    const atualizarPosicaoTempoReal = async (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const precisao = pos.coords.accuracy;
 
-        // SE A PRECISÃO FOR MAIOR QUE 150 METROS, É REDE E NÃO SATÉLITE!
-        if (precisao > 150) {
-          alert(`⚠️ SINAL DE GPS FRACO\n\nO telemóvel está a adivinhar a localização pela rede (Erro de ${precisao.toFixed(0)}m).\n\nLigue a "Localização Precisa" nas definições e vá para um local mais aberto.`);
-          
-          if (!this.markerOrigem) {
-            this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
-          }
-          return; // Aborta e não centraliza na localização errada
-        }
+      this.coordsOrigem = [lat, lng];
+      this.definirOrigem(lat, lng, precisao);
 
-        // Se chegou aqui, é o satélite real!
-        this.coordsOrigem = [lat, lng];
-        this.definirOrigem(lat, lng, precisao);
-
+      // Só voa a câmara na primeira vez que apanha sinal OU se o utilizador clicou no botão de recentrar
+      if (!this.gpsFixo) {
         if (this.map) {
-          this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.5 });
+          this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
           this.invalidarTamanho();
         }
+        this.gpsFixo = true;
+      }
 
-        if (callbackSucesso) callbackSucesso({ lat, lng });
-      },
-      (err) => {
-        console.warn('Falha no GPS:', err.message);
-        if (!this.markerOrigem) {
-          this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
-        }
-      },
+      // Se o cliente já tiver marcado destino e estiver a andar, a rota atualiza com ele
+      if (this.coordsDestino && this.onClickDestinoCallback) {
+        const rota = await this.calcularRota([lat, lng], this.coordsDestino);
+        this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
+      }
+
+      if (callbackSucesso) callbackSucesso({ lat, lng });
+    };
+
+    // Limpa qualquer radar de GPS antigo para não duplicar
+    if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
+
+    // Liga o radar de TEMPO REAL (watchPosition)
+    this.watchId = navigator.geolocation.watchPosition(
+      atualizarPosicaoTempoReal,
+      (err) => console.warn('Aviso GPS em tempo real:', err.message),
       {
         enableHighAccuracy: true,
         timeout: 20000,
@@ -178,6 +182,8 @@ export class HubyMapa {
   }
 
   obterGPS(callbackSucesso) {
+    // Quando o utilizador clica na mira do GPS, destravamos a câmara para voar até ele
+    this.gpsFixo = false; 
     this.obterGPSReal(callbackSucesso);
   }
 
