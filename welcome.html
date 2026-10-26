@@ -15,7 +15,7 @@
 
     .onboarding-step {
       display: none;
-      animation: fadeIn 0.3s ease forwards;
+      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
     .onboarding-step.active {
@@ -25,7 +25,7 @@
     @keyframes fadeIn {
       from {
         opacity: 0;
-        transform: translateY(8px);
+        transform: translateY(12px);
       }
       to {
         opacity: 1;
@@ -33,17 +33,17 @@
       }
     }
 
-    .role-selection-grid {
+    .role-selection-grid, .action-choice-grid {
       display: flex;
       flex-direction: column;
       gap: 12px;
-      margin: 20px 0;
+      margin: 18px 0;
     }
 
     .card-choice {
       background: rgba(255, 255, 255, 0.03);
       border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 18px;
+      border-radius: 16px;
       padding: 16px;
       display: flex;
       align-items: center;
@@ -61,21 +61,21 @@
     }
 
     .card-choice-icon {
-      width: 52px;
-      height: 52px;
+      width: 48px;
+      height: 48px;
       background: #151D2C;
       border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 14px;
+      border-radius: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
+      font-size: 24px;
       flex-shrink: 0;
     }
 
     .card-choice-info h3 {
       margin: 0;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 800;
       color: #FFF;
     }
@@ -106,6 +106,20 @@
       width: 24px;
       background: #10B981;
     }
+
+    .selected-role-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #10B981;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
   </style>
 </head>
 <body class="auth-body">
@@ -125,8 +139,8 @@
           </p>
         </header>
 
-        <div style="text-align: center; margin: 26px 0;">
-          <div style="font-size: 64px; margin-bottom: 10px;">🏙️⚡</div>
+        <div style="text-align: center; margin: 24px 0;">
+          <div style="font-size: 60px; margin-bottom: 10px;">🏙️⚡</div>
           <p style="color: #64748B; font-size: 13px; margin: 0;">Prático, moderno e transparente.</p>
         </div>
 
@@ -137,6 +151,7 @@
         <div class="indicator-dots">
           <div class="dot active"></div>
           <div class="dot"></div>
+          <div class="dot"></div>
         </div>
       </section>
 
@@ -144,37 +159,75 @@
       <section id="step2" class="onboarding-step">
         <header class="auth-header">
           <div class="auth-badge">Personalização</div>
-          <h2 style="font-size: 24px; font-weight: 900; margin: 6px 0 0; color: #FFF;">Como quer usar o HUBy?</h2>
-          <p class="auth-desc">Selecione o seu objetivo para continuar</p>
+          <h2 style="font-size: 22px; font-weight: 900; margin: 6px 0 0; color: #FFF;">Como quer usar o HUBy?</h2>
+          <p class="auth-desc">Selecione o seu perfil para prosseguir</p>
         </header>
 
         <div class="role-selection-grid">
-          <!-- OPÇÃO PASSAGEIRO -->
-          <div class="card-choice" id="escolhaPassageiro">
+          <div class="card-choice" data-role="cliente">
             <div class="card-choice-icon">👤</div>
             <div class="card-choice-info">
               <h3>Sou Passageiro</h3>
-              <p>Viagens rápidas, entregas no próprio dia e transporte seguro na palma da mão.</p>
+              <p>Viagens rápidas e transporte seguro na palma da mão.</p>
             </div>
           </div>
 
-          <!-- OPÇÃO MOTORISTA PARCEIRO -->
-          <div class="card-choice" id="escolhaMotorista">
+          <div class="card-choice" data-role="motorista">
             <div class="card-choice-icon">🚘</div>
             <div class="card-choice-info">
               <h3>Quero ser Motorista Parceiro</h3>
-              <p>Conduza no seu próprio ritmo, conquiste a sua independência e faça parte da nossa rede de parceiros.</p>
+              <p>Conduza no seu ritmo e conquiste a sua independência.</p>
             </div>
           </div>
         </div>
 
-        <div style="text-align: center; margin-top: 12px;">
+        <div style="text-align: center; margin-top: 8px;">
           <button type="button" id="btnVoltarStep1" style="background: none; border: none; color: #64748B; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 12px;">
             ← Voltar
           </button>
         </div>
 
         <div class="indicator-dots">
+          <div class="dot"></div>
+          <div class="dot active"></div>
+          <div class="dot"></div>
+        </div>
+      </section>
+
+      <!-- PASSO 3: ESCOLHA ENTRE ENTRAR OU CRIAR CONTA -->
+      <section id="step3" class="onboarding-step">
+        <header class="auth-header">
+          <div id="badgePerfilSelecionado" class="selected-role-badge">👤 Passageiro</div>
+          <h2 style="font-size: 22px; font-weight: 900; margin: 6px 0 0; color: #FFF;">O que deseja fazer?</h2>
+          <p class="auth-desc">Escolha uma das opções abaixo para continuar</p>
+        </header>
+
+        <div class="action-choice-grid">
+          <div class="card-choice" id="opcaoLogin">
+            <div class="card-choice-icon">🔑</div>
+            <div class="card-choice-info">
+              <h3>Já tenho uma conta</h3>
+              <p>Iniciar sessão com as suas credenciais cadastradas.</p>
+            </div>
+          </div>
+
+          <div class="card-choice" id="opcaoCadastro">
+            <div class="card-choice-icon">✨</div>
+            <div class="card-choice-info">
+              <h3>Criar uma nova conta</h3>
+              <p>Registe-se agora para começar a usar a plataforma.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 8px;">
+          <button type="button" id="btnVoltarStep2" style="background: none; border: none; color: #64748B; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 12px;">
+            ← Voltar e trocar perfil
+          </button>
+        </div>
+
+        <div class="indicator-dots">
+          <div class="dot"></div>
           <div class="dot"></div>
           <div class="dot active"></div>
         </div>
@@ -186,20 +239,23 @@
   <script>
     const step1 = document.getElementById('step1');
     const step2 = document.getElementById('step2');
+    const step3 = document.getElementById('step3');
+    
     const btnAvancar = document.getElementById('btnAvancar');
-    const btnVoltar = document.getElementById('btnVoltarStep1');
-    const escolhaPassageiro = document.getElementById('escolhaPassageiro');
-    const escolhaMotorista = document.getElementById('escolhaMotorista');
+    const btnVoltarStep1 = document.getElementById('btnVoltarStep1');
+    const btnVoltarStep2 = document.getElementById('btnVoltarStep2');
+    
+    const badgePerfil = document.getElementById('badgePerfilSelecionado');
+    const opcaoLogin = document.getElementById('opcaoLogin');
+    const opcaoCadastro = document.getElementById('opcaoCadastro');
 
-    // Se o utilizador já tiver sessão iniciada, redireciona de imediato
+    let perfilEscolhido = 'cliente';
+
+    // Verificação de sessão existente
     const token = localStorage.getItem('huby_token');
     const role = localStorage.getItem('huby_user_role');
     if (token) {
-      if (role === 'motorista') {
-        window.location.replace('./motorista.html');
-      } else {
-        window.location.replace('./index.html');
-      }
+      window.location.replace(role === 'motorista' ? './motorista.html' : './index.html');
     }
 
     btnAvancar.onclick = () => {
@@ -207,19 +263,40 @@
       step2.classList.add('active');
     };
 
-    btnVoltar.onclick = () => {
+    btnVoltarStep1.onclick = () => {
       step2.classList.remove('active');
       step1.classList.add('active');
     };
 
-    escolhaPassageiro.onclick = () => {
-      localStorage.setItem('huby_tipo_acesso', 'cliente');
-      window.location.href = './login.html?perfil=cliente';
+    btnVoltarStep2.onclick = () => {
+      step3.classList.remove('active');
+      step2.classList.add('active');
     };
 
-    escolhaMotorista.onclick = () => {
-      localStorage.setItem('huby_tipo_acesso', 'motorista');
-      window.location.href = './login.html?perfil=motorista';
+    // Cliques nos perfis do Passo 2
+    document.querySelectorAll('.card-choice[data-role]').forEach(card => {
+      card.addEventListener('click', () => {
+        perfilEscolhido = card.getAttribute('data-role');
+        localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
+
+        if (perfilEscolhido === 'motorista') {
+          badgePerfil.innerHTML = '🚘 Motorista Parceiro';
+        } else {
+          badgePerfil.innerHTML = '👤 Passageiro';
+        }
+
+        step2.classList.remove('active');
+        step3.classList.add('active');
+      });
+    });
+
+    // Decisão final no Passo 3
+    opcaoLogin.onclick = () => {
+      window.location.href = `./login.html?perfil=${perfilEscolhido}`;
+    };
+
+    opcaoCadastro.onclick = () => {
+      window.location.href = `./cadastro.html?perfil=${perfilEscolhido}`;
     };
   </script>
 </body>
