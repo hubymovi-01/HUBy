@@ -202,7 +202,7 @@
       e.target.value = v;
     });
 
-    // Conversor de Imagem para Texto (Base64)
+    // Conversor de Imagem para Base64
     function processarUpload(inputId, boxId, callback) {
       const input = document.getElementById(inputId);
       const box = document.getElementById(boxId);
@@ -260,10 +260,12 @@
         }
       }
 
+      const btnSub = document.getElementById('btnSubmeterCadastro');
+      const spanBtn = btnSub.querySelector('span');
+
       try {
-        const btnSub = document.getElementById('btnSubmeterCadastro');
         btnSub.disabled = true;
-        btnSub.querySelector('span').textContent = 'A criar conta...';
+        if (spanBtn) spanBtn.textContent = 'A criar conta...';
 
         const resp = await fetch(`${API_URL}/api/usuarios/cadastro`, {
           method: 'POST',
@@ -272,7 +274,10 @@
         });
         
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Falha no registo.');
+        
+        if (!resp.ok) {
+          throw new Error(data.erro || `Erro no servidor (${resp.status})`);
+        }
 
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_role', data.usuario.role);
@@ -284,10 +289,10 @@
         }, 800);
 
       } catch (err) {
+        console.error("ERRO DETALHADO DO CADASTRO:", err);
         exibirAlerta(err.message, 'error');
-        const btnSub = document.getElementById('btnSubmeterCadastro');
         btnSub.disabled = false;
-        btnSub.querySelector('span').textContent = 'Criar Conta';
+        if (spanBtn) spanBtn.textContent = 'Criar Conta';
       }
     });
 
