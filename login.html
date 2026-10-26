@@ -3,138 +3,42 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Criar Conta • HUBy</title>
+  <title>Iniciar Sessão • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
-  <style>
-    .upload-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    .upload-box {
-      border: 2px dashed rgba(16, 185, 129, 0.4);
-      background: rgba(16, 185, 129, 0.05);
-      border-radius: 12px;
-      padding: 16px;
-      text-align: center;
-      cursor: pointer;
-      color: #10B981;
-      font-size: 13px;
-      font-weight: 700;
-      transition: all 0.2s;
-    }
-    .upload-box:hover {
-      background: rgba(16, 185, 129, 0.1);
-      border-color: #10B981;
-    }
-    .upload-box.has-file {
-      border-style: solid;
-      background: rgba(16, 185, 129, 0.15);
-      color: #FFF;
-    }
-    .file-input { display: none; }
-  </style>
 </head>
 <body class="auth-body">
 
   <div class="auth-ambient-glow"></div>
 
   <main class="auth-container">
-    <div class="auth-card" style="max-height: 90vh; overflow-y: auto;">
-      
+    <div class="auth-card">
       <header class="auth-header">
         <h1 class="auth-brand">HUB<span>y</span></h1>
-        <p id="txtSubtituloCadastro" class="auth-desc">Crie a sua conta de Passageiro</p>
+        <p class="auth-desc">Entre na sua conta para continuar</p>
       </header>
 
-      <div class="role-selector" id="roleSelectorContainer">
-        <button type="button" id="btnRoleCliente" class="btn-role active">👤 Passageiro</button>
-        <button type="button" id="btnRoleMotorista" class="btn-role">🚘 Motorista</button>
-      </div>
+      <div id="alertaLoginBox" class="auth-alert" style="display: none;"></div>
 
-      <div id="alertaCadastroBox" class="auth-alert" style="display: none;"></div>
-
-      <form id="formCadastroHuby" class="auth-form" novalidate>
-        
-        <!-- DADOS COMUNS -->
+      <form id="formLoginHuby" class="auth-form" novalidate>
         <div class="input-group">
-          <label>Nome Completo</label>
-          <input type="text" id="cadNome" placeholder="Seu nome" required>
-        </div>
-
-        <div class="input-group">
-          <label>Telemóvel / WhatsApp</label>
-          <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" required>
-        </div>
-
-        <div class="input-group">
-          <label>CPF</label>
-          <input type="tel" id="cadCPF" placeholder="000.000.000-00" required>
+          <label>E-mail ou Telemóvel</label>
+          <input type="text" id="loginIdentificador" placeholder="Seu e-mail ou telemóvel" required>
         </div>
 
         <div class="input-group">
           <label>Palavra-passe</label>
-          <input type="password" id="cadSenha" placeholder="••••••••" required>
+          <input type="password" id="loginSenha" placeholder="••••••••" required>
         </div>
 
-        <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
-        <div id="blocoMotorista" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
-          <h4 style="margin-bottom: 12px; color: #10B981;">Dados do Veículo e CNH</h4>
-          
-          <div class="input-group">
-            <label>Nº da CNH</label>
-            <input type="tel" id="cadCNH" placeholder="11 dígitos da CNH">
-          </div>
-
-          <div class="input-group">
-            <label>Categoria do Veículo</label>
-            <select id="cadCategoriaVeiculo" style="width: 100%; padding: 10px; background: #090D16; border: 1px solid rgba(255,255,255,0.1); color: #FFF; border-radius: 8px;">
-              <option value="carro">Carro Padrão</option>
-              <option value="moto">Moto Passageiro</option>
-              <option value="flash_moto">Flash (Entregas)</option>
-              <option value="cargo_pickup">Frete / Picape</option>
-            </select>
-          </div>
-
-          <div style="display: flex; gap: 10px;">
-            <div class="input-group" style="flex: 2;">
-              <label>Modelo (Ex: Onix)</label>
-              <input type="text" id="cadModelo">
-            </div>
-            <div class="input-group" style="flex: 1;">
-              <label>Placa</label>
-              <input type="text" id="cadPlaca" placeholder="ABC1D23">
-            </div>
-          </div>
-
-          <!-- UPLOAD DE DOCUMENTOS -->
-          <div class="upload-group">
-            <label>Fotografia da CNH</label>
-            <label class="upload-box" id="boxCNH">
-              📸 Tocar para fotografar a CNH
-              <input type="file" id="fileCNH" class="file-input" accept="image/*" capture="environment">
-            </label>
-          </div>
-
-          <div class="upload-group">
-            <label>Fotografia do CRLV (Documento do Carro)</label>
-            <label class="upload-box" id="boxCRLV">
-              📸 Tocar para fotografar o CRLV
-              <input type="file" id="fileCRLV" class="file-input" accept="image/*" capture="environment">
-            </label>
-          </div>
-        </div>
-
-        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action" style="margin-top: 20px;">
-          <span>Criar Conta</span>
+        <button type="submit" id="btnSubmeterLogin" class="btn-primary-action">
+          <span>Entrar na Conta</span>
         </button>
       </form>
 
-      <footer class="auth-footer-nav" style="margin-top: 20px;">
-        <span>Já tem conta?</span>
-        <a href="./login.html">Iniciar sessão</a>
+      <footer class="auth-footer-nav">
+        <span>Ainda não tem conta?</span>
+        <a href="./cadastro.html">Criar conta</a>
       </footer>
     </div>
   </main>
@@ -142,105 +46,66 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    let roleAtual = 'cliente';
-    let cnhBase64 = null;
-    let crlvBase64 = null;
+    const alertaBox = document.getElementById('alertaLoginBox');
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const perfilParam = urlParams.get('perfil');
-
-    const btnCliente = document.getElementById('btnRoleCliente');
-    const btnMotorista = document.getElementById('btnRoleMotorista');
-    const blocoMot = document.getElementById('blocoMotorista');
-    const subtitulo = document.getElementById('txtSubtituloCadastro');
-    
-    function alternarPerfil(role) {
-      roleAtual = role;
-      if (role === 'motorista') {
-        btnMotorista.classList.add('active');
-        btnCliente.classList.remove('active');
-        blocoMot.style.display = 'block';
-        subtitulo.textContent = 'Crie a sua conta de Motorista Parceiro';
-      } else {
-        btnCliente.classList.add('active');
-        btnMotorista.classList.remove('active');
-        blocoMot.style.display = 'none';
-        subtitulo.textContent = 'Crie a sua conta de Passageiro';
-      }
-    }
-
-    if (perfilParam === 'motorista') alternarPerfil('motorista');
-    btnCliente.addEventListener('click', () => alternarPerfil('cliente'));
-    btnMotorista.addEventListener('click', () => alternarPerfil('motorista'));
-
-    // Conversor de Imagem para Texto (Base64)
-    function processarUpload(inputId, boxId, callback) {
-      const input = document.getElementById(inputId);
-      const box = document.getElementById(boxId);
-      
-      input.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          callback(reader.result);
-          box.classList.add('has-file');
-          box.innerHTML = '✅ Fotografia guardada com sucesso!';
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    processarUpload('fileCNH', 'boxCNH', (b64) => cnhBase64 = b64);
-    processarUpload('fileCRLV', 'boxCRLV', (b64) => crlvBase64 = b64);
-
-    document.getElementById('formCadastroHuby').addEventListener('submit', async (e) => {
+    document.getElementById('formLoginHuby').addEventListener('submit', async (e) => {
       e.preventDefault();
-      
-      const payload = {
-        nome: document.getElementById('cadNome').value,
-        telefone: document.getElementById('cadTelefone').value,
-        cpf: document.getElementById('cadCPF').value,
-        senha: document.getElementById('cadSenha').value,
-        role: roleAtual
-      };
+      esconderAlerta();
 
-      if (roleAtual === 'motorista') {
-        payload.cnh = document.getElementById('cadCNH').value;
-        payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
-        payload.veiculo_modelo = document.getElementById('cadModelo').value;
-        payload.veiculo_placa = document.getElementById('cadPlaca').value;
-        payload.doc_cnh_url = cnhBase64;
-        payload.doc_crlv_url = crlvBase64;
+      const identificador = document.getElementById('loginIdentificador').value.trim();
+      const senha = document.getElementById('loginSenha').value;
 
-        if (!cnhBase64 || !crlvBase64) {
-          alert('Por favor, fotografe a sua CNH e o CRLV para prosseguir.');
-          return;
-        }
+      if (!identificador || !senha) {
+        exibirAlerta('Preencha todos os campos.', 'error');
+        return;
       }
 
       try {
-        document.getElementById('btnSubmeterCadastro').disabled = true;
-        const resp = await fetch(`${API_URL}/api/usuarios/cadastro`, {
+        const btnSub = document.getElementById('btnSubmeterLogin');
+        btnSub.disabled = true;
+        btnSub.querySelector('span').textContent = 'A entrar...';
+
+        const resp = await fetch(`${API_URL}/api/usuarios/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ identificador, senha })
         });
-        
+
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Falha no registo.');
+        if (!resp.ok) throw new Error(data.erro || 'Credenciais inválidas.');
 
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_role', data.usuario.role);
-        
-        alert('Conta criada com sucesso! A sua documentação foi enviada para análise.');
-        window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
+        localStorage.setItem('huby_user_name', data.usuario.nome);
+        localStorage.setItem('huby_user_phone', data.usuario.telefone || '');
+
+        exibirAlerta('Login efetuado com sucesso!', 'success');
+        setTimeout(() => {
+          window.location.replace(data.usuario.role === 'motorista' ? './motorista.html' : './index.html');
+        }, 600);
+
       } catch (err) {
-        alert(err.message);
-        document.getElementById('btnSubmeterCadastro').disabled = false;
+        exibirAlerta(err.message, 'error');
+        const btnSub = document.getElementById('btnSubmeterLogin');
+        btnSub.disabled = false;
+        btnSub.querySelector('span').textContent = 'Entrar na Conta';
       }
     });
+
+    function exibirAlerta(msg, tipo) {
+      if (!alertaBox) return;
+      alertaBox.textContent = msg;
+      alertaBox.className = `auth-alert ${tipo}`;
+      alertaBox.style.display = 'block';
+      alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+      alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
+      alertaBox.style.color = tipo === 'error' ? '#F87171' : '#10B981';
+    }
+
+    function esconderAlerta() {
+      if (!alertaBox) return;
+      alertaBox.style.display = 'none';
+    }
   </script>
 </body>
 </html>

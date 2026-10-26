@@ -7,41 +7,20 @@
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
   <style>
-    .upload-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
-    }
+    .upload-group { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
     .upload-box {
       border: 2px dashed rgba(16, 185, 129, 0.4);
       background: rgba(16, 185, 129, 0.05);
       border-radius: 12px;
-      padding: 16px;
+      padding: 14px;
       text-align: center;
       cursor: pointer;
       color: #10B981;
       font-size: 13px;
       font-weight: 700;
-      transition: all 0.2s;
     }
-    .upload-box:hover {
-      background: rgba(16, 185, 129, 0.1);
-      border-color: #10B981;
-    }
-    .upload-box.has-file {
-      border-style: solid;
-      background: rgba(16, 185, 129, 0.15);
-      color: #FFF;
-      border-color: #10B981;
-    }
+    .upload-box.has-file { border-style: solid; background: rgba(16, 185, 129, 0.15); color: #FFF; }
     .file-input { display: none; }
-    
-    .input-group input:focus, .input-group select:focus {
-      border-color: #10B981;
-      outline: none;
-      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-    }
   </style>
 </head>
 <body class="auth-body">
@@ -50,7 +29,6 @@
 
   <main class="auth-container">
     <div class="auth-card" style="max-height: 90vh; overflow-y: auto;">
-      
       <header class="auth-header">
         <h1 class="auth-brand">HUB<span>y</span></h1>
         <p id="txtSubtituloCadastro" class="auth-desc">Crie a sua conta de Passageiro</p>
@@ -61,14 +39,17 @@
         <button type="button" id="btnRoleMotorista" class="btn-role">🚘 Motorista</button>
       </div>
 
-      <div id="alertaCadastroBox" class="auth-alert" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 14px; font-size: 13px;"></div>
+      <div id="alertaCadastroBox" class="auth-alert" style="display: none;"></div>
 
       <form id="formCadastroHuby" class="auth-form" novalidate>
-        
-        <!-- DADOS COMUNS -->
         <div class="input-group">
           <label>Nome Completo</label>
           <input type="text" id="cadNome" placeholder="Digite seu nome completo" required>
+        </div>
+
+        <div class="input-group">
+          <label>E-mail</label>
+          <input type="email" id="cadEmail" placeholder="seu@email.com" required>
         </div>
 
         <div class="input-group">
@@ -97,7 +78,7 @@
 
           <div class="input-group">
             <label>Categoria do Veículo</label>
-            <select id="cadCategoriaVeiculo" style="width: 100%; padding: 10px; background: #090D16; border: 1px solid rgba(255,255,255,0.1); color: #FFF; border-radius: 8px;">
+            <select id="cadCategoriaVeiculo" style="width: 100%; padding: 12px; background: #090D16; border: 1px solid rgba(255,255,255,0.08); color: #FFF; border-radius: 10px;">
               <option value="carro">Carro Padrão</option>
               <option value="moto">Moto Passageiro</option>
               <option value="flash_moto">Flash (Entregas)</option>
@@ -116,7 +97,6 @@
             </div>
           </div>
 
-          <!-- UPLOAD DE DOCUMENTOS -->
           <div class="upload-group">
             <label>Fotografia da CNH</label>
             <label class="upload-box" id="boxCNH">
@@ -182,7 +162,6 @@
     btnCliente.addEventListener('click', () => alternarPerfil('cliente'));
     btnMotorista.addEventListener('click', () => alternarPerfil('motorista'));
 
-    // Máscaras automáticas para CPF e Telefone
     const inputCpf = document.getElementById('cadCPF');
     inputCpf.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
@@ -202,15 +181,12 @@
       e.target.value = v;
     });
 
-    // Conversor de Imagem para Base64
     function processarUpload(inputId, boxId, callback) {
       const input = document.getElementById(inputId);
       const box = document.getElementById(boxId);
-      
       input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         const reader = new FileReader();
         reader.onloadend = () => {
           callback(reader.result);
@@ -230,13 +206,14 @@
       
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
+        email: document.getElementById('cadEmail').value.trim(),
         telefone: inputTel.value.trim(),
         cpf: inputCpf.value.trim(),
         senha: document.getElementById('cadSenha').value,
         role: roleAtual
       };
 
-      if (!payload.nome || !payload.telefone || !payload.cpf || !payload.senha) {
+      if (!payload.nome || !payload.email || !payload.telefone || !payload.cpf || !payload.senha) {
         exibirAlerta('Por favor, preencha todos os campos obrigatórios.', 'error');
         return;
       }
@@ -274,10 +251,7 @@
         });
         
         const data = await resp.json();
-        
-        if (!resp.ok) {
-          throw new Error(data.erro || `Erro no servidor (${resp.status})`);
-        }
+        if (!resp.ok) throw new Error(data.erro || 'Falha no registo.');
 
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_role', data.usuario.role);
@@ -289,7 +263,6 @@
         }, 800);
 
       } catch (err) {
-        console.error("ERRO DETALHADO DO CADASTRO:", err);
         exibirAlerta(err.message, 'error');
         btnSub.disabled = false;
         if (spanBtn) spanBtn.textContent = 'Criar Conta';
