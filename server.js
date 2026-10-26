@@ -24,6 +24,7 @@ app.use((req, res, next) => {
 });
 
 app.use(cors());
+// Limite aumentado para 10mb para permitir o upload das fotografias (Base64)
 app.use(express.json({ limit: '10mb' }));
 
 if (!process.env.DATABASE_URL) {
@@ -234,7 +235,7 @@ app.get('/', (req, res) => {
 });
 
 // ============================================================================
-// 1. AUTENTICAÇÃO UNIFICADA
+// 1. AUTENTICAÇÃO UNIFICADA E REGISTO
 // ============================================================================
 
 const processarCadastro = async (req, res) => {
@@ -242,7 +243,8 @@ const processarCadastro = async (req, res) => {
     const {
       nome, email, telefone, cpf, senha, role = 'cliente',
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
-      cnh, veiculo_modelo, veiculo_placa, categoria_veiculo, fotoVeiculo
+      cnh, veiculo_modelo, veiculo_placa, categoria_veiculo,
+      doc_cnh_url, doc_crlv_url // Recebe as strings Base64
     } = req.body;
 
     if (!nome || !senha || (!email && !telefone)) {
@@ -278,16 +280,17 @@ const processarCadastro = async (req, res) => {
       const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const novoId = 'mot_' + Date.now().toString(36);
 
+      // INSERSÃO ATUALIZADA: Grava Base64 e define status como 'pendente'
       const resultado = await sql`
         INSERT INTO motoristas (
           id, nome, email, telefone, cpf, data_nascimento, senha_hash,
           cnh_numero, categoria, veiculo_modelo, veiculo_placa,
-          doc_crlv_url, status_aprovacao
+          doc_cnh_url, doc_crlv_url, status_aprovacao
         ) VALUES (
           ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
           ${dataNascSql}, ${senhaHash},
           ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa},
-          ${fotoVeiculo || null}, 'aprovado'
+          ${doc_cnh_url || null}, ${doc_crlv_url || null}, 'pendente'
         )
         RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
       `;

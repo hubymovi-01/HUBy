@@ -36,8 +36,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('Erro ao inicializar mapa do motorista:', err);
   }
 
-  // 2. Configura modal de saque Pix
+  // 2. Configura modal de saque Pix e Chat
   configurarModalSaquePix();
+  configurarChatMotorista();
 
   // 3. Carregar saldo, checar aprovação e identificar categoria (carro, moto, frete)
   await atualizarPerfilESaldo();
@@ -187,6 +188,98 @@ function configurarModalSaquePix() {
   });
 }
 
+// ==========================================
+// LÓGICA DO CHAT INTERNO DA CORRIDA (MOTORISTA)
+// ==========================================
+let chatInterval = null;
+
+function configurarChatMotorista() {
+  const btnAbrirChat = document.getElementById('btnAbrirChat');
+  const modalChat = document.getElementById('modalChatCorrida');
+  const btnFecharChat = document.getElementById('btnFecharChat');
+  const btnEnviarMsg = document.getElementById('btnEnviarMsgChat');
+  const inputMsg = document.getElementById('inputChatMsg');
+
+  btnAbrirChat?.addEventListener('click', () => {
+    if (modalChat) modalChat.style.display = 'flex';
+    carregarMensagensChat();
+    chatInterval = setInterval(carregarMensagensChat, 3000);
+  });
+
+  btnFecharChat?.addEventListener('click', () => {
+    if (modalChat) modalChat.style.display = 'none';
+    if (chatInterval) clearInterval(chatInterval);
+  });
+
+  btnEnviarMsg?.addEventListener('click', enviarMensagemChat);
+  inputMsg?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') enviarMensagemChat();
+  });
+}
+
+async function enviarMensagemChat() {
+  const inputMsg = document.getElementById('inputChatMsg');
+  const txt = inputMsg ? inputMsg.value.trim() : '';
+  if (!txt || !pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
+
+  const token = localStorage.getItem('huby_token');
+  if (inputMsg) inputMsg.value = '';
+
+  try {
+    await fetch(`${API_URL}/api/pedidos/${pedidoAceitoAtual.id}/chat`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}` 
+      },
+      body: JSON.stringify({ mensagem: txt })
+    });
+    carregarMensagensChat();
+  } catch (err) {
+    console.warn('Erro ao enviar msg:', err);
+  }
+}
+
+async function carregarMensagensChat() {
+  if (!pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
+  const token = localStorage.getItem('huby_token');
+  const meuId = localStorage.getItem('huby_user_id');
+  const areaMensagens = document.getElementById('chatAreaMensagens');
+  if (!areaMensagens) return;
+
+  try {
+    const resp = await fetch(`${API_URL}/api/pedidos/${pedidoAceitoAtual.id}/chat`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return;
+    const msgs = await resp.json();
+    
+    let html = '<div style="text-align: center; color: #94A3B8; font-size: 11px;">O chat é monitorizado por segurança.</div>';
+    
+    msgs.forEach(m => {
+      const souEu = (m.remetente_id === meuId);
+      const alinhamento = souEu ? 'flex-end' : 'flex-start';
+      const corFundo = souEu ? '#38BDF8' : '#1F2937';
+      const corTexto = souEu ? '#000' : '#FFF';
+      const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
+      
+      html += `
+        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 4px;">
+          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
+          <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
+            ${m.mensagem}
+          </div>
+        </div>
+      `;
+    });
+
+    areaMensagens.innerHTML = html;
+    areaMensagens.scrollTop = areaMensagens.scrollHeight;
+  } catch (err) {
+    console.warn('Erro ao ler chat:', err);
+  }
+}
+
 function iniciarRadarChamadas() {
   if (intervalRadar) clearInterval(intervalRadar);
 
@@ -232,7 +325,7 @@ function renderizarRadar(pedidos) {
       <div class="order-route">
         <span><strong>Partida:</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
         <span><strong>Destino:</strong> ${p.destino_endereco}</span>
-        <small style="color: var(--primary-green, #10B981); font-weight: 700;">${p.distancia_km} km • ${p.duracao_min || 5} min</small>
+        <small style="color: #10B981; font-weight: 700;">${p.distancia_km} km • ${p.duracao_min || 5} min</small>
       </div>
       <button type="button" 
               class="btn-accept-order" 
@@ -279,6 +372,10 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
 
     pedidoAceitoAtual = data.pedido;
 
+    // Mostra o botão flutuante de chat do motorista
+    const btnChat = document.getElementById('btnAbrirChat');
+    if (btnChat) btnChat.style.display = 'flex';
+
     if (coordsOrig && coordsDest && hubyMapa) {
       await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981');
     }
@@ -286,7 +383,7 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
     const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
     if (feed) {
       feed.innerHTML = `
-        <div class="order-card" style="border-color: var(--primary-green, #10B981);">
+        <div class="order-card" style="border-color: #10B981;">
           <div class="order-card-header">
             <span class="order-badge" style="background: rgba(16,185,129,0.25);">EM ATENDIMENTO</span>
             <span class="order-price">R$ ${Number(pedidoAceitoAtual.valor_total).toFixed(2).replace('.', ',')}</span>
@@ -367,5 +464,13 @@ function limparAtendimento() {
     hubyMapa.rotaLayer = null;
   }
   pedidoAceitoAtual = null;
+
+  // Esconde o botão e fecha a janela do chat
+  const btnChat = document.getElementById('btnAbrirChat');
+  const modalChat = document.getElementById('modalChatCorrida');
+  if (btnChat) btnChat.style.display = 'none';
+  if (modalChat) modalChat.style.display = 'none';
+  if (chatInterval) clearInterval(chatInterval);
+
   iniciarRadarChamadas();
 }
