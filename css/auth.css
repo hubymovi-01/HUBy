@@ -1,19 +1,18 @@
 /* ==========================================================================
-   ESTILO RÚSTICO INDUSTRIAL DARK - HUBY AUTH
+   ESTILO MODAL E ELEGANTE - HUBY AUTH
    ========================================================================== */
 
 :root {
   --hub-green: #10B981;
   --hub-green-hover: #059669;
-  --hub-green-shadow: rgba(16, 185, 129, 0.28);
-  --bg-dark-base: #080B11;
-  --bg-card-metal: #101622;
-  --input-bg: #151D2C;
-  --border-steel: rgba(255, 255, 255, 0.08);
-  --border-steel-focus: rgba(16, 185, 129, 0.6);
+  --hub-green-shadow: rgba(16, 185, 129, 0.25);
+  --bg-dark-base: #090D16;
+  --bg-card: #121826;
+  --input-bg: #090D16;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-focus: #10B981;
   --text-main: #F8FAFC;
   --text-muted: #94A3B8;
-  --text-dim: #64748B;
 }
 
 * {
@@ -23,7 +22,7 @@
 
 body.auth-body {
   margin: 0;
-  padding: 0;
+  padding: 16px;
   background-color: var(--bg-dark-base);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   color: var(--text-main);
@@ -39,58 +38,42 @@ body.auth-body {
 /* LUZ AMBIENTAL DE FUNDO */
 .auth-ambient-glow {
   position: absolute;
-  top: -15%;
+  top: -10%;
   left: 50%;
   transform: translateX(-50%);
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.12) 0%, transparent 70%);
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
 
 .auth-container {
   width: 100%;
-  max-width: 440px;
-  padding: 20px 16px;
+  max-width: 420px;
   position: relative;
   z-index: 1;
 }
 
 .auth-card {
-  background: var(--bg-card-metal);
-  border: 1px solid var(--border-steel);
-  border-radius: 26px;
-  padding: 30px 22px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 24px 20px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
 }
 
 /* CABEÇALHO DA MARCA */
 .auth-header {
   text-align: center;
-  margin-bottom: 22px;
-}
-
-.auth-badge {
-  display: inline-block;
-  background: rgba(16, 185, 129, 0.1);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  color: var(--hub-green);
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  margin-bottom: 12px;
+  margin-bottom: 20px;
 }
 
 .auth-brand {
-  font-size: 42px;
+  font-size: 36px;
   font-weight: 900;
-  letter-spacing: -1.5px;
+  letter-spacing: -1px;
   margin: 0;
   color: #FFF;
 }
@@ -100,29 +83,30 @@ body.auth-body {
 }
 
 .auth-desc {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
   margin: 6px 0 0;
+  font-weight: 600;
 }
 
-/* SELETOR DE PERFIL PASSAGEIRO / CONDUTOR */
+/* SELETOR DE PERFIL (PASSAGEIRO / MOTORISTA) */
 .role-selector {
   display: flex;
-  background: #0B0F17;
-  border: 1px solid var(--border-steel);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-color);
   padding: 4px;
-  border-radius: 14px;
+  border-radius: 12px;
   gap: 6px;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 
 .btn-role {
   flex: 1;
   background: transparent;
   border: none;
-  color: var(--text-dim);
+  color: var(--text-muted);
   padding: 10px 8px;
-  border-radius: 10px;
+  border-radius: 9px;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
@@ -134,56 +118,26 @@ body.auth-body {
 }
 
 .btn-role.active {
-  background: #192336;
+  background: rgba(16, 185, 129, 0.15);
   color: #FFF;
   border: 1px solid rgba(16, 185, 129, 0.4);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
 }
 
-.btn-role.active .role-icon {
-  filter: drop-shadow(0 0 6px var(--hub-green));
-}
-
-/* ALERTAS EMBUTIDOS */
+/* ALERTAS */
 .auth-alert {
-  padding: 11px 14px;
-  border-radius: 12px;
-  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
   font-weight: 700;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
   text-align: left;
 }
 
-.auth-alert.error {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  color: #F87171;
-}
-
-.auth-alert.success {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  color: #34D399;
-}
-
-/* CAMPOS E GRUPOS */
+/* FORMULÁRIO E INPUTS UNIFORMES */
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.form-section-tag {
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  color: var(--text-dim);
-  margin-top: 6px;
-}
-
-.form-section-tag.highlight {
-  color: var(--hub-green);
+  gap: 12px;
 }
 
 .input-group {
@@ -194,40 +148,28 @@ body.auth-body {
 }
 
 .input-group label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.input-wrapper .input-ico {
-  position: absolute;
-  left: 14px;
-  font-size: 14px;
-  pointer-events: none;
-  opacity: 0.7;
-}
-
-.input-wrapper input,
-.input-wrapper select {
+.input-group input,
+.input-group select {
   width: 100%;
   background: var(--input-bg);
-  border: 1px solid var(--border-steel);
-  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
   color: #FFF;
-  padding: 13px 14px 13px 40px;
+  padding: 12px 14px;
   font-size: 14px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s ease;
 }
 
-.input-wrapper select {
+.input-group select {
   appearance: none;
   -webkit-appearance: none;
   background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -235,68 +177,39 @@ body.auth-body {
   background-position: right 14px center;
 }
 
-.input-wrapper input:focus,
-.input-wrapper select:focus {
-  border-color: var(--border-steel-focus);
+.input-group input:focus,
+.input-group select:focus {
+  border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
-}
-
-.input-row {
-  display: flex;
-  gap: 10px;
-}
-
-.input-row .input-group {
-  flex: 1;
-}
-
-.btn-toggle-eye {
-  position: absolute;
-  right: 12px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
-  padding: 4px;
-  opacity: 0.6;
 }
 
 /* BOTÃO PRINCIPAL */
 .btn-primary-action {
   width: 100%;
   background: var(--hub-green);
-  color: #02241C;
+  color: #032017;
   border: none;
-  border-radius: 14px;
-  padding: 15px;
-  font-size: 15px;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 14px;
   font-weight: 900;
   cursor: pointer;
-  box-shadow: 0 4px 20px var(--hub-green-shadow);
+  box-shadow: 0 4px 16px var(--hub-green-shadow);
   transition: transform 0.15s ease, background 0.15s ease;
-  margin-top: 8px;
-}
-
-.btn-primary-action:hover {
-  background: var(--hub-green-hover);
+  margin-top: 6px;
 }
 
 .btn-primary-action:active {
   transform: scale(0.98);
 }
 
-.btn-primary-action:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
 /* RODAPÉ */
 .auth-footer-nav {
   text-align: center;
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-steel);
-  font-size: 13px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -304,5 +217,5 @@ body.auth-body {
   color: var(--hub-green);
   text-decoration: none;
   font-weight: 800;
-  margin-left: 5px;
+  margin-left: 4px;
 }
