@@ -4,46 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <!-- PWA Manifest e Configurações Mobile -->
-  <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#0B0F19">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="HUBy">
-  <link rel="apple-touch-icon" href="./img/icon-192.png">
   <title>HUBy</title>
   
-  <!-- Estilos Leaflet e Aplicação -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0B0F19">
+  
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./css/base.css?v=2.1.2">
-  <link rel="stylesheet" href="./css/cliente.css?v=2.1.2">
+  <link rel="stylesheet" href="./css/base.css?v=2.2.0">
+  <link rel="stylesheet" href="./css/cliente.css?v=2.2.0">
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    /* DESAPARECIMENTO GARANTIDO DA SPLASH */
-    #hubySplash {
-      animation: encerrarSplashHUBy 0.4s ease 1.2s forwards !important;
-    }
-
+    #hubySplash { animation: encerrarSplashHUBy 0.4s ease 1.2s forwards !important; }
     @keyframes encerrarSplashHUBy {
       0% { opacity: 1; visibility: visible; pointer-events: all; }
       99% { opacity: 0; visibility: hidden; pointer-events: none; }
       100% { opacity: 0; visibility: hidden; display: none !important; pointer-events: none; }
     }
 
-    /* BOTÃO FLUTUANTE DO GPS AJUSTADO */
+    /* BOTÃO FLUTUANTE DO GPS (SOZINHO E AJUSTADO) */
     .btn-floating-gps {
       position: absolute;
-      bottom: 240px; /* Posicionado acima do dock inferior */
+      bottom: 240px; 
       right: 18px;
-      width: 44px;
-      height: 44px;
+      width: 48px;
+      height: 48px;
       background: rgba(17, 24, 39, 0.9);
-      border: 1px solid rgba(16, 185, 129, 0.4);
+      border: 2px solid rgba(16, 185, 129, 0.8);
       border-radius: 50%;
       color: #10B981;
       display: flex;
@@ -53,145 +41,50 @@
       z-index: 9999;
       cursor: pointer;
       backdrop-filter: blur(8px);
-      transition: all 0.2s ease;
-    }
-    
-    .btn-floating-gps:active {
-      transform: scale(0.92);
-      border-color: #10B981;
-      background: rgba(16, 185, 129, 0.15);
     }
 
     #mapaCliente {
       position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      width: 100%;
-      height: 100vh !important;
+      top: 0; left: 0; right: 0; bottom: 0;
+      width: 100%; height: 100vh !important;
       z-index: 10; 
     }
   </style>
-
-  <script>
-    (function() {
-      const token = localStorage.getItem('huby_token');
-      const perfilEscolhido = localStorage.getItem('huby_tipo_acesso');
-      if (!token && !perfilEscolhido) {
-        window.location.replace('./welcome.html');
-      }
-    })();
-  </script>
 </head>
 <body class="client-viewport">
 
   <div id="hubySplash" class="splash-screen" onclick="this.style.display='none'">
     <div class="splash-content">
-      <div class="splash-logo">
-        <span class="s-hub">HUB</span><span class="s-y">y</span>
-      </div>
+      <div class="splash-logo"><span class="s-hub">HUB</span><span class="s-y">y</span></div>
       <div class="splash-spinner"></div>
-      <span class="splash-tagline">Mobilidade urbana inteligente</span>
     </div>
   </div>
-
-  <script>
-    (function() {
-      function fecharSplashSeguro() {
-        var el = document.getElementById('hubySplash');
-        if (el) {
-          el.style.opacity = '0';
-          setTimeout(function() {
-            if (el && el.parentNode) el.parentNode.removeChild(el);
-          }, 400);
-        }
-      }
-      setTimeout(fecharSplashSeguro, 1200);
-    })();
-  </script>
 
   <div id="mapaCliente"></div>
 
   <header class="top-nav-bar">
-    <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
-      <span></span>
-      <span></span>
-      <span></span>
-    </button>
-
-    <div class="brand-pill">
-      <span class="hub-txt">HUB</span><span class="y-txt">y</span>
-    </div>
-
-    <button type="button" id="btnNavViagens" class="btn-action-pill">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <polyline points="12 6 12 12 16 14"></polyline>
-      </svg>
-      <span>Viagens</span>
-    </button>
+    <button type="button" id="btnAbrirMenu" class="btn-menu-burger"><span></span><span></span><span></span></button>
+    <div class="brand-pill"><span class="hub-txt">HUB</span><span class="y-txt">y</span></div>
+    <button type="button" id="btnNavViagens" class="btn-action-pill"><span>Viagens</span></button>
   </header>
 
   <div id="menuBackdrop" class="drawer-backdrop"></div>
   <aside id="drawerMenu" class="drawer-panel">
     <div class="drawer-profile" id="drawerPerfilBox"></div>
-
     <nav class="drawer-nav">
-      <a href="#" id="menuItemViagens" class="drawer-item">
-        <span class="d-icon">📋</span>
-        <div class="d-info">
-          <strong>Minhas Viagens</strong>
-          <small>Histórico e recibos de corridas</small>
-        </div>
-      </a>
-      <a href="#" id="menuItemPagamentos" class="drawer-item">
-        <span class="d-icon">💳</span>
-        <div class="d-info">
-          <strong>Formas de Pagamento</strong>
-          <small>Pix, Cartão e Dinheiro</small>
-        </div>
-      </a>
-      <a href="#" id="menuItemSeguranca" class="drawer-item">
-        <span class="d-icon">🛡️</span>
-        <div class="d-info">
-          <strong>Contato de Segurança</strong>
-          <small>Compartilhar trajeto e emergência</small>
-        </div>
-      </a>
-      <a href="./motorista.html" class="drawer-item highlight-driver">
-        <span class="d-icon">🚘</span>
-        <div class="d-info">
-          <strong>Painel do Motorista</strong>
-          <small>Aceder ao modo parceiro</small>
-        </div>
-      </a>
-      <a href="#" id="menuItemAjuda" class="drawer-item">
-        <span class="d-icon">💬</span>
-        <div class="d-info">
-          <strong>Ajuda & Suporte</strong>
-          <small>Fale com a equipa HUBy</small>
-        </div>
-      </a>
-
-      <a href="./admin.html" id="menuItemAdmin" class="drawer-item" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
-        <span class="d-icon">⚡</span>
-        <div class="d-info">
-          <strong style="color: #F87171;">Painel de Controlo</strong>
-          <small>Métricas, motoristas e financeiro</small>
-        </div>
-      </a>
+      <a href="#" id="menuItemViagens" class="drawer-item"><span class="d-icon">📋</span><div class="d-info"><strong>Minhas Viagens</strong></div></a>
+      <a href="#" id="menuItemPagamentos" class="drawer-item"><span class="d-icon">💳</span><div class="d-info"><strong>Formas de Pagamento</strong></div></a>
+      <a href="#" id="menuItemSeguranca" class="drawer-item"><span class="d-icon">🛡️</span><div class="d-info"><strong>Contato de Segurança</strong></div></a>
+      <a href="./motorista.html" class="drawer-item highlight-driver"><span class="d-icon">🚘</span><div class="d-info"><strong>Painel do Motorista</strong></div></a>
     </nav>
-
     <div class="drawer-footer">
       <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Entrar ou Cadastrar</button>
-      <span class="version-tag">HUBy v2.0 • 2026</span>
     </div>
   </aside>
 
-  <!-- BOTÃO FLUTUANTE DE GPS (BOTÃO SOS REMOVIDO) -->
-  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- BOTÃO GPS ISOLADO (O botão SOS foi removido daqui) -->
+  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
       <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -202,29 +95,12 @@
 
   <section class="client-dock-sheet" style="z-index: 50;">
     <div class="sheet-drag-handle"></div>
-
     <div class="category-slider">
-      <button type="button" class="category-chip active" data-id="carro">
-        <span class="cat-icon">🚗</span>
-        <span class="cat-label">Carro</span>
-      </button>
-      <button type="button" class="category-chip" data-id="moto">
-        <span class="cat-icon">🏍️</span>
-        <span class="cat-label">Moto</span>
-      </button>
-      <button type="button" class="category-chip" data-id="flash_moto">
-        <span class="cat-icon">⚡</span>
-        <span class="cat-label">Flash</span>
-      </button>
-      <button type="button" class="category-chip" data-id="cargo_pickup">
-        <span class="cat-icon">📦</span>
-        <span class="cat-label">Frete</span>
-      </button>
+      <button type="button" class="category-chip active" data-id="carro"><span class="cat-icon">🚗</span><span class="cat-label">Carro</span></button>
+      <button type="button" class="category-chip" data-id="moto"><span class="cat-icon">🏍️</span><span class="cat-label">Moto</span></button>
     </div>
-
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
-        <div class="route-point-indicator"></div>
         <div class="route-texts">
           <span class="route-title">Destino</span>
           <span id="txtDestinoSelecionado" class="route-subtitle">Toque no mapa para indicar o destino</span>
@@ -235,168 +111,30 @@
         <span id="txtDistanciaEstimada" class="eta-val">-- km</span>
       </div>
     </div>
-
-    <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
-      <div class="ride-header">
-        <div class="pulse-radar"></div>
-        <h4 id="statusTitulo">Radar Ativo: Procurando motorista...</h4>
-      </div>
-      <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
-    </div>
-
-    <button type="button" id="btnPedirHuby" class="btn-main-action">
-      Chamar HUBy Carro
-    </button>
+    <button type="button" id="btnPedirHuby" class="btn-main-action">Chamar HUBy Carro</button>
   </section>
 
-  <!-- MODAL DE CONTATO DE SEGURANÇA (Agora acedido apenas pelo menu) -->
+  <!-- MODAL DE SEGURANÇA MANTIDO, MAS OCULTO -->
   <div id="modalSeguranca" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card">
       <div class="modal-header-row">
-        <h3>Segurança na Viagem</h3>
-        <button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
+        <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
-
-      <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">
-          Seu contato de confiança recebe sua rota em tempo real e pode acompanhar seu deslocamento.
-        </p>
-
-        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
-          <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">
-            Nenhum contato cadastrado
-          </div>
-        </div>
-
-        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
-          <span>📲 Compartilhar Rota no WhatsApp</span>
-        </button>
-      </div>
+      <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%;">📲 Compartilhar Rota</button>
     </div>
   </div>
 
-  <div id="modalHistorico" class="modal-backdrop" style="display: none; z-index: 10000;">
-    <div class="modal-card modal-wide">
-      <div class="modal-header-row">
-        <h3>Minhas Viagens</h3>
-        <button type="button" id="btnFecharHistorico" class="btn-icon-close">✕</button>
-      </div>
-      <div id="listaHistoricoCorridas" class="historico-scroll-box">
-        <p class="loading-txt">Carregando viagens...</p>
-      </div>
-    </div>
-  </div>
-
-  <div id="modalAvaliacao" class="modal-backdrop" style="display: none; z-index: 10000;">
-    <div class="modal-card">
-      <h3>Como correu a sua viagem?</h3>
-      <p>Classifique o atendimento do condutor parceiro:</p>
-      
-      <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
-      </div>
-
-      <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
-      
-      <div class="modal-btn-row">
-        <button type="button" id="btnPularAvaliacao" class="btn-secondary-modal">Pular</button>
-        <button type="button" id="btnEnviarAvaliacao" class="btn-primary-modal">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-  <div id="modalPagamento" class="modal-backdrop" style="display: none; z-index: 10000;">
-    <div class="modal-card modal-wide">
-      <div class="modal-header-row">
-        <h3>Formas de Pagamento</h3>
-        <button type="button" id="btnFecharPagamento" class="btn-icon-close">✕</button>
-      </div>
-
-      <div class="payment-methods-list">
-        <div class="payment-method-card active-method">
-          <div class="method-header">
-            <span class="m-icon">💠</span>
-            <div>
-              <strong>Pix Dinâmico</strong>
-              <small>Aprovação e liberação imediata</small>
-            </div>
-          </div>
-          <span class="badge-active">Padrão</span>
-        </div>
-
-        <div class="payment-method-card">
-          <div class="method-header">
-            <span class="m-icon">💵</span>
-            <div>
-              <strong>Dinheiro ou Cartão</strong>
-              <small>Direto ao motorista parceiro</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="pix-charge-box">
-        <span class="charge-title">Chave Pix HUBy para recarga rápida:</span>
-        <div class="pix-key-row">
-          <input type="text" id="chavePixInput" value="pix@huby.app.br" readonly />
-          <button type="button" id="btnCopiarPix">Copiar</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="./js/app-cliente.js?v=2.1.2"></script>
-  
+  <script type="module" src="./js/app-cliente.js?v=2.2.0"></script>
   <script type="module">
     const modalSeg = document.getElementById('modalSeguranca');
-    const btnMenuSeg = document.getElementById('menuItemSeguranca');
-    const btnFecharSeg = document.getElementById('btnFecharSeguranca');
-    const infoContato = document.getElementById('infoContatoSeguranca');
-    const btnZap = document.getElementById('btnCompartilharRotaZap');
-
-    function abrirModalSeguranca() {
-      const nomeEmergencia = localStorage.getItem('huby_emergencia_nome') || 'Não informado';
-      const telEmergencia = localStorage.getItem('huby_emergencia_tel') || '';
-
-      if (infoContato) {
-        infoContato.innerHTML = telEmergencia 
-          ? `<strong>${nomeEmergencia}</strong><br><span style="font-size: 13px; color: #10B981;">${telEmergencia}</span>`
-          : 'Nenhum contato registrado. Atualize seu cadastro.';
-      }
-
-      if (modalSeg) modalSeg.style.display = 'flex';
-    }
-
-    btnMenuSeg?.addEventListener('click', (e) => {
+    document.getElementById('menuItemSeguranca')?.addEventListener('click', (e) => {
       e.preventDefault();
       document.getElementById('menuBackdrop')?.click();
-      abrirModalSeguranca();
+      if (modalSeg) modalSeg.style.display = 'flex';
     });
-
-    btnFecharSeg?.addEventListener('click', () => {
+    document.getElementById('btnFecharSeguranca')?.addEventListener('click', () => {
       if (modalSeg) modalSeg.style.display = 'none';
     });
-
-    btnZap?.addEventListener('click', () => {
-      const tel = (localStorage.getItem('huby_emergencia_tel') || '').replace(/\D/g, '');
-      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto ou entre em contato em caso de emergência.`);
-      const link = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
-      window.open(link, '_blank');
-    });
-
-    function checarAdminInstantaneo() {
-      const token = localStorage.getItem('huby_token');
-      const role = localStorage.getItem('huby_user_role');
-      const btnAdmin = document.getElementById('menuItemAdmin');
-
-      if (btnAdmin && token && role === 'admin') {
-        btnAdmin.style.display = 'flex';
-      }
-    }
-
-    checarAdminInstantaneo();
-    document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
   </script>
 </body>
 </html>
