@@ -28,8 +28,6 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
   
-  // Aqui futuramente podemos colocar salas privadas de chat entre motorista e passageiro
-  
   socket.on('disconnect', () => {
     console.log(`Utilizador desconectado do radar: ${socket.id}`);
   });
@@ -475,10 +473,6 @@ app.post('/api/auth/login', processarLogin);
 app.post('/api/usuarios/login', processarLogin);
 
 // ============================================================================
-// 2. GESTÃO DE PEDIDOS
-// ============================================================================
-
-// ============================================================================
 // LOGIN EXCLUSIVO PARA MOTORISTA (CNH E PLACA - SEM SENHA)
 // ============================================================================
 app.post('/api/usuarios/login-motorista', async (req, res) => {
@@ -530,6 +524,69 @@ app.post('/api/usuarios/login-motorista', async (req, res) => {
   } catch (err) {
     console.error('Erro no login do motorista:', err);
     res.status(500).json({ erro: 'Falha interna ao validar credenciais do veículo.' });
+  }
+});
+
+
+// ============================================================================
+// 2. GESTÃO DE PEDIDOS (COM CORREÇÃO DOS NÚMEROS E VÍRGULAS)
+// ============================================================================
+
+app.post('/api/pedidos', async (req, res) => {
+  try {
+    const {
+      id, clienteId, tipo, subTipoId, subTipoLabel,
+      origem, destino, coordsOrigem, coordsDestino,
+      distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto
+    } = req.body;
+
+    if (!id || !valorTotal || !origem || !destino) {
+      return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
+    }
+
+    // ----------------------------------------------------------------------
+    // LIMPEZA MÁGICA: Garante que o banco de dados Neon não dá erro com vírgulas!
+    // ----------------------------------------------------------------------
+    const formatarNum = (val) => Number(String(val).replace(',', '.')) || 0;
+    
+    const vTotal = formatarNum(valorTotal);
+    const vAdic = formatarNum(valorAdicionais);
+    const dKm = formatarNum(distanciaKm);
+    const dMin = formatarNum(duracaoMin);
+    
+    const origLat = coordsOrigem && coordsOrigem[0] ? Number(coordsOrigem[0]) : null;
+    const origLng = coordsOrigem && coordsOrigem[1] ? Number(coordsOrigem[1]) : null;
+    const destLat = coordsDestino && coordsDestino[0] ? Number(coordsDestino[0]) : null;
+    const destLng = coordsDestino && coordsDestino[1] ? Number(coordsDestino[1]) : null;
+    // ----------------------------------------------------------------------
+
+    await sql`
+      INSERT INTO pedidos (
+        id, cliente_id, tipo, sub_tipo_id, sub_tipo_label,
+        origem_endereco, destino_endereco,
+        origem_lat, origem_lng, destino_lat, destino_lng,
+        distancia_km, duracao_min, valor_total, valor_adicionais,
+        metodo_pgto, status
+      ) VALUES (
+        ${id}, ${clienteId || null}, ${tipo || 'carro'}, ${subTipoId || null}, ${subTipoLabel || 'Carro Padrão'},
+        ${origem}, ${destino},
+        ${origLat}, ${origLng}, ${destLat}, ${destLng},
+        ${dKm}, ${dMin}, ${vTotal}, ${vAdic},
+        ${metodoPgto || 'pix_app'}, 'pendente'
+      )
+    `;
+
+    // ----------------------------------------------------------------------------
+    // EMITIR O EVENTO PARA O MOTORISTA VIA SOCKET.IO
+    // ----------------------------------------------------------------------------
+    io.emit('nova_chamada', {
+      id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal
+    });
+
+    res.status(201).json({ sucesso: true, id });
+  } catch (error) {
+    console.error('⚠️ ERRO AO GRAVAR PEDIDO NO NEON:', error.message);
+    res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados.' });
   }
 });
 
