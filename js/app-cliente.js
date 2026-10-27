@@ -52,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
-      e.preventDefault(); // Impede duplo clique no telemóvel
+      e.preventDefault(); 
       e.stopPropagation();
       if (hubyMapa) {
         hubyMapa.obterGPS((posicaoReal) => {
@@ -275,7 +275,6 @@ async function submeterPedido() {
 
   const precoInfo = calcularPreco(categoriaSelecionada, rotaAtual.distanciaKm);
 
-  // Coordenadas reais de origem obtidas do GPS ativo
   const latOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
   const lngOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
 
@@ -340,6 +339,9 @@ function mostrarAguardandoMotorista() {
   }
 }
 
+// ============================================================================
+// MODIFICAÇÃO PRINCIPAL: CHAMA A INTERFACE PREMIUM QUANDO É ACEITO
+// ============================================================================
 function iniciarPollingStatus() {
   if (intervalPolling) clearInterval(intervalPolling);
 
@@ -353,13 +355,11 @@ function iniciarPollingStatus() {
       const pedido = await resp.json();
 
       if (pedido.status === 'aceito') {
-        document.getElementById('statusTitulo').textContent = '✅ Condutor a caminho!';
-        document.getElementById('statusDescricao').innerHTML = `
-          <strong>Motorista:</strong> ${pedido.motorista_nome || 'Parceiro HUBy'}<br>
-          <strong>Veículo:</strong> ${pedido.motorista_veiculo || ''} (${pedido.motorista_placa || ''})<br>
-          <strong>Contato:</strong> ${pedido.motorista_telefone || 'Disponível no app'}
-        `;
+        
+        // CHAMA O NOVO PAINEL PREMIUM E ESCONDE O RESTO
+        atualizarInterfaceMotoristaAceitou(pedido);
 
+        // Atualiza o pino do motorista no mapa se necessário
         if (hubyMapa && hubyMapa.map && typeof L !== 'undefined' && !markerMotoristaAaminho) {
           const iconeCondutor = L.divIcon({
             className: 'huby-pin-motorista',
@@ -370,8 +370,6 @@ function iniciarPollingStatus() {
           markerMotoristaAaminho = L.marker(hubyMapa.coordsOrigem, { icon: iconeCondutor }).addTo(hubyMapa.map);
         }
 
-        const btn = document.getElementById('btnPedirHuby');
-        if (btn) btn.style.display = 'none';
       } else if (pedido.status === 'concluido') {
         clearInterval(intervalPolling);
         corridaParaAvaliarId = pedidoAtivoId;
@@ -393,6 +391,150 @@ function iniciarPollingStatus() {
     }
   }, 3000);
 }
+
+// ============================================================================
+// LÓGICA PREMIUM DA INTERFACE: MOTORISTA A CAMINHO & CHAT
+// ============================================================================
+function atualizarInterfaceMotoristaAceitou(pedido) {
+  // Esconde os elementos da fase de "pedido"
+  const sliderCategorias = document.getElementById('sliderCategorias');
+  const blocoResumo = document.getElementById('blocoResumo');
+  const cardStatusViagem = document.getElementById('cardStatusViagem');
+  const btnPedirHuby = document.getElementById('btnPedirHuby');
+  
+  if (sliderCategorias) sliderCategorias.style.display = 'none';
+  if (blocoResumo) blocoResumo.style.display = 'none';
+  if (cardStatusViagem) cardStatusViagem.style.display = 'none';
+  if (btnPedirHuby) btnPedirHuby.style.display = 'none';
+
+  // Mostra o Painel Premium do Motorista
+  const painelMotorista = document.getElementById('painelMotoristaAceitou');
+  if (painelMotorista) {
+    painelMotorista.style.display = 'block';
+    
+    // Preenche os dados reais vindos da base de dados
+    document.getElementById('lblMotoristaNome').textContent = pedido.motorista_nome || 'Motorista Parceiro';
+    document.getElementById('lblMotoristaPlaca').textContent = pedido.motorista_placa || '---';
+    document.getElementById('lblMotoristaVeiculo').textContent = pedido.motorista_veiculo || 'Carro HUBy';
+    
+    // Configura o botão de Ligar
+    const btnLigar = document.getElementById('btnLigarMotorista');
+    if (btnLigar) btnLigar.href = `tel:${pedido.motorista_telefone}`;
+  }
+
+  // Mostra o botão flutuante redondo de Chat no mapa
+  const btnChatFlutuante = document.getElementById('btnAbrirChat');
+  if (btnChatFlutuante) btnChatFlutuante.style.display = 'flex';
+
+  // Liga os motores do Chat!
+  configurarChatCliente(pedido.id);
+}
+
+// ==========================================
+// FUNÇÕES DO CHAT DO PASSAGEIRO
+// ==========================================
+let chatIntervalCliente = null;
+
+function configurarChatCliente(pedidoId) {
+  const btnAbrirChatCard = document.getElementById('btnAbrirChatClienteCard');
+  const btnAbrirChatFlut = document.getElementById('btnAbrirChat');
+  const modalChat = document.getElementById('modalChatCorrida');
+  const btnFecharChat = document.getElementById('btnFecharChat');
+  const btnEnviarMsg = document.getElementById('btnEnviarMsgChat');
+  const inputMsg = document.getElementById('inputChatMsg');
+
+  // Abre o modal ao clicar em qualquer botão de Chat
+  const abrirChat = () => {
+    if (modalChat) modalChat.style.display = 'flex';
+    carregarMensagensChatCliente(pedidoId);
+    if (!chatIntervalCliente) {
+      chatIntervalCliente = setInterval(() => carregarMensagensChatCliente(pedidoId), 3000);
+    }
+  };
+
+  btnAbrirChatCard?.addEventListener('click', abrirChat);
+  btnAbrirChatFlut?.addEventListener('click', abrirChat);
+
+  btnFecharChat?.addEventListener('click', () => {
+    if (modalChat) modalChat.style.display = 'none';
+    if (chatIntervalCliente) {
+      clearInterval(chatIntervalCliente);
+      chatIntervalCliente = null;
+    }
+  });
+
+  btnEnviarMsg?.addEventListener('click', () => enviarMensagemChatCliente(pedidoId));
+  inputMsg?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') enviarMensagemChatCliente(pedidoId);
+  });
+}
+
+async function enviarMensagemChatCliente(pedidoId) {
+  const inputMsg = document.getElementById('inputChatMsg');
+  const txt = inputMsg ? inputMsg.value.trim() : '';
+  if (!txt || !pedidoId) return;
+
+  const token = localStorage.getItem('huby_token');
+  if (inputMsg) inputMsg.value = '';
+
+  try {
+    await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ mensagem: txt })
+    });
+    carregarMensagensChatCliente(pedidoId);
+  } catch (err) {
+    console.warn('Erro ao enviar mensagem:', err);
+  }
+}
+
+async function carregarMensagensChatCliente(pedidoId) {
+  if (!pedidoId) return;
+  const token = localStorage.getItem('huby_token');
+  const meuId = localStorage.getItem('huby_user_id');
+  const areaMensagens = document.getElementById('chatAreaMensagens');
+  if (!areaMensagens) return;
+
+  try {
+    const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
+      headers: { 
+        ...(token ? { Authorization: `Bearer ${token}` } : {}) 
+      }
+    });
+    if (!resp.ok) return;
+    const msgs = await resp.json();
+    
+    let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
+    
+    msgs.forEach(m => {
+      const souEu = (m.remetente_id === meuId);
+      const alinhamento = souEu ? 'flex-end' : 'flex-start';
+      const corFundo = souEu ? '#38BDF8' : '#1F2937';
+      const corTexto = souEu ? '#000' : '#FFF';
+      const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
+      
+      html += `
+        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 4px;">
+          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
+          <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
+            ${m.mensagem}
+          </div>
+        </div>
+      `;
+    });
+
+    areaMensagens.innerHTML = html;
+    areaMensagens.scrollTop = areaMensagens.scrollHeight; 
+  } catch (err) {
+    console.warn('Erro ao carregar mensagens:', err);
+  }
+}
+// ============================================================================
+
 
 async function enviarAvaliacaoCorrida() {
   if (!corridaParaAvaliarId) return;
@@ -473,6 +615,18 @@ function resetarPainelCliente() {
   const cardStatus = document.getElementById('cardStatusViagem');
   const blocoResumo = document.getElementById('blocoResumo');
   const btn = document.getElementById('btnPedirHuby');
+  
+  // Esconde o painel do motorista se estiver visível
+  const painelMotorista = document.getElementById('painelMotoristaAceitou');
+  if (painelMotorista) painelMotorista.style.display = 'none';
+
+  // Esconde o botão flutuante de chat
+  const btnChatFlutuante = document.getElementById('btnAbrirChat');
+  if (btnChatFlutuante) btnChatFlutuante.style.display = 'none';
+  
+  // Mostra as categorias novamente
+  const sliderCategorias = document.getElementById('sliderCategorias');
+  if (sliderCategorias) sliderCategorias.style.display = 'flex';
 
   if (cardStatus) cardStatus.style.display = 'none';
   if (blocoResumo) blocoResumo.style.display = 'flex';
@@ -490,6 +644,11 @@ function resetarPainelCliente() {
     btn.style.display = 'block';
     btn.style.background = '';
     atualizarBotaoChamar();
+  }
+  
+  if (chatIntervalCliente) {
+    clearInterval(chatIntervalCliente);
+    chatIntervalCliente = null;
   }
 }
 

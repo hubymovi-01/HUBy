@@ -180,7 +180,7 @@
   <section class="client-dock-sheet" style="z-index: 50;">
     <div class="sheet-drag-handle"></div>
 
-    <div class="category-slider">
+    <div class="category-slider" id="sliderCategorias">
       <button type="button" class="category-chip active" data-id="carro"><span class="cat-icon">🚗</span><span class="cat-label">Carro</span></button>
       <button type="button" class="category-chip" data-id="moto"><span class="cat-icon">🏍️</span><span class="cat-label">Moto</span></button>
       <button type="button" class="category-chip" data-id="flash_moto"><span class="cat-icon">⚡</span><span class="cat-label">Flash</span></button>
@@ -208,6 +208,51 @@
       </div>
       <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
     </div>
+
+    <!-- ========================================================================= -->
+    <!-- PAINEL PREMIUM: APARECE QUANDO O MOTORISTA ACEITA A CORRIDA               -->
+    <!-- ========================================================================= -->
+    <div id="painelMotoristaAceitou" style="display: none; width: 100%;">
+      
+      <!-- Alerta de Sucesso -->
+      <div style="text-align: center; margin-bottom: 16px;">
+        <span style="background: rgba(16, 185, 129, 0.15); color: #10B981; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+          ✓ Motorista a Caminho
+        </span>
+      </div>
+
+      <!-- Informações do Motorista -->
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="width: 54px; height: 54px; background: #1F2937; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px;">
+            🚘
+          </div>
+          <div>
+            <h3 id="lblMotoristaNome" style="margin: 0 0 4px 0; font-size: 18px; color: #FFF; font-weight: 800;">A carregar...</h3>
+            <span style="font-size: 13px; color: #F59E0B; font-weight: 700;">★ 5.0</span>
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <div id="lblMotoristaPlaca" style="background: #E2E8F0; padding: 6px 10px; border-radius: 8px; font-size: 15px; color: #0F172A; font-weight: 900; letter-spacing: 1.5px; border: 1px solid #CBD5E1;">
+            ---
+          </div>
+          <div id="lblMotoristaVeiculo" style="font-size: 12px; color: #94A3B8; margin-top: 6px; font-weight: 600;">
+            ---
+          </div>
+        </div>
+      </div>
+
+      <!-- Botões de Ação na Tela -->
+      <div style="display: flex; gap: 12px;">
+        <button type="button" id="btnAbrirChatClienteCard" style="flex: 1; background: #38BDF8; color: #032017; padding: 14px; border-radius: 12px; border: none; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+          💬 Mensagem
+        </button>
+        <a href="#" id="btnLigarMotorista" style="flex: 1; background: rgba(255, 255, 255, 0.05); color: #FFF; border: 1px solid rgba(255, 255, 255, 0.1); padding: 14px; border-radius: 12px; text-decoration: none; text-align: center; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          📞 Ligar
+        </a>
+      </div>
+    </div>
+    <!-- ========================================================================= -->
 
     <button type="button" id="btnPedirHuby" class="btn-main-action">Chamar HUBy Carro</button>
   </section>
