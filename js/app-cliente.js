@@ -48,7 +48,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Erro ao inicializar mapa:', err);
   }
 
-  // BOTÃO GPS CORRIGIDO PARA ECRÃS TÁTEIS (TELEMOVEL)
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
@@ -339,9 +338,6 @@ function mostrarAguardandoMotorista() {
   }
 }
 
-// ============================================================================
-// MODIFICAÇÃO PRINCIPAL: CHAMA A INTERFACE PREMIUM QUANDO É ACEITO
-// ============================================================================
 function iniciarPollingStatus() {
   if (intervalPolling) clearInterval(intervalPolling);
 
@@ -356,10 +352,8 @@ function iniciarPollingStatus() {
 
       if (pedido.status === 'aceito') {
         
-        // CHAMA O NOVO PAINEL PREMIUM E ESCONDE O RESTO
         atualizarInterfaceMotoristaAceitou(pedido);
 
-        // Atualiza o pino do motorista no mapa se necessário
         if (hubyMapa && hubyMapa.map && typeof L !== 'undefined' && !markerMotoristaAaminho) {
           const iconeCondutor = L.divIcon({
             className: 'huby-pin-motorista',
@@ -392,11 +386,7 @@ function iniciarPollingStatus() {
   }, 3000);
 }
 
-// ============================================================================
-// LÓGICA PREMIUM DA INTERFACE: MOTORISTA A CAMINHO & CHAT
-// ============================================================================
 function atualizarInterfaceMotoristaAceitou(pedido) {
-  // Esconde os elementos da fase de "pedido"
   const sliderCategorias = document.getElementById('sliderCategorias');
   const blocoResumo = document.getElementById('blocoResumo');
   const cardStatusViagem = document.getElementById('cardStatusViagem');
@@ -407,26 +397,21 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
   if (cardStatusViagem) cardStatusViagem.style.display = 'none';
   if (btnPedirHuby) btnPedirHuby.style.display = 'none';
 
-  // Mostra o Painel Premium do Motorista
   const painelMotorista = document.getElementById('painelMotoristaAceitou');
   if (painelMotorista) {
     painelMotorista.style.display = 'block';
     
-    // Preenche os dados reais vindos da base de dados
     document.getElementById('lblMotoristaNome').textContent = pedido.motorista_nome || 'Motorista Parceiro';
     document.getElementById('lblMotoristaPlaca').textContent = pedido.motorista_placa || '---';
     document.getElementById('lblMotoristaVeiculo').textContent = pedido.motorista_veiculo || 'Carro HUBy';
     
-    // Configura o botão de Ligar
     const btnLigar = document.getElementById('btnLigarMotorista');
     if (btnLigar) btnLigar.href = `tel:${pedido.motorista_telefone}`;
   }
 
-  // Mostra o botão flutuante redondo de Chat no mapa
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) btnChatFlutuante.style.display = 'flex';
 
-  // Liga os motores do Chat!
   configurarChatCliente(pedido.id);
 }
 
@@ -443,7 +428,6 @@ function configurarChatCliente(pedidoId) {
   const btnEnviarMsg = document.getElementById('btnEnviarMsgChat');
   const inputMsg = document.getElementById('inputChatMsg');
 
-  // Abre o modal ao clicar em qualquer botão de Chat
   const abrirChat = () => {
     if (modalChat) modalChat.style.display = 'flex';
     carregarMensagensChatCliente(pedidoId);
@@ -474,12 +458,10 @@ async function enviarMensagemChatCliente(pedidoId) {
   const txt = inputMsg ? inputMsg.value.trim() : '';
   if (!txt || !pedidoId) return;
 
-  // 🛑 BLOQUEIO DE SEGURANÇA: Anti-Fraude e Frete por fora
-  // Conta quantos números existem na mensagem
   const quantidadeNumeros = (txt.match(/\d/g) || []).length;
   if (quantidadeNumeros >= 4) {
     alert('⚠️ Segurança HUBy:\nPor motivos de segurança, não é permitido partilhar números de telefone ou contactos no chat.');
-    return; // Cancela o envio imediatamente
+    return; 
   }
 
   const token = localStorage.getItem('huby_token');
@@ -505,7 +487,6 @@ async function carregarMensagensChatCliente(pedidoId) {
   if (!pedidoId) return;
   const token = localStorage.getItem('huby_token');
   
-  // 🟢 CORREÇÃO DO ALINHAMENTO: Extrair a identidade direto do Token de segurança
   let meuId = null;
   if (token) {
     try {
@@ -530,7 +511,6 @@ async function carregarMensagensChatCliente(pedidoId) {
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
     
     msgs.forEach(m => {
-      // Agora ele sabe com 100% de certeza quem é você
       const souEu = (String(m.remetente_id) === String(meuId));
       
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
@@ -555,49 +535,9 @@ async function carregarMensagensChatCliente(pedidoId) {
   }
 }
 
-async function carregarMensagensChatCliente(pedidoId) {
-  if (!pedidoId) return;
-  const token = localStorage.getItem('huby_token');
-  const meuId = localStorage.getItem('huby_user_id');
-  const areaMensagens = document.getElementById('chatAreaMensagens');
-  if (!areaMensagens) return;
-
-  try {
-    const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
-      headers: { 
-        ...(token ? { Authorization: `Bearer ${token}` } : {}) 
-      }
-    });
-    if (!resp.ok) return;
-    const msgs = await resp.json();
-    
-    let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
-    
-    msgs.forEach(m => {
-      const souEu = (m.remetente_id === meuId);
-      const alinhamento = souEu ? 'flex-end' : 'flex-start';
-      const corFundo = souEu ? '#38BDF8' : '#1F2937';
-      const corTexto = souEu ? '#000' : '#FFF';
-      const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
-      
-      html += `
-        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 4px;">
-          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
-          <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
-            ${m.mensagem}
-          </div>
-        </div>
-      `;
-    });
-
-    areaMensagens.innerHTML = html;
-    areaMensagens.scrollTop = areaMensagens.scrollHeight; 
-  } catch (err) {
-    console.warn('Erro ao carregar mensagens:', err);
-  }
-}
 // ============================================================================
-
+// OUTRAS FUNÇÕES
+// ============================================================================
 
 async function enviarAvaliacaoCorrida() {
   if (!corridaParaAvaliarId) return;
@@ -679,15 +619,12 @@ function resetarPainelCliente() {
   const blocoResumo = document.getElementById('blocoResumo');
   const btn = document.getElementById('btnPedirHuby');
   
-  // Esconde o painel do motorista se estiver visível
   const painelMotorista = document.getElementById('painelMotoristaAceitou');
   if (painelMotorista) painelMotorista.style.display = 'none';
 
-  // Esconde o botão flutuante de chat
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) btnChatFlutuante.style.display = 'none';
   
-  // Mostra as categorias novamente
   const sliderCategorias = document.getElementById('sliderCategorias');
   if (sliderCategorias) sliderCategorias.style.display = 'flex';
 
