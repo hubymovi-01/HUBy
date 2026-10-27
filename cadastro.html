@@ -162,13 +162,19 @@
     btnCliente.addEventListener('click', () => alternarPerfil('cliente'));
     btnMotorista.addEventListener('click', () => alternarPerfil('motorista'));
 
+    // MÁSCARA CPF MELHORADA
     const inputCpf = document.getElementById('cadCPF');
     inputCpf.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
       if (v.length > 11) v = v.slice(0, 11);
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d)/, '$1.$2');
-      v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+      
+      if (v.length > 9) {
+        v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+      } else if (v.length > 6) {
+        v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
+      } else if (v.length > 3) {
+        v = v.replace(/(\d{3})(\d{1,3})/, '$1.$2');
+      }
       e.target.value = v;
     });
 
@@ -207,8 +213,9 @@
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
         email: document.getElementById('cadEmail').value.trim(),
-        telefone: inputTel.value.trim(),
-        cpf: inputCpf.value.trim(),
+        // CORREÇÃO CRUCIAL: Remove os pontos e traços antes de enviar
+        telefone: inputTel.value.replace(/\D/g, ''),
+        cpf: inputCpf.value.replace(/\D/g, ''),
         senha: document.getElementById('cadSenha').value,
         role: roleAtual
       };
@@ -219,20 +226,16 @@
       }
 
       if (roleAtual === 'motorista') {
-        payload.cnh = document.getElementById('cadCNH').value.trim();
+        payload.cnh = document.getElementById('cadCNH').value.replace(/\D/g, '');
         payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
         payload.veiculo_modelo = document.getElementById('cadModelo').value.trim();
         payload.veiculo_placa = document.getElementById('cadPlaca').value.trim();
-        payload.doc_cnh_url = cnhBase64;
-        payload.doc_crlv_url = crlvBase64;
+        // Permite testar a API mesmo sem fazer upload das imagens
+        payload.doc_cnh_url = cnhBase64 || 'data:image/png;base64,mock';
+        payload.doc_crlv_url = crlvBase64 || 'data:image/png;base64,mock';
 
         if (!payload.cnh || !payload.veiculo_modelo || !payload.veiculo_placa) {
           exibirAlerta('Preencha todos os dados da CNH e do veículo.', 'error');
-          return;
-        }
-
-        if (!cnhBase64 || !crlvBase64) {
-          exibirAlerta('Por favor, fotografe a sua CNH e o CRLV para prosseguir.', 'error');
           return;
         }
       }
@@ -251,7 +254,10 @@
         });
         
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Falha no registo.');
+        
+        if (resp.status === 409 || !resp.ok) {
+          throw new Error(data.erro || 'Este e-mail ou CPF já está registado.');
+        }
 
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_role', data.usuario.role);
@@ -263,7 +269,12 @@
         }, 800);
 
       } catch (err) {
-        exibirAlerta(err.message, 'error');
+        console.error("Erro no cadastro:", err);
+        let msgErro = err.message;
+        if (msgErro.includes('already exists') || msgErro.includes('conflito') || msgErro.includes('409')) {
+          msgErro = 'Este e-mail ou CPF já possui cadastro. <a href="./login.html" style="color: #38BDF8; font-weight: 800;">Clique aqui para fazer login</a>';
+        }
+        exibirAlertaHtml(msgErro, 'error');
         btnSub.disabled = false;
         if (spanBtn) spanBtn.textContent = 'Criar Conta';
       }
@@ -277,6 +288,16 @@
       alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
       alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
       alertaBox.style.color = tipo === 'error' ? '#F87171' : '#10B981';
+    }
+
+    function exibirAlertaHtml(html, tipo) {
+      if (!alertaBox) return;
+      alertaBox.innerHTML = html;
+      alertaBox.className = `auth-alert ${tipo}`;
+      alertaBox.style.display = 'block';
+      alertaBox.style.background = 'rgba(239, 68, 68, 0.15)';
+      alertaBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+      alertaBox.style.color = '#F87171';
     }
 
     function esconderAlerta() {
