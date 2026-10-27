@@ -1,5 +1,7 @@
 import { API_URL } from './config.js';
 import { HubyMapa } from './mapa.js';
+// ADICIONADO: Importação direta da antena do Socket.IO para o frontend!
+import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
 let hubyMapa = null;
 let pedidoAceitoAtual = null;
@@ -7,6 +9,7 @@ let intervalRadar = null;
 let chamadasAnterioresIds = new Set();
 let statusAprovacaoAtual = 'aprovado';
 let categoriaMotorista = 'carro';
+let socketRadar = null; // Variável para manter a conexão em tempo real
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
@@ -51,6 +54,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 5. Limpeza de recursos ao fechar ou recarregar
   window.addEventListener('beforeunload', () => {
     if (intervalRadar) clearInterval(intervalRadar);
+    if (socketRadar) socketRadar.disconnect();
     if (hubyMapa?.watchId !== null && navigator.geolocation) {
       navigator.geolocation.clearWatch(hubyMapa.watchId);
     }
@@ -130,7 +134,6 @@ async function atualizarPerfilESaldo() {
   }
 }
 
-// Configuração do Modal e Envio do Pedido de Saque Pix
 function configurarModalSaquePix() {
   const modalSaque = document.getElementById('modalSaquePix');
   const btnAbrirSaque = document.getElementById('btnAbrirModalSaque');
@@ -188,9 +191,6 @@ function configurarModalSaquePix() {
   });
 }
 
-// ==========================================
-// LÓGICA DO CHAT INTERNO DA CORRIDA (MOTORISTA)
-// ==========================================
 let chatInterval = null;
 
 function configurarChatMotorista() {
@@ -280,31 +280,53 @@ async function carregarMensagensChat() {
   }
 }
 
+// ==========================================
+// RADAR DE CHAMADAS (AGORA EM TEMPO REAL!)
+// ==========================================
 function iniciarRadarChamadas() {
-  if (intervalRadar) clearInterval(intervalRadar);
+  // 1. Faz a busca inicial mal o motorista entra
+  buscarChamadasPendentes();
 
-  intervalRadar = setInterval(async () => {
-    if (pedidoAceitoAtual || statusAprovacaoAtual !== 'aprovado') return;
-
-    try {
-      const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(categoriaMotorista)}`);
-      if (!resp.ok) return;
-
-      const pedidos = await resp.json();
-
-      const idsAtuais = pedidos.map(p => p.id);
-      const existeNovaChamada = idsAtuais.some(id => !chamadasAnterioresIds.has(id));
-
-      if (existeNovaChamada && pedidos.length > 0) {
-        tocarAlertaSonoro();
+  // 2. Conecta o Radar em Tempo Real (Socket.IO)
+  if (!socketRadar) {
+    socketRadar = io(API_URL);
+    
+    socketRadar.on('nova_chamada', (dados) => {
+      // Se não estiver em viagem e estiver aprovado, força a atualização imediata da lista
+      if (!pedidoAceitoAtual && statusAprovacaoAtual === 'aprovado') {
+        console.log('⚡ CORRIDA RECEBIDA EM TEMPO REAL VIA SOCKET!', dados);
+        buscarChamadasPendentes(true); // O true força o alerta sonoro
       }
+    });
+  }
 
-      chamadasAnterioresIds = new Set(idsAtuais);
-      renderizarRadar(pedidos);
-    } catch (err) {
-      console.warn('Erro no radar:', err);
+  // 3. Mantém o Polling mais lento (10 seg) apenas como medida de segurança contra quebras de rede
+  if (intervalRadar) clearInterval(intervalRadar);
+  intervalRadar = setInterval(() => buscarChamadasPendentes(false), 10000);
+}
+
+// Função isolada para buscar as chamadas na base de dados
+async function buscarChamadasPendentes(tocarSomForcado = false) {
+  if (pedidoAceitoAtual || statusAprovacaoAtual !== 'aprovado') return;
+
+  try {
+    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(categoriaMotorista)}`);
+    if (!resp.ok) return;
+
+    const pedidos = await resp.json();
+
+    const idsAtuais = pedidos.map(p => p.id);
+    const existeNovaChamada = idsAtuais.some(id => !chamadasAnterioresIds.has(id));
+
+    if ((existeNovaChamada && pedidos.length > 0) || tocarSomForcado) {
+      tocarAlertaSonoro();
     }
-  }, 4000);
+
+    chamadasAnterioresIds = new Set(idsAtuais);
+    renderizarRadar(pedidos);
+  } catch (err) {
+    console.warn('Erro no radar:', err);
+  }
 }
 
 function renderizarRadar(pedidos) {

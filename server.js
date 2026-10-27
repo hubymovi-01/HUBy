@@ -4,12 +4,37 @@ import dotenv from 'dotenv';
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { createServer } from 'http'; // ADICIONADO PARA O SOCKET.IO
+import { Server } from 'socket.io';  // ADICIONADO PARA O SOCKET.IO
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'huby_jwt_secret_key_prod_2026_xpto';
+
+// ----------------------------------------------------------------------------
+// CRIAR O SERVIDOR HTTP E A ANTENA SOCKET.IO PARA TEMPO REAL
+// ----------------------------------------------------------------------------
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
+
+// ESCUTAR QUANDO O MOTORISTA OU PASSAGEIRO SE LIGA AO RADAR
+io.on('connection', (socket) => {
+  console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
+  
+  // Aqui futuramente podemos colocar salas privadas de chat entre motorista e passageiro
+  
+  socket.on('disconnect', () => {
+    console.log(`Utilizador desconectado do radar: ${socket.id}`);
+  });
+});
+// ----------------------------------------------------------------------------
 
 // 1. TRATAMENTO EXPLÍCITO DE CORS & PREFLIGHT OPTIONS
 app.use((req, res, next) => {
@@ -244,7 +269,7 @@ const processarCadastro = async (req, res) => {
       nome, email, telefone, cpf, senha, role = 'cliente',
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
       cnh, veiculo_modelo, veiculo_placa, categoria_veiculo,
-      doc_cnh_url, doc_crlv_url // Recebe as strings Base64
+      doc_cnh_url, doc_crlv_url 
     } = req.body;
 
     if (!nome || !senha || (!email && !telefone)) {
@@ -280,7 +305,6 @@ const processarCadastro = async (req, res) => {
       const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const novoId = 'mot_' + Date.now().toString(36);
 
-      // INSERSÃO ATUALIZADA: Grava Base64 e define status como 'pendente'
       const resultado = await sql`
         INSERT INTO motoristas (
           id, nome, email, telefone, cpf, data_nascimento, senha_hash,
@@ -483,6 +507,14 @@ app.post('/api/pedidos', async (req, res) => {
       )
     `;
 
+    // ----------------------------------------------------------------------------
+    // EMITIR O EVENTO PARA O MOTORISTA ASSIM QUE O PEDIDO ENTRA NO BANCO
+    // ----------------------------------------------------------------------------
+    io.emit('nova_chamada', {
+      id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm, duracaoMin, valorTotal
+    });
+    // ----------------------------------------------------------------------------
+
     res.status(201).json({ sucesso: true, id });
   } catch (error) {
     console.error('Erro ao registar pedido:', error);
@@ -490,7 +522,6 @@ app.post('/api/pedidos', async (req, res) => {
   }
 });
 
-// FILTRO ESTRITO POR CATEGORIA DE VEÍCULO DO MOTORISTA
 app.get('/api/pedidos/pendentes', async (req, res) => {
   try {
     const { categoria } = req.query;
@@ -514,7 +545,6 @@ app.get('/api/pedidos/pendentes', async (req, res) => {
           LIMIT 20;
         `;
       } else {
-        // Carro padrão
         pedidos = await sql`
           SELECT * FROM pedidos 
           WHERE status = 'pendente' 
@@ -1059,6 +1089,6 @@ app.get('/api/admin/relatorios/corridas.csv', autenticarToken, async (req, res) 
 // ============================================================================
 // INICIALIZAÇÃO DO SERVIDOR (ÚLTIMA LINHA)
 // ============================================================================
-app.listen(port, () => {
-  console.log(`Servidor HUBy ativo na porta ${port}`);
+server.listen(port, () => {
+  console.log(`Servidor HUBy ativo na porta ${port} COM Tempo Real (Socket.IO)`);
 });
