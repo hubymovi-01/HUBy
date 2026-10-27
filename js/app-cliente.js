@@ -487,11 +487,14 @@ async function carregarMensagensChatCliente(pedidoId) {
   if (!pedidoId) return;
   const token = localStorage.getItem('huby_token');
   
-  let meuId = null;
+  // Extrai o nome e o cargo exato do usuário logado através do Token JWT
+  let meuNome = '';
+  let meuRole = 'cliente';
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      meuId = payload.id;
+      meuNome = String(payload.nome || '').trim().toLowerCase();
+      meuRole = String(payload.role || 'cliente').trim().toLowerCase();
     } catch(e) {}
   }
 
@@ -511,15 +514,19 @@ async function carregarMensagensChatCliente(pedidoId) {
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
     
     msgs.forEach(m => {
-      const souEu = (String(m.remetente_id) === String(meuId));
+      const nomeRemetente = String(m.remetente_nome || '').trim().toLowerCase();
       
+      // Se o remetente for o cliente (ou tiver o mesmo nome), a mensagem é sua!
+      const souEu = (nomeRemetente === meuNome) || (m.remetente_id && m.remetente_id.startsWith('usr_'));
+      
+      // No Cliente: O que você envia fica à DIREITA (Azul), o que vem do motorista fica à ESQUERDA (Cinzento)
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#38BDF8' : '#1F2937';
       const corTexto = souEu ? '#000' : '#FFF';
       const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
       
       html += `
-        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 4px;">
+        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 6px;">
           <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
           <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
             ${m.mensagem}
@@ -534,7 +541,6 @@ async function carregarMensagensChatCliente(pedidoId) {
     console.warn('Erro ao carregar mensagens:', err);
   }
 }
-
 // ============================================================================
 // OUTRAS FUNÇÕES
 // ============================================================================

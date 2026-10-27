@@ -249,11 +249,11 @@ async function carregarMensagensChat() {
   if (!pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
   const token = localStorage.getItem('huby_token');
   
-  let meuId = null;
+  let meuNome = '';
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      meuId = payload.id;
+      meuNome = String(payload.nome || '').trim().toLowerCase();
     } catch(e) {}
   }
 
@@ -267,18 +267,22 @@ async function carregarMensagensChat() {
     if (!resp.ok) return;
     const msgs = await resp.json();
     
-    let html = '<div style="text-align: center; color: #94A3B8; font-size: 11px; margin-bottom: 10px;">O chat é monitorizado por segurança.</div>';
+    let html = '<div style="text-align: center; color: #94A3B8; font-size: 11px; margin-bottom: 10px;">O chat foi monitorizado por segurança.</div>';
     
     msgs.forEach(m => {
-      const souEu = (String(m.remetente_id) === String(meuId));
+      const nomeRemetente = String(m.remetente_nome || '').trim().toLowerCase();
       
+      // Se o remetente for o motorista, a mensagem é sua!
+      const souEu = (nomeRemetente === meuNome) || (m.remetente_id && m.remetente_id.startsWith('mot_'));
+      
+      // No Motorista: O que o motorista envia fica à DIREITA (Verde), o do cliente fica à ESQUERDA (Cinzento)
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#10B981' : '#1F2937'; 
       const corTexto = souEu ? '#000' : '#FFF';
       const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
       
       html += `
-        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 4px;">
+        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 6px;">
           <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
           <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
             ${m.mensagem}
