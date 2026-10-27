@@ -4,8 +4,8 @@ import dotenv from 'dotenv';
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { createServer } from 'http'; // ADICIONADO PARA O SOCKET.IO
-import { Server } from 'socket.io';  // ADICIONADO PARA O SOCKET.IO
+import { createServer } from 'http'; 
+import { Server } from 'socket.io';  
 
 dotenv.config();
 
@@ -24,7 +24,6 @@ const io = new Server(server, {
   }
 });
 
-// ESCUTAR QUANDO O MOTORISTA OU PASSAGEIRO SE LIGA AO RADAR
 io.on('connection', (socket) => {
   console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
   
@@ -32,7 +31,6 @@ io.on('connection', (socket) => {
     console.log(`Utilizador desconectado do radar: ${socket.id}`);
   });
 });
-// ----------------------------------------------------------------------------
 
 // 1. TRATAMENTO EXPLÍCITO DE CORS & PREFLIGHT OPTIONS
 app.use((req, res, next) => {
@@ -47,7 +45,6 @@ app.use((req, res, next) => {
 });
 
 app.use(cors());
-// Limite aumentado para 10mb para permitir o upload das fotografias (Base64)
 app.use(express.json({ limit: '10mb' }));
 
 if (!process.env.DATABASE_URL) {
@@ -74,7 +71,6 @@ export function autenticarToken(req, res, next) {
   }
 }
 
-// Funções Algorítmicas de Validação Documental
 function validarNumeroCPF(cpf) {
   cpf = String(cpf).replace(/\D/g, '');
   if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
@@ -210,6 +206,21 @@ async function inicializarBanco() {
       );
     `;
 
+    // ========================================================================
+    // NOVA TABELA: MENSAGENS DO CHAT
+    // ========================================================================
+    await sql`
+      CREATE TABLE IF NOT EXISTS mensagens_chat (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT NOT NULL,
+        remetente_id TEXT NOT NULL,
+        remetente_nome TEXT NOT NULL,
+        mensagem TEXT NOT NULL,
+        enviado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    // ========================================================================
+
     await sql`
       CREATE TABLE IF NOT EXISTS configuracoes_plataforma (
         chave TEXT PRIMARY KEY,
@@ -246,7 +257,7 @@ async function inicializarBanco() {
       ON CONFLICT (chave) DO NOTHING;
     `;
 
-    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
+    console.log('Tabelas sincronizadas no Neon PostgreSQL (Incluindo Chat).');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);
   }
@@ -472,9 +483,6 @@ const processarLogin = async (req, res) => {
 app.post('/api/auth/login', processarLogin);
 app.post('/api/usuarios/login', processarLogin);
 
-// ============================================================================
-// LOGIN EXCLUSIVO PARA MOTORISTA (CNH E PLACA - SEM SENHA)
-// ============================================================================
 app.post('/api/usuarios/login-motorista', async (req, res) => {
   try {
     const { email, cnh, veiculo_placa } = req.body;
@@ -529,7 +537,7 @@ app.post('/api/usuarios/login-motorista', async (req, res) => {
 
 
 // ============================================================================
-// 2. GESTÃO DE PEDIDOS (COM CORREÇÃO DOS NÚMEROS E VÍRGULAS)
+// 2. GESTÃO DE PEDIDOS
 // ============================================================================
 
 app.post('/api/pedidos', async (req, res) => {
@@ -544,9 +552,6 @@ app.post('/api/pedidos', async (req, res) => {
       return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
     }
 
-    // ----------------------------------------------------------------------
-    // LIMPEZA MÁGICA: Garante que o banco de dados Neon não dá erro com vírgulas!
-    // ----------------------------------------------------------------------
     const formatarNum = (val) => Number(String(val).replace(',', '.')) || 0;
     
     const vTotal = formatarNum(valorTotal);
@@ -558,7 +563,6 @@ app.post('/api/pedidos', async (req, res) => {
     const origLng = coordsOrigem && coordsOrigem[1] ? Number(coordsOrigem[1]) : null;
     const destLat = coordsDestino && coordsDestino[0] ? Number(coordsDestino[0]) : null;
     const destLng = coordsDestino && coordsDestino[1] ? Number(coordsDestino[1]) : null;
-    // ----------------------------------------------------------------------
 
     await sql`
       INSERT INTO pedidos (
@@ -576,9 +580,6 @@ app.post('/api/pedidos', async (req, res) => {
       )
     `;
 
-    // ----------------------------------------------------------------------------
-    // EMITIR O EVENTO PARA O MOTORISTA VIA SOCKET.IO
-    // ----------------------------------------------------------------------------
     io.emit('nova_chamada', {
       id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal
     });
@@ -815,6 +816,58 @@ app.put('/api/pedidos/:id/cancelar', autenticarToken, async (req, res) => {
     res.status(500).json({ erro: 'Falha ao processar cancelamento.' });
   }
 });
+
+// ============================================================================
+// CHAT INTERNO DA CORRIDA (PASSAGEIRO E MOTORISTA)
+// ============================================================================
+
+app.post('/api/pedidos/:id/chat', autenticarToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { mensagem } = req.body;
+    
+    // O Token JWT já nos diz quem é a pessoa sem precisarmos de perguntar
+    const remetenteId = req.usuario.id;
+    const remetenteNome = req.usuario.nome; 
+
+    if (!mensagem) {
+      return res.status(400).json({ erro: 'A mensagem não pode estar vazia.' });
+    }
+
+    await sql`
+      INSERT INTO mensagens_chat (pedido_id, remetente_id, remetente_nome, mensagem)
+      VALUES (${id}, ${remetenteId}, ${remetenteNome}, ${mensagem})
+    `;
+    
+    // Dispara alerta em tempo real para os dispositivos recarregarem o chat
+    io.emit('nova_mensagem', { pedido_id: id });
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    console.error('Erro ao gravar mensagem de chat:', err);
+    res.status(500).json({ erro: 'Falha ao processar o envio.' });
+  }
+});
+
+app.get('/api/pedidos/:id/chat', autenticarToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Puxa o histórico ordenado da mensagem mais antiga para a mais recente
+    const mensagens = await sql`
+      SELECT remetente_id, remetente_nome, mensagem, enviado_em 
+      FROM mensagens_chat 
+      WHERE pedido_id = ${id} 
+      ORDER BY enviado_em ASC
+    `;
+
+    res.json(mensagens);
+  } catch (err) {
+    console.error('Erro ao carregar chat:', err);
+    res.status(500).json({ erro: 'Falha ao sincronizar mensagens.' });
+  }
+});
+
 
 // ============================================================================
 // 3. DOCUMENTOS, TRIAGEM E AVALIAÇÕES
