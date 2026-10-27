@@ -222,6 +222,13 @@ async function enviarMensagemChat() {
   const txt = inputMsg ? inputMsg.value.trim() : '';
   if (!txt || !pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
 
+  // 🛑 BLOQUEIO DE SEGURANÇA: Anti-Fraude
+  const quantidadeNumeros = (txt.match(/\d/g) || []).length;
+  if (quantidadeNumeros >= 4) {
+    alert('⚠️ Atenção Parceiro:\nNão é permitido enviar números de telefone no chat.');
+    return;
+  }
+
   const token = localStorage.getItem('huby_token');
   if (inputMsg) inputMsg.value = '';
 
@@ -240,6 +247,55 @@ async function enviarMensagemChat() {
   }
 }
 
+async function carregarMensagensChat() {
+  if (!pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
+  const token = localStorage.getItem('huby_token');
+  
+  // 🟢 CORREÇÃO DO ALINHAMENTO
+  let meuId = null;
+  if (token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      meuId = payload.id;
+    } catch(e) {}
+  }
+
+  const areaMensagens = document.getElementById('chatAreaMensagens');
+  if (!areaMensagens) return;
+
+  try {
+    const resp = await fetch(`${API_URL}/api/pedidos/${pedidoAceitoAtual.id}/chat`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return;
+    const msgs = await resp.json();
+    
+    let html = '<div style="text-align: center; color: #94A3B8; font-size: 11px;">O chat é monitorizado por segurança.</div>';
+    
+    msgs.forEach(m => {
+      const souEu = (String(m.remetente_id) === String(meuId));
+      
+      const alinhamento = souEu ? 'flex-end' : 'flex-start';
+      const corFundo = souEu ? '#10B981' : '#1F2937'; // Motorista usa cor Verde
+      const corTexto = souEu ? '#000' : '#FFF';
+      const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
+      
+      html += `
+        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 4px;">
+          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
+          <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
+            ${m.mensagem}
+          </div>
+        </div>
+      `;
+    });
+
+    areaMensagens.innerHTML = html;
+    areaMensagens.scrollTop = areaMensagens.scrollHeight;
+  } catch (err) {
+    console.warn('Erro ao ler chat:', err);
+  }
+}
 async function carregarMensagensChat() {
   if (!pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
   const token = localStorage.getItem('huby_token');
