@@ -478,47 +478,58 @@ app.post('/api/usuarios/login', processarLogin);
 // 2. GESTÃO DE PEDIDOS
 // ============================================================================
 
-app.post('/api/pedidos', async (req, res) => {
+// ============================================================================
+// LOGIN EXCLUSIVO PARA MOTORISTA (CNH E PLACA - SEM SENHA)
+// ============================================================================
+app.post('/api/usuarios/login-motorista', async (req, res) => {
   try {
-    const {
-      id, clienteId, tipo, subTipoId, subTipoLabel,
-      origem, destino, coordsOrigem, coordsDestino,
-      distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto
-    } = req.body;
+    const { email, cnh, veiculo_placa } = req.body;
 
-    if (!id || !valorTotal || !origem || !destino) {
-      return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
+    if (!email || !cnh || !veiculo_placa) {
+      return res.status(400).json({ erro: 'Preencha o E-mail, CNH e Placa.' });
     }
 
-    await sql`
-      INSERT INTO pedidos (
-        id, cliente_id, tipo, sub_tipo_id, sub_tipo_label,
-        origem_endereco, destino_endereco,
-        origem_lat, origem_lng, destino_lat, destino_lng,
-        distancia_km, duracao_min, valor_total, valor_adicionais,
-        metodo_pgto, status
-      ) VALUES (
-        ${id}, ${clienteId || null}, ${tipo}, ${subTipoId}, ${subTipoLabel},
-        ${origem}, ${destino},
-        ${coordsOrigem ? coordsOrigem[0] : null}, ${coordsOrigem ? coordsOrigem[1] : null},
-        ${coordsDestino ? coordsDestino[0] : null}, ${coordsDestino ? coordsDestino[1] : null},
-        ${distanciaKm}, ${duracaoMin}, ${valorTotal}, ${valorAdicionais || 0},
-        ${metodoPgto || 'pix_app'}, 'pendente'
-      )
+    const emailLimpo = String(email).trim().toLowerCase();
+    const cnhLimpa = String(cnh).replace(/\D/g, '');
+    const placaLimpa = String(veiculo_placa).trim().toUpperCase();
+
+    const motoristas = await sql`
+      SELECT * FROM motoristas
+      WHERE LOWER(TRIM(email)) = ${emailLimpo}
+        AND regexp_replace(cnh_numero, '\\D', '', 'g') = ${cnhLimpa}
+        AND UPPER(TRIM(veiculo_placa)) = ${placaLimpa}
+      LIMIT 1;
     `;
 
-    // ----------------------------------------------------------------------------
-    // EMITIR O EVENTO PARA O MOTORISTA ASSIM QUE O PEDIDO ENTRA NO BANCO
-    // ----------------------------------------------------------------------------
-    io.emit('nova_chamada', {
-      id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm, duracaoMin, valorTotal
-    });
-    // ----------------------------------------------------------------------------
+    if (motoristas.length === 0) {
+      return res.status(404).json({ erro: 'Nenhum veículo encontrado com estas credenciais.' });
+    }
 
-    res.status(201).json({ sucesso: true, id });
-  } catch (error) {
-    console.error('Erro ao registar pedido:', error);
-    res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados.' });
+    const mot = motoristas[0];
+    await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${mot.id};`;
+
+    const token = jwt.sign(
+      { id: mot.id, nome: mot.nome, role: 'motorista', categoria: mot.categoria },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.json({
+      sucesso: true,
+      token,
+      usuario: {
+        id: mot.id,
+        nome: mot.nome,
+        email: mot.email,
+        telefone: mot.telefone,
+        role: 'motorista',
+        veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`,
+        saldo: mot.saldo_carteira
+      }
+    });
+  } catch (err) {
+    console.error('Erro no login do motorista:', err);
+    res.status(500).json({ erro: 'Falha interna ao validar credenciais do veículo.' });
   }
 });
 
