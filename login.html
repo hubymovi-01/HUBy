@@ -14,13 +14,15 @@
   <main class="auth-container">
     <div class="auth-card">
       <header class="auth-header">
+        <div id="badgeLogin" class="auth-badge" style="margin-bottom: 12px; display: inline-block;">Entrar</div>
         <h1 class="auth-brand">HUB<span>y</span></h1>
-        <p class="auth-desc">Entre na sua conta para continuar</p>
+        <p id="txtSubtituloLogin" class="auth-desc">Entre na sua conta para continuar</p>
       </header>
 
-      <div id="alertaLoginBox" class="auth-alert" style="display: none;"></div>
+      <div id="alertaLoginBox" class="auth-alert" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 14px; font-size: 13px;"></div>
 
-      <form id="formLoginHuby" class="auth-form" novalidate>
+      <!-- FORMULÁRIO 1: LOGIN DE PASSAGEIRO (Padrão) -->
+      <form id="formLoginCliente" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail ou Telemóvel</label>
           <input type="text" id="loginIdentificador" placeholder="Seu e-mail ou telemóvel" required>
@@ -31,14 +33,37 @@
           <input type="password" id="loginSenha" placeholder="••••••••" required>
         </div>
 
-        <button type="submit" id="btnSubmeterLogin" class="btn-primary-action">
-          <span>Entrar na Conta</span>
+        <button type="submit" id="btnSubmeterCliente" class="btn-primary-action">
+          <span>Entrar como Passageiro</span>
         </button>
       </form>
 
-      <footer class="auth-footer-nav">
+      <!-- FORMULÁRIO 2: LOGIN DE MOTORISTA (Sem senha, usa CNH e Placa) -->
+      <form id="formLoginMotorista" class="auth-form" style="display: none;" novalidate>
+        
+        <div class="input-group">
+          <label>E-mail de Registo</label>
+          <input type="email" id="loginEmailMot" placeholder="seu@email.com" required>
+        </div>
+
+        <div class="input-group">
+          <label>Nº da CNH</label>
+          <input type="tel" id="loginCNH" placeholder="Digite os 11 dígitos da CNH" maxlength="11" required>
+        </div>
+
+        <div class="input-group">
+          <label>Placa do Veículo</label>
+          <input type="text" id="loginPlaca" placeholder="ABC1D23" style="text-transform: uppercase;" maxlength="7" required>
+        </div>
+
+        <button type="submit" id="btnSubmeterMotorista" class="btn-primary-action" style="margin-top: 20px;">
+          <span>Aceder ao Painel Parceiro</span>
+        </button>
+      </form>
+
+      <footer class="auth-footer-nav" style="margin-top: 20px;">
         <span>Ainda não tem conta?</span>
-        <a href="./cadastro.html">Criar conta</a>
+        <a href="#" id="linkCriarConta">Criar conta</a>
       </footer>
     </div>
   </main>
@@ -46,56 +71,112 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
+    // Capturar parâmetros da URL vindos do funil (welcome.html)
+    const urlParams = new URLSearchParams(window.location.search);
+    const perfil = urlParams.get('perfil') || 'cliente'; // Por padrão é cliente
+
+    const formCliente = document.getElementById('formLoginCliente');
+    const formMotorista = document.getElementById('formLoginMotorista');
+    const txtSubtitulo = document.getElementById('txtSubtituloLogin');
+    const badgeLogin = document.getElementById('badgeLogin');
+    const linkCriarConta = document.getElementById('linkCriarConta');
     const alertaBox = document.getElementById('alertaLoginBox');
 
-    document.getElementById('formLoginHuby').addEventListener('submit', async (e) => {
+    // Configurar a tela baseada no perfil escolhido no funil
+    if (perfil === 'motorista') {
+      formMotorista.style.display = 'block';
+      txtSubtitulo.textContent = 'Acesso exclusivo para Motoristas Parceiros';
+      badgeLogin.textContent = '🚘 Área do Parceiro';
+      badgeLogin.style.background = 'rgba(16, 185, 129, 0.15)';
+      badgeLogin.style.color = '#10B981';
+      linkCriarConta.href = './cadastro.html?perfil=motorista';
+    } else {
+      formCliente.style.display = 'block';
+      txtSubtitulo.textContent = 'Entre na sua conta de Passageiro';
+      badgeLogin.textContent = '👤 Passageiro';
+      linkCriarConta.href = './cadastro.html?perfil=cliente';
+    }
+
+    // Lógica de Login para PASSAGEIRO
+    formCliente.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
-
       const identificador = document.getElementById('loginIdentificador').value.trim();
       const senha = document.getElementById('loginSenha').value;
 
-      if (!identificador || !senha) {
-        exibirAlerta('Preencha todos os campos.', 'error');
-        return;
-      }
+      if (!identificador || !senha) return exibirAlerta('Preencha todos os campos.', 'error');
+
+      const btnSub = document.getElementById('btnSubmeterCliente');
+      btnSub.disabled = true;
+      btnSub.querySelector('span').textContent = 'A entrar...';
 
       try {
-        const btnSub = document.getElementById('btnSubmeterLogin');
-        btnSub.disabled = true;
-        btnSub.querySelector('span').textContent = 'A entrar...';
-
         const resp = await fetch(`${API_URL}/api/usuarios/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identificador, senha })
         });
-
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.erro || 'Credenciais inválidas.');
 
-        localStorage.setItem('huby_token', data.token);
-        localStorage.setItem('huby_user_role', data.usuario.role);
-        localStorage.setItem('huby_user_name', data.usuario.nome);
-        localStorage.setItem('huby_user_phone', data.usuario.telefone || '');
-
-        exibirAlerta('Login efetuado com sucesso!', 'success');
-        setTimeout(() => {
-          window.location.replace(data.usuario.role === 'motorista' ? './motorista.html' : './index.html');
-        }, 600);
-
+        guardarSessaoERedirecionar(data, './index.html');
       } catch (err) {
         exibirAlerta(err.message, 'error');
-        const btnSub = document.getElementById('btnSubmeterLogin');
         btnSub.disabled = false;
-        btnSub.querySelector('span').textContent = 'Entrar na Conta';
+        btnSub.querySelector('span').textContent = 'Entrar como Passageiro';
       }
     });
+
+    // Lógica de Login EXCLUSIVA para MOTORISTA (Sem Senha)
+    formMotorista.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      esconderAlerta();
+      
+      const email = document.getElementById('loginEmailMot').value.trim();
+      const cnh = document.getElementById('loginCNH').value.trim();
+      const placa = document.getElementById('loginPlaca').value.trim().toUpperCase();
+
+      if (!email || !cnh || !placa) return exibirAlerta('Preencha E-mail, CNH e Placa.', 'error');
+
+      const btnSub = document.getElementById('btnSubmeterMotorista');
+      btnSub.disabled = true;
+      btnSub.querySelector('span').textContent = 'A verificar veículo...';
+
+      try {
+        // Envia os dados para a API (Atenção: O backend precisará de uma rota ajustada para isto)
+        const resp = await fetch(`${API_URL}/api/usuarios/login-motorista`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, cnh, veiculo_placa: placa })
+        });
+        
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.erro || 'Dados do veículo ou e-mail não encontrados.');
+
+        guardarSessaoERedirecionar(data, './motorista.html');
+      } catch (err) {
+        exibirAlerta(err.message, 'error');
+        btnSub.disabled = false;
+        btnSub.querySelector('span').textContent = 'Aceder ao Painel Parceiro';
+      }
+    });
+
+    // Formatações Visuais e Funções Auxiliares
+    document.getElementById('loginCNH').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11);
+    });
+
+    function guardarSessaoERedirecionar(data, urlDestino) {
+      localStorage.setItem('huby_token', data.token);
+      localStorage.setItem('huby_user_role', data.usuario.role);
+      localStorage.setItem('huby_user_name', data.usuario.nome);
+      exibirAlerta('Login efetuado com sucesso!', 'success');
+      setTimeout(() => window.location.replace(urlDestino), 600);
+    }
 
     function exibirAlerta(msg, tipo) {
       if (!alertaBox) return;
       alertaBox.textContent = msg;
-      alertaBox.className = `auth-alert ${tipo}`;
       alertaBox.style.display = 'block';
       alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
       alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
@@ -103,8 +184,7 @@
     }
 
     function esconderAlerta() {
-      if (!alertaBox) return;
-      alertaBox.style.display = 'none';
+      if (alertaBox) alertaBox.style.display = 'none';
     }
   </script>
 </body>
