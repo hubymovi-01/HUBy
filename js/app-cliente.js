@@ -468,7 +468,6 @@ async function enviarMensagemChatCliente(pedidoId) {
   if (inputMsg) inputMsg.value = '';
 
   try {
-    const { API_URL } = await import('./config.js');
     await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
       method: 'POST',
       headers: { 
@@ -487,7 +486,6 @@ async function carregarMensagensChatCliente(pedidoId) {
   if (!pedidoId) return;
   const token = localStorage.getItem('huby_token');
   
-  // Extrai o ID real do usuário logado diretamente do Token JWT
   let meuId = null;
   if (token) {
     try {
@@ -500,7 +498,6 @@ async function carregarMensagensChatCliente(pedidoId) {
   if (!areaMensagens) return;
 
   try {
-    const { API_URL } = await import('./config.js');
     const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
       headers: { 
         ...(token ? { Authorization: `Bearer ${token}` } : {}) 
@@ -512,10 +509,8 @@ async function carregarMensagensChatCliente(pedidoId) {
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
     
     msgs.forEach(m => {
-      // Compara diretamente o ID de quem enviou a mensagem com o ID do usuário logado
       const souEu = (String(m.remetente_id) === String(meuId));
       
-      // CLIENTE: O que você envia fica à DIREITA (Azul), o que vem do motorista fica à ESQUERDA (Cinzento escuro)
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#38BDF8' : '#1F2937';
       const corTexto = souEu ? '#000' : '#FFF';
@@ -537,6 +532,7 @@ async function carregarMensagensChatCliente(pedidoId) {
     console.warn('Erro ao carregar mensagens:', err);
   }
 }
+
 // ============================================================================
 // OUTRAS FUNÇÕES
 // ============================================================================
