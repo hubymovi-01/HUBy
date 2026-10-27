@@ -249,11 +249,11 @@ async function carregarMensagensChat() {
   if (!pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
   const token = localStorage.getItem('huby_token');
   
-  let meuNome = '';
+  let meuId = null;
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      meuNome = String(payload.nome || '').trim().toLowerCase();
+      meuId = payload.id;
     } catch(e) {}
   }
 
@@ -267,15 +267,12 @@ async function carregarMensagensChat() {
     if (!resp.ok) return;
     const msgs = await resp.json();
     
-    let html = '<div style="text-align: center; color: #94A3B8; font-size: 11px; margin-bottom: 10px;">O chat foi monitorizado por segurança.</div>';
+    let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat é monitorizado por segurança.</div>';
     
     msgs.forEach(m => {
-      const nomeRemetente = String(m.remetente_nome || '').trim().toLowerCase();
+      const souEu = (String(m.remetente_id) === String(meuId));
       
-      // Se o remetente for o motorista, a mensagem é sua!
-      const souEu = (nomeRemetente === meuNome) || (m.remetente_id && m.remetente_id.startsWith('mot_'));
-      
-      // No Motorista: O que o motorista envia fica à DIREITA (Verde), o do cliente fica à ESQUERDA (Cinzento)
+      // MOTORISTA: O que o motorista envia fica à DIREITA (Verde), o do cliente fica à ESQUERDA (Cinzento escuro)
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#10B981' : '#1F2937'; 
       const corTexto = souEu ? '#000' : '#FFF';

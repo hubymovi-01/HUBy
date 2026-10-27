@@ -487,14 +487,12 @@ async function carregarMensagensChatCliente(pedidoId) {
   if (!pedidoId) return;
   const token = localStorage.getItem('huby_token');
   
-  // Extrai o nome e o cargo exato do usuário logado através do Token JWT
-  let meuNome = '';
-  let meuRole = 'cliente';
+  // Extrai o ID real do usuário logado diretamente do Token JWT
+  let meuId = null;
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
-      meuNome = String(payload.nome || '').trim().toLowerCase();
-      meuRole = String(payload.role || 'cliente').trim().toLowerCase();
+      meuId = payload.id;
     } catch(e) {}
   }
 
@@ -514,12 +512,10 @@ async function carregarMensagensChatCliente(pedidoId) {
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
     
     msgs.forEach(m => {
-      const nomeRemetente = String(m.remetente_nome || '').trim().toLowerCase();
+      // Compara diretamente o ID de quem enviou a mensagem com o ID do usuário logado
+      const souEu = (String(m.remetente_id) === String(meuId));
       
-      // Se o remetente for o cliente (ou tiver o mesmo nome), a mensagem é sua!
-      const souEu = (nomeRemetente === meuNome) || (m.remetente_id && m.remetente_id.startsWith('usr_'));
-      
-      // No Cliente: O que você envia fica à DIREITA (Azul), o que vem do motorista fica à ESQUERDA (Cinzento)
+      // CLIENTE: O que você envia fica à DIREITA (Azul), o que vem do motorista fica à ESQUERDA (Cinzento escuro)
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#38BDF8' : '#1F2937';
       const corTexto = souEu ? '#000' : '#FFF';
