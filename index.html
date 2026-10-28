@@ -271,7 +271,6 @@
     </div>
   </div>
 
-  <!-- AQUI O SEU MODAL HISTÓRICO JÁ PRONTO -->
   <div id="modalHistorico" class="modal-backdrop" style="display: none; z-index: 10000;">
     <div class="modal-card modal-wide">
       <div class="modal-header-row">
@@ -388,11 +387,11 @@
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
 
     // =======================================================================
-    // PASSO 1: HISTÓRICO DE VIAGENS (Integrado no Backend!)
+    // PASSO 1: HISTÓRICO DE VIAGENS
     // =======================================================================
     document.getElementById('menuItemViagens')?.addEventListener('click', async (e) => {
       e.preventDefault();
-      document.getElementById('menuBackdrop')?.click(); // Fecha o menu
+      document.getElementById('menuBackdrop')?.click(); 
       
       const modalHist = document.getElementById('modalHistorico');
       const listaHist = document.getElementById('listaHistoricoCorridas');
@@ -437,7 +436,7 @@
     });
 
     // =======================================================================
-    // PASSO 2: MOVIMENTAÇÃO SUAVE NO MAPA (CSS Mágico)
+    // PASSO 2: MOVIMENTAÇÃO SUAVE NO MAPA
     // =======================================================================
     const styleS = document.createElement('style');
     styleS.innerHTML = `
@@ -454,7 +453,7 @@
     
     const estrelas = document.querySelectorAll('#estrelasRating span');
     estrelas.forEach(estrela => {
-      estrela.style.color = '#F59E0B'; // Inicia tudo a dourado
+      estrela.style.color = '#F59E0B'; 
       estrela.style.cursor = 'pointer';
       
       estrela.addEventListener('click', (e) => {
@@ -512,7 +511,38 @@
       document.getElementById('modalAvaliacao').style.display = 'none';
       localStorage.removeItem('huby_ultima_corrida_id');
     });
+
+    // =======================================================================
+    // PASSO 4: ATUALIZAR FOTO E NOME NO MENU LATERAL
+    // =======================================================================
+    function atualizarMenuLateral() {
+      const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
+      const fotoLocal = localStorage.getItem('huby_user_foto'); 
+      const drawerBox = document.getElementById('drawerPerfilBox');
+
+      if (drawerBox) {
+        let avatarHTML = '';
+        
+        if (fotoLocal && fotoLocal !== 'null' && fotoLocal !== 'undefined') {
+          avatarHTML = `<img src="${fotoLocal}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981; box-shadow: 0 4px 12px rgba(0,0,0,0.4);" alt="Avatar" />`;
+        } else {
+          avatarHTML = `<div style="width: 52px; height: 52px; border-radius: 50%; background: #121826; border: 2px solid #10B981; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: #10B981; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">${nomeLocal.charAt(0).toUpperCase()}</div>`;
+        }
+
+        drawerBox.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 14px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); background: linear-gradient(180deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%);">
+            ${avatarHTML}
+            <div style="display: flex; flex-direction: column;">
+              <span style="font-size: 17px; font-weight: 800; color: #FFF; letter-spacing: -0.3px;">${nomeLocal}</span>
+              <span style="font-size: 12px; color: #94A3B8; font-weight: 600;">Conta verificada</span>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
+    document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
 </body>
-
 </html>
