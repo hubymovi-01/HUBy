@@ -1,7 +1,7 @@
 /**
 - ============================================================================
 - HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
-- CÓDIGO FINAL - Rastreamento Contínuo e Zoom Inteligente
+- CÓDIGO FINAL - Rastreamento Contínuo e Zoom Inteligente (FIX LINHAS)
 - ============================================================================
  */
 
@@ -62,7 +62,6 @@ export class HubyMapa {
       this.map.on('click', async (e) => {
         const { lat, lng } = e.latlng;
         this.definirDestino(lat, lng);
-        // CLIENTE: Ao clicar no mapa, calcula a rota mas NÃO desenha a linha (false)
         const rota = await this.calcularRota(this.coordsOrigem, [lat, lng], '#10B981', false);
         onClickDestino(rota, { lat, lng });
       });
@@ -157,7 +156,6 @@ export class HubyMapa {
       }
 
       if (this.coordsDestino && this.onClickDestinoCallback) {
-        // Atualiza a rota invisível se o cliente se mover
         const rota = await this.calcularRota([lat, lng], this.coordsDestino, '#10B981', false);
         this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
       }
@@ -179,7 +177,6 @@ export class HubyMapa {
     this.obterGPSReal(callbackSucesso);
   }
 
-  // Atualizado com o parâmetro 'exibirLinha' para ocultar a linha no cliente
   async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true) {
     const lon1 = origem[1], lat1 = origem[0];
     const lon2 = destino[1], lat2 = destino[0];
@@ -196,15 +193,14 @@ export class HubyMapa {
         if (this.rotaLayer && this.map) this.map.removeLayer(this.rotaLayer);
 
         if (exibirLinha) {
-          // Se for a rota azul do motorista até ao cliente, fazemos linha tracejada premium
-          const estiloTracado = cor === '#38BDF8' ? '12, 12' : '';
+          // CORREÇÃO DE SEGURANÇA: Usamos null para evitar bugs de renderização no Android
+          const estiloTracado = cor === '#38BDF8' ? '12, 12' : null;
           const pesoLinha = cor === '#38BDF8' ? 4 : 5;
 
           this.rotaLayer = L.geoJSON(rota.geometry, {
             style: { color: cor, weight: pesoLinha, opacity: 0.9, dashArray: estiloTracado }
           }).addTo(this.map);
 
-          // O SEGREDO DO ZOOM: Esperar 400ms para a interface ajustar e depois centralizar a rota toda (com maxZoom 15)
           setTimeout(() => {
             if (this.map && this.rotaLayer) {
               this.map.invalidateSize();
