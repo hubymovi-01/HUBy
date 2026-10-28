@@ -1,10 +1,15 @@
 /**
- * HUBy 2.0 - Configurações Gerais e Tarifas Dinâmicas (js/config.js)
+- HUBy 2.0 - Configurações Gerais e Tarifas Dinâmicas (js/config.js)
  */
 
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
+
+// DESPERTADOR: Acorda o servidor em background assim que a app é aberta
+fetch(`${API_URL}/`).catch(() => {
+  console.log('A acordar o motor do servidor HUBy...');
+});
 
 // Tarifas de contingência com tipos rigorosamente mapeados
 export let CATEGORIAS = {
