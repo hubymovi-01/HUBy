@@ -28,7 +28,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// 1. O SEU CORS CUSTOMIZADO (Excelente para evitar bloqueios)
+// 1. O SEU CORS CUSTOMIZADO
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -39,7 +39,7 @@ app.use((req, res, next) => {
 
 app.use(cors());
 
-// 2. A MÁGICA: LIMITE DE 50MB PARA AS FOTOS DE PERFIL!
+// 2. LIMITE DE 50MB PARA AS FOTOS DE PERFIL
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -109,6 +109,11 @@ inicializarBanco();
 
 app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online (Modularizada)', versao: '2.0.2', banco: 'Neon PostgreSQL' });
+});
+
+// 3. ROTA PARA LIMPAR O ERRO 404 DAS TARIFAS
+app.get('/api/config/tarifas', (req, res) => {
+  res.json({}); 
 });
 
 // Registo de Rotas Modulares
