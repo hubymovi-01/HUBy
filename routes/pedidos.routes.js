@@ -172,6 +172,51 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // Rota de Avaliação Rica (Notas + Comentário + Tags/Etiquetas)
+  router.post('/:id/avaliar', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { nota, comentario, etiquetas } = req.body;
+      const clienteId = req.usuario.id;
+
+      const notaNum = parseInt(nota, 10);
+      if (!notaNum || notaNum < 1 || notaNum > 5) {
+        return res.status(400).json({ erro: 'A nota deve ser entre 1 e 5.' });
+      }
+
+      const pedidos = await sql`SELECT id, motorista_id, status FROM pedidos WHERE id = ${id} LIMIT 1;`;
+      if (pedidos.length === 0 || pedidos[0].status !== 'concluido') {
+        return res.status(400).json({ erro: 'Apenas corridas concluídas podem ser avaliadas.' });
+      }
+
+      const motoristaId = pedidos[0].motorista_id;
+      const etiquetasStr = Array.isArray(etiquetas) ? etiquetas.join(', ') : (etiquetas || '');
+      const comentarioCompleto = etiquetasStr ? `${comentario || ''} [Tags: ${etiquetasStr}]`.trim() : (comentario || null);
+
+      await sql`
+        INSERT INTO avaliacoes (pedido_id, cliente_id, motorista_id, nota, comentario)
+        VALUES (${id}, ${clienteId}, ${motoristaId}, ${notaNum}, ${comentarioCompleto});
+      `;
+
+      if (motoristaId) {
+        const stats = await sql`
+          SELECT AVG(nota)::numeric(3,2) AS media, COUNT(*)::int AS total
+          FROM avaliacoes WHERE motorista_id = ${motoristaId};
+        `;
+        await sql`
+          UPDATE motoristas
+          SET avaliacao_media = ${stats[0].media}, total_avaliacoes = ${stats[0].total}
+          WHERE id = ${motoristaId};
+        `;
+      }
+
+      res.json({ sucesso: true, mensagem: 'Avaliação registrada com sucesso!' });
+    } catch (err) {
+      console.error('Erro ao avaliar corrida:', err);
+      res.status(500).json({ erro: 'Falha ao processar avaliação.' });
+    }
+  });
+
   // Chat interno
   router.post('/:id/chat', autenticarToken, async (req, res) => {
     try {
