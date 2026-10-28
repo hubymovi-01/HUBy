@@ -272,7 +272,6 @@ async function carregarMensagensChat() {
     msgs.forEach(m => {
       const souEu = (String(m.remetente_id) === String(meuId));
       
-      // MOTORISTA: O que o motorista envia fica à DIREITA (Verde), o do cliente fica à ESQUERDA (Cinzento escuro)
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#10B981' : '#1F2937'; 
       const corTexto = souEu ? '#000' : '#FFF';
@@ -296,7 +295,7 @@ async function carregarMensagensChat() {
 }
 
 // ==========================================
-// RADAR DE CHAMADAS (AGORA EM TEMPO REAL!)
+// RADAR DE CHAMADAS E GPS AVANÇADO
 // ==========================================
 function iniciarRadarChamadas() {
   buscarChamadasPendentes();
@@ -406,36 +405,71 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
     const btnChat = document.getElementById('btnAbrirChat');
     if (btnChat) btnChat.style.display = 'flex';
 
-    if (coordsOrig && coordsDest && hubyMapa) {
-      await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981');
-    }
-
+    // ATUALIZAÇÃO 2.0: Interface do Motorista com Tempos de Chegada (Azul = Passageiro, Verde = Destino)
     const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
     if (feed) {
       feed.innerHTML = `
-        <div class="order-card" style="border-color: #10B981;">
+        <div class="order-card" style="border-color: #38BDF8;">
           <div class="order-card-header">
-            <span class="order-badge" style="background: rgba(16,185,129,0.25);">EM ATENDIMENTO</span>
+            <span class="order-badge" style="background: rgba(56,189,248,0.25); color: #38BDF8;">EM ATENDIMENTO</span>
             <span class="order-price">R$ ${Number(pedidoAceitoAtual.valor_total).toFixed(2).replace('.', ',')}</span>
           </div>
           <div class="order-route">
+            <span style="display: block; color: #38BDF8; font-weight: 800; font-size: 15px; margin-bottom: 6px;" id="lblTempoPassageiro">
+              📍 A calcular GPS até ao cliente...
+            </span>
+            <span><strong>Recolha:</strong> ${pedidoAceitoAtual.origem_endereco || 'Local do passageiro'}</span>
             <span><strong>Destino:</strong> ${pedidoAceitoAtual.destino_endereco}</span>
-            <small>Dirija-se ao local do passageiro.</small>
+            <small style="color: #10B981; font-weight: 700; display: block; margin-top: 4px;">⏱️ Viagem até destino: ~${pedidoAceitoAtual.duracao_min || 5} min</small>
           </div>
-          <div style="display: flex; gap: 8px; margin-top: 10px;">
-            <button type="button" id="btnCancelarPeloMotorista" style="flex: 1; background: #EF4444; color: #FFF; border: none; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer;">
-              Cancelar
+          <div style="display: flex; gap: 8px; margin-top: 14px;">
+            <button type="button" id="btnNavegarDestino" style="flex: 1; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer; transition: 0.2s;">
+              📍 Iniciar Viagem
             </button>
-            <button type="button" id="btnConcluirCorrida" style="flex: 2; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer;">
-              Concluir & Receber
+            <button type="button" id="btnConcluirCorrida" style="flex: 1; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer; transition: 0.2s;">
+              ✅ Concluir
             </button>
           </div>
+          <button type="button" id="btnCancelarPeloMotorista" style="width: 100%; margin-top: 8px; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
+            Cancelar Corrida
+          </button>
         </div>
       `;
 
       document.getElementById('btnConcluirCorrida')?.addEventListener('click', concluirCorridaAtual);
       document.getElementById('btnCancelarPeloMotorista')?.addEventListener('click', cancelarCorridaAtual);
+      
+      // MOTOR DE ROTA 2: Quando o cliente entra no carro, traça a rota até ao destino
+      document.getElementById('btnNavegarDestino')?.addEventListener('click', async () => {
+         if (coordsOrig && coordsDest && hubyMapa) {
+             await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981'); // Cor Verde Padrão
+             const lblTempo = document.getElementById('lblTempoPassageiro');
+             if (lblTempo) {
+               lblTempo.innerHTML = '🏁 A caminho do destino final!';
+               lblTempo.style.color = '#10B981';
+             }
+         }
+      });
     }
+
+    // MOTOR DE ROTA 1: Assim que aceita, traça rota GPS do Motorista -> Passageiro
+    if (coordsOrig && hubyMapa) {
+        hubyMapa.obterGPS(async (pos) => {
+            try {
+                // Usa a cor #38BDF8 (Azul claro) para indicar que é o caminho ATÉ ao passageiro
+                const rotaAteCliente = await hubyMapa.calcularRota([pos.lat, pos.lng], coordsOrig, '#38BDF8');
+                const lblTempo = document.getElementById('lblTempoPassageiro');
+                if (lblTempo) {
+                    lblTempo.innerHTML = `⏳ Chega ao passageiro em <span style="font-size:18px;">${rotaAteCliente.duracaoMin} min</span>`;
+                }
+            } catch (e) {
+                console.warn('Erro ao traçar rota até cliente:', e);
+                const lblTempo = document.getElementById('lblTempoPassageiro');
+                if (lblTempo) lblTempo.textContent = '📍 Siga para o local de recolha';
+            }
+        });
+    }
+
   } catch (err) {
     alert(err.message);
   }
