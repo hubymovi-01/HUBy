@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>HUBy - Meu Perfil</title>
+  <link rel="stylesheet" href="./css/base.css">
+  <style>
+    body {
+      background: #090D16;
+      color: #F8FAFC;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0; padding: 0;
+    }
+    .header-perfil {
+      display: flex; align-items: center; gap: 16px; padding: 20px; background: #121826;
+      border-bottom: 1px solid rgba(255,255,255,0.08); position: sticky; top: 0; z-index: 10;
+    }
+    .btn-voltar {
+      background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 36px; height: 36px;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer;
+    }
+    .avatar-wrapper {
+      position: relative; width: 110px; height: 110px; margin: 30px auto;
+    }
+    .avatar-circle {
+      width: 100%; height: 100%; background: #1F2937; border-radius: 50%; border: 3px solid #38BDF8;
+      overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 40px; color: #38BDF8; font-weight: 800;
+    }
+    .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .btn-edit-avatar {
+      position: absolute; bottom: 0; right: 0; background: #38BDF8; color: #000; border: none;
+      width: 34px; height: 34px; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    }
+    .form-perfil { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+    .form-group label { display: block; font-size: 12px; color: #94A3B8; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
+    .form-group input { width: 100%; background: #121826; border: 1px solid rgba(255,255,255,0.1); padding: 14px; border-radius: 12px; color: #FFF; font-size: 15px; outline: none; box-sizing: border-box; }
+    .form-group input:focus { border-color: #38BDF8; }
+    .btn-salvar { background: #10B981; color: #032017; border: none; width: 100%; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 800; margin-top: 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <div class="header-perfil">
+    <button class="btn-voltar" onclick="history.back()">←</button>
+    <h3 style="margin:0; font-size: 18px;">Editar Perfil</h3>
+  </div>
+
+  <div class="avatar-wrapper">
+    <div class="avatar-circle" id="avatarDisplay">U</div>
+    <button class="btn-edit-avatar" onclick="document.getElementById('inputFoto').click()">📷</button>
+    <input type="file" id="inputFoto" accept="image/*" style="display: none;">
+  </div>
+
+  <div class="form-perfil">
+    <div class="form-group">
+      <label>Nome Completo</label>
+      <input type="text" id="perfilNome" placeholder="Seu nome">
+    </div>
+    <div class="form-group">
+      <label>E-mail</label>
+      <input type="email" id="perfilEmail" placeholder="seu@email.com">
+    </div>
+    <div class="form-group">
+      <label>Telemóvel / Telefone</label>
+      <input type="tel" id="perfilTelefone" placeholder="(00) 00000-0000">
+    </div>
+    <button type="button" class="btn-salvar" id="btnSalvarPerfil">Salvar Alterações</button>
+  </div>
+
+  <script type="module">
+    import { API_URL } from './js/config.js';
+    let fotoBase64 = null;
+    const token = localStorage.getItem('huby_token');
+
+    if(!token) window.location.href = './login.html';
+
+    // Carregar dados atuais do banco de dados
+    async function carregarDados() {
+      try {
+        const resp = await fetch(`${API_URL}/api/auth/perfil`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const dados = await resp.json();
+        if(dados.erro) throw new Error(dados.erro);
+
+        document.getElementById('perfilNome').value = dados.nome || '';
+        document.getElementById('perfilEmail').value = dados.email || '';
+        document.getElementById('perfilTelefone').value = dados.telefone || '';
+
+        if(dados.foto_url) {
+          fotoBase64 = dados.foto_url;
+          document.getElementById('avatarDisplay').innerHTML = `<img src="${dados.foto_url}" />`;
+        } else {
+          document.getElementById('avatarDisplay').textContent = dados.nome.charAt(0).toUpperCase();
+        }
+      } catch(err) {
+        console.warn(err);
+      }
+    }
+
+    // Lógica para transformar imagem em Base64 para salvar no banco
+    document.getElementById('inputFoto').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if(!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        fotoBase64 = event.target.result;
+        document.getElementById('avatarDisplay').innerHTML = `<img src="${fotoBase64}" />`;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Salvar no Backend
+    document.getElementById('btnSalvarPerfil').addEventListener('click', async () => {
+      const btn = document.getElementById('btnSalvarPerfil');
+      btn.textContent = 'A salvar...';
+      btn.disabled = true;
+
+      const payload = {
+        nome: document.getElementById('perfilNome').value,
+        email: document.getElementById('perfilEmail').value,
+        telefone: document.getElementById('perfilTelefone').value,
+        foto_url: fotoBase64
+      };
+
+      try {
+        const resp = await fetch(`${API_URL}/api/auth/perfil`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const resData = await resp.json();
+        if(!resp.ok) throw new Error(resData.erro);
+
+        // Atualiza os dados no armazenamento local
+        localStorage.setItem('huby_user_name', payload.nome);
+        localStorage.setItem('huby_user_phone', payload.telefone);
+        if(fotoBase64) localStorage.setItem('huby_user_foto', fotoBase64);
+
+        alert('Perfil atualizado com sucesso!');
+        history.back(); // Volta para a tela do mapa
+      } catch(err) {
+        alert(err.message);
+      } finally {
+        btn.textContent = 'Salvar Alterações';
+        btn.disabled = false;
+      }
+    });
+
+    carregarDados();
+  </script>
+</body>
+</html>

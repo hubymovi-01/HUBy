@@ -95,6 +95,8 @@ async function inicializarBanco() {
         solicitado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, pago_em TIMESTAMP
       );
     `;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_url TEXT;`;
     console.log('Tabelas sincronizadas no Neon PostgreSQL.');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);

@@ -251,4 +251,61 @@ router.post('/login-motorista', async (req, res) => {
   }
 });
 
+// ============================================================================
+// NOVAS ROTAS DE PERFIL (CRIADAS PARA A TELA DE EDIÇÃO COM FOTO)
+// ============================================================================
+
+// Buscar os dados atuais para preencher o formulário
+router.get('/perfil', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ erro: 'Não autorizado.' });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const tabela = payload.role === 'motorista' ? 'motoristas' : 'usuarios';
+    
+    // Busca a informação do banco, incluindo a foto_url
+    const user = await sql`
+      SELECT id, nome, email, telefone, foto_url 
+      FROM ${sql(tabela)} 
+      WHERE id = ${payload.id} 
+      LIMIT 1
+    `;
+    
+    if (user.length === 0) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
+    res.json(user[0]);
+  } catch (err) {
+    res.status(401).json({ erro: 'Sessão inválida.' });
+  }
+});
+
+// Receber os novos dados do formulário (incluindo a foto) e guardar
+router.put('/perfil', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ erro: 'Não autorizado.' });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const { nome, email, telefone, foto_url } = req.body;
+    const tabela = payload.role === 'motorista' ? 'motoristas' : 'usuarios';
+
+    const atualizado = await sql`
+      UPDATE ${sql(tabela)}
+      SET nome = ${nome}, 
+          email = ${email}, 
+          telefone = ${telefone}, 
+          foto_url = ${foto_url}
+      WHERE id = ${payload.id}
+      RETURNING id, nome, email, telefone, foto_url;
+    `;
+
+    res.json({ sucesso: true, mensagem: 'Perfil atualizado!', usuario: atualizado[0] });
+  } catch (err) {
+    console.error('Erro ao atualizar perfil:', err);
+    res.status(500).json({ erro: 'Erro ao salvar alterações.' });
+  }
+});
+
 export default router;

@@ -149,17 +149,14 @@
         <span class="d-icon">🚘</span>
         <div class="d-info"><strong>Painel do Motorista</strong><small>Aceder ao modo parceiro</small></div>
       </a>
-      <a href="#" id="menuItemAjuda" class="drawer-item">
-        <span class="d-icon">💬</span>
-        <div class="d-info"><strong>Ajuda & Suporte</strong><small>Fale com a equipa HUBy</small></div>
-      </a>
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
         <span class="d-icon">⚡</span>
         <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
       </a>
-      <a href="#" id="menuItemPerfil" class="drawer-item">
+      <!-- Link Direto para a Página de Perfil -->
+      <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
-        <div class="d-info"><strong>Meu Perfil</strong><small>Dados da conta e estatísticas</small></div>
+        <div class="d-info"><strong>Meu Perfil</strong><small>Editar foto e dados</small></div>
       </a>
     </nav>
     <div class="drawer-footer">
@@ -343,32 +340,6 @@
     </div>
   </div>
 
-  <!-- NOVO MODAL: MEU PERFIL -->
-  <div id="modalPerfilCompleto" class="modal-backdrop" style="display: none; z-index: 10005;">
-    <div class="modal-card" style="text-align: center; padding: 24px;">
-      <div style="width: 76px; height: 76px; background: linear-gradient(135deg, #38BDF8, #10B981); color: #03251E; font-size: 32px; font-weight: 900; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 14px auto; box-shadow: 0 4px 16px rgba(56,189,248,0.3);" id="perfilAvatarLetra">
-        U
-      </div>
-      <h3 id="perfilNomeTxt" style="margin: 0 0 4px; font-size: 18px; color: #FFF; font-weight: 800;">Carregando...</h3>
-      <p id="perfilCargoTxt" style="margin: 0 0 16px; font-size: 12px; color: #38BDF8; text-transform: uppercase; font-weight: 700;">Passageiro HUBy</p>
-      
-      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; text-align: left; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;">
-        <div>
-          <span style="font-size: 10px; color: #94A3B8; display: block; font-weight: 700;">TELEMÓVEL / CONTACTO</span>
-          <strong id="perfilTelTxt" style="font-size: 14px; color: #FFF;">---</strong>
-        </div>
-        <div>
-          <span style="font-size: 10px; color: #94A3B8; display: block; font-weight: 700;">ESTATÍSTICAS DA CONTA</span>
-          <strong id="perfilStatsTxt" style="font-size: 14px; color: #10B981;">Membro ativo HUBy</strong>
-        </div>
-      </div>
-
-      <button type="button" id="btnFecharPerfilModal" style="width: 100%; background: rgba(255,255,255,0.1); border: none; color: #FFF; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer;">
-        Fechar Perfil
-      </button>
-    </div>
-  </div>
-
   <script type="module" src="./js/app-cliente.js?v=3.0.0"></script>
 
   <script type="module">
@@ -413,28 +384,6 @@
 
     checarAdminInstantaneo();
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
-
-    // LÓGICA DO MODAL DE PERFIL
-    document.getElementById('menuItemPerfil')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('menuBackdrop')?.click();
-      
-      const nome = localStorage.getItem('huby_user_name') || 'Utilizador HUBy';
-      const tel = localStorage.getItem('huby_user_phone') || 'Não informado';
-      const role = localStorage.getItem('huby_user_role') || 'passageiro';
-
-      document.getElementById('perfilAvatarLetra').textContent = nome.charAt(0).toUpperCase();
-      document.getElementById('perfilNomeTxt').textContent = nome;
-      document.getElementById('perfilCargoTxt').textContent = role === 'motorista' ? 'Condutor Parceiro HUBy' : 'Passageiro HUBy';
-      document.getElementById('perfilTelTxt').textContent = tel;
-      document.getElementById('perfilStatsTxt').textContent = role === 'motorista' ? 'Parceiro verificado com sucesso' : 'Conta verificada no sistema';
-
-      document.getElementById('modalPerfilCompleto').style.display = 'flex';
-    });
-
-    document.getElementById('btnFecharPerfilModal')?.addEventListener('click', () => {
-      document.getElementById('modalPerfilCompleto').style.display = 'none';
-    });
   </script>
 </body>
 
