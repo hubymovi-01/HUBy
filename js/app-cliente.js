@@ -31,8 +31,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       rotaAtual = rota;
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
+      const inputPesquisa = document.getElementById('inputPesquisaLocal');
+      
       if (txtDestino) {
-        txtDestino.textContent = `Destino marcado (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+        txtDestino.textContent = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+      }
+      
+      // Limpa a barra se o cliente clicar no mapa manualmente
+      if (inputPesquisa) {
+        inputPesquisa.value = 'Destino selecionado no mapa';
+        document.getElementById('btnLimparPesquisa').style.display = 'block';
       }
 
       atualizarResumoValores();
@@ -99,6 +107,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   configurarModalAvaliacao();
+  
+  // INICIA A MÁGICA DA BARRA DE PESQUISA
+  configurarPesquisaLocal();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
@@ -128,6 +139,107 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (intervalPolling) clearInterval(intervalPolling);
   });
 });
+
+// ============================================================================
+// NOVO: MOTOR DE PESQUISA DE LOCALIZAÇÃO (OPENSTREETMAP)
+// ============================================================================
+function configurarPesquisaLocal() {
+  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  const btnLimpar = document.getElementById('btnLimparPesquisa');
+  const listaResultados = document.getElementById('listaResultadosPesquisa');
+  let timeoutPesquisa = null;
+
+  if (!inputPesquisa || !listaResultados) return;
+
+  inputPesquisa.addEventListener('input', (e) => {
+    const termo = e.target.value.trim();
+    
+    if (termo.length > 0) {
+      btnLimpar.style.display = 'block';
+    } else {
+      btnLimpar.style.display = 'none';
+      listaResultados.style.display = 'none';
+      return;
+    }
+
+    // Debounce (espera o cliente parar de digitar por 600ms antes de pesquisar)
+    clearTimeout(timeoutPesquisa);
+    timeoutPesquisa = setTimeout(async () => {
+      if (termo.length < 3) return;
+      
+      try {
+        // Busca gratuita no OpenStreetMap, focada no Brasil
+        const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(termo)}&limit=5&countrycodes=br`);
+        const dados = await resp.json();
+        
+        listaResultados.innerHTML = '';
+        
+        if (dados.length === 0) {
+          listaResultados.innerHTML = '<li class="search-result-item">Nenhum local encontrado</li>';
+          listaResultados.style.display = 'block';
+          return;
+        }
+
+        dados.forEach(local => {
+          const li = document.createElement('li');
+          li.className = 'search-result-item';
+          
+          // Formata o nome para ficar limpo e profissional
+          const partesNome = local.display_name.split(',');
+          const nomeCurto = partesNome[0];
+          const ruaBairro = partesNome.length > 1 ? partesNome[1].trim() + (partesNome.length > 2 ? ', ' + partesNome[2].trim() : '') : '';
+          
+          li.innerHTML = `<span style="font-size: 18px;">📍</span> <div><strong style="color: #FFF; font-size: 15px;">${nomeCurto}</strong><br><small style="color:#94A3B8; font-size:12px;">${ruaBairro}</small></div>`;
+          
+          li.addEventListener('click', () => {
+            selecionarLocalPesquisado(local, nomeCurto);
+            listaResultados.style.display = 'none';
+          });
+          
+          listaResultados.appendChild(li);
+        });
+        
+        listaResultados.style.display = 'block';
+      } catch (err) {
+        console.error('Erro na pesquisa:', err);
+      }
+    }, 600);
+  });
+
+  btnLimpar?.addEventListener('click', () => {
+    inputPesquisa.value = '';
+    btnLimpar.style.display = 'none';
+    listaResultados.style.display = 'none';
+  });
+  
+  // Fecha a lista se clicar fora
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-floating-box')) {
+      listaResultados.style.display = 'none';
+    }
+  });
+}
+
+function selecionarLocalPesquisado(local, nomeCurto) {
+  const lat = parseFloat(local.lat);
+  const lng = parseFloat(local.lon);
+  coordsDestino = [lat, lng];
+  
+  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  const txtDestino = document.getElementById('txtDestinoSelecionado');
+  
+  if (inputPesquisa) inputPesquisa.value = nomeCurto;
+  if (txtDestino) txtDestino.textContent = nomeCurto;
+  
+  // Usa o motor de rota já existente para traçar a linha e obter o tempo/km
+  if (hubyMapa && hubyMapa.coordsOrigem) {
+    hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsDestino).then(rota => {
+      rotaAtual = rota;
+      atualizarResumoValores(); // Atualiza o preço e o relógio da viagem!
+    });
+  }
+}
+// ============================================================================
 
 function verificarAcessoAdminMenu() {
   const token = localStorage.getItem('huby_token');
@@ -255,7 +367,8 @@ function atualizarResumoValores() {
 
   if (txtDist) {
     const dinamicaInfo = MULTIPLICADOR_PICO > 1.0 ? ` • ⚡ Dinâmica ${MULTIPLICADOR_PICO}x` : '';
-    txtDist.textContent = `${km} km • ${rotaAtual.duracaoMin} min${dinamicaInfo}`;
+    // AQUI MOSTRAMOS O TEMPO ESTIMADO DE CHEGADA AO DESTINO PARA O CLIENTE
+    txtDist.textContent = `${km} km • ⏱️ ${rotaAtual.duracaoMin} min${dinamicaInfo}`;
   }
   if (txtPreco) {
     txtPreco.textContent = precoCalculado.formatado;
@@ -264,7 +377,7 @@ function atualizarResumoValores() {
 
 async function submeterPedido() {
   if (!rotaAtual || !coordsDestino) {
-    alert('Toque no mapa para indicar o destino da viagem.');
+    alert('Por favor, indique o destino da viagem.');
     return;
   }
 
@@ -276,6 +389,10 @@ async function submeterPedido() {
 
   const latOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
   const lngOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
+  
+  // Pegamos no nome exato que o cliente escolheu na barra de pesquisa
+  const txtDestino = document.getElementById('txtDestinoSelecionado');
+  const nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`;
 
   const payload = {
     id: novoId,
@@ -284,7 +401,7 @@ async function submeterPedido() {
     subTipoId: categoriaSelecionada,
     subTipoLabel: precoInfo.categoria,
     origem: `Partida (${latOrig}, ${lngOrig})`,
-    destino: `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`,
+    destino: nomeDestino,
     coordsOrigem: hubyMapa.coordsOrigem,
     coordsDestino: coordsDestino,
     distanciaKm: rotaAtual.distanciaKm,
@@ -616,7 +733,12 @@ function resetarPainelCliente() {
   const cardStatus = document.getElementById('cardStatusViagem');
   const blocoResumo = document.getElementById('blocoResumo');
   const btn = document.getElementById('btnPedirHuby');
+  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  const btnLimpar = document.getElementById('btnLimparPesquisa');
   
+  if (inputPesquisa) inputPesquisa.value = '';
+  if (btnLimpar) btnLimpar.style.display = 'none';
+
   const painelMotorista = document.getElementById('painelMotoristaAceitou');
   if (painelMotorista) painelMotorista.style.display = 'none';
 
