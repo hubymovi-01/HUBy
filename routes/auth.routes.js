@@ -252,10 +252,9 @@ router.post('/login-motorista', async (req, res) => {
 });
 
 // ============================================================================
-// NOVAS ROTAS DE PERFIL (CRIADAS PARA A TELA DE EDIÇÃO COM FOTO)
+// ROTAS DE PERFIL CORRIGIDAS (AGORA BLINDADAS CONTRA O ERRO 'UNDEFINED')
 // ============================================================================
 
-// Buscar os dados atuais para preencher o formulário
 router.get('/perfil', async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader ? authHeader.split(' ')[1] : null;
@@ -265,7 +264,6 @@ router.get('/perfil', async (req, res) => {
     const payload = jwt.verify(token, JWT_SECRET);
     const tabela = payload.role === 'motorista' ? 'motoristas' : 'usuarios';
     
-    // Busca a informação do banco, incluindo a foto_url
     const user = await sql`
       SELECT id, nome, email, telefone, foto_url 
       FROM ${sql(tabela)} 
@@ -280,7 +278,6 @@ router.get('/perfil', async (req, res) => {
   }
 });
 
-// Receber os novos dados do formulário (incluindo a foto) e guardar
 router.put('/perfil', async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader ? authHeader.split(' ')[1] : null;
@@ -291,20 +288,21 @@ router.put('/perfil', async (req, res) => {
     const { nome, email, telefone, foto_url } = req.body;
     const tabela = payload.role === 'motorista' ? 'motoristas' : 'usuarios';
 
+    // A MÁGICA ESTÁ AQUI: o "?? null" previne a falha silenciosa da base de dados
     const atualizado = await sql`
       UPDATE ${sql(tabela)}
-      SET nome = ${nome}, 
-          email = ${email}, 
-          telefone = ${telefone}, 
-          foto_url = ${foto_url}
+      SET nome = ${nome ?? null}, 
+          email = ${email ?? null}, 
+          telefone = ${telefone ?? null}, 
+          foto_url = ${foto_url ?? null}
       WHERE id = ${payload.id}
       RETURNING id, nome, email, telefone, foto_url;
     `;
 
-    res.json({ sucesso: true, mensagem: 'Perfil atualizado!', usuario: atualizado[0] });
+    res.json({ sucesso: true, mensagem: 'Perfil atualizado com sucesso!', usuario: atualizado[0] });
   } catch (err) {
-    console.error('Erro ao atualizar perfil:', err);
-    res.status(500).json({ erro: 'Erro ao salvar alterações.' });
+    console.error('ERRO CRÍTICO AO ATUALIZAR PERFIL:', err);
+    res.status(500).json({ erro: `Erro ao salvar alterações: ${err.message}` });
   }
 });
 
