@@ -68,7 +68,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (hubyMapa) {
         hubyMapa.obterGPS((posicaoReal) => {
           if (coordsDestino) {
-            hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino).then(rota => {
+            // AQUI ESTÁ A CORREÇÃO: '#10B981', false -> Não desenha a linha no cliente!
+            hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino, '#10B981', false).then(rota => {
               rotaAtual = rota;
               atualizarResumoValores();
             });
@@ -166,13 +167,11 @@ function configurarPesquisaLocal() {
       return;
     }
 
-    // Debounce (espera o cliente parar de digitar por 600ms antes de pesquisar)
     clearTimeout(timeoutPesquisa);
     timeoutPesquisa = setTimeout(async () => {
       if (termo.length < 3) return;
       
       try {
-        // Busca gratuita no OpenStreetMap, focada no Brasil
         const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(termo)}&limit=5&countrycodes=br`);
         const dados = await resp.json();
         
@@ -188,7 +187,6 @@ function configurarPesquisaLocal() {
           const li = document.createElement('li');
           li.className = 'search-result-item';
           
-          // Formata o nome para ficar limpo e profissional
           const partesNome = local.display_name.split(',');
           const nomeCurto = partesNome[0];
           const ruaBairro = partesNome.length > 1 ? partesNome[1].trim() + (partesNome.length > 2 ? ', ' + partesNome[2].trim() : '') : '';
@@ -216,7 +214,6 @@ function configurarPesquisaLocal() {
     listaResultados.style.display = 'none';
   });
   
-  // Fecha a lista se clicar fora
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-floating-box')) {
       listaResultados.style.display = 'none';
@@ -235,11 +232,11 @@ function selecionarLocalPesquisado(local, nomeCurto) {
   if (inputPesquisa) inputPesquisa.value = nomeCurto;
   if (txtDestino) txtDestino.textContent = nomeCurto;
   
-  // Usa o motor de rota já existente para traçar a linha e obter o tempo/km
   if (hubyMapa && hubyMapa.coordsOrigem) {
-    hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsDestino).then(rota => {
+    // AQUI ESTÁ A CORREÇÃO: '#10B981', false -> Não desenha a linha no cliente!
+    hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsDestino, '#10B981', false).then(rota => {
       rotaAtual = rota;
-      atualizarResumoValores(); // Atualiza o preço e o relógio da viagem!
+      atualizarResumoValores(); 
     });
   }
 }
@@ -371,7 +368,6 @@ function atualizarResumoValores() {
 
   if (txtDist) {
     const dinamicaInfo = MULTIPLICADOR_PICO > 1.0 ? ` • ⚡ Dinâmica ${MULTIPLICADOR_PICO}x` : '';
-    // AQUI MOSTRAMOS O TEMPO ESTIMADO DE CHEGADA AO DESTINO PARA O CLIENTE
     txtDist.textContent = `${km} km • ⏱️ ${rotaAtual.duracaoMin} min${dinamicaInfo}`;
   }
   if (txtPreco) {
@@ -394,7 +390,6 @@ async function submeterPedido() {
   const latOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
   const lngOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
   
-  // Pegamos no nome exato que o cliente escolheu na barra de pesquisa
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`;
 
@@ -529,9 +524,6 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
     const btnLigar = document.getElementById('btnLigarMotorista');
     if (btnLigar) btnLigar.href = `tel:${pedido.motorista_telefone}`;
 
-    // =========================================================
-    // NOVO: CRONÓMETRO DE CHEGADA NO ECRÃ DO CLIENTE
-    // =========================================================
     let divTempo = document.getElementById('boxCronometroChegada');
     if (!divTempo) {
       divTempo = document.createElement('div');
@@ -556,7 +548,6 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
         clearInterval(cronometroChegada);
       }
     }, 60000); 
-    // =========================================================
   }
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
@@ -565,9 +556,6 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
   configurarChatCliente(pedido.id);
 }
 
-// ==========================================
-// FUNÇÕES DO CHAT DO PASSAGEIRO
-// ==========================================
 let chatIntervalCliente = null;
 
 function configurarChatCliente(pedidoId) {
@@ -683,10 +671,6 @@ async function carregarMensagensChatCliente(pedidoId) {
   }
 }
 
-// ============================================================================
-// OUTRAS FUNÇÕES
-// ============================================================================
-
 async function enviarAvaliacaoCorrida() {
   if (!corridaParaAvaliarId) return;
 
@@ -750,7 +734,6 @@ function resetarPainelCliente() {
   rotaAtual = null;
   coordsDestino = null;
 
-  // Limpa o relógio virtual
   if (cronometroChegada) {
     clearInterval(cronometroChegada);
     cronometroChegada = null;

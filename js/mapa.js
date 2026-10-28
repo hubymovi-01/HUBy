@@ -1,8 +1,8 @@
 /**
- * ============================================================================
- * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO FINAL - Rastreamento Contínuo em Tempo Real
- * ============================================================================
+- ============================================================================
+- HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
+- CÓDIGO FINAL - Rastreamento Contínuo e Zoom Inteligente
+- ============================================================================
  */
 
 export class HubyMapa {
@@ -17,7 +17,7 @@ export class HubyMapa {
     this.coordsDestino = null;
     this.watchId = null;
     this.onClickDestinoCallback = null;
-    this.gpsFixo = false; // Controla se a câmara já voou para o cliente
+    this.gpsFixo = false;
   }
 
   inicializar(onClickDestino = null) {
@@ -62,12 +62,12 @@ export class HubyMapa {
       this.map.on('click', async (e) => {
         const { lat, lng } = e.latlng;
         this.definirDestino(lat, lng);
-        const rota = await this.calcularRota(this.coordsOrigem, [lat, lng]);
+        // CLIENTE: Ao clicar no mapa, calcula a rota mas NÃO desenha a linha (false)
+        const rota = await this.calcularRota(this.coordsOrigem, [lat, lng], '#10B981', false);
         onClickDestino(rota, { lat, lng });
       });
     }
 
-    // Liga o rastreio contínuo
     this.obterGPSReal();
   }
 
@@ -148,7 +148,6 @@ export class HubyMapa {
       this.coordsOrigem = [lat, lng];
       this.definirOrigem(lat, lng, precisao);
 
-      // Só voa a câmara na primeira vez que apanha sinal OU se o utilizador clicou no botão de recentrar
       if (!this.gpsFixo) {
         if (this.map) {
           this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
@@ -157,56 +156,31 @@ export class HubyMapa {
         this.gpsFixo = true;
       }
 
-      // Se o cliente já tiver marcado destino e estiver a andar, a rota atualiza com ele
       if (this.coordsDestino && this.onClickDestinoCallback) {
-        const rota = await this.calcularRota([lat, lng], this.coordsDestino);
+        // Atualiza a rota invisível se o cliente se mover
+        const rota = await this.calcularRota([lat, lng], this.coordsDestino, '#10B981', false);
         this.onClickDestinoCallback(rota, { lat: this.coordsDestino[0], lng: this.coordsDestino[1] });
       }
 
       if (callbackSucesso) callbackSucesso({ lat, lng });
     };
 
-    // Limpa qualquer radar de GPS antigo para não duplicar
     if (this.watchId !== null) navigator.geolocation.clearWatch(this.watchId);
 
-    // Liga o radar de TEMPO REAL (watchPosition)
     this.watchId = navigator.geolocation.watchPosition(
       atualizarPosicaoTempoReal,
       (err) => console.warn('Aviso GPS em tempo real:', err.message),
-      {
-        enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
     );
   }
 
   obterGPS(callbackSucesso) {
-    // Quando o utilizador clica na mira do GPS, destravamos a câmara para voar até ele
     this.gpsFixo = false; 
     this.obterGPSReal(callbackSucesso);
   }
 
-  async buscarEndereco(texto) {
-    if (!texto || texto.length < 3) return null;
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(texto)}&limit=1&countrycodes=br`;
-    try {
-      const res = await fetch(url, { headers: { 'Accept-Language': 'pt-BR,pt;q=0.9' } });
-      const dados = await res.json();
-      if (dados && dados.length > 0) {
-        return {
-          nome: dados[0].display_name.split(',')[0],
-          lat: parseFloat(dados[0].lat),
-          lng: parseFloat(dados[0].lon)
-        };
-      }
-    } catch (e) {
-      console.warn('Erro Nominatim:', e);
-    }
-    return null;
-  }
-
-  async calcularRota(origem, destino, cor = '#10B981') {
+  // Atualizado com o parâmetro 'exibirLinha' para ocultar a linha no cliente
+  async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true) {
     const lon1 = origem[1], lat1 = origem[0];
     const lon2 = destino[1], lat2 = destino[0];
     const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`;
@@ -221,12 +195,23 @@ export class HubyMapa {
 
         if (this.rotaLayer && this.map) this.map.removeLayer(this.rotaLayer);
 
-        this.rotaLayer = L.geoJSON(rota.geometry, {
-          style: { color: cor, weight: 5, opacity: 0.95 }
-        }).addTo(this.map);
+        if (exibirLinha) {
+          // Se for a rota azul do motorista até ao cliente, fazemos linha tracejada premium
+          const estiloTracado = cor === '#38BDF8' ? '12, 12' : '';
+          const pesoLinha = cor === '#38BDF8' ? 4 : 5;
 
-        this.map.fitBounds(this.rotaLayer.getBounds(), { padding: [60, 60], animate: true });
-        this.invalidarTamanho();
+          this.rotaLayer = L.geoJSON(rota.geometry, {
+            style: { color: cor, weight: pesoLinha, opacity: 0.9, dashArray: estiloTracado }
+          }).addTo(this.map);
+
+          // O SEGREDO DO ZOOM: Esperar 400ms para a interface ajustar e depois centralizar a rota toda (com maxZoom 15)
+          setTimeout(() => {
+            if (this.map && this.rotaLayer) {
+              this.map.invalidateSize();
+              this.map.fitBounds(this.rotaLayer.getBounds(), { padding: [50, 50], maxZoom: 15, animate: true });
+            }
+          }, 400);
+        }
 
         return { distanciaKm: Number(distanciaKm.toFixed(1)), duracaoMin };
       }
