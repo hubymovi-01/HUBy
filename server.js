@@ -1,4 +1,3 @@
-// server.js
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -29,6 +28,7 @@ io.on('connection', (socket) => {
   });
 });
 
+// 1. O SEU CORS CUSTOMIZADO (Excelente para evitar bloqueios)
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -38,7 +38,10 @@ app.use((req, res, next) => {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+
+// 2. A MÁGICA: LIMITE DE 50MB PARA AS FOTOS DE PERFIL!
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Inicialização das tabelas no Neon PostgreSQL
 async function inicializarBanco() {
