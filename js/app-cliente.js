@@ -12,6 +12,10 @@ let markerMotoristaAaminho = null;
 let corridaParaAvaliarId = null;
 let notaSelecionada = 5;
 
+// VARIÁVEIS PARA O CRONÓMETRO DO CLIENTE
+let cronometroChegada = null;
+let tempoEstimado = 5;
+
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -524,6 +528,35 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
     
     const btnLigar = document.getElementById('btnLigarMotorista');
     if (btnLigar) btnLigar.href = `tel:${pedido.motorista_telefone}`;
+
+    // =========================================================
+    // NOVO: CRONÓMETRO DE CHEGADA NO ECRÃ DO CLIENTE
+    // =========================================================
+    let divTempo = document.getElementById('boxCronometroChegada');
+    if (!divTempo) {
+      divTempo = document.createElement('div');
+      divTempo.id = 'boxCronometroChegada';
+      divTempo.style = "text-align: center; margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 12px; border-radius: 12px;";
+      painelMotorista.insertBefore(divTempo, painelMotorista.firstChild);
+    }
+
+    tempoEstimado = 5; 
+    divTempo.innerHTML = `<div style="color: #10B981; font-size: 14px; font-weight: 800; text-transform: uppercase;">🚘 Motorista a caminho</div>
+                          <div style="color: #FFF; font-size: 22px; font-weight: 900; margin-top: 4px;">Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${tempoEstimado} min</span></div>`;
+
+    if (cronometroChegada) clearInterval(cronometroChegada);
+    
+    cronometroChegada = setInterval(() => {
+      tempoEstimado--;
+      const txtMinutos = document.getElementById('txtMinutosChegada');
+      if (tempoEstimado > 0) {
+        if (txtMinutos) txtMinutos.textContent = `${tempoEstimado} min`;
+      } else {
+        if (txtMinutos) txtMinutos.textContent = `A chegar!`;
+        clearInterval(cronometroChegada);
+      }
+    }, 60000); 
+    // =========================================================
   }
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
@@ -716,6 +749,14 @@ function resetarPainelCliente() {
   pedidoAtivoId = null;
   rotaAtual = null;
   coordsDestino = null;
+
+  // Limpa o relógio virtual
+  if (cronometroChegada) {
+    clearInterval(cronometroChegada);
+    cronometroChegada = null;
+  }
+  const divTempo = document.getElementById('boxCronometroChegada');
+  if (divTempo) divTempo.remove();
 
   if (hubyMapa && hubyMapa.rotaLayer && hubyMapa.map) {
     hubyMapa.map.removeLayer(hubyMapa.rotaLayer);
