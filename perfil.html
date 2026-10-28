@@ -2,80 +2,197 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>HUBy - Meu Perfil</title>
-  <link rel="stylesheet" href="./css/base.css">
   <style>
+    :root {
+      --bg-dark: #090D16;
+      --card-dark: #121826;
+      --border-dark: rgba(255, 255, 255, 0.08);
+      --emerald: #10B981;
+      --blue: #38BDF8;
+      --text-pri: #F8FAFC;
+      --text-sec: #94A3B8;
+    }
+
+    * { box-sizing: border-box; }
+
     body {
-      background: #090D16;
-      color: #F8FAFC;
+      background: var(--bg-dark);
+      color: var(--text-pri);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      margin: 0; padding: 0;
+      margin: 0; 
+      padding: 0;
+      padding-bottom: 40px;
     }
+
+    /* Cabeçalho Premium */
     .header-perfil {
-      display: flex; align-items: center; gap: 16px; padding: 20px; background: #121826;
-      border-bottom: 1px solid rgba(255,255,255,0.08); position: sticky; top: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px; background: rgba(9, 13, 22, 0.85);
+      backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 10;
+      border-bottom: 1px solid var(--border-dark);
     }
+
     .btn-voltar {
-      background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 36px; height: 36px;
-      border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border-dark);
+      color: #FFF; width: 40px; height: 40px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center; font-size: 18px; cursor: pointer;
+      transition: all 0.2s ease;
     }
+    
+    .btn-voltar:active { transform: scale(0.9); }
+
+    /* Showcase do Perfil (Avatar + Info) */
+    .profile-showcase {
+      text-align: center;
+      padding: 40px 20px 30px;
+      background: linear-gradient(180deg, rgba(56, 189, 248, 0.05) 0%, var(--bg-dark) 100%);
+    }
+
     .avatar-wrapper {
-      position: relative; width: 110px; height: 110px; margin: 30px auto;
+      position: relative; width: 120px; height: 120px; margin: 0 auto 16px auto;
     }
+
     .avatar-circle {
-      width: 100%; height: 100%; background: #1F2937; border-radius: 50%; border: 3px solid #38BDF8;
-      overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 40px; color: #38BDF8; font-weight: 800;
+      width: 100%; height: 100%; background: var(--card-dark);
+      border-radius: 50%; border: 4px solid var(--card-dark);
+      box-shadow: 0 0 0 2px var(--blue), 0 10px 24px rgba(0,0,0,0.5);
+      overflow: hidden; display: flex; align-items: center; justify-content: center; 
+      font-size: 48px; color: var(--blue); font-weight: 900;
     }
+
     .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+
     .btn-edit-avatar {
-      position: absolute; bottom: 0; right: 0; background: #38BDF8; color: #000; border: none;
-      width: 34px; height: 34px; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      position: absolute; bottom: 0; right: 0; background: var(--blue); color: #000; 
+      border: 4px solid var(--bg-dark); width: 40px; height: 40px; border-radius: 50%; 
+      font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: transform 0.2s;
     }
-    .form-perfil { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-    .form-group label { display: block; font-size: 12px; color: #94A3B8; font-weight: 700; margin-bottom: 6px; text-transform: uppercase; }
-    .form-group input { width: 100%; background: #121826; border: 1px solid rgba(255,255,255,0.1); padding: 14px; border-radius: 12px; color: #FFF; font-size: 15px; outline: none; box-sizing: border-box; }
-    .form-group input:focus { border-color: #38BDF8; }
-    .btn-salvar { background: #10B981; color: #032017; border: none; width: 100%; padding: 16px; border-radius: 12px; font-size: 16px; font-weight: 800; margin-top: 10px; cursor: pointer; }
+
+    .btn-edit-avatar:active { transform: scale(0.9); }
+
+    .showcase-name { margin: 0 0 6px; font-size: 24px; font-weight: 900; letter-spacing: -0.5px; }
+    .showcase-contact { margin: 0; font-size: 13px; color: var(--text-sec); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;}
+    
+    .badge-verificado {
+      background: rgba(16, 185, 129, 0.15); color: var(--emerald);
+      padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; text-transform: uppercase;
+    }
+
+    /* Secção de Edição */
+    .profile-section {
+      padding: 0 24px;
+      margin-bottom: 30px;
+    }
+
+    .section-title {
+      font-size: 12px; color: var(--text-sec); font-weight: 800; text-transform: uppercase;
+      letter-spacing: 1px; margin-bottom: 16px; display: block;
+    }
+
+    .form-group {
+      background: var(--card-dark); border: 1px solid var(--border-dark);
+      border-radius: 16px; padding: 8px 16px; display: flex; flex-direction: column;
+      margin-bottom: 16px;
+    }
+
+    .form-group label { font-size: 10px; color: var(--blue); font-weight: 800; text-transform: uppercase; margin-bottom: 4px; margin-top: 6px; }
+    .form-group input { 
+      width: 100%; background: transparent; border: none; color: #FFF; 
+      font-size: 16px; font-weight: 700; padding: 6px 0 10px 0; outline: none; 
+    }
+
+    .btn-salvar { 
+      background: var(--emerald); color: #032017; border: none; width: 100%; 
+      padding: 16px; border-radius: 14px; font-size: 15px; font-weight: 900; 
+      cursor: pointer; box-shadow: 0 8px 20px rgba(16, 185, 129, 0.2); transition: all 0.2s;
+    }
+    .btn-salvar:active { transform: translateY(2px); box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2); }
+
+    /* Menu de Ações (Estilo App Nativo) */
+    .action-menu {
+      background: var(--card-dark); border: 1px solid var(--border-dark);
+      border-radius: 16px; overflow: hidden;
+    }
+
+    .action-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 16px; background: transparent; border: none; border-bottom: 1px solid var(--border-dark);
+      width: 100%; color: #FFF; font-size: 15px; font-weight: 700; cursor: pointer; text-align: left;
+    }
+    .action-item:last-child { border-bottom: none; }
+    .action-item:active { background: rgba(255,255,255,0.02); }
+    
+    .action-left { display: flex; align-items: center; gap: 14px; }
+    .action-icon { 
+      width: 32px; height: 32px; background: rgba(255,255,255,0.05); 
+      border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px;
+    }
+    .action-arrow { color: var(--text-sec); font-weight: 900; }
+
+    .btn-logout { color: #EF4444; }
+    .btn-logout .action-icon { background: rgba(239, 68, 68, 0.1); }
   </style>
 </head>
 <body>
 
   <div class="header-perfil">
     <button class="btn-voltar" onclick="history.back()">←</button>
-    <h3 style="margin:0; font-size: 18px;">Editar Perfil</h3>
+    <h3 style="margin:0; font-size: 16px; font-weight: 800;">A Minha Conta</h3>
+    <div style="width: 40px;"></div> <!-- Espaçador para centralizar o título -->
   </div>
 
-  <div class="avatar-wrapper">
-    <div class="avatar-circle" id="avatarDisplay">U</div>
-    <button class="btn-edit-avatar" onclick="document.getElementById('inputFoto').click()">📷</button>
-    <input type="file" id="inputFoto" accept="image/*" style="display: none;">
+  <div class="profile-showcase">
+    <div class="avatar-wrapper">
+      <div class="avatar-circle" id="avatarDisplay">U</div>
+      <button class="btn-edit-avatar" onclick="document.getElementById('inputFoto').click()">📷</button>
+      <input type="file" id="inputFoto" accept="image/*" style="display: none;">
+    </div>
+    <h2 class="showcase-name" id="displayNome">Carregando...</h2>
+    <p class="showcase-contact">
+      <span id="displayContato">---</span>
+      <span class="badge-verificado">✓ Verificado</span>
+    </p>
   </div>
 
-  <div class="form-perfil">
+  <div class="profile-section">
+    <span class="section-title">Dados Principais</span>
     <div class="form-group">
-      <label>Nome Completo</label>
-      <input type="text" id="perfilNome" placeholder="Seu nome">
+      <label>Nome de Exibição</label>
+      <input type="text" id="perfilNome" placeholder="Como quer ser chamado?">
     </div>
-    <div class="form-group">
-      <label>E-mail</label>
-      <input type="email" id="perfilEmail" placeholder="seu@email.com">
+    <button type="button" class="btn-salvar" id="btnSalvarPerfil">Guardar Alterações</button>
+  </div>
+
+  <div class="profile-section">
+    <span class="section-title">Definições da Conta</span>
+    <div class="action-menu">
+      <button class="action-item" onclick="alert('Funcionalidade em desenvolvimento!')">
+        <div class="action-left"><div class="action-icon">📍</div> Locais Guardados</div>
+        <div class="action-arrow">›</div>
+      </button>
+      <button class="action-item" onclick="alert('Funcionalidade em desenvolvimento!')">
+        <div class="action-left"><div class="action-icon">🛡️</div> Segurança e Privacidade</div>
+        <div class="action-arrow">›</div>
+      </button>
+      <button class="action-item btn-logout" onclick="fazerLogout()">
+        <div class="action-left"><div class="action-icon">🚪</div> Terminar Sessão</div>
+      </button>
     </div>
-    <div class="form-group">
-      <label>Telemóvel / Telefone</label>
-      <input type="tel" id="perfilTelefone" placeholder="(00) 00000-0000">
-    </div>
-    <button type="button" class="btn-salvar" id="btnSalvarPerfil">Salvar Alterações</button>
   </div>
 
   <script type="module">
     import { API_URL } from './js/config.js';
+    
     let fotoBase64 = null;
+    let dadosAtuais = {}; // Guarda o e-mail e telefone secretamente para não os apagar na base de dados
+    
     const token = localStorage.getItem('huby_token');
-
     if(!token) window.location.href = './login.html';
 
-    // Carregar dados atuais do banco de dados
+    // Carregar dados da BD e preencher os elementos elegantes
     async function carregarDados() {
       try {
         const resp = await fetch(`${API_URL}/api/auth/perfil`, {
@@ -84,9 +201,16 @@
         const dados = await resp.json();
         if(dados.erro) throw new Error(dados.erro);
 
+        dadosAtuais = dados; // Guardar tudo na memória
+
+        // Preenche o input do Nome
         document.getElementById('perfilNome').value = dados.nome || '';
-        document.getElementById('perfilEmail').value = dados.email || '';
-        document.getElementById('perfilTelefone').value = dados.telefone || '';
+        
+        // Preenche os textos visuais
+        document.getElementById('displayNome').textContent = dados.nome || 'Utilizador';
+        
+        // Esconde o e-mail e mostra só o telemóvel para ficar mais limpo
+        document.getElementById('displayContato').textContent = dados.telefone || dados.email || 'Conta sem contacto';
 
         if(dados.foto_url) {
           fotoBase64 = dados.foto_url;
@@ -99,7 +223,7 @@
       }
     }
 
-    // Lógica para transformar imagem em Base64 para salvar no banco
+    // Transformar imagem em Base64
     document.getElementById('inputFoto').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if(!file) return;
@@ -112,16 +236,18 @@
       reader.readAsDataURL(file);
     });
 
-    // Salvar no Backend
+    // Salvar no Backend (enviando o email e telefone ocultos para não os perder)
     document.getElementById('btnSalvarPerfil').addEventListener('click', async () => {
       const btn = document.getElementById('btnSalvarPerfil');
-      btn.textContent = 'A salvar...';
+      btn.textContent = 'A guardar...';
       btn.disabled = true;
 
+      const novoNome = document.getElementById('perfilNome').value;
+
       const payload = {
-        nome: document.getElementById('perfilNome').value,
-        email: document.getElementById('perfilEmail').value,
-        telefone: document.getElementById('perfilTelefone').value,
+        nome: novoNome,
+        email: dadosAtuais.email,       // Mantém o email original
+        telefone: dadosAtuais.telefone, // Mantém o telefone original
         foto_url: fotoBase64
       };
 
@@ -138,20 +264,27 @@
         const resData = await resp.json();
         if(!resp.ok) throw new Error(resData.erro);
 
-        // Atualiza os dados no armazenamento local
-        localStorage.setItem('huby_user_name', payload.nome);
-        localStorage.setItem('huby_user_phone', payload.telefone);
+        // Atualiza a interface e a memória local
+        document.getElementById('displayNome').textContent = novoNome;
+        localStorage.setItem('huby_user_name', novoNome);
         if(fotoBase64) localStorage.setItem('huby_user_foto', fotoBase64);
 
         alert('Perfil atualizado com sucesso!');
-        history.back(); // Volta para a tela do mapa
       } catch(err) {
-        alert(err.message);
+        alert('Erro ao guardar: ' + err.message);
       } finally {
-        btn.textContent = 'Salvar Alterações';
+        btn.textContent = 'Guardar Alterações';
         btn.disabled = false;
       }
     });
+
+    // Função de Logout Elegante
+    window.fazerLogout = function() {
+      if(confirm('Tem a certeza que deseja terminar sessão?')) {
+        localStorage.clear();
+        window.location.replace('./login.html');
+      }
+    }
 
     carregarDados();
   </script>
