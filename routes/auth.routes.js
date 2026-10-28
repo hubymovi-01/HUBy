@@ -278,6 +278,33 @@ router.get('/perfil', async (req, res) => {
   }
 });
 
+// ============================================================================
+// ROTAS DE PERFIL CORRIGIDAS (SEM ERRO DE SINTAXE $1)
+// ============================================================================
+
+router.get('/perfil', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader ? authHeader.split(' ')[1] : null;
+  if (!token) return res.status(401).json({ erro: 'Não autorizado.' });
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    let user;
+
+    // IF/ELSE para evitar o erro de sintaxe $1 ao injetar nomes de tabelas
+    if (payload.role === 'motorista') {
+      user = await sql`SELECT id, nome, email, telefone, foto_url FROM motoristas WHERE id = ${payload.id} LIMIT 1`;
+    } else {
+      user = await sql`SELECT id, nome, email, telefone, foto_url FROM usuarios WHERE id = ${payload.id} LIMIT 1`;
+    }
+    
+    if (user.length === 0) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
+    res.json(user[0]);
+  } catch (err) {
+    res.status(401).json({ erro: 'Sessão inválida.' });
+  }
+});
+
 router.put('/perfil', async (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader ? authHeader.split(' ')[1] : null;
@@ -286,18 +313,30 @@ router.put('/perfil', async (req, res) => {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     const { nome, email, telefone, foto_url } = req.body;
-    const tabela = payload.role === 'motorista' ? 'motoristas' : 'usuarios';
+    let atualizado;
 
-    // A MÁGICA ESTÁ AQUI: o "?? null" previne a falha silenciosa da base de dados
-    const atualizado = await sql`
-      UPDATE ${sql(tabela)}
-      SET nome = ${nome ?? null}, 
-          email = ${email ?? null}, 
-          telefone = ${telefone ?? null}, 
-          foto_url = ${foto_url ?? null}
-      WHERE id = ${payload.id}
-      RETURNING id, nome, email, telefone, foto_url;
-    `;
+    // IF/ELSE direto na base de dados, 100% à prova de falhas
+    if (payload.role === 'motorista') {
+      atualizado = await sql`
+        UPDATE motoristas
+        SET nome = ${nome ?? null}, 
+            email = ${email ?? null}, 
+            telefone = ${telefone ?? null}, 
+            foto_url = ${foto_url ?? null}
+        WHERE id = ${payload.id}
+        RETURNING id, nome, email, telefone, foto_url;
+      `;
+    } else {
+      atualizado = await sql`
+        UPDATE usuarios
+        SET nome = ${nome ?? null}, 
+            email = ${email ?? null}, 
+            telefone = ${telefone ?? null}, 
+            foto_url = ${foto_url ?? null}
+        WHERE id = ${payload.id}
+        RETURNING id, nome, email, telefone, foto_url;
+      `;
+    }
 
     res.json({ sucesso: true, mensagem: 'Perfil atualizado com sucesso!', usuario: atualizado[0] });
   } catch (err) {
@@ -305,5 +344,7 @@ router.put('/perfil', async (req, res) => {
     res.status(500).json({ erro: `Erro ao salvar alterações: ${err.message}` });
   }
 });
+
+export default router;
 
 export default router;
