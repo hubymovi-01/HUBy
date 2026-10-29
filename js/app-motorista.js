@@ -15,7 +15,7 @@ let direcaoCasaAtiva = false;
 let coordsCasaMotorista = null;
 let intervalTelemetria = null;
 
-// ETAPA DA CORRIDA: 'a_caminho' (indo buscar) ou 'em_viagem' (com passageiro a bordo)
+// ETAPA DA CORRIDA: 'a_caminho' ou 'em_viagem'
 let etapaCorridaAtual = 'a_caminho';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -583,7 +583,7 @@ function renderizarRadar(pedidos) {
 }
 
 // ==========================================
-// 9. PRÉVIA DA ROTA (SEM MUDAR STATUS PARA O CLIENTE)
+// 9. PRÉVIA DA ROTA (SEM ACEITAR NO BANCO)
 // ==========================================
 async function preVisualizarRotaPedido(dados) {
   pedidoEmAnalise = dados;
@@ -651,7 +651,7 @@ function cancelarPrevia() {
 }
 
 // ==========================================
-// 10. FLUXO POR ETAPAS (APENAS 1 BOTÃO PRINCIPAL POR VEZ)
+// 10. FLUXO POR ETAPAS (APENAS UM BOTÃO DE AÇÃO POR VEZ)
 // ==========================================
 async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
   const token = localStorage.getItem('huby_token');
@@ -676,7 +676,7 @@ async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
 
     pedidoAceitoAtual = data.pedido;
     pedidoEmAnalise = null;
-    etapaCorridaAtual = 'a_caminho'; // ETAPA 1: Indo até o passageiro
+    etapaCorridaAtual = 'a_caminho'; // Começa indo até o passageiro
 
     const btnChat = document.getElementById('btnAbrirChat');
     if (btnChat) btnChat.style.display = 'flex';
@@ -727,7 +727,7 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
         </small>
       </div>
 
-      <!-- BOTÃO DE AÇÃO SEQUENCIAL (APENAS 1 DE CADA VEZ) -->
+      <!-- BOTÃO DE AÇÃO ÚNICO -->
       <div style="margin-top: 14px;">
         ${estaACaminho ? `
           <button type="button" id="btnIniciarViagemUnico" style="width: 100%; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; cursor: pointer;">
@@ -759,12 +759,12 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
     document.getElementById('btnIniciarViagemUnico')?.addEventListener('click', async () => {
       etapaCorridaAtual = 'em_viagem';
 
-      // Atualiza o mapa para a rota da viagem até o destino
+      // Atualiza o mapa para a rota final até o destino
       if (coordsOrig && coordsDest && hubyMapa) {
         await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981');
       }
 
-      // Re-renderiza o card exibindo apenas o botão Concluir
+      // Re-renderiza exibindo apenas o botão verde de Concluir
       renderizarCardEtapa(coordsOrig, coordsDest);
     });
   } else {

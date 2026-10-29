@@ -10,14 +10,13 @@
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/base.css?v=3.0.0">
+  <link rel="stylesheet" href="./css/base.css?v=4.0.0">
   <style>
     :root {
       --bg-dark: #090D16;
       --card-dark: #121826;
       --border-dark: rgba(255, 255, 255, 0.08);
       --emerald: #10B981;
-      --emerald-glow: rgba(16, 185, 129, 0.2);
       --rose: #EF4444;
       --text-pri: #F8FAFC;
       --text-sec: #94A3B8;
@@ -36,7 +35,6 @@
       width: 100vw;
     }
 
-    /* MAPA EM TELA CHEIA */
     #mapaMotorista {
       position: absolute;
       inset: 0;
@@ -45,7 +43,6 @@
       z-index: 1;
     }
 
-    /* BARRA SUPERIOR */
     .top-driver-nav {
       position: absolute;
       top: 14px;
@@ -87,7 +84,6 @@
       cursor: pointer;
     }
 
-    /* BOTÃO FLUTUANTE DE CHAT */
     .btn-floating-chat {
       position: absolute;
       bottom: 250px;
@@ -109,12 +105,6 @@
       font-size: 20px;
     }
 
-    .btn-floating-chat:active {
-      transform: scale(0.92);
-      background: rgba(56, 189, 248, 0.15);
-    }
-
-    /* DOCK INFERIOR DE CORRIDAS E CARTEIRA */
     .driver-dock {
       position: absolute;
       bottom: 0;
@@ -131,7 +121,6 @@
       flex-direction: column;
     }
 
-    /* BARRA DE CARTEIRA E SAQUE */
     .wallet-card-row {
       display: flex;
       justify-content: space-between;
@@ -168,23 +157,14 @@
       font-size: 12px;
       font-weight: 800;
       cursor: pointer;
-      transition: all 0.2s;
     }
 
-    .btn-action-pix:active {
-      transform: scale(0.95);
-      background: var(--emerald);
-      color: #032017;
-    }
-
-    /* FEED DE CHAMADAS PENDENTES */
     .orders-feed {
       overflow-y: auto;
       flex: 1;
       display: flex;
       flex-direction: column;
       gap: 10px;
-      padding-right: 2px;
     }
 
     .dock-empty {
@@ -247,7 +227,6 @@
       width: 100%;
     }
 
-    /* MODAL DE SAQUE PIX */
     .modal-saque-backdrop {
       position: fixed;
       inset: 0;
@@ -267,19 +246,6 @@
       width: 100%;
       max-width: 380px;
       padding: 18px;
-    }
-
-    .modal-saque-card h3 {
-      margin: 0 0 6px;
-      font-size: 16px;
-      font-weight: 800;
-      color: #FFF;
-    }
-
-    .modal-saque-card p {
-      margin: 0 0 14px;
-      font-size: 11px;
-      color: var(--text-sec);
     }
 
     .form-field-saque {
@@ -340,7 +306,6 @@
 </head>
 <body>
 
-  <!-- NAVEGAÇÃO SUPERIOR -->
   <header class="top-driver-nav">
     <div class="driver-pill">
       <div style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
@@ -349,18 +314,13 @@
     <a href="./index.html" class="btn-exit-partner">← Modo Passageiro</a>
   </header>
 
-  <!-- MAPA LEAFLET -->
   <div id="mapaMotorista"></div>
 
-  <!-- BOTÃO FLUTUANTE DE CHAT (Inicia oculto) -->
   <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;" aria-label="Abrir Chat">
     💬
   </button>
 
-  <!-- DOCK DE GESTÃO E RADAR -->
   <section class="driver-dock">
-    
-    <!-- BARRA DE CARTEIRA -->
     <div class="wallet-card-row">
       <div class="wallet-meta">
         <small>Saldo Disponível (85%)</small>
@@ -371,7 +331,6 @@
       </button>
     </div>
 
-    <!-- FEED DE CORRIDAS -->
     <div class="orders-feed" id="listaChamadasPendentes">
       <div class="dock-empty">Aguardando novas chamadas na região...</div>
     </div>
@@ -380,8 +339,8 @@
   <!-- MODAL DE SAQUE PIX -->
   <div id="modalSaquePix" class="modal-saque-backdrop">
     <div class="modal-saque-card">
-      <h3>Solicitar Saque Pix</h3>
-      <p>O valor é debitado do saldo e enviado à sua chave após liquidação.</p>
+      <h3 style="margin: 0 0 6px; font-size: 16px; font-weight: 800; color: #FFF;">Solicitar Saque Pix</h3>
+      <p style="margin: 0 0 14px; font-size: 11px; color: var(--text-sec);">O valor é debitado do saldo e enviado à sua chave após liquidação.</p>
 
       <div class="form-field-saque">
         <label>Tipo de Chave</label>
@@ -413,93 +372,24 @@
   <!-- MODAL DO CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-saque-backdrop" style="display: none; z-index: 10005;">
     <div class="modal-saque-card" style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-      
-      <!-- Cabeçalho do Chat -->
       <div style="padding: 14px; border-bottom: 1px solid var(--border-dark); background: var(--card-dark); display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8;">💬 Mensagens com o Passageiro</h3>
         <button type="button" id="btnFecharChat" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
       
-      <!-- Área das Mensagens -->
       <div id="chatAreaMensagens" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
         <div style="text-align: center; color: var(--text-sec); font-size: 11px;">O chat foi iniciado.</div>
       </div>
       
-      <!-- Input de Envio -->
       <div style="padding: 12px; border-top: 1px solid var(--border-dark); background: var(--card-dark); display: flex; gap: 8px;">
         <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
         <button type="button" id="btnEnviarMsgChat" style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer; font-size: 14px;">Enviar</button>
       </div>
-
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=3.0.0"></script>
-
-  <!-- SCRIPT DA CARTEIRA E SAQUE PIX -->
-  <script type="module">
-    const token = localStorage.getItem('huby_token');
-    
-    // 1. Ir à base de dados procurar o saldo real do motorista
-    async function carregarSaldo() {
-      try {
-        const API_URL = 'https://huby.onrender.com';
-        const resp = await fetch(`${API_URL}/api/auth/perfil`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        const dados = await resp.json();
-        
-        if (dados && dados.saldo_carteira !== undefined) {
-          const saldoFormatado = Number(dados.saldo_carteira).toFixed(2).replace('.', ',');
-          document.getElementById('saldoCarteiraValor').textContent = `R$ ${saldoFormatado}`;
-        }
-      } catch(err) {
-        console.warn('Aviso: Não foi possível carregar o saldo atualizado.', err);
-      }
-    }
-
-    // 2. Abrir e Fechar o Modal de Saque Pix
-    const modalSaque = document.getElementById('modalSaquePix');
-    
-    document.getElementById('btnAbrirModalSaque')?.addEventListener('click', () => {
-      modalSaque.style.display = 'flex';
-    });
-
-    document.getElementById('btnFecharModalSaque')?.addEventListener('click', () => {
-      modalSaque.style.display = 'none';
-    });
-
-    // 3. Lógica para processar o pedido de Saque
-    document.getElementById('btnConfirmarSaquePix')?.addEventListener('click', async () => {
-      const tipoChave = document.getElementById('saqueTipoChave').value;
-      const chave = document.getElementById('saqueChavePix').value;
-      const valor = document.getElementById('saqueValor').value;
-
-      if(!chave || !valor || valor <= 0) {
-        alert('Por favor, preencha a chave Pix e um valor válido para levantar.');
-        return;
-      }
-
-      const btn = document.getElementById('btnConfirmarSaquePix');
-      btn.textContent = 'A processar pedido...';
-      btn.disabled = true;
-
-      // Aqui simulamos o tempo de envio para o servidor
-      setTimeout(() => {
-        alert(`Sucesso! O seu pedido de levantamento de R$ ${valor} foi enviado para a equipa HUBy. O valor cairá na chave ${chave} em breve.`);
-        modalSaque.style.display = 'none';
-        btn.textContent = 'Confirmar Saque';
-        btn.disabled = false;
-        
-        // Limpar os campos após o pedido
-        document.getElementById('saqueChavePix').value = '';
-        document.getElementById('saqueValor').value = '';
-      }, 1500);
-    });
-
-    // Executar a busca de saldo assim que a página carrega
-    carregarSaldo();
-  </script>
+  <!-- Versão 4.0.0 limpa sem script redundante no rodapé -->
+  <script type="module" src="./js/app-motorista.js?v=4.0.0"></script>
 </body>
 </html>
