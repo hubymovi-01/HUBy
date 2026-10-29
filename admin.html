@@ -3,9 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy - Painel de Controle Master</title>
+  <title>HUBy - Painel Master Corporativo</title>
+  
+  <!-- CSS Base, Leaflet para Radar e FontAwesome para Ícones -->
   <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
   <style>
     :root {
       --bg: #0B0F19;
@@ -17,6 +23,7 @@
       --blue: #38BDF8;
       --amber: #F59E0B;
       --rose: #EF4444;
+      --purple: #A855F7;
     }
     body {
       background: var(--bg);
@@ -40,21 +47,28 @@
       letter-spacing: -0.5px;
     }
     .brand-title span { color: var(--primary); }
-    .btn-sync {
+    .btn-action {
       background: var(--primary);
       color: #000;
       border: none;
-      padding: 10px 18px;
+      padding: 10px 16px;
       border-radius: 8px;
       font-weight: 700;
       cursor: pointer;
       font-size: 13px;
       transition: opacity 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
-    .btn-sync:hover { opacity: 0.9; }
+    .btn-action:hover { opacity: 0.9; }
+    .btn-action.secondary {
+      background: rgba(255,255,255,0.08);
+      color: #FFF;
+    }
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 16px;
       margin-bottom: 24px;
     }
@@ -78,7 +92,7 @@
     }
     .tabs-nav {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       margin-bottom: 20px;
       border-bottom: 1px solid var(--border);
       padding-bottom: 10px;
@@ -88,12 +102,13 @@
       background: transparent;
       border: 1px solid var(--border);
       color: var(--muted);
-      padding: 10px 18px;
+      padding: 10px 16px;
       border-radius: 8px;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       white-space: nowrap;
+      transition: 0.2s;
     }
     .tab-btn.active {
       background: var(--primary);
@@ -134,9 +149,15 @@
       text-transform: uppercase;
     }
     .badge-pendente { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
-    .badge-aprovado, .badge-concluido, .badge-pago { background: rgba(16, 185, 129, 0.15); color: var(--primary); }
-    .badge-recusado, .badge-cancelado { background: rgba(239, 68, 68, 0.15); color: var(--rose); }
+    .badge-aprovado, .badge-concluido, .badge-pago, .badge-ativo { background: rgba(16, 185, 129, 0.15); color: var(--primary); }
+    .badge-recusado, .badge-cancelado, .badge-inativo { background: rgba(239, 68, 68, 0.15); color: var(--rose); }
     .badge-aceito { background: rgba(56, 189, 248, 0.15); color: var(--blue); }
+    .badge-sos { background: rgba(239, 68, 68, 0.25); color: var(--rose); animation: pulseSos 1.5s infinite; }
+    @keyframes pulseSos {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
     .btn-tbl {
       padding: 6px 12px;
       border-radius: 6px;
@@ -147,11 +168,11 @@
     }
     .btn-tbl.app { background: var(--primary); color: #000; }
     .btn-tbl.rej { background: var(--rose); color: #FFF; }
+    .btn-tbl.alt { background: var(--blue); color: #000; }
     .charts-container {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 20px;
-      margin-top: 10px;
     }
     .chart-box {
       background: var(--card-bg);
@@ -159,35 +180,48 @@
       border-radius: 14px;
       padding: 20px;
       height: 300px;
-      position: relative;
     }
-    .config-card {
+    .split-grid {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 20px;
+    }
+    @media(max-width: 900px) {
+      .split-grid { grid-template-columns: 1fr; }
+    }
+    .card-panel {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 14px;
-      padding: 24px;
-      max-width: 600px;
+      padding: 20px;
     }
-    .config-group {
-      margin-bottom: 18px;
+    .form-group {
+      margin-bottom: 14px;
     }
-    .config-group label {
+    .form-group label {
       display: block;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       color: var(--muted);
     }
-    .config-group input {
+    .form-group input, .form-group select, .form-group textarea {
       width: 100%;
       background: rgba(0,0,0,0.4);
       border: 1px solid var(--border);
-      padding: 12px;
+      padding: 10px 12px;
       border-radius: 8px;
       color: #FFF;
-      font-size: 14px;
+      font-size: 13px;
       outline: none;
       box-sizing: border-box;
+    }
+    #mapaRadarContainer {
+      width: 100%;
+      height: 520px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      z-index: 1;
     }
     .modal-preview {
       display: none;
@@ -208,10 +242,14 @@
 <body>
 
   <header>
-    <div class="brand-title">HUBy <span>Admin Master</span></div>
-    <div style="display: flex; gap: 12px; align-items: center;">
+    <div>
+      <div class="brand-title">HUBy <span>Painel Master</span></div>
+      <small style="color: var(--muted); font-size: 11px;">Central Operacional & Inteligência de Frota</small>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button type="button" id="btnBaixarCSV" class="btn-action secondary">📥 Exportar CSV</button>
       <a href="./index.html" style="color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;">Voltar ao Mapa</a>
-      <button type="button" id="btnSincronizar" class="btn-sync">↻ Atualizar</button>
+      <button type="button" id="btnSincronizar" class="btn-action">↻ Atualizar</button>
     </div>
   </header>
 
@@ -226,7 +264,7 @@
       <div id="metricLiquido" class="metric-value" style="color: var(--blue);">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Repasse Parceiros</div>
+      <div class="metric-title">Repasse Motoristas</div>
       <div id="metricRepasse" class="metric-value" style="color: var(--amber);">R$ 0,00</div>
     </div>
     <div class="metric-card">
@@ -234,35 +272,149 @@
       <div id="metricConcluidas" class="metric-value" style="color: var(--primary);">0</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Motoristas Ativos</div>
-      <div id="metricMotoristas" class="metric-value">0</div>
+      <div class="metric-title">Alertas de Segurança</div>
+      <div id="metricAlertas" class="metric-value" style="color: var(--rose);">0</div>
     </div>
   </section>
 
-  <!-- NAVEGAÇÃO POR ABAS -->
+  <!-- ABAS DE NAVEGAÇÃO -->
   <nav class="tabs-nav">
-    <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho & Gráficos</button>
+    <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
+    <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
+    <button type="button" class="tab-btn" data-tab="tabCupons">🎟️ Cupons & Marketing</button>
+    <button type="button" class="tab-btn" data-tab="tabSeguranca">🚨 Segurança & SOS</button>
+    <button type="button" class="tab-btn" data-tab="tabBroadcast">📢 Notificações Push</button>
     <button type="button" class="tab-btn" data-tab="tabSaques">💰 Saques Pix</button>
-    <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Gestão de Parceiros</button>
-    <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Monitor de Viagens</button>
-    <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Controle de Taxas & Preços</button>
+    <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Condutores</button>
+    <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Viagens</button>
+    <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Tarifas</button>
   </nav>
 
   <!-- ABA 1: MÉTRICAS E GRÁFICOS -->
   <section id="tabMetricas" class="tab-pane active">
     <div class="charts-container">
       <div class="chart-box">
-        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Divisão Financeira</h4>
+        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Divisão de Receitas</h4>
         <canvas id="chartFinanceiro"></canvas>
       </div>
       <div class="chart-box">
-        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Fluxo de Pedidos</h4>
+        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Fluxo Operacional de Corridas</h4>
         <canvas id="chartCategorias"></canvas>
       </div>
     </div>
   </section>
 
-  <!-- ABA 2: GESTÃO DE SAQUES -->
+  <!-- ABA 2: RADAR MASTER EM TEMPO REAL -->
+  <section id="tabRadar" class="tab-pane">
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+      <span style="font-size: 13px; color: var(--muted);">Rastreamento de viaturas em tempo real via telemetria GPS.</span>
+      <span id="txtCondutoresOnline" style="font-size: 13px; font-weight: 700; color: var(--primary);">0 parceiros ativos</span>
+    </div>
+    <div id="mapaRadarContainer"></div>
+  </section>
+
+  <!-- ABA 3: CUPONS & MARKETING -->
+  <section id="tabCupons" class="tab-pane">
+    <div class="split-grid">
+      <div class="card-panel">
+        <h3 style="margin-top: 0; font-size: 16px;">Criar Novo Cupom</h3>
+        <form id="formNovoCupom">
+          <div class="form-group">
+            <label>Código Promocional</label>
+            <input type="text" id="cupomCodigo" placeholder="EX: VEMDEHUBY" required uppercase>
+          </div>
+          <div class="form-group">
+            <label>Tipo de Abate</label>
+            <select id="cupomTipo">
+              <option value="fixo">Valor Fixo (R$)</option>
+              <option value="porcentagem">Percentual (%)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Valor do Desconto</label>
+            <input type="number" id="cupomValor" step="0.50" placeholder="5.00" required>
+          </div>
+          <div class="form-group">
+            <label>Limite Global de Usos</label>
+            <input type="number" id="cupomLimite" value="100" min="1">
+          </div>
+          <div class="form-group">
+            <label>Validade / Expiração</label>
+            <input type="date" id="cupomExpira">
+          </div>
+          <button type="submit" class="btn-action" style="width: 100%; justify-content: center;">Salvar Campanha</button>
+        </form>
+      </div>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Desconto</th>
+              <th>Usos</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaCuponsBody">
+            <tr><td colspan="5" style="text-align: center; color: var(--muted);">Carregando campanhas...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ABA 4: SEGURANÇA, SOS E ANTIFRAUDE -->
+  <section id="tabSeguranca" class="tab-pane">
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tipo</th>
+            <th>Detalhes do Alerta</th>
+            <th>Data/Hora</th>
+            <th>Estado</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaSegurancaBody">
+          <tr><td colspan="6" style="text-align: center; color: var(--muted);">Sem incidentes pendentes.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ABA 5: NOTIFICAÇÕES GLOBAIS EM MASSA (BROADCAST) -->
+  <section id="tabBroadcast" class="tab-pane">
+    <div class="card-panel" style="max-width: 600px;">
+      <h3 style="margin-top: 0; font-size: 16px;">Disparo de Alerta Global</h3>
+      <p style="font-size: 12px; color: var(--muted); margin-bottom: 16px;">
+        Esta mensagem surge instantaneamente no ecrã dos utilizadores conectados.
+      </p>
+      <form id="formBroadcast">
+        <div class="form-group">
+          <label>Público Alvo</label>
+          <select id="broadPublico">
+            <option value="todos">Todos (Passageiros e Motoristas)</option>
+            <option value="motoristas">Apenas Condutores Parceiros</option>
+            <option value="passageiros">Apenas Passageiros</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Título do Alerta</label>
+          <input type="text" id="broadTitulo" placeholder="Ex: Chuva Intensa ou Tarifa Dinâmica Ativa" required>
+        </div>
+        <div class="form-group">
+          <label>Mensagem</label>
+          <textarea id="broadMensagem" rows="4" placeholder="Mensagem detalhada para a frota..." required></textarea>
+        </div>
+        <button type="submit" class="btn-action" style="width: 100%; justify-content: center;">Enviar Broadcast Agora</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ABA 6: GESTÃO DE SAQUES -->
   <section id="tabSaques" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -271,7 +423,7 @@
             <th>ID</th>
             <th>Motorista</th>
             <th>Chave Pix</th>
-            <th>Valor Solicitado</th>
+            <th>Valor</th>
             <th>Status</th>
             <th>Ações</th>
           </tr>
@@ -283,7 +435,7 @@
     </div>
   </section>
 
-  <!-- ABA 3: GESTÃO DE FROTA -->
+  <!-- ABA 7: GESTÃO DE FROTA -->
   <section id="tabFrota" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -292,7 +444,7 @@
             <th>Motorista</th>
             <th>Veículo & Placa</th>
             <th>Categoria</th>
-            <th>Saldo em Carteira</th>
+            <th>Saldo</th>
             <th>Status</th>
             <th>Documento</th>
             <th>Ações</th>
@@ -305,7 +457,7 @@
     </div>
   </section>
 
-  <!-- ABA 4: MONITOR DE VIAGENS -->
+  <!-- ABA 8: MONITOR DE VIAGENS -->
   <section id="tabViagens" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -314,7 +466,7 @@
             <th>ID</th>
             <th>Modalidade</th>
             <th>Distância</th>
-            <th>Total do Pedido</th>
+            <th>Total</th>
             <th>Taxa HUBy</th>
             <th>Motorista</th>
             <th>Status</th>
@@ -327,36 +479,28 @@
     </div>
   </section>
 
-  <!-- ABA 5: CONTROLE DE TAXAS E PREÇOS -->
+  <!-- ABA 9: REGRAS DE NEGÓCIO E TARIFAS -->
   <section id="tabConfig" class="tab-pane">
-    <div class="config-card">
-      <h3 style="margin-top: 0; color: #FFF;">Configuração Geral da Plataforma</h3>
-      <p style="font-size: 13px; color: var(--muted); margin-bottom: 20px;">
-        Altere o percentual de retenção da HUBy e o valor cobrado por km em cada categoria em tempo real.
-      </p>
-
+    <div class="card-panel" style="max-width: 550px;">
+      <h3 style="margin-top: 0;">Parâmetros da Plataforma</h3>
       <form id="formConfiguracoes">
-        <div class="config-group">
-          <label>Taxa da Plataforma Retida (%)</label>
+        <div class="form-group">
+          <label>Taxa de Retenção HUBy (%)</label>
           <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
         </div>
-
-        <div class="config-group">
+        <div class="form-group">
           <label>Tarifa por Km - HUBy Carro (R$)</label>
           <input type="number" id="cfgKmCarro" step="0.10" value="2.50" required>
         </div>
-
-        <div class="config-group">
+        <div class="form-group">
           <label>Tarifa por Km - HUBy Moto (R$)</label>
           <input type="number" id="cfgKmMoto" step="0.10" value="1.80" required>
         </div>
-
-        <div class="config-group">
+        <div class="form-group">
           <label>Tarifa por Km - HUBy Entrega (R$)</label>
           <input type="number" id="cfgKmEntrega" step="0.10" value="2.00" required>
         </div>
-
-        <button type="submit" class="btn-sync" style="width: 100%; padding: 14px; font-size: 14px;">Salvar Regras da Plataforma</button>
+        <button type="submit" class="btn-action" style="width: 100%; justify-content: center; padding: 12px;">Salvar Parâmetros</button>
       </form>
     </div>
   </section>
@@ -367,6 +511,6 @@
     <button type="button" id="btnFecharModalPreview" style="position: absolute; top: 20px; right: 20px; background: #FFF; border: none; padding: 10px 16px; border-radius: 50%; font-weight: 800; cursor: pointer;">✕</button>
   </div>
 
-  <script type="module" src="./js/admin.js?v=4.0.0"></script>
+  <script type="module" src="./js/admin.js?v=5.0.0"></script>
 </body>
 </html>
