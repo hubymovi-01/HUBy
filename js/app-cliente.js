@@ -166,15 +166,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function verificarAcessoAdminMenu() {
   const token = localStorage.getItem('huby_token');
-  const role = localStorage.getItem('huby_user_role');
   const btnAdmin = document.getElementById('menuItemAdmin');
+  
+  if (!btnAdmin) return;
 
-  if (btnAdmin) {
-    if (token && role === 'admin') {
+  if (!token) {
+    btnAdmin.style.display = 'none';
+    return;
+  }
+
+  try {
+    // CORREÇÃO CRÍTICA: Descodifica o token JWT do utilizador para extrair o role real
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+
+    const payloadUser = JSON.parse(jsonPayload);
+    const roleServidor = payloadUser.role || payloadUser.tipo;
+
+    // Guarda também no localStorage para sincronizar com o HTML
+    if (roleServidor) {
+      localStorage.setItem('huby_user_role', roleServidor);
+    }
+
+    if (roleServidor === 'admin') {
       btnAdmin.style.display = 'flex';
     } else {
       btnAdmin.style.display = 'none';
     }
+  } catch (e) {
+    console.warn('Erro ao validar token de admin:', e);
+    btnAdmin.style.display = 'none';
   }
 }
 
@@ -218,7 +242,10 @@ function configurarDrawerMenu() {
     }
   }
 
-  btnMenu?.addEventListener('click', abrirDrawer);
+  btnMenu?.addEventListener('click', () => {
+    verificarAcessoAdminMenu(); // Garante verificação fresca ao abrir o menu
+    abrirDrawer();
+  });
   backdrop?.addEventListener('click', fecharDrawer);
 }
 
@@ -273,7 +300,7 @@ function atualizarBotaoChamar() {
   const labels = {
     carro: 'Chamar HUBy Carro',
     moto: 'Chamar HUBy Moto',
-    entrega: 'Solicitar Entrega' // Botão ajustado para a nova nomenclatura
+    entrega: 'Solicitar Entrega'
   };
   btn.textContent = labels[categoriaSelecionada] || 'Chamar HUBy';
 }
@@ -302,9 +329,6 @@ async function submeterPedido() {
     return;
   }
 
-  // ==========================================================================
-  // VALIDAÇÃO PREMIUM: IMPEDIR ENTREGA SEM DADOS DO RECEBEDOR
-  // ==========================================================================
   if (categoriaSelecionada === 'entrega') {
     const recebedorVal = document.getElementById('inputRecebedor')?.value.trim();
     if (!recebedorVal) {
@@ -312,7 +336,6 @@ async function submeterPedido() {
       return;
     }
   }
-  // ==========================================================================
 
   const token = localStorage.getItem('huby_token');
   const clienteId = localStorage.getItem('huby_user_id');
@@ -326,9 +349,6 @@ async function submeterPedido() {
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   let nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`;
 
-  // ==========================================================================
-  // INJETAR DADOS DA ENCOMENDA NO NOME DO DESTINO PARA O MOTORISTA VER
-  // ==========================================================================
   if (categoriaSelecionada === 'entrega') {
     const recebedor = document.getElementById('inputRecebedor')?.value || 'Não informado';
     const tipoItemEl = document.getElementById('selectTipoItem');
@@ -336,7 +356,6 @@ async function submeterPedido() {
     
     nomeDestino += ` | 📦 Recebedor: ${recebedor} | 🏷️ ${tipoItem}`;
   }
-  // ==========================================================================
 
   const payload = {
     id: novoId,
@@ -388,7 +407,7 @@ function mostrarAguardandoMotorista() {
   const btn = document.getElementById('btnPedirHuby');
 
   if (blocoResumo) blocoResumo.style.display = 'none';
-  if (blocoEntrega) blocoEntrega.style.display = 'none'; // Esconde o formulário ao chamar
+  if (blocoEntrega) blocoEntrega.style.display = 'none';
   if (cardStatus) cardStatus.style.display = 'block';
 
   document.getElementById('statusTitulo').textContent = 'Radar Ativo: Procurando motorista...';
@@ -723,7 +742,6 @@ function resetarPainelCliente() {
   if (cardStatus) cardStatus.style.display = 'none';
   if (blocoResumo) blocoResumo.style.display = 'flex';
   
-  // Ao resetar, se estava selecionado 'entrega', mostra o form de novo
   if (blocoEntrega) {
     blocoEntrega.style.display = (categoriaSelecionada === 'entrega') ? 'block' : 'none';
   }
