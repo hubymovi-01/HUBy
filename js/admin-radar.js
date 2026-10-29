@@ -12,9 +12,10 @@ export function inicializarRadarMaster(token) {
   if (!mapaAdmin) {
     mapaAdmin = L.map('mapaRadarContainer').setView([-8.3580, -42.2460], 13);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    // Substituído: OpenStreetMap público sem exigência de API Key
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: 'HUBy Radar Intelligence'
+      attribution: '&copy; OpenStreetMap contributors | HUBy Radar'
     }).addTo(mapaAdmin);
 
     // Clique no mapa para criar uma zona dinâmica
