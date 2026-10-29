@@ -10,6 +10,13 @@ let statusAprovacaoAtual = 'aprovado';
 let categoriaMotorista = 'carro';
 let socketRadar = null; 
 
+// Filtro Direção de Casa
+let direcaoCasaAtiva = false;
+let coordsCasaMotorista = null;
+
+// Telemetria GPS em Tempo Real para o Radar Master
+let intervalTelemetria = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');
@@ -32,6 +39,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     hubyMapa.obterGPS((pos) => {
       console.log('GPS do motorista fixado com sucesso:', pos);
+      iniciarTransmissaoTelemetria(pos);
     });
   } catch (err) {
     console.warn('Erro ao inicializar mapa do motorista:', err);
@@ -39,6 +47,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   configurarModalSaquePix();
   configurarChatMotorista();
+  configurarFiltroDirecaoCasa();
+  configurarBotaoSosMotorista();
 
   await atualizarPerfilESaldo();
 
@@ -48,6 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.addEventListener('beforeunload', () => {
     if (intervalRadar) clearInterval(intervalRadar);
+    if (intervalTelemetria) clearInterval(intervalTelemetria);
     if (socketRadar) socketRadar.disconnect();
     if (hubyMapa?.watchId !== null && navigator.geolocation) {
       navigator.geolocation.clearWatch(hubyMapa.watchId);
@@ -55,6 +66,153 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
+// ==========================================
+// 1. TRANSMISSÃO TELEMÉTRICA GPS (RADAR MASTER)
+// ==========================================
+function iniciarTransmissaoTelemetria(posicaoInicial) {
+  const token = localStorage.getItem('huby_token');
+  if (!token) return;
+
+  const enviarPosicao = async (lat, lng) => {
+    try {
+      await fetch(`${API_URL}/api/pedidos/motoristas/localizacao`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          lat,
+          lng,
+          emCorrida: !!pedidoAceitoAtual
+        })
+      });
+    } catch (e) {
+      console.warn('Falha na telemetria GPS:', e);
+    }
+  };
+
+  if (posicaoInicial) enviarPosicao(posicaoInicial.lat, posicaoInicial.lng);
+
+  if (intervalTelemetria) clearInterval(intervalTelemetria);
+  intervalTelemetria = setInterval(() => {
+    if (hubyMapa && hubyMapa.coordsOrigem) {
+      enviarPosicao(hubyMapa.coordsOrigem[0], hubyMapa.coordsOrigem[1]);
+    }
+  }, 10000);
+}
+
+// ==========================================
+// 2. FILTRO "DIREÇÃO DE CASA"
+// ==========================================
+function configurarFiltroDirecaoCasa() {
+  const btnCasa = document.getElementById('btnFiltroCasa');
+  if (!btnCasa) return;
+
+  btnCasa.addEventListener('click', async () => {
+    const token = localStorage.getItem('huby_token');
+
+    if (!direcaoCasaAtiva) {
+      const enderecoCasa = prompt('Insira o endereço ou ponto de referência de sua casa:');
+      if (!enderecoCasa) return;
+
+      const latCasa = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0] : -8.3580;
+      const lngCasa = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1] : -42.2460;
+      coordsCasaMotorista = { lat: latCasa, lng: lngCasa };
+
+      try {
+        const resp = await fetch(`${API_URL}/api/motoristas-regras/filtro-destino`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            ativo: true,
+            lat: coordsCasaMotorista.lat,
+            lng: coordsCasaMotorista.lng
+          })
+        });
+
+        if (resp.ok) {
+          direcaoCasaAtiva = true;
+          btnCasa.style.background = '#F59E0B';
+          btnCasa.style.color = '#000';
+          btnCasa.textContent = '🏠 Rumo a Casa (Ativo)';
+          alert('Filtro ativado! Receberá chamadas com rota direcionada à sua residência.');
+        }
+      } catch (err) {
+        alert('Erro ao ativar filtro.');
+      }
+    } else {
+      try {
+        await fetch(`${API_URL}/api/motoristas-regras/filtro-destino`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ ativo: false })
+        });
+        direcaoCasaAtiva = false;
+        btnCasa.style.background = '';
+        btnCasa.style.color = '';
+        btnCasa.textContent = '🏠 Direção de Casa';
+        alert('Filtro desativado. Modo normal restaurado.');
+      } catch (err) {
+        alert('Erro ao desativar filtro.');
+      }
+    }
+  });
+}
+
+// ==========================================
+// 3. BOTÃO DE PÂNICO / SOS DO MOTORISTA
+// ==========================================
+function configurarBotaoSosMotorista() {
+  const btnSos = document.getElementById('btnSosMotorista');
+  if (!btnSos) return;
+
+  btnSos.addEventListener('click', async () => {
+    if (!pedidoAceitoAtual) {
+      alert('O alerta SOS só pode ser emitido durante um atendimento em andamento.');
+      return;
+    }
+
+    if (!confirm('🚨 ALERTA DE EMERGÊNCIA HUBy!\nDeseja acionar a central de segurança da plataforma agora?')) {
+      return;
+    }
+
+    const token = localStorage.getItem('huby_token');
+    const lat = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0] : null;
+    const lng = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1] : null;
+
+    try {
+      const resp = await fetch(`${API_URL}/api/pedidos/${pedidoAceitoAtual.id}/sos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          lat,
+          lng,
+          relato: 'SOS emitido pelo motorista parceiro durante a corrida.'
+        })
+      });
+
+      if (resp.ok) {
+        alert('🚨 SOS REGISTRADO!\nA central de suporte do Admin Master foi notificada com a sua posição GPS.');
+      }
+    } catch (err) {
+      alert('Falha ao acionar socorro via rede. Contate a polícia (190).');
+    }
+  });
+}
+
+// ==========================================
+// 4. ALERTA SONORO
+// ==========================================
 function tocarAlertaSonoro() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -85,6 +243,9 @@ function tocarAlertaSonoro() {
   }
 }
 
+// ==========================================
+// 5. ATUALIZAR PERFIL E SALDO
+// ==========================================
 async function atualizarPerfilESaldo() {
   const token = localStorage.getItem('huby_token');
   try {
@@ -127,6 +288,9 @@ async function atualizarPerfilESaldo() {
   }
 }
 
+// ==========================================
+// 6. GESTÃO DE SAQUES PIX
+// ==========================================
 function configurarModalSaquePix() {
   const modalSaque = document.getElementById('modalSaquePix');
   const btnAbrirSaque = document.getElementById('btnAbrirModalSaque');
@@ -185,7 +349,7 @@ function configurarModalSaquePix() {
 }
 
 // ==========================================
-// FUNÇÕES DO CHAT DO MOTORISTA
+// 7. CHAT DO MOTORISTA
 // ==========================================
 let chatInterval = null;
 
@@ -295,7 +459,7 @@ async function carregarMensagensChat() {
 }
 
 // ==========================================
-// RADAR DE CHAMADAS E GPS AVANÇADO
+// 8. RADAR DE CHAMADAS E SOCKET.IO BROADCAST
 // ==========================================
 function iniciarRadarChamadas() {
   buscarChamadasPendentes();
@@ -303,9 +467,16 @@ function iniciarRadarChamadas() {
   if (!socketRadar) {
     socketRadar = io(API_URL);
     
-    socketRadar.on('nova_chamada', (dados) => {
+    socketRadar.on('nova_chamada', () => {
       if (!pedidoAceitoAtual && statusAprovacaoAtual === 'aprovado') {
         buscarChamadasPendentes(true); 
+      }
+    });
+
+    // Recepção de Notificações Push Globais disparadas pelo Admin Master
+    socketRadar.on('alerta_broadcast_geral', (dados) => {
+      if (dados.publico === 'todos' || dados.publico === 'motoristas') {
+        alert(`📢 COMUNICADO OFICIAL HUBY:\n\n${dados.titulo}\n\n${dados.mensagem}`);
       }
     });
   }
@@ -347,7 +518,6 @@ function renderizarRadar(pedidos) {
   }
 
   feedEl.innerHTML = pedidos.map(p => {
-    // CORREÇÃO: Extração segura das coordenadas vindas do banco de dados do servidor
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
@@ -392,6 +562,9 @@ function renderizarRadar(pedidos) {
   });
 }
 
+// ==========================================
+// 9. ACEITAR E EXECUTAR ATENDIMENTO
+// ==========================================
 async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
   const token = localStorage.getItem('huby_token');
 
@@ -436,16 +609,21 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
               ✅ Concluir
             </button>
           </div>
-          <button type="button" id="btnCancelarPeloMotorista" style="width: 100%; margin-top: 8px; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
-            Cancelar Corrida
-          </button>
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button type="button" id="btnCancelarPeloMotorista" style="flex: 1; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
+              Cancelar Corrida
+            </button>
+            <button type="button" id="btnSosMotorista" style="flex: 1; background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; border-radius: 10px; padding: 10px; font-weight: 800; cursor: pointer;">
+              🚨 SOS Alerta
+            </button>
+          </div>
         </div>
       `;
 
       document.getElementById('btnConcluirCorrida')?.addEventListener('click', concluirCorridaAtual);
       document.getElementById('btnCancelarPeloMotorista')?.addEventListener('click', cancelarCorridaAtual);
+      configurarBotaoSosMotorista();
       
-      // MOTOR DE ROTA 2: Quando o cliente entra no carro, traça a rota até ao destino
       document.getElementById('btnNavegarDestino')?.addEventListener('click', async () => {
          if (coordsOrig && coordsDest && hubyMapa) {
              await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981'); 
@@ -458,9 +636,7 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
       });
     }
 
-    // MOTOR DE ROTA 1: Assim que aceita, traça rota GPS do Motorista -> Passageiro
     if (coordsOrig && hubyMapa) {
-        // Correção: Desenha a linha imediatamente com o GPS fixo para não deixar o mapa vazio
         if (hubyMapa.coordsOrigem) {
            hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsOrig, '#38BDF8');
         }
@@ -523,7 +699,7 @@ async function concluirCorridaAtual() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.erro || 'Falha ao liquidar corrida.');
 
-    alert(`Viagem Concluída!\n\nLíquido do Parceiro (85%): R$ ${Number(data.repasseLiquido).toFixed(2).replace('.', ',')}\nTaxa Plataforma (15%): R$ ${Number(data.taxaHuby).toFixed(2).replace('.', ',')}`);
+    alert(`Viagem Concluída!\n\nLíquido do Parceiro: R$ ${Number(data.repasseLiquido).toFixed(2).replace('.', ',')}\nTaxa Plataforma: R$ ${Number(data.taxaHuby).toFixed(2).replace('.', ',')}`);
 
     limparAtendimento();
     await atualizarPerfilESaldo();

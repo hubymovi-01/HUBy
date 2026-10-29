@@ -1,4 +1,5 @@
 import { API_URL } from './config.js';
+import { inicializarRadarMaster, carregarZonasDinamicas, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
 // ==========================================
 // 1. SEGURANÇA E ACESSO
@@ -27,7 +28,7 @@ if (!token || (role !== 'admin' && role !== 'administrador')) {
 }
 
 // ==========================================
-// 2. SOCKET.IO PARA ALERTAS E RADAR
+// 2. SOCKET.IO PARA ALERTAS E RADAR DINÂMICO
 // ==========================================
 let socket = null;
 try {
@@ -39,18 +40,21 @@ try {
     carregarSeguranca();
   });
 
-  socket.on('alerta_seguranca_admin', (dados) => {
+  socket.on('alerta_seguranca_admin', () => {
     carregarSeguranca();
   });
 
+  // Atualiza a posição do condutor através do módulo admin-radar.js
   socket.on('posicao_motorista', (dados) => {
-    atualizarPosicaoRadar(dados);
+    atualizarPosicaoCondutorNoMapa(dados);
   });
 } catch(err) {
   console.warn('Socket indisponível:', err);
 }
 
-// Navegação por Abas
+// ==========================================
+// 3. NAVEGAÇÃO POR ABAS
+// ==========================================
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -61,7 +65,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (pane) pane.classList.add('active');
 
     if (btn.dataset.tab === 'tabMetricas') carregarMetricas();
-    if (btn.dataset.tab === 'tabRadar') inicializarOuAtualizarRadar();
+    if (btn.dataset.tab === 'tabRadar') inicializarRadarMaster(token);
     if (btn.dataset.tab === 'tabCupons') carregarCupons();
     if (btn.dataset.tab === 'tabSeguranca') carregarSeguranca();
   });
@@ -71,45 +75,6 @@ const fMoeda = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', curr
 
 let chartFin = null;
 let chartCat = null;
-let mapaRadar = null;
-let markersMotoristas = {};
-
-// ==========================================
-// 3. RADAR MASTER (MAPA LEAFLET)
-// ==========================================
-function inicializarOuAtualizarRadar() {
-  if (!mapaRadar) {
-    mapaRadar = L.map('mapaRadarContainer').setView([-8.3580, -42.2460], 13);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      attribution: 'HUBy Radar Intelligence'
-    }).addTo(mapaRadar);
-  }
-  setTimeout(() => mapaRadar.invalidateSize(), 250);
-}
-
-function atualizarPosicaoRadar(dado) {
-  if (!mapaRadar) return;
-  const { motoristaId, lat, lng, emCorrida } = dado;
-  const iconeCor = emCorrida ? '#F59E0B' : '#10B981';
-
-  if (markersMotoristas[motoristaId]) {
-    markersMotoristas[motoristaId].setLatLng([lat, lng]);
-  } else {
-    const iconCustom = L.divIcon({
-      className: 'huby-driver-pin',
-      html: `<div style="width:26px;height:26px;background:#090D16;border:2.5px solid ${iconeCor};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px ${iconeCor};font-size:12px;">🚘</div>`,
-      iconSize: [26, 26],
-      iconAnchor: [13, 13]
-    });
-    const marker = L.marker([lat, lng], { icon: iconCustom }).addTo(mapaRadar);
-    marker.bindPopup(`<b>Motorista:</b> #${motoristaId}<br><b>Status:</b> ${emCorrida ? 'Em Viagem' : 'Livre'}`);
-    markersMotoristas[motoristaId] = marker;
-  }
-
-  const elContador = document.getElementById('txtCondutoresOnline');
-  if (elContador) elContador.textContent = `${Object.keys(markersMotoristas).length} parceiros monitorados`;
-}
 
 // ==========================================
 // 4. CARREGAR MÉTRICAS E GRÁFICOS
@@ -445,6 +410,7 @@ document.getElementById('formConfiguracoes')?.addEventListener('submit', async (
 
 document.getElementById('btnSincronizar')?.addEventListener('click', () => {
   carregarMetricas(); carregarSaques(); carregarFrota(); carregarViagens(); carregarCupons(); carregarSeguranca();
+  carregarZonasDinamicas(token);
 });
 
 // Inicialização imediata

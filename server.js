@@ -7,6 +7,9 @@ import { sql } from './db.js';
 import authRoutes from './routes/auth.routes.js';
 import pedidosRouter from './routes/pedidos.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import carteiraRoutes from './routes/carteira.routes.js';
+import dinamicaRoutes from './routes/dinamica.routes.js';
+import motoristaRoutes from './routes/motorista.routes.js';
 
 dotenv.config();
 
@@ -150,6 +153,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', authRoutes); 
 app.use('/api/pedidos', pedidosRouter(io));
 app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
+app.use('/api/carteira', carteiraRoutes);
+app.use('/api/dinamica', dinamicaRoutes);
+app.use('/api/motoristas-regras', motoristaRoutes);
 
 server.listen(port, () => {
   console.log(`Servidor HUBy modularizado ativo na porta ${port}`);

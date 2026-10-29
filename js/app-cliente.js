@@ -12,10 +12,14 @@ let markerMotoristaAaminho = null;
 
 let corridaParaAvaliarId = null;
 let notaSelecionada = 5;
+let gorjetaSelecionada = 0;
 
-// VARIÁVEIS PARA O CRONÓMETRO DO CLIENTE
+// Cronómetro de chegada do motorista
 let cronometroChegada = null;
 let tempoEstimado = 5;
+
+// Saldo da carteira pré-paga
+let saldoCarteiraCliente = 0;
 
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
@@ -27,6 +31,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   await sincronizarTarifasServidor();
+  await carregarSaldoCarteiraCliente();
 
   try {
     hubyMapa = new HubyMapa('mapaCliente');
@@ -44,7 +49,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       if (inputPesquisa) {
         inputPesquisa.value = 'Destino selecionado no mapa';
-        document.getElementById('btnLimparPesquisa').style.display = 'block';
+        const btnLimpar = document.getElementById('btnLimparPesquisa');
+        if (btnLimpar) btnLimpar.style.display = 'block';
       }
 
       atualizarResumoValores();
@@ -101,9 +107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modal) modal.style.display = 'none';
   });
 
-  // ==========================================================================
-  // LÓGICA PREMIUM: SLIDER E MOSTRAR/ESCONDER FORMULÁRIO DE ENTREGA
-  // ==========================================================================
+  // Slider de Categorias
   const chips = document.querySelectorAll('.category-chip');
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
@@ -130,6 +134,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   configurarModalAvaliacao();
+  configurarBotoesGorjeta();
+
+  // Botão SOS / Pânico do Passageiro
+  document.getElementById('btnSosCliente')?.addEventListener('click', acionarSosCliente);
   
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
@@ -161,15 +169,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ============================================================================
-// FUNÇÕES RESTANTES (Menus, Pedidos, Chat, Avaliação)
+// CARTEIRA PRÉ-PAGA E MÉTODOS DE PAGAMENTO
 // ============================================================================
+async function carregarSaldoCarteiraCliente() {
+  const token = localStorage.getItem('huby_token');
+  if (!token) return;
 
+  try {
+    const res = await fetch(`${API_URL}/api/carteira/saldo`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const dados = await res.json();
+      saldoCarteiraCliente = Number(dados.saldo || 0);
+      const lblSaldo = document.getElementById('lblSaldoCarteira');
+      if (lblSaldo) {
+        lblSaldo.textContent = `R$ ${saldoCarteiraCliente.toFixed(2).replace('.', ',')}`;
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao consultar saldo da carteira:', err);
+  }
+}
+
+// ============================================================================
+// MENUS E AUTENTICAÇÃO
+// ============================================================================
 function verificarAcessoAdminMenu() {
   const token = localStorage.getItem('huby_token');
   const btnAdmin = document.getElementById('menuItemAdmin');
   
   if (!btnAdmin) return;
-
   if (!token) {
     btnAdmin.style.display = 'none';
     return;
@@ -185,18 +215,14 @@ function verificarAcessoAdminMenu() {
     const payloadUser = JSON.parse(jsonPayload);
     const roleServidor = String(payloadUser.role || payloadUser.tipo || '').toLowerCase();
 
-    if (roleServidor) {
-      localStorage.setItem('huby_user_role', roleServidor);
-    }
+    if (roleServidor) localStorage.setItem('huby_user_role', roleServidor);
 
-    // CORREÇÃO: Aceita tanto 'admin' quanto 'administrador'
     if (roleServidor === 'admin' || roleServidor === 'administrador') {
       btnAdmin.style.display = 'flex';
     } else {
       btnAdmin.style.display = 'none';
     }
   } catch (e) {
-    console.warn('Erro ao validar token de admin:', e);
     btnAdmin.style.display = 'none';
   }
 }
@@ -219,6 +245,9 @@ function configurarDrawerMenu() {
           <div class="profile-meta">
             <strong>${userName}</strong>
             <small>${userPhone}</small>
+            <div style="margin-top:4px; font-size:12px; color:#10B981; font-weight:700;">
+              Saldo: <span id="lblSaldoCarteira">R$ ${saldoCarteiraCliente.toFixed(2).replace('.', ',')}</span>
+            </div>
           </div>
         </div>
       `;
@@ -231,7 +260,7 @@ function configurarDrawerMenu() {
     } else {
       perfilBox.innerHTML = `
         <h4 class="profile-guest-title">Bem-vindo ao HUBy</h4>
-        <p class="profile-guest-sub">Entre para pedir viagens mais rápido e ver seu histórico.</p>
+        <p class="profile-guest-sub">Entre para pedir viagens mais rápido e usar sua carteira digital.</p>
       `;
       btnAuth.textContent = 'Entrar ou Cadastrar';
       btnAuth.classList.remove('btn-sair');
@@ -258,6 +287,9 @@ function fecharDrawer() {
   document.getElementById('menuBackdrop')?.classList.remove('active');
 }
 
+// ============================================================================
+// AVALIAÇÕES E GORJETAS
+// ============================================================================
 function configurarModalAvaliacao() {
   const estrelas = document.querySelectorAll('#estrelasRating span');
   estrelas.forEach(star => {
@@ -278,6 +310,17 @@ function configurarModalAvaliacao() {
   });
 }
 
+function configurarBotoesGorjeta() {
+  const btnGorjetas = document.querySelectorAll('.btn-gorjeta');
+  btnGorjetas.forEach(btn => {
+    btn.addEventListener('click', () => {
+      btnGorjetas.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      gorjetaSelecionada = Number(btn.getAttribute('data-valor') || 0);
+    });
+  });
+}
+
 function fecharModalAvaliacao() {
   const modal = document.getElementById('modalAvaliacao');
   if (modal) modal.style.display = 'none';
@@ -286,12 +329,18 @@ function fecharModalAvaliacao() {
   if (comentarioEl) comentarioEl.value = '';
 
   notaSelecionada = 5;
+  gorjetaSelecionada = 0;
+  
   const estrelas = document.querySelectorAll('#estrelasRating span');
   estrelas.forEach(s => s.style.color = '#F59E0B');
 
+  document.querySelectorAll('.btn-gorjeta').forEach(b => b.classList.remove('active'));
   corridaParaAvaliarId = null;
 }
 
+// ============================================================================
+// DINÂMICA E ESTIMATIVAS
+// ============================================================================
 function atualizarBotaoChamar() {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn || pedidoAtivoId) return;
@@ -322,6 +371,9 @@ function atualizarResumoValores() {
   }
 }
 
+// ============================================================================
+// SOLICITAÇÃO DE CORRIDA (COM CUPOM E SEGURANÇA)
+// ============================================================================
 async function submeterPedido() {
   if (!rotaAtual || !coordsDestino) {
     alert('Por favor, indique o destino da viagem.');
@@ -341,6 +393,7 @@ async function submeterPedido() {
   const novoId = 'ped_' + Date.now().toString(36);
 
   const precoInfo = calcularPreco(categoriaSelecionada, rotaAtual.distanciaKm);
+  const cupomCodigo = document.getElementById('inputCupomDesconto')?.value.trim().toUpperCase() || null;
 
   const latOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
   const lngOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
@@ -352,7 +405,6 @@ async function submeterPedido() {
     const recebedor = document.getElementById('inputRecebedor')?.value || 'Não informado';
     const tipoItemEl = document.getElementById('selectTipoItem');
     const tipoItem = tipoItemEl && tipoItemEl.value !== "" ? tipoItemEl.options[tipoItemEl.selectedIndex].text : 'Encomenda genérica';
-    
     nomeDestino += ` | 📦 Recebedor: ${recebedor} | 🏷️ ${tipoItem}`;
   }
 
@@ -369,7 +421,8 @@ async function submeterPedido() {
     distanciaKm: rotaAtual.distanciaKm,
     duracaoMin: rotaAtual.duracaoMin,
     valorTotal: precoInfo.valorTotal,
-    metodoPgto: 'pix_app'
+    metodoPgto: 'pix_app',
+    cupomCodigo
   };
 
   const btn = document.getElementById('btnPedirHuby');
@@ -388,6 +441,11 @@ async function submeterPedido() {
     });
 
     if (!resp.ok) throw new Error('Falha ao registar pedido na base de dados.');
+    const dadosResposta = await resp.json();
+
+    if (dadosResposta.desconto > 0) {
+      alert(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`);
+    }
 
     pedidoAtivoId = novoId;
     mostrarAguardandoMotorista();
@@ -419,6 +477,44 @@ function mostrarAguardandoMotorista() {
   }
 }
 
+// ============================================================================
+// BOTÃO DE PÂNICO / SOS DO PASSAGEIRO
+// ============================================================================
+async function acionarSosCliente() {
+  if (!pedidoAtivoId) {
+    alert('O alerta SOS só pode ser acionado durante uma viagem ativa.');
+    return;
+  }
+
+  if (!confirm('🚨 ATENÇÃO: Deseja acionar a emergência SOS?\nA central de monitoramento e os contatos de suporte serão alertados com sua localização.')) {
+    return;
+  }
+
+  const token = localStorage.getItem('huby_token');
+  const lat = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[0] : null;
+  const lng = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1] : null;
+
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoAtivoId}/sos`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ lat, lng, relato: 'Emergência acionada pelo passageiro no aplicativo.' })
+    });
+
+    if (res.ok) {
+      alert('🚨 ALERTA SOS REGISTRADO!\nA equipe da HUBy foi alertada e o suporte está ciente da sua localização.');
+    }
+  } catch (err) {
+    alert('Erro ao transmitir SOS. Ligue imediatamente para a polícia (190).');
+  }
+}
+
+// ============================================================================
+// MONITORAMENTO E ATUALIZAÇÃO DO STATUS
+// ============================================================================
 function iniciarPollingStatus() {
   if (intervalPolling) clearInterval(intervalPolling);
 
@@ -432,7 +528,6 @@ function iniciarPollingStatus() {
       const pedido = await resp.json();
 
       if (pedido.status === 'aceito') {
-        
         atualizarInterfaceMotoristaAceitou(pedido);
 
         if (hubyMapa && hubyMapa.map && typeof L !== 'undefined' && !markerMotoristaAaminho) {
@@ -521,6 +616,9 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
   configurarChatCliente(pedido.id);
 }
 
+// ============================================================================
+// CHAT INTERNO DA CORRIDA
+// ============================================================================
 let chatIntervalCliente = null;
 
 function configurarChatCliente(pedidoId) {
@@ -602,9 +700,7 @@ async function carregarMensagensChatCliente(pedidoId) {
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
-      headers: { 
-        ...(token ? { Authorization: `Bearer ${token}` } : {}) 
-      }
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
     });
     if (!resp.ok) return;
     const msgs = await resp.json();
@@ -613,7 +709,6 @@ async function carregarMensagensChatCliente(pedidoId) {
     
     msgs.forEach(m => {
       const souEu = (String(m.remetente_id) === String(meuId));
-      
       const alinhamento = souEu ? 'flex-end' : 'flex-start';
       const corFundo = souEu ? '#38BDF8' : '#1F2937';
       const corTexto = souEu ? '#000' : '#FFF';
@@ -636,6 +731,9 @@ async function carregarMensagensChatCliente(pedidoId) {
   }
 }
 
+// ============================================================================
+// ENVIO DE AVALIAÇÃO E GORJETA
+// ============================================================================
 async function enviarAvaliacaoCorrida() {
   if (!corridaParaAvaliarId) return;
 
@@ -650,7 +748,8 @@ async function enviarAvaliacaoCorrida() {
       btn.textContent = 'Enviando...';
     }
 
-    const resp = await fetch(`${API_URL}/api/pedidos/${corridaParaAvaliarId}/avaliar`, {
+    // 1. Enviar Avaliação
+    await fetch(`${API_URL}/api/pedidos/${corridaParaAvaliarId}/avaliar`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -659,7 +758,24 @@ async function enviarAvaliacaoCorrida() {
       body: JSON.stringify({ nota: notaSelecionada, comentario })
     });
 
-    if (!resp.ok) throw new Error('Não foi possível registrar a avaliação.');
+    // 2. Enviar Gorjeta (se selecionada)
+    if (gorjetaSelecionada > 0) {
+      const resGorjeta = await fetch(`${API_URL}/api/carteira/gorjeta`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          pedidoId: corridaParaAvaliarId,
+          valorGorjeta: gorjetaSelecionada
+        })
+      });
+
+      if (resGorjeta.ok) {
+        await carregarSaldoCarteiraCliente();
+      }
+    }
 
     alert('Obrigado pela sua avaliação!');
   } catch (err) {
@@ -673,6 +789,9 @@ async function enviarAvaliacaoCorrida() {
   }
 }
 
+// ============================================================================
+// CANCELAMENTO E RESET
+// ============================================================================
 async function cancelarBusca() {
   if (pedidoAtivoId) {
     const token = localStorage.getItem('huby_token');
@@ -802,6 +921,6 @@ async function carregarEExibirHistoricoModal() {
       </div>
     `).join('');
   } catch (err) {
-    if (container) container.innerHTML = '<p class="loading-txt" style="color: #EF4444;">${err.message}</p>';
+    if (container) container.innerHTML = `<p class="loading-txt" style="color: #EF4444;">${err.message}</p>`;
   }
 }
