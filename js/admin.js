@@ -1,7 +1,7 @@
 import { API_URL } from './config.js';
 
 // ==========================================
-// VERIFICAÇÃO DE SEGURANÇA ADMIN MULTI-ROLE
+// SEGURANÇA E ACESSO
 // ==========================================
 const token = localStorage.getItem('huby_token');
 let role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
@@ -15,10 +15,10 @@ if (token && !role) {
     }).join(''));
 
     const payload = JSON.parse(jsonPayload);
-    role = String(payload.role || payload.tipo || '').toLowerCase();
+    role = String(payload.role || payload.funcao || payload.tipo || '').toLowerCase();
     if (role) localStorage.setItem('huby_user_role', role);
   } catch (e) {
-    console.warn('Erro ao decodificar token no admin:', e);
+    console.warn('Erro ao decodificar token:', e);
   }
 }
 
@@ -33,7 +33,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     
     btn.classList.add('active');
-    document.getElementById(btn.dataset.tab).classList.add('active');
+    const pane = document.getElementById(btn.dataset.tab);
+    if (pane) pane.classList.add('active');
+
+    if (btn.dataset.tab === 'tabMetricas') {
+      carregarMetricas();
+    }
   });
 });
 
@@ -42,56 +47,88 @@ const fMoeda = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', curr
 let chartFin = null;
 let chartCat = null;
 
-// 1. CARREGAR MÉTRICAS E GRÁFICOS
+// ==========================================
+// 1. CARREGAR MÉTRICAS E RENDERIZAR GRÁFICOS
+// ==========================================
 async function carregarMetricas() {
   try {
-    const res = await fetch(`${API_URL}/api/admin/metricas`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(`${API_URL}/api/admin/metricas`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (!res.ok) throw new Error('Falha ao obter métricas');
     const dados = await res.json();
 
-    const bruto = Number(dados.financeiro.faturamento_total) || 0;
-    const repasse = Number(dados.financeiro.total_pago_motoristas) || 0;
-    const liquido = Number(dados.financeiro.lucro_plataforma) || 0;
+    const bruto = Number(dados.financeiro?.faturamento_total ?? dados.faturamentoBruto ?? 0);
+    const repasse = Number(dados.financeiro?.total_pago_motoristas ?? dados.repasseMotoristas ?? 0);
+    const liquido = Number(dados.financeiro?.lucro_plataforma ?? dados.receitaPlataforma ?? 0);
+    const pedidos = dados.pedidos || { pendentes: dados.chamadasEmAberto || 0, concluidos: dados.totalCorridas || 0, cancelados: 0 };
 
     document.getElementById('metricBruto').textContent = fMoeda(bruto);
     document.getElementById('metricLiquido').textContent = fMoeda(liquido);
     document.getElementById('metricRepasse').textContent = fMoeda(repasse);
-    document.getElementById('metricRadar').textContent = dados.pedidos.pendentes;
+    document.getElementById('metricConcluidas').textContent = pedidos.concluidos || 0;
+    document.getElementById('metricMotoristas').textContent = dados.motoristas?.total ?? dados.motoristasAtivos ?? 0;
 
-    renderizarGraficos(bruto, liquido, repasse, dados.pedidos);
+    renderizarGraficos(bruto, liquido, repasse, pedidos);
   } catch (err) {
     console.error("Erro ao carregar métricas:", err);
   }
 }
 
 function renderizarGraficos(bruto, liquido, repasse, pedidos) {
-  const ctxFin = document.getElementById('chartFinanceiro')?.getContext('2d');
-  if (ctxFin) {
-    if (chartFin) chartFin.destroy();
-    chartFin = new Chart(ctxFin, {
-      type: 'doughnut',
-      data: {
-        labels: ['Lucro HUBy (15%)', 'Repasse Motoristas (85%)'],
-        datasets: [{ data: [liquido, repasse], backgroundColor: ['#38BDF8', '#F59E0B'], borderWidth: 0 }]
-      },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#FFF' } } } }
-    });
-  }
+  const canvasFin = document.getElementById('chartFinanceiro');
+  const canvasCat = document.getElementById('chartCategorias');
 
-  const ctxCat = document.getElementById('chartCategorias')?.getContext('2d');
-  if (ctxCat) {
-    if (chartCat) chartCat.destroy();
-    chartCat = new Chart(ctxCat, {
-      type: 'bar',
-      data: {
-        labels: ['Pendentes', 'Concluídos', 'Cancelados'],
-        datasets: [{ label: 'Qtd', data: [pedidos.pendentes, pedidos.concluidos, pedidos.cancelados], backgroundColor: ['#F59E0B', '#10B981', '#F43F5E'] }]
-      },
-      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#64748B' } }, x: { ticks: { color: '#64748B' } } } }
-    });
-  }
+  if (!canvasFin || !canvasCat) return;
+
+  if (chartFin) chartFin.destroy();
+  chartFin = new Chart(canvasFin.getContext('2d'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Lucro HUBy', 'Repasse Parceiros'],
+      datasets: [{
+        data: [liquido > 0 ? liquido : 1, repasse > 0 ? repasse : 1],
+        backgroundColor: ['#38BDF8', '#F59E0B'],
+        borderWidth: 0
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#FFF' } }
+      }
+    }
+  });
+
+  if (chartCat) chartCat.destroy();
+  chartCat = new Chart(canvasCat.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Pendentes', 'Concluídos', 'Cancelados'],
+      datasets: [{
+        label: 'Viagens',
+        data: [pedidos.pendentes || 0, pedidos.concluidos || 0, pedidos.cancelados || 0],
+        backgroundColor: ['#F59E0B', '#10B981', '#EF4444'],
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, ticks: { color: '#64748B' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        x: { ticks: { color: '#64748B' }, grid: { display: false } }
+      }
+    }
+  });
 }
 
-// 2. GESTÃO DE SAQUES
+// ==========================================
+// 2. GESTÃO DE SAQUES PIX
+// ==========================================
 async function carregarSaques() {
   const tbody = document.getElementById('tabelaSaquesBody');
   if (!tbody) return;
@@ -99,59 +136,64 @@ async function carregarSaques() {
     const res = await fetch(`${API_URL}/api/admin/saques`, { headers: { 'Authorization': `Bearer ${token}` } });
     const saques = await res.json();
     
-    if (saques.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted);">Nenhum pedido de saque.</td></tr>';
+    if (!saques || saques.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--muted); padding: 20px;">Nenhum pedido de saque registrado.</td></tr>';
       return;
     }
 
     tbody.innerHTML = saques.map(s => {
       let botoesAcao = '';
       if (s.status === 'pendente') {
-        botoesAcao = '<button class="btn-tbl app" onclick="aprovarSaque(' + s.id + ')">Aprovar & Pagar</button>' +
-                     '<button class="btn-tbl rej" onclick="rejeitarSaque(' + s.id + ')" style="margin-left:4px;">Recusar</button>';
+        botoesAcao = `<button class="btn-tbl app" onclick="aprovarSaque(${s.id})">Aprovar & Pagar</button>
+                      <button class="btn-tbl rej" onclick="rejeitarSaque(${s.id})" style="margin-left:4px;">Recusar</button>`;
       } else {
-        botoesAcao = '<small style="color: var(--muted);">Já processado</small>';
+        botoesAcao = '<small style="color: var(--muted);">Processado</small>';
       }
 
       let cssBadge = 'badge-pendente';
       if (s.status === 'pago') cssBadge = 'badge-pago';
       if (s.status === 'recusado') cssBadge = 'badge-recusado';
 
-      return '<tr>' +
-        '<td>#' + s.id + '</td>' +
-        '<td><strong>' + s.motorista_nome + '</strong></td>' +
-        '<td><span style="color: #38BDF8; font-family: monospace;">' + s.chave_pix + '</span> (' + s.tipo_chave + ')</td>' +
-        '<td style="color: #10B981; font-weight: 800;">' + fMoeda(s.valor) + '</td>' +
-        '<td><span class="badge ' + cssBadge + '">' + s.status + '</span></td>' +
-        '<td>' + botoesAcao + '</td>' +
-      '</tr>';
+      return `<tr>
+        <td>#${s.id}</td>
+        <td><strong>${s.motorista_nome || 'Motorista'}</strong></td>
+        <td><span style="color: #38BDF8; font-family: monospace;">${s.chave_pix}</span> (${s.tipo_chave})</td>
+        <td style="color: #10B981; font-weight: 800;">${fMoeda(s.valor)}</td>
+        <td><span class="badge ${cssBadge}">${s.status}</span></td>
+        <td>${botoesAcao}</td>
+      </tr>`;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--rose);">Erro de conexão.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--rose);">Erro ao carregar lista de saques.</td></tr>';
   }
 }
 
 window.aprovarSaque = async (id) => {
-  if (!confirm('Confirma que já enviou o dinheiro por Pix para o parceiro?')) return;
+  if (!confirm('Confirma que realizou a transferência Pix para o parceiro?')) return;
   try {
     await fetch(`${API_URL}/api/admin/saques/${id}/aprovar`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
     alert('Saque marcado como PAGO!');
     carregarSaques();
-  } catch (e) { alert('Erro ao aprovar.'); }
+    carregarMetricas();
+  } catch (e) { alert('Erro ao processar aprovação.'); }
 };
 
 window.rejeitarSaque = async (id) => {
-  const motivo = prompt("Motivo da recusa:");
+  const motivo = prompt("Motivo da recusa do saque:");
   if (!motivo) return;
   try {
     await fetch(`${API_URL}/api/admin/saques/${id}/rejeitar`, { 
-      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ motivo })
+      method: 'PUT', 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+      body: JSON.stringify({ motivo })
     });
     carregarSaques();
-  } catch (e) { alert('Erro ao rejeitar.'); }
+  } catch (e) { alert('Erro ao recusar saque.'); }
 };
 
+// ==========================================
 // 3. GESTÃO DE FROTA
+// ==========================================
 async function carregarFrota() {
   const tbody = document.getElementById('tabelaFrotaBody');
   if (!tbody) return;
@@ -159,44 +201,51 @@ async function carregarFrota() {
     const res = await fetch(`${API_URL}/api/admin/motoristas`, { headers: { 'Authorization': `Bearer ${token}` } });
     const motoristas = await res.json();
 
+    if (!motoristas || motoristas.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 20px;">Nenhum motorista cadastrado na base.</td></tr>';
+      return;
+    }
+
     tbody.innerHTML = motoristas.map(m => {
-      let btnDoc = m.doc_crlv_url ? '<button class="btn-tbl" style="background:#38BDF8; color:#000;" onclick="verDoc(\'' + m.doc_crlv_url + '\')">Ver Doc</button>' : '<small>Sem doc</small>';
+      let btnDoc = m.doc_crlv_url ? `<button class="btn-tbl" style="background:#38BDF8; color:#000;" onclick="verDoc('${m.doc_crlv_url}')">Ver Doc</button>` : '<small>Sem anexo</small>';
       
       let botoesMot = '';
       if (m.status_aprovacao === 'pendente') {
-        botoesMot = '<button class="btn-tbl app" onclick="alterarStatusMot(\'' + m.id + '\', \'aprovado\')">Aprovar</button>' +
-                    '<button class="btn-tbl rej" onclick="alterarStatusMot(\'' + m.id + '\', \'recusado\')" style="margin-left:4px;">Bloquear</button>';
+        botoesMot = `<button class="btn-tbl app" onclick="alterarStatusMot('${m.id}', 'aprovar')">Aprovar</button>
+                    <button class="btn-tbl rej" onclick="alterarStatusMot('${m.id}', 'recusar')" style="margin-left:4px;">Bloquear</button>`;
       } else {
-        botoesMot = '<button class="btn-tbl rej" onclick="alterarStatusMot(\'' + m.id + '\', \'recusado\')">Suspender</button>';
+        botoesMot = `<button class="btn-tbl rej" onclick="alterarStatusMot('${m.id}', 'recusar')">Suspender</button>`;
       }
 
       let cssStatus = 'badge-pendente';
       if (m.status_aprovacao === 'aprovado') cssStatus = 'badge-aprovado';
       if (m.status_aprovacao === 'recusado') cssStatus = 'badge-recusado';
 
-      return '<tr>' +
-        '<td><strong>' + m.nome + '</strong><br><small style="color:var(--muted);">' + m.telefone + '</small></td>' +
-        '<td>' + m.veiculo_modelo + '<br><strong style="letter-spacing: 1px; color:#FFF;">' + m.veiculo_placa + '</strong></td>' +
-        '<td>' + (m.categoria || '').toUpperCase() + '</td>' +
-        '<td style="color: #10B981; font-weight: 800;">' + fMoeda(m.saldo_carteira) + '</td>' +
-        '<td><span class="badge ' + cssStatus + '">' + m.status_aprovacao + '</span></td>' +
-        '<td>' + btnDoc + '</td>' +
-        '<td>' + botoesMot + '</td>' +
-      '</tr>';
+      return `<tr>
+        <td><strong>${m.nome}</strong><br><small style="color:var(--muted);">${m.telefone || 'Sem contato'}</small></td>
+        <td>${m.veiculo_modelo || 'Veículo'}<br><strong style="letter-spacing: 1px; color:#FFF;">${m.veiculo_placa || '---'}</strong></td>
+        <td>${(m.categoria_veiculo || m.categoria || '').toUpperCase()}</td>
+        <td style="color: #10B981; font-weight: 800;">${fMoeda(m.saldo_carteira)}</td>
+        <td><span class="badge ${cssStatus}">${m.status_aprovacao}</span></td>
+        <td>${btnDoc}</td>
+        <td>${botoesMot}</td>
+      </tr>`;
     }).join('');
   } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose);">Erro ao carregar parceiros.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose);">Erro ao consultar frota.</td></tr>';
   }
 }
 
-window.alterarStatusMot = async (id, status) => {
-  if (!confirm(`Deseja alterar o motorista para ${status}?`)) return;
+window.alterarStatusMot = async (id, acao) => {
+  if (!confirm(`Deseja aplicar a ação "${acao}" neste motorista?`)) return;
   try {
-    await fetch(`${API_URL}/api/admin/motoristas/${id}/status`, { 
-      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ status_aprovacao: status })
+    await fetch(`${API_URL}/api/admin/motoristas/${id}/triagem`, { 
+      method: 'PUT', 
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+      body: JSON.stringify({ acao })
     });
     carregarFrota();
-  } catch (e) { alert('Erro na alteração.'); }
+  } catch (e) { alert('Erro ao alterar status.'); }
 };
 
 window.verDoc = (url) => {
@@ -213,7 +262,9 @@ document.getElementById('btnFecharModalPreview')?.addEventListener('click', () =
   if (modal) modal.style.display = 'none';
 });
 
+// ==========================================
 // 4. MONITOR DE VIAGENS
+// ==========================================
 async function carregarViagens() {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
@@ -221,32 +272,77 @@ async function carregarViagens() {
     const res = await fetch(`${API_URL}/api/admin/pedidos`, { headers: { 'Authorization': `Bearer ${token}` } });
     const viagens = await res.json();
     
+    if (!viagens || viagens.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--muted); padding: 20px;">Nenhuma viagem solicitada até o momento.</td></tr>';
+      return;
+    }
+
     tbody.innerHTML = viagens.map(v => {
-      const taxa = Number(v.valor_total) * 0.15;
+      const taxa = Number(v.valor_total || 0) * 0.15;
       let badgeClass = 'badge-concluido';
       if (v.status === 'pendente') badgeClass = 'badge-pendente';
       if (v.status === 'cancelado') badgeClass = 'badge-cancelado';
       if (v.status === 'aceito') badgeClass = 'badge-aceito';
 
-      return '<tr>' +
-        '<td><small style="color:var(--muted)">' + String(v.id).substring(0,8) + '</small></td>' +
-        '<td>' + (v.sub_tipo_label || v.tipo) + '</td>' +
-        '<td>' + Number(v.distancia_km).toFixed(1) + ' km</td>' +
-        '<td style="color: #F59E0B; font-weight: 800;">' + fMoeda(v.valor_total) + '</td>' +
-        '<td style="color: #38BDF8; font-weight: 800;">+ ' + fMoeda(taxa) + '</td>' +
-        '<td>' + (v.motorista_nome || 'Nenhum') + '</td>' +
-        '<td><span class="badge ' + badgeClass + '">' + v.status + '</span></td>' +
-      '</tr>';
+      return `<tr>
+        <td><small style="color:var(--muted)">${String(v.id).substring(0,8)}</small></td>
+        <td>${v.sub_tipo_label || v.tipo}</td>
+        <td>${Number(v.distancia_km || 0).toFixed(1)} km</td>
+        <td style="color: #F59E0B; font-weight: 800;">${fMoeda(v.valor_total)}</td>
+        <td style="color: #38BDF8; font-weight: 800;">+ ${fMoeda(taxa)}</td>
+        <td>${v.motorista_nome || 'Aguardando'}</td>
+        <td><span class="badge ${badgeClass}">${v.status}</span></td>
+      </tr>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose);">Erro ao monitorizar viagens.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose);">Erro ao carregar viagens.</td></tr>';
   }
 }
 
-document.getElementById('btnSincronizar')?.addEventListener('click', () => {
-  carregarMetricas(); carregarSaques(); carregarFrota(); carregarViagens();
+// ==========================================
+// 5. SALVAR REGRAS DE NEGÓCIO E TAXAS
+// ==========================================
+document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const taxa_plataforma = document.getElementById('cfgTaxaPlataforma').value;
+  const tarifa_km_carro = document.getElementById('cfgKmCarro').value;
+  const tarifa_km_moto = document.getElementById('cfgKmMoto').value;
+  const tarifa_km_entrega = document.getElementById('cfgKmEntrega').value;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/tarifas`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        taxa_plataforma: Number(taxa_plataforma),
+        tarifa_km_carro: Number(tarifa_km_carro),
+        tarifa_km_moto: Number(tarifa_km_moto),
+        tarifa_km_entrega: Number(tarifa_km_entrega)
+      })
+    });
+
+    if (res.ok) {
+      alert('Configurações salvas e aplicadas a toda a plataforma!');
+    } else {
+      alert('Erro ao gravar configurações no servidor.');
+    }
+  } catch (err) {
+    alert('Erro de conexão ao salvar configurações.');
+  }
 });
 
+// Ações Globais
+document.getElementById('btnSincronizar')?.addEventListener('click', () => {
+  carregarMetricas();
+  carregarSaques();
+  carregarFrota();
+  carregarViagens();
+});
+
+// Inicialização imediata
 carregarMetricas();
 carregarSaques();
 carregarFrota();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HUBy - Painel de Controle</title>
+  <title>HUBy - Painel de Controle Master</title>
   <link rel="stylesheet" href="./css/base.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
@@ -23,7 +23,7 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       margin: 0;
-      padding: 20px;
+      padding: 24px;
       box-sizing: border-box;
     }
     header {
@@ -35,7 +35,7 @@
       border-bottom: 1px solid var(--border);
     }
     .brand-title {
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 800;
       letter-spacing: -0.5px;
     }
@@ -49,10 +49,12 @@
       font-weight: 700;
       cursor: pointer;
       font-size: 13px;
+      transition: opacity 0.2s;
     }
+    .btn-sync:hover { opacity: 0.9; }
     .metrics-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
       gap: 16px;
       margin-bottom: 24px;
     }
@@ -63,15 +65,15 @@
       padding: 18px;
     }
     .metric-title {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--muted);
-      font-weight: 600;
+      font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
     .metric-value {
-      font-size: 26px;
-      font-weight: 800;
+      font-size: 24px;
+      font-weight: 900;
       margin-top: 8px;
     }
     .tabs-nav {
@@ -147,16 +149,45 @@
     .btn-tbl.rej { background: var(--rose); color: #FFF; }
     .charts-container {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
       gap: 20px;
-      margin-top: 20px;
+      margin-top: 10px;
     }
     .chart-box {
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 14px;
       padding: 20px;
-      height: 280px;
+      height: 300px;
+      position: relative;
+    }
+    .config-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      max-width: 600px;
+    }
+    .config-group {
+      margin-bottom: 18px;
+    }
+    .config-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      color: var(--muted);
+    }
+    .config-group input {
+      width: 100%;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+      color: #FFF;
+      font-size: 14px;
+      outline: none;
+      box-sizing: border-box;
     }
     .modal-preview {
       display: none;
@@ -177,52 +208,61 @@
 <body>
 
   <header>
-    <div class="brand-title">HUBy <span>Admin</span></div>
-    <div style="display: flex; gap: 10px; align-items: center;">
+    <div class="brand-title">HUBy <span>Admin Master</span></div>
+    <div style="display: flex; gap: 12px; align-items: center;">
       <a href="./index.html" style="color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;">Voltar ao Mapa</a>
-      <button type="button" id="btnSincronizar" class="btn-sync">Atualizar</button>
+      <button type="button" id="btnSincronizar" class="btn-sync">↻ Atualizar</button>
     </div>
   </header>
 
+  <!-- CARTÕES DE MÉTRICAS -->
   <section class="metrics-grid">
     <div class="metric-card">
-      <div class="metric-title">Faturamento Total</div>
+      <div class="metric-title">Faturamento Bruto</div>
       <div id="metricBruto" class="metric-value">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Lucro HUBy (15%)</div>
+      <div class="metric-title">Lucro HUBy</div>
       <div id="metricLiquido" class="metric-value" style="color: var(--blue);">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Repasse Motoristas (85%)</div>
+      <div class="metric-title">Repasse Parceiros</div>
       <div id="metricRepasse" class="metric-value" style="color: var(--amber);">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Corridas no Radar</div>
-      <div id="metricRadar" class="metric-value" style="color: var(--primary);">0</div>
+      <div class="metric-title">Viagens Concluídas</div>
+      <div id="metricConcluidas" class="metric-value" style="color: var(--primary);">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-title">Motoristas Ativos</div>
+      <div id="metricMotoristas" class="metric-value">0</div>
     </div>
   </section>
 
+  <!-- NAVEGAÇÃO POR ABAS -->
   <nav class="tabs-nav">
-    <button type="button" class="tab-btn active" data-tab="tabMetricas">Métricas & Gráficos</button>
-    <button type="button" class="tab-btn" data-tab="tabSaques">Gestão de Saques</button>
-    <button type="button" class="tab-btn" data-tab="tabFrota">Motoristas Parceiros</button>
-    <button type="button" class="tab-btn" data-tab="tabViagens">Monitor de Viagens</button>
+    <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho & Gráficos</button>
+    <button type="button" class="tab-btn" data-tab="tabSaques">💰 Saques Pix</button>
+    <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Gestão de Parceiros</button>
+    <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Monitor de Viagens</button>
+    <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Controle de Taxas & Preços</button>
   </nav>
 
-  <!-- ABA 1: MÉTRICAS -->
+  <!-- ABA 1: MÉTRICAS E GRÁFICOS -->
   <section id="tabMetricas" class="tab-pane active">
     <div class="charts-container">
       <div class="chart-box">
+        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Divisão Financeira</h4>
         <canvas id="chartFinanceiro"></canvas>
       </div>
       <div class="chart-box">
+        <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Fluxo de Pedidos</h4>
         <canvas id="chartCategorias"></canvas>
       </div>
     </div>
   </section>
 
-  <!-- ABA 2: SAQUES -->
+  <!-- ABA 2: GESTÃO DE SAQUES -->
   <section id="tabSaques" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -231,7 +271,7 @@
             <th>ID</th>
             <th>Motorista</th>
             <th>Chave Pix</th>
-            <th>Valor</th>
+            <th>Valor Solicitado</th>
             <th>Status</th>
             <th>Ações</th>
           </tr>
@@ -243,16 +283,16 @@
     </div>
   </section>
 
-  <!-- ABA 3: FROTA -->
+  <!-- ABA 3: GESTÃO DE FROTA -->
   <section id="tabFrota" class="tab-pane">
     <div class="table-responsive">
       <table>
         <thead>
           <tr>
             <th>Motorista</th>
-            <th>Veículo</th>
+            <th>Veículo & Placa</th>
             <th>Categoria</th>
-            <th>Saldo</th>
+            <th>Saldo em Carteira</th>
             <th>Status</th>
             <th>Documento</th>
             <th>Ações</th>
@@ -265,16 +305,16 @@
     </div>
   </section>
 
-  <!-- ABA 4: VIAGENS -->
+  <!-- ABA 4: MONITOR DE VIAGENS -->
   <section id="tabViagens" class="tab-pane">
     <div class="table-responsive">
       <table>
         <thead>
           <tr>
             <th>ID</th>
-            <th>Categoria</th>
+            <th>Modalidade</th>
             <th>Distância</th>
-            <th>Total</th>
+            <th>Total do Pedido</th>
             <th>Taxa HUBy</th>
             <th>Motorista</th>
             <th>Status</th>
@@ -287,11 +327,46 @@
     </div>
   </section>
 
+  <!-- ABA 5: CONTROLE DE TAXAS E PREÇOS -->
+  <section id="tabConfig" class="tab-pane">
+    <div class="config-card">
+      <h3 style="margin-top: 0; color: #FFF;">Configuração Geral da Plataforma</h3>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 20px;">
+        Altere o percentual de retenção da HUBy e o valor cobrado por km em cada categoria em tempo real.
+      </p>
+
+      <form id="formConfiguracoes">
+        <div class="config-group">
+          <label>Taxa da Plataforma Retida (%)</label>
+          <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
+        </div>
+
+        <div class="config-group">
+          <label>Tarifa por Km - HUBy Carro (R$)</label>
+          <input type="number" id="cfgKmCarro" step="0.10" value="2.50" required>
+        </div>
+
+        <div class="config-group">
+          <label>Tarifa por Km - HUBy Moto (R$)</label>
+          <input type="number" id="cfgKmMoto" step="0.10" value="1.80" required>
+        </div>
+
+        <div class="config-group">
+          <label>Tarifa por Km - HUBy Entrega (R$)</label>
+          <input type="number" id="cfgKmEntrega" step="0.10" value="2.00" required>
+        </div>
+
+        <button type="submit" class="btn-sync" style="width: 100%; padding: 14px; font-size: 14px;">Salvar Regras da Plataforma</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- MODAL DE VISUALIZAÇÃO DE DOCUMENTO -->
   <div id="modalPreviewFoto" class="modal-preview">
     <img id="imgPreviewVeiculo" src="" alt="Documento do Veículo">
     <button type="button" id="btnFecharModalPreview" style="position: absolute; top: 20px; right: 20px; background: #FFF; border: none; padding: 10px 16px; border-radius: 50%; font-weight: 800; cursor: pointer;">✕</button>
   </div>
 
-  <script type="module" src="./js/admin.js?v=2.0.0"></script>
+  <script type="module" src="./js/admin.js?v=4.0.0"></script>
 </body>
 </html>

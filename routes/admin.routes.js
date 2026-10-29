@@ -5,9 +5,10 @@ import { autenticarToken } from './pedidos.routes.js';
 
 const router = express.Router();
 
-// Middleware exclusivo para verificar se é Admin
+// Middleware flexível: aceita 'admin' e 'administrador'
 function verificarAdmin(req, res, next) {
-  if (!req.usuario || req.usuario.role !== 'admin') {
+  const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase();
+  if (role !== 'admin' && role !== 'administrador') {
     return res.status(403).json({ erro: 'Acesso restrito à administração.' });
   }
   next();
@@ -24,15 +25,16 @@ router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
       WHERE status = 'concluido';
     `;
 
-    const faturamentoBruto = Number(statsFinanceiro[0].faturamento_bruto || 0);
+    const faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_bruto || 0);
     const receitaPlataforma = Number((faturamentoBruto * 0.15).toFixed(2));
     const repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
 
     const statsUsuarios = await sql`
       SELECT 
         (SELECT COUNT(*) FROM motoristas WHERE status_aprovacao = 'aprovado') AS motoristas_ativos,
-        (SELECT COUNT(*) FROM usuarios WHERE role = 'cliente') AS total_clientes,
-        (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente') AS chamadas_em_aberto;
+        (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente') AS chamadas_em_aberto,
+        (SELECT COUNT(*) FROM pedidos WHERE status = 'concluido') AS chamadas_concluidas,
+        (SELECT COUNT(*) FROM pedidos WHERE status = 'cancelado') AS chamadas_canceladas;
     `;
 
     const ultimasChamadas = await sql`
@@ -42,14 +44,24 @@ router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
       LIMIT 20;
     `;
 
+    // Resposta compatível com ambos os formatos
     res.json({
+      financeiro: {
+        faturamento_total: faturamentoBruto,
+        lucro_plataforma: receitaPlataforma,
+        total_pago_motoristas: repasseMotoristas
+      },
+      pedidos: {
+        pendentes: Number(statsUsuarios[0]?.chamadas_em_aberto || 0),
+        concluidos: Number(statsUsuarios[0]?.chamadas_concluidas || 0),
+        cancelados: Number(statsUsuarios[0]?.chamadas_canceladas || 0)
+      },
+      motoristas: {
+        total: Number(statsUsuarios[0]?.motoristas_ativos || 0)
+      },
       faturamentoBruto,
       receitaPlataforma,
       repasseMotoristas,
-      totalCorridas: Number(statsFinanceiro[0].total_corridas_concluidas || 0),
-      motoristasAtivos: Number(statsUsuarios[0].motoristas_ativos || 0),
-      totalClientes: Number(statsUsuarios[0].total_clientes || 0),
-      chamadasEmAberto: Number(statsUsuarios[0].chamadas_em_aberto || 0),
       ultimasChamadas
     });
   } catch (err) {
@@ -58,7 +70,7 @@ router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
   }
 });
 
-// 2. Listar Motoristas para Gestão
+// 2. Listar Motoristas
 router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const motoristas = await sql`
@@ -75,7 +87,7 @@ router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
   }
 });
 
-// 3. Triagem de Motoristas (Aprovar/Recusar)
+// 3. Triagem de Motoristas (Aprovar/Recusar/Suspender)
 router.put('/motoristas/:id/triagem', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -102,6 +114,22 @@ router.put('/motoristas/:id/triagem', autenticarToken, verificarAdmin, async (re
   } catch (err) {
     console.error('Erro na triagem:', err);
     res.status(500).json({ erro: 'Falha ao processar triagem.' });
+  }
+});
+
+// Rota auxiliar para compatibilidade de status
+router.put('/motoristas/:id/status', autenticarToken, verificarAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status_aprovacao } = req.body;
+    await sql`
+      UPDATE motoristas
+      SET status_aprovacao = ${status_aprovacao}
+      WHERE id = ${id};
+    `;
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao alterar status.' });
   }
 });
 
@@ -157,15 +185,52 @@ router.put('/saques/:id/processar', autenticarToken, verificarAdmin, async (req,
   }
 });
 
-// 6. Atualizar Tarifas Dinâmicas
+// Rotas auxiliares para compatibilidade de aprovar/rejeitar
+router.put('/saques/:id/aprovar', autenticarToken, verificarAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await sql`UPDATE saques_motoristas SET status = 'pago', pago_em = CURRENT_TIMESTAMP WHERE id = ${id};`;
+    res.json({ sucesso: true });
+  } catch (e) {
+    res.status(500).json({ erro: 'Erro ao aprovar saque.' });
+  }
+});
+
+router.put('/saques/:id/rejeitar', autenticarToken, verificarAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { motivo } = req.body;
+    await sql`UPDATE saques_motoristas SET status = 'recusado', motivo_recusa = ${motivo || 'Recusado'} WHERE id = ${id};`;
+    res.json({ sucesso: true });
+  } catch (e) {
+    res.status(500).json({ erro: 'Erro ao rejeitar saque.' });
+  }
+});
+
+// 6. Listar Pedidos/Viagens para o Admin
+router.get('/pedidos', autenticarToken, verificarAdmin, async (req, res) => {
+  try {
+    const viagens = await sql`
+      SELECT id, criado_em, tipo, sub_tipo_label, distancia_km, valor_total, motorista_nome, status
+      FROM pedidos
+      ORDER BY criado_em DESC
+      LIMIT 100;
+    `;
+    res.json(viagens);
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao listar corridas.' });
+  }
+});
+
+// 7. Atualizar Tarifas e Regras de Negócio
 router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const novasTarifas = req.body;
     await sql`
-      UPDATE configuracoes_plataforma
-      SET valor = ${JSON.stringify(novasTarifas)}::jsonb,
-          atualizado_em = CURRENT_TIMESTAMP
-      WHERE chave = 'tarifas';
+      INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
+      VALUES ('tarifas', ${JSON.stringify(novasTarifas)}::jsonb, CURRENT_TIMESTAMP)
+      ON CONFLICT (chave) DO UPDATE
+      SET valor = ${JSON.stringify(novasTarifas)}::jsonb, atualizado_em = CURRENT_TIMESTAMP;
     `;
     res.json({ sucesso: true, mensagem: 'Tarifas atualizadas com sucesso!' });
   } catch (err) {
@@ -174,7 +239,7 @@ router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
   }
 });
 
-// 7. Relatório CSV de Corridas
+// 8. Relatório CSV de Corridas
 router.get('/relatorios/corridas.csv', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const registros = await sql`
