@@ -346,7 +346,14 @@ function renderizarRadar(pedidos) {
     return;
   }
 
-  feedEl.innerHTML = pedidos.map(p => `
+  feedEl.innerHTML = pedidos.map(p => {
+    // CORREÇÃO: Extração segura das coordenadas vindas do banco de dados do servidor
+    const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
+    const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
+    const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
+    const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
+
+    return `
     <div class="order-card">
       <div class="order-card-header">
         <span class="order-badge">${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}</span>
@@ -360,14 +367,14 @@ function renderizarRadar(pedidos) {
       <button type="button" 
               class="btn-accept-order" 
               data-id="${p.id}" 
-              data-lat-orig="${p.origem_lat || ''}" 
-              data-lng-orig="${p.origem_lng || ''}" 
-              data-lat-dest="${p.destino_lat || ''}" 
-              data-lng-dest="${p.destino_lng || ''}">
+              data-lat-orig="${latOrig}" 
+              data-lng-orig="${lngOrig}" 
+              data-lat-dest="${latDest}" 
+              data-lng-dest="${lngDest}">
         Aceitar Corrida
       </button>
     </div>
-  `).join('');
+  `}).join('');
 
   feedEl.querySelectorAll('.btn-accept-order').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -405,7 +412,6 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
     const btnChat = document.getElementById('btnAbrirChat');
     if (btnChat) btnChat.style.display = 'flex';
 
-    // ATUALIZAÇÃO 2.0: Interface do Motorista com Tempos de Chegada (Azul = Passageiro, Verde = Destino)
     const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
     if (feed) {
       feed.innerHTML = `
@@ -442,7 +448,7 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
       // MOTOR DE ROTA 2: Quando o cliente entra no carro, traça a rota até ao destino
       document.getElementById('btnNavegarDestino')?.addEventListener('click', async () => {
          if (coordsOrig && coordsDest && hubyMapa) {
-             await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981'); // Cor Verde Padrão
+             await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981'); 
              const lblTempo = document.getElementById('lblTempoPassageiro');
              if (lblTempo) {
                lblTempo.innerHTML = '🏁 A caminho do destino final!';
@@ -454,9 +460,13 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
 
     // MOTOR DE ROTA 1: Assim que aceita, traça rota GPS do Motorista -> Passageiro
     if (coordsOrig && hubyMapa) {
+        // Correção: Desenha a linha imediatamente com o GPS fixo para não deixar o mapa vazio
+        if (hubyMapa.coordsOrigem) {
+           hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsOrig, '#38BDF8');
+        }
+        
         hubyMapa.obterGPS(async (pos) => {
             try {
-                // Usa a cor #38BDF8 (Azul claro) para indicar que é o caminho ATÉ ao passageiro
                 const rotaAteCliente = await hubyMapa.calcularRota([pos.lat, pos.lng], coordsOrig, '#38BDF8');
                 const lblTempo = document.getElementById('lblTempoPassageiro');
                 if (lblTempo) {
