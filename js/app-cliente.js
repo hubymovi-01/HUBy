@@ -1,6 +1,6 @@
 import { API_URL, CATEGORIAS, calcularPreco, sincronizarTarifasServidor, MULTIPLICADOR_PICO } from './config.js';
 import { HubyMapa } from './mapa.js';
-import { configurarPesquisaLocal } from './pesquisa.js';
+import { configurarPesquisaLocal } from './pesquisa.js?v=6'; // O Cache Buster para o telemóvel forçar a leitura!
 
 let hubyMapa = null;
 let coordsDestino = null;
@@ -61,6 +61,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Erro ao inicializar mapa:', err);
   }
 
+  // ==========================================================================
+  // INICIA A MÁGICA DA BARRA DE PESQUISA AQUI! 
+  // (Foi isto que faltou para o botão acordar)
+  // ==========================================================================
+  configurarPesquisaLocal(hubyMapa, (rota, coords, nomeCurto) => {
+    rotaAtual = rota;
+    coordsDestino = coords;
+
+    const txtDestino = document.getElementById('txtDestinoSelecionado');
+    if (txtDestino) txtDestino.textContent = nomeCurto;
+
+    atualizarResumoValores(); 
+  });
+  // ==========================================================================
+
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
@@ -112,7 +127,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   configurarModalAvaliacao();
-  
   
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
