@@ -176,7 +176,6 @@ function verificarAcessoAdminMenu() {
   }
 
   try {
-    // CORREÇÃO CRÍTICA: Descodifica o token JWT do utilizador para extrair o role real
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
@@ -184,14 +183,14 @@ function verificarAcessoAdminMenu() {
     }).join(''));
 
     const payloadUser = JSON.parse(jsonPayload);
-    const roleServidor = payloadUser.role || payloadUser.tipo;
+    const roleServidor = String(payloadUser.role || payloadUser.tipo || '').toLowerCase();
 
-    // Guarda também no localStorage para sincronizar com o HTML
     if (roleServidor) {
       localStorage.setItem('huby_user_role', roleServidor);
     }
 
-    if (roleServidor === 'admin') {
+    // CORREÇÃO: Aceita tanto 'admin' quanto 'administrador'
+    if (roleServidor === 'admin' || roleServidor === 'administrador') {
       btnAdmin.style.display = 'flex';
     } else {
       btnAdmin.style.display = 'none';
@@ -243,7 +242,7 @@ function configurarDrawerMenu() {
   }
 
   btnMenu?.addEventListener('click', () => {
-    verificarAcessoAdminMenu(); // Garante verificação fresca ao abrir o menu
+    verificarAcessoAdminMenu();
     abrirDrawer();
   });
   backdrop?.addEventListener('click', fecharDrawer);
@@ -803,6 +802,6 @@ async function carregarEExibirHistoricoModal() {
       </div>
     `).join('');
   } catch (err) {
-    if (container) container.innerHTML = `<p class="loading-txt" style="color: #EF4444;">${err.message}</p>`;
+    if (container) container.innerHTML = '<p class="loading-txt" style="color: #EF4444;">${err.message}</p>';
   }
 }
