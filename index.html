@@ -86,6 +86,45 @@
       height: 100vh !important;
       z-index: 10;
     }
+
+    /* REFINAMENTO PREMIUM DA BARRA DE PESQUISA */
+    .search-glass-box {
+      padding: 4px 12px !important;
+      border-radius: 24px !important;
+      background: rgba(15, 23, 42, 0.85) !important;
+      border: 1px solid rgba(255,255,255,0.06) !important;
+    }
+    .search-glass-box input {
+      font-size: 14px !important;
+      font-weight: 500 !important;
+    }
+
+    /* DESIGN SOFISTICADO PARA AS CATEGORIAS */
+    .category-slider {
+      gap: 10px !important;
+      padding-bottom: 12px !important;
+    }
+    .category-chip {
+      background: rgba(255,255,255,0.02) !important;
+      border: 1px solid rgba(255,255,255,0.05) !important;
+      border-radius: 14px !important;
+      padding: 10px 14px !important;
+      min-width: 85px !important;
+      transition: all 0.3s ease !important;
+    }
+    .category-chip .cat-label {
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      color: #94A3B8 !important;
+    }
+    .category-chip.active {
+      background: rgba(16, 185, 129, 0.08) !important;
+      border-color: #10B981 !important;
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.15) !important;
+    }
+    .category-chip.active .cat-label {
+      color: #10B981 !important;
+    }
   </style>
 
   <script>
@@ -224,10 +263,23 @@
           class="cat-label">Carro</span></button>
       <button type="button" class="category-chip" data-id="moto"><span class="cat-icon">🏍️</span><span
           class="cat-label">Moto</span></button>
-      <button type="button" class="category-chip" data-id="flash_moto"><span class="cat-icon">⚡</span><span
-          class="cat-label">Flash</span></button>
-      <button type="button" class="category-chip" data-id="cargo_pickup"><span class="cat-icon">📦</span><span
-          class="cat-label">Frete</span></button>
+      <button type="button" class="category-chip" data-id="entrega"><span class="cat-icon">📦</span><span
+          class="cat-label">Entrega</span></button>
+    </div>
+
+    <!-- FORMULÁRIO INTELIGENTE DE ENTREGA (Escondido por padrão) -->
+    <div id="blocoDetalhesEntrega" style="display: none; margin-bottom: 16px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 14px;">
+      <div style="font-size: 11px; color: #10B981; font-weight: 800; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">📋 Detalhes da Encomenda</div>
+      
+      <input type="text" id="inputRecebedor" placeholder="Quem vai receber? (Nome e Telefone)" style="width: 100%; background: #090D16; border: 1px solid rgba(255,255,255,0.1); color: #FFF; padding: 12px 14px; border-radius: 8px; margin-bottom: 10px; font-size: 13px; outline: none; box-sizing: border-box;" />
+      
+      <select id="selectTipoItem" style="width: 100%; background: #090D16; border: 1px solid rgba(255,255,255,0.1); color: #FFF; padding: 12px 14px; border-radius: 8px; font-size: 13px; outline: none; box-sizing: border-box; appearance: none;">
+        <option value="" disabled selected>O que você está enviando?</option>
+        <option value="documento">📄 Documentos / Chaves (Envelope)</option>
+        <option value="pequeno">📦 Pacote Pequeno (Até 5kg)</option>
+        <option value="medio">🛍️ Pacote Médio / Compras (Até 15kg)</option>
+        <option value="fragil">🍷 Item Frágil / Bolos</option>
+      </select>
     </div>
 
     <div id="blocoResumo" class="trip-summary-card">
@@ -401,7 +453,7 @@
     </div>
   </div>
 
-  <script type="module" src="./js/app-cliente.js?v=4.0.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=5.0.0"></script>
   <script type="module">
     // LÓGICA DO MODAL DE SEGURANÇA
     const modalSeg = document.getElementById('modalSeguranca');

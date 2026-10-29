@@ -1,6 +1,6 @@
 import { API_URL, CATEGORIAS, calcularPreco, sincronizarTarifasServidor, MULTIPLICADOR_PICO } from './config.js';
 import { HubyMapa } from './mapa.js';
-import { configurarPesquisaLocal } from './pesquisa.js?v=6'; // O Cache Buster para o telemóvel forçar a leitura!
+import { configurarPesquisaLocal } from './pesquisa.js?v=6'; 
 
 let hubyMapa = null;
 let coordsDestino = null;
@@ -42,7 +42,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         txtDestino.textContent = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
       }
       
-      // Limpa a barra se o cliente clicar no mapa manualmente
       if (inputPesquisa) {
         inputPesquisa.value = 'Destino selecionado no mapa';
         document.getElementById('btnLimparPesquisa').style.display = 'block';
@@ -61,10 +60,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Erro ao inicializar mapa:', err);
   }
 
-  // ==========================================================================
-  // INICIA A MÁGICA DA BARRA DE PESQUISA AQUI! 
-  // (Foi isto que faltou para o botão acordar)
-  // ==========================================================================
   configurarPesquisaLocal(hubyMapa, (rota, coords, nomeCurto) => {
     rotaAtual = rota;
     coordsDestino = coords;
@@ -74,7 +69,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     atualizarResumoValores(); 
   });
-  // ==========================================================================
 
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
@@ -107,12 +101,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modal) modal.style.display = 'none';
   });
 
+  // ==========================================================================
+  // LÓGICA PREMIUM: SLIDER E MOSTRAR/ESCONDER FORMULÁRIO DE ENTREGA
+  // ==========================================================================
   const chips = document.querySelectorAll('.category-chip');
   chips.forEach(chip => {
     chip.addEventListener('click', () => {
       chips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       categoriaSelecionada = chip.getAttribute('data-id') || 'carro';
+      
+      const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
+      if (blocoEntrega) {
+        blocoEntrega.style.display = (categoriaSelecionada === 'entrega') ? 'block' : 'none';
+      }
+
       atualizarBotaoChamar();
       if (rotaAtual) atualizarResumoValores();
     });
@@ -270,8 +273,7 @@ function atualizarBotaoChamar() {
   const labels = {
     carro: 'Chamar HUBy Carro',
     moto: 'Chamar HUBy Moto',
-    flash_moto: 'Chamar HUBy Flash',
-    cargo_pickup: 'Chamar HUBy Frete'
+    entrega: 'Solicitar Entrega' // Botão ajustado para a nova nomenclatura
   };
   btn.textContent = labels[categoriaSelecionada] || 'Chamar HUBy';
 }
@@ -300,6 +302,18 @@ async function submeterPedido() {
     return;
   }
 
+  // ==========================================================================
+  // VALIDAÇÃO PREMIUM: IMPEDIR ENTREGA SEM DADOS DO RECEBEDOR
+  // ==========================================================================
+  if (categoriaSelecionada === 'entrega') {
+    const recebedorVal = document.getElementById('inputRecebedor')?.value.trim();
+    if (!recebedorVal) {
+      alert('Para a segurança da sua entrega, informe quem irá receber a encomenda (Nome e Telefone).');
+      return;
+    }
+  }
+  // ==========================================================================
+
   const token = localStorage.getItem('huby_token');
   const clienteId = localStorage.getItem('huby_user_id');
   const novoId = 'ped_' + Date.now().toString(36);
@@ -310,7 +324,19 @@ async function submeterPedido() {
   const lngOrig = hubyMapa?.coordsOrigem ? hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
   
   const txtDestino = document.getElementById('txtDestinoSelecionado');
-  const nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`;
+  let nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${coordsDestino[0].toFixed(4)}, ${coordsDestino[1].toFixed(4)})`;
+
+  // ==========================================================================
+  // INJETAR DADOS DA ENCOMENDA NO NOME DO DESTINO PARA O MOTORISTA VER
+  // ==========================================================================
+  if (categoriaSelecionada === 'entrega') {
+    const recebedor = document.getElementById('inputRecebedor')?.value || 'Não informado';
+    const tipoItemEl = document.getElementById('selectTipoItem');
+    const tipoItem = tipoItemEl && tipoItemEl.value !== "" ? tipoItemEl.options[tipoItemEl.selectedIndex].text : 'Encomenda genérica';
+    
+    nomeDestino += ` | 📦 Recebedor: ${recebedor} | 🏷️ ${tipoItem}`;
+  }
+  // ==========================================================================
 
   const payload = {
     id: novoId,
@@ -358,9 +384,11 @@ async function submeterPedido() {
 function mostrarAguardandoMotorista() {
   const cardStatus = document.getElementById('cardStatusViagem');
   const blocoResumo = document.getElementById('blocoResumo');
+  const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
   const btn = document.getElementById('btnPedirHuby');
 
   if (blocoResumo) blocoResumo.style.display = 'none';
+  if (blocoEntrega) blocoEntrega.style.display = 'none'; // Esconde o formulário ao chamar
   if (cardStatus) cardStatus.style.display = 'block';
 
   document.getElementById('statusTitulo').textContent = 'Radar Ativo: Procurando motorista...';
@@ -675,6 +703,7 @@ function resetarPainelCliente() {
 
   const cardStatus = document.getElementById('cardStatusViagem');
   const blocoResumo = document.getElementById('blocoResumo');
+  const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
   const btn = document.getElementById('btnPedirHuby');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
@@ -693,6 +722,11 @@ function resetarPainelCliente() {
 
   if (cardStatus) cardStatus.style.display = 'none';
   if (blocoResumo) blocoResumo.style.display = 'flex';
+  
+  // Ao resetar, se estava selecionado 'entrega', mostra o form de novo
+  if (blocoEntrega) {
+    blocoEntrega.style.display = (categoriaSelecionada === 'entrega') ? 'block' : 'none';
+  }
 
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const txtDist = document.getElementById('txtDistanciaEstimada');
