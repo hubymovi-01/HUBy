@@ -1,10 +1,28 @@
 import { API_URL } from './config.js';
 
-// Verificação de segurança admin
+// ==========================================
+// VERIFICAÇÃO DE SEGURANÇA ADMIN MULTI-ROLE
+// ==========================================
 const token = localStorage.getItem('huby_token');
-const role = localStorage.getItem('huby_user_role');
+let role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
 
-if (!token || role !== 'admin') {
+if (token && !role) {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+
+    const payload = JSON.parse(jsonPayload);
+    role = String(payload.role || payload.tipo || '').toLowerCase();
+    if (role) localStorage.setItem('huby_user_role', role);
+  } catch (e) {
+    console.warn('Erro ao decodificar token no admin:', e);
+  }
+}
+
+if (!token || (role !== 'admin' && role !== 'administrador')) {
   window.location.replace('./welcome.html');
 }
 
@@ -19,15 +37,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
   });
 });
 
-// Funções Utilitárias para Formatar Moeda
 const fMoeda = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val) || 0);
 
 let chartFin = null;
 let chartCat = null;
 
-// ==========================================
 // 1. CARREGAR MÉTRICAS E GRÁFICOS
-// ==========================================
 async function carregarMetricas() {
   try {
     const res = await fetch(`${API_URL}/api/admin/metricas`, { headers: { 'Authorization': `Bearer ${token}` } });
@@ -49,34 +64,37 @@ async function carregarMetricas() {
 }
 
 function renderizarGraficos(bruto, liquido, repasse, pedidos) {
-  const ctxFin = document.getElementById('chartFinanceiro').getContext('2d');
-  if(chartFin) chartFin.destroy();
-  chartFin = new Chart(ctxFin, {
-    type: 'doughnut',
-    data: {
-      labels: ['Lucro HUBy (15%)', 'Repasse Motoristas (85%)'],
-      datasets: [{ data: [liquido, repasse], backgroundColor: ['#38BDF8', '#F59E0B'], borderWidth: 0 }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#FFF' } } } }
-  });
+  const ctxFin = document.getElementById('chartFinanceiro')?.getContext('2d');
+  if (ctxFin) {
+    if (chartFin) chartFin.destroy();
+    chartFin = new Chart(ctxFin, {
+      type: 'doughnut',
+      data: {
+        labels: ['Lucro HUBy (15%)', 'Repasse Motoristas (85%)'],
+        datasets: [{ data: [liquido, repasse], backgroundColor: ['#38BDF8', '#F59E0B'], borderWidth: 0 }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#FFF' } } } }
+    });
+  }
 
-  const ctxCat = document.getElementById('chartCategorias').getContext('2d');
-  if(chartCat) chartCat.destroy();
-  chartCat = new Chart(ctxCat, {
-    type: 'bar',
-    data: {
-      labels: ['Pendentes', 'Concluídos', 'Cancelados'],
-      datasets: [{ label: 'Qtd', data: [pedidos.pendentes, pedidos.concluidos, pedidos.cancelados], backgroundColor: ['#F59E0B', '#10B981', '#F43F5E'] }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#64748B' } }, x: { ticks: { color: '#64748B' } } } }
-  });
+  const ctxCat = document.getElementById('chartCategorias')?.getContext('2d');
+  if (ctxCat) {
+    if (chartCat) chartCat.destroy();
+    chartCat = new Chart(ctxCat, {
+      type: 'bar',
+      data: {
+        labels: ['Pendentes', 'Concluídos', 'Cancelados'],
+        datasets: [{ label: 'Qtd', data: [pedidos.pendentes, pedidos.concluidos, pedidos.cancelados], backgroundColor: ['#F59E0B', '#10B981', '#F43F5E'] }]
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { ticks: { color: '#64748B' } }, x: { ticks: { color: '#64748B' } } } }
+    });
+  }
 }
 
-// ==========================================
-// 2. GESTÃO DE SAQUES PIX
-// ==========================================
+// 2. GESTÃO DE SAQUES
 async function carregarSaques() {
   const tbody = document.getElementById('tabelaSaquesBody');
+  if (!tbody) return;
   try {
     const res = await fetch(`${API_URL}/api/admin/saques`, { headers: { 'Authorization': `Bearer ${token}` } });
     const saques = await res.json();
@@ -114,30 +132,29 @@ async function carregarSaques() {
 }
 
 window.aprovarSaque = async (id) => {
-  if(!confirm('Confirma que já enviou o dinheiro por Pix para o parceiro?')) return;
+  if (!confirm('Confirma que já enviou o dinheiro por Pix para o parceiro?')) return;
   try {
     await fetch(`${API_URL}/api/admin/saques/${id}/aprovar`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
     alert('Saque marcado como PAGO!');
     carregarSaques();
-  } catch(e) { alert('Erro ao aprovar.'); }
-}
+  } catch (e) { alert('Erro ao aprovar.'); }
+};
 
 window.rejeitarSaque = async (id) => {
   const motivo = prompt("Motivo da recusa:");
-  if(!motivo) return;
+  if (!motivo) return;
   try {
     await fetch(`${API_URL}/api/admin/saques/${id}/rejeitar`, { 
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ motivo })
     });
     carregarSaques();
-  } catch(e) { alert('Erro ao rejeitar.'); }
-}
+  } catch (e) { alert('Erro ao rejeitar.'); }
+};
 
-// ==========================================
 // 3. GESTÃO DE FROTA
-// ==========================================
 async function carregarFrota() {
   const tbody = document.getElementById('tabelaFrotaBody');
+  if (!tbody) return;
   try {
     const res = await fetch(`${API_URL}/api/admin/motoristas`, { headers: { 'Authorization': `Bearer ${token}` } });
     const motoristas = await res.json();
@@ -154,8 +171,8 @@ async function carregarFrota() {
       }
 
       let cssStatus = 'badge-pendente';
-      if(m.status_aprovacao === 'aprovado') cssStatus = 'badge-aprovado';
-      if(m.status_aprovacao === 'recusado') cssStatus = 'badge-recusado';
+      if (m.status_aprovacao === 'aprovado') cssStatus = 'badge-aprovado';
+      if (m.status_aprovacao === 'recusado') cssStatus = 'badge-recusado';
 
       return '<tr>' +
         '<td><strong>' + m.nome + '</strong><br><small style="color:var(--muted);">' + m.telefone + '</small></td>' +
@@ -173,28 +190,33 @@ async function carregarFrota() {
 }
 
 window.alterarStatusMot = async (id, status) => {
-  if(!confirm(`Deseja alterar o motorista para ${status}?`)) return;
+  if (!confirm(`Deseja alterar o motorista para ${status}?`)) return;
   try {
     await fetch(`${API_URL}/api/admin/motoristas/${id}/status`, { 
       method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ status_aprovacao: status })
     });
     carregarFrota();
-  } catch(e) { alert('Erro na alteração.'); }
-}
+  } catch (e) { alert('Erro na alteração.'); }
+};
 
 window.verDoc = (url) => {
-  document.getElementById('imgPreviewVeiculo').src = url;
-  document.getElementById('modalPreviewFoto').style.display = 'flex';
-}
-document.getElementById('btnFecharModalPreview').addEventListener('click', () => {
-  document.getElementById('modalPreviewFoto').style.display = 'none';
+  const img = document.getElementById('imgPreviewVeiculo');
+  const modal = document.getElementById('modalPreviewFoto');
+  if (img && modal) {
+    img.src = url;
+    modal.style.display = 'flex';
+  }
+};
+
+document.getElementById('btnFecharModalPreview')?.addEventListener('click', () => {
+  const modal = document.getElementById('modalPreviewFoto');
+  if (modal) modal.style.display = 'none';
 });
 
-// ==========================================
 // 4. MONITOR DE VIAGENS
-// ==========================================
 async function carregarViagens() {
   const tbody = document.getElementById('tabelaCorridasBody');
+  if (!tbody) return;
   try {
     const res = await fetch(`${API_URL}/api/admin/pedidos`, { headers: { 'Authorization': `Bearer ${token}` } });
     const viagens = await res.json();
@@ -202,9 +224,9 @@ async function carregarViagens() {
     tbody.innerHTML = viagens.map(v => {
       const taxa = Number(v.valor_total) * 0.15;
       let badgeClass = 'badge-concluido';
-      if(v.status === 'pendente') badgeClass = 'badge-pendente';
-      if(v.status === 'cancelado') badgeClass = 'badge-cancelado';
-      if(v.status === 'aceito') badgeClass = 'badge-aceito';
+      if (v.status === 'pendente') badgeClass = 'badge-pendente';
+      if (v.status === 'cancelado') badgeClass = 'badge-cancelado';
+      if (v.status === 'aceito') badgeClass = 'badge-aceito';
 
       return '<tr>' +
         '<td><small style="color:var(--muted)">' + String(v.id).substring(0,8) + '</small></td>' +
@@ -216,16 +238,15 @@ async function carregarViagens() {
         '<td><span class="badge ' + badgeClass + '">' + v.status + '</span></td>' +
       '</tr>';
     }).join('');
-  } catch(e) {
+  } catch (e) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--rose);">Erro ao monitorizar viagens.</td></tr>';
   }
 }
 
-document.getElementById('btnSincronizar').addEventListener('click', () => {
+document.getElementById('btnSincronizar')?.addEventListener('click', () => {
   carregarMetricas(); carregarSaques(); carregarFrota(); carregarViagens();
 });
 
-// Iniciar tudo ao carregar a página
 carregarMetricas();
 carregarSaques();
 carregarFrota();
