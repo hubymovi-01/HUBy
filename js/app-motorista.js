@@ -4,6 +4,7 @@ import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
 let hubyMapa = null;
 let pedidoAceitoAtual = null;
+let pedidoEmAnalise = null; // Guarda a chamada que o motorista está visualizando no mapa
 let intervalRadar = null;
 let chamadasAnterioresIds = new Set();
 let statusAprovacaoAtual = 'aprovado';
@@ -48,7 +49,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarModalSaquePix();
   configurarChatMotorista();
   configurarFiltroDirecaoCasa();
-  configurarBotaoSosMotorista();
 
   await atualizarPerfilESaldo();
 
@@ -468,12 +468,12 @@ function iniciarRadarChamadas() {
     socketRadar = io(API_URL);
     
     socketRadar.on('nova_chamada', () => {
-      if (!pedidoAceitoAtual && statusAprovacaoAtual === 'aprovado') {
+      // Se não estiver em corrida e nem estiver analisando uma rota, atualiza o feed
+      if (!pedidoAceitoAtual && !pedidoEmAnalise && statusAprovacaoAtual === 'aprovado') {
         buscarChamadasPendentes(true); 
       }
     });
 
-    // Recepção de Notificações Push Globais disparadas pelo Admin Master
     socketRadar.on('alerta_broadcast_geral', (dados) => {
       if (dados.publico === 'todos' || dados.publico === 'motoristas') {
         alert(`📢 COMUNICADO OFICIAL HUBY:\n\n${dados.titulo}\n\n${dados.mensagem}`);
@@ -482,11 +482,15 @@ function iniciarRadarChamadas() {
   }
 
   if (intervalRadar) clearInterval(intervalRadar);
-  intervalRadar = setInterval(() => buscarChamadasPendentes(false), 10000);
+  intervalRadar = setInterval(() => {
+    if (!pedidoAceitoAtual && !pedidoEmAnalise) {
+      buscarChamadasPendentes(false);
+    }
+  }, 10000);
 }
 
 async function buscarChamadasPendentes(tocarSomForcado = false) {
-  if (pedidoAceitoAtual || statusAprovacaoAtual !== 'aprovado') return;
+  if (pedidoAceitoAtual || pedidoEmAnalise || statusAprovacaoAtual !== 'aprovado') return;
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(categoriaMotorista)}`);
@@ -537,11 +541,16 @@ function renderizarRadar(pedidos) {
       <button type="button" 
               class="btn-accept-order" 
               data-id="${p.id}" 
+              data-preco="${p.valor_total}"
+              data-origem="${p.origem_endereco || 'Local do passageiro'}"
+              data-destino="${p.destino_endereco}"
+              data-dist="${p.distancia_km}"
+              data-dur="${p.duracao_min || 5}"
               data-lat-orig="${latOrig}" 
               data-lng-orig="${lngOrig}" 
               data-lat-dest="${latDest}" 
               data-lng-dest="${lngDest}">
-        Aceitar Corrida
+        Visualizar Rota no Mapa
       </button>
     </div>
   `}).join('');
@@ -549,6 +558,11 @@ function renderizarRadar(pedidos) {
   feedEl.querySelectorAll('.btn-accept-order').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.getAttribute('data-id');
+      const preco = btn.getAttribute('data-preco');
+      const origem = btn.getAttribute('data-origem');
+      const destino = btn.getAttribute('data-destino');
+      const dist = btn.getAttribute('data-dist');
+      const dur = btn.getAttribute('data-dur');
       const latOrig = parseFloat(btn.getAttribute('data-lat-orig'));
       const lngOrig = parseFloat(btn.getAttribute('data-lng-orig'));
       const latDest = parseFloat(btn.getAttribute('data-lat-dest'));
@@ -557,18 +571,102 @@ function renderizarRadar(pedidos) {
       const coordsOrig = (!isNaN(latOrig) && !isNaN(lngOrig)) ? [latOrig, lngOrig] : null;
       const coordsDest = (!isNaN(latDest) && !isNaN(lngDest)) ? [latDest, lngDest] : null;
 
-      aceitarChamada(id, coordsOrig, coordsDest);
+      // ETAPA 1: Pré-visualizar no mapa sem mudar o status para o passageiro!
+      preVisualizarRotaPedido({
+        id,
+        preco,
+        origem,
+        destino,
+        dist,
+        dur,
+        coordsOrig,
+        coordsDest
+      });
     });
   });
 }
 
 // ==========================================
-// 9. ACEITAR E EXECUTAR ATENDIMENTO
+// 9. PRÉ-VISUALIZAÇÃO DA ROTA (SEM ACEITAR NO BANCO)
 // ==========================================
-async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
+async function preVisualizarRotaPedido(dados) {
+  pedidoEmAnalise = dados;
+
+  // Pausa a atualização periódica da lista para manter a análise na tela
+  if (intervalRadar) clearInterval(intervalRadar);
+
+  // 1. Plota a rota da viagem no mapa para o condutor inspecionar o trajeto
+  if (dados.coordsOrig && dados.coordsDest && hubyMapa) {
+    try {
+      await hubyMapa.calcularRota(dados.coordsOrig, dados.coordsDest, '#38BDF8');
+    } catch (err) {
+      console.warn('Erro ao plotar prévia da rota no mapa:', err);
+    }
+  }
+
+  // 2. Exibe o card de decisão: "Confirmar Aceite" ou "Voltar/Recusar"
+  const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
+  if (feed) {
+    feed.innerHTML = `
+      <div class="order-card" style="border: 2px solid #F59E0B; background: #0E131F;">
+        <div class="order-card-header">
+          <span class="order-badge" style="background: rgba(245,158,11,0.2); color: #F59E0B;">🔍 ANALISANDO ROTA</span>
+          <span class="order-price">R$ ${Number(dados.preco).toFixed(2).replace('.', ',')}</span>
+        </div>
+        <div class="order-route">
+          <span style="display: block; color: #F59E0B; font-weight: 800; font-size: 14px; margin-bottom: 6px;">
+            Confira o trajeto traçado no mapa antes de confirmar
+          </span>
+          <span><strong>Origem:</strong> ${dados.origem}</span>
+          <span><strong>Destino:</strong> ${dados.destino}</span>
+          <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
+            📏 Distância: ${dados.dist} km • ⏱️ Estimativa: ~${dados.dur} min
+          </small>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 14px;">
+          <button type="button" id="btnRecusarPrevia" style="flex: 1; background: #1F2937; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 12px; font-weight: 700; cursor: pointer;">
+            ✕ Voltar
+          </button>
+          <button type="button" id="btnConfirmarAceite" style="flex: 1.3; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 12px; font-weight: 900; cursor: pointer; font-size: 14px;">
+            ✓ Aceitar Viagem
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btnRecusarPrevia')?.addEventListener('click', () => {
+      cancelarPrevia();
+    });
+
+    document.getElementById('btnConfirmarAceite')?.addEventListener('click', () => {
+      // AGORA SIM: Motorista confirmou voluntariamente, altera o status para o cliente!
+      efetivarAceiteChamada(dados.id, dados.coordsOrig, dados.coordsDest);
+    });
+  }
+}
+
+function cancelarPrevia() {
+  pedidoEmAnalise = null;
+  if (hubyMapa && hubyMapa.rotaLayer && hubyMapa.map) {
+    hubyMapa.map.removeLayer(hubyMapa.rotaLayer);
+    hubyMapa.rotaLayer = null;
+  }
+  iniciarRadarChamadas();
+}
+
+// ==========================================
+// 10. EFETIVAR ACEITE (NOTIFICA O CLIENTE)
+// ==========================================
+async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
   const token = localStorage.getItem('huby_token');
+  const btn = document.getElementById('btnConfirmarAceite');
 
   try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Confirmando...';
+    }
+
     const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/aceitar`, {
       method: 'PUT',
       headers: {
@@ -581,6 +679,7 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
     if (!resp.ok) throw new Error(data.erro || 'Não foi possível aceitar a chamada.');
 
     pedidoAceitoAtual = data.pedido;
+    pedidoEmAnalise = null;
 
     const btnChat = document.getElementById('btnAbrirChat');
     if (btnChat) btnChat.style.display = 'flex';
@@ -636,6 +735,7 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
       });
     }
 
+    // Traça rota até o cliente
     if (coordsOrig && hubyMapa) {
         if (hubyMapa.coordsOrigem) {
            hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsOrig, '#38BDF8');
@@ -658,6 +758,7 @@ async function aceitarChamada(pedidoId, coordsOrig, coordsDest) {
 
   } catch (err) {
     alert(err.message);
+    cancelarPrevia();
   }
 }
 
@@ -714,6 +815,7 @@ function limparAtendimento() {
     hubyMapa.rotaLayer = null;
   }
   pedidoAceitoAtual = null;
+  pedidoEmAnalise = null;
 
   const btnChat = document.getElementById('btnAbrirChat');
   const modalChat = document.getElementById('modalChatCorrida');
