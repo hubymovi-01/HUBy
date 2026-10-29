@@ -16,24 +16,22 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
   const executarBusca = async (termo) => {
     if (termo.length < 3) return;
     
-    // ABRIR A CAIXA IMEDIATAMENTE COM AVISO DE CARREGAMENTO
     listaResultados.innerHTML = `
       <li class="search-result-item">
         <div class="result-text">
           <strong style="color: #38BDF8;">A procurar morada...</strong>
-          <small>A conectar ao satélite...</small>
+          <small>A consultar o mapa...</small>
         </div>
       </li>
     `;
     listaResultados.style.display = 'block';
 
     try {
-      // INJEÇÃO DE IDIOMA PARA O SERVIDOR NÃO BLOQUEAR O TELEMÓVEL
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(termo)}&limit=5&countrycodes=br`, {
-        headers: {
-          'Accept-Language': 'pt-BR,pt;q=0.9'
-        }
-      });
+      // CORREÇÃO CRÍTICA: Idioma passado direto no link (&accept-language=pt-BR)
+      // Removemos o 'headers' para evitar o bloqueio de segurança (CORS) no telemóvel
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(termo)}&limit=5&countrycodes=br&accept-language=pt-BR`;
+      
+      const resp = await fetch(url);
       const dados = await resp.json();
       
       listaResultados.innerHTML = '';
@@ -43,7 +41,7 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
           <li class="search-result-item">
             <div class="result-text">
               <strong style="color: #F59E0B;">Nenhum local encontrado</strong>
-              <small>Tente colocar o nome da cidade junto (ex: Simplício Mendes, PI)</small>
+              <small>Tente colocar o nome da cidade junto (ex: Simplício Mendes)</small>
             </div>
           </li>
         `;
@@ -93,7 +91,7 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
         <li class="search-result-item">
           <div class="result-text">
             <strong style="color: #EF4444;">Erro de Ligação</strong>
-            <small>Verifique a internet e tente novamente.</small>
+            <small>Sem resposta do mapa. Tente novamente.</small>
           </div>
         </li>
       `;
