@@ -28,16 +28,12 @@ io.on('connection', (socket) => {
   });
 });
 
-// 1. O SEU CORS CUSTOMIZADO
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
-
-app.use(cors());
+// 1. CONFIGURAÇÃO DE CORS (Resolvendo o erro de Same-Origin)
+app.use(cors({
+  origin: '*', // Permite que o GitHub Pages comunique com o Render
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
+}));
 
 // 2. LIMITE DE 50MB PARA AS FOTOS DE PERFIL
 app.use(express.json({ limit: '50mb' }));
