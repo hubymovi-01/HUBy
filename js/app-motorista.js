@@ -4,19 +4,19 @@ import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
 let hubyMapa = null;
 let pedidoAceitoAtual = null;
-let pedidoEmAnalise = null; // Guarda a chamada que o motorista está visualizando no mapa
+let pedidoEmAnalise = null;
 let intervalRadar = null;
 let chamadasAnterioresIds = new Set();
 let statusAprovacaoAtual = 'aprovado';
 let categoriaMotorista = 'carro';
 let socketRadar = null; 
 
-// Filtro Direção de Casa
 let direcaoCasaAtiva = false;
 let coordsCasaMotorista = null;
-
-// Telemetria GPS em Tempo Real para o Radar Master
 let intervalTelemetria = null;
+
+// ETAPA DA CORRIDA: 'a_caminho' (indo buscar) ou 'em_viagem' (com passageiro a bordo)
+let etapaCorridaAtual = 'a_caminho';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
@@ -39,7 +39,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 250);
 
     hubyMapa.obterGPS((pos) => {
-      console.log('GPS do motorista fixado com sucesso:', pos);
       iniciarTransmissaoTelemetria(pos);
     });
   } catch (err) {
@@ -67,7 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 1. TRANSMISSÃO TELEMÉTRICA GPS (RADAR MASTER)
+// 1. TRANSMISSÃO TELEMÉTRICA GPS
 // ==========================================
 function iniciarTransmissaoTelemetria(posicaoInicial) {
   const token = localStorage.getItem('huby_token');
@@ -173,7 +172,7 @@ function configurarBotaoSosMotorista() {
   const btnSos = document.getElementById('btnSosMotorista');
   if (!btnSos) return;
 
-  btnSos.addEventListener('click', async () => {
+  btnSos.onclick = async () => {
     if (!pedidoAceitoAtual) {
       alert('O alerta SOS só pode ser emitido durante um atendimento em andamento.');
       return;
@@ -207,7 +206,7 @@ function configurarBotaoSosMotorista() {
     } catch (err) {
       alert('Falha ao acionar socorro via rede. Contate a polícia (190).');
     }
-  });
+  };
 }
 
 // ==========================================
@@ -459,7 +458,7 @@ async function carregarMensagensChat() {
 }
 
 // ==========================================
-// 8. RADAR DE CHAMADAS E SOCKET.IO BROADCAST
+// 8. RADAR DE CHAMADAS
 // ==========================================
 function iniciarRadarChamadas() {
   buscarChamadasPendentes();
@@ -468,7 +467,6 @@ function iniciarRadarChamadas() {
     socketRadar = io(API_URL);
     
     socketRadar.on('nova_chamada', () => {
-      // Se não estiver em corrida e nem estiver analisando uma rota, atualiza o feed
       if (!pedidoAceitoAtual && !pedidoEmAnalise && statusAprovacaoAtual === 'aprovado') {
         buscarChamadasPendentes(true); 
       }
@@ -497,7 +495,6 @@ async function buscarChamadasPendentes(tocarSomForcado = false) {
     if (!resp.ok) return;
 
     const pedidos = await resp.json();
-
     const idsAtuais = pedidos.map(p => p.id);
     const existeNovaChamada = idsAtuais.some(id => !chamadasAnterioresIds.has(id));
 
@@ -571,7 +568,6 @@ function renderizarRadar(pedidos) {
       const coordsOrig = (!isNaN(latOrig) && !isNaN(lngOrig)) ? [latOrig, lngOrig] : null;
       const coordsDest = (!isNaN(latDest) && !isNaN(lngDest)) ? [latDest, lngDest] : null;
 
-      // ETAPA 1: Pré-visualizar no mapa sem mudar o status para o passageiro!
       preVisualizarRotaPedido({
         id,
         preco,
@@ -587,24 +583,28 @@ function renderizarRadar(pedidos) {
 }
 
 // ==========================================
-// 9. PRÉ-VISUALIZAÇÃO DA ROTA (SEM ACEITAR NO BANCO)
+// 9. PRÉVIA DA ROTA (SEM MUDAR STATUS PARA O CLIENTE)
 // ==========================================
 async function preVisualizarRotaPedido(dados) {
   pedidoEmAnalise = dados;
 
-  // Pausa a atualização periódica da lista para manter a análise na tela
   if (intervalRadar) clearInterval(intervalRadar);
 
-  // 1. Plota a rota da viagem no mapa para o condutor inspecionar o trajeto
+  // Limpa rota anterior do mapa se houver
+  if (hubyMapa?.rotaLayer && hubyMapa.map) {
+    hubyMapa.map.removeLayer(hubyMapa.rotaLayer);
+    hubyMapa.rotaLayer = null;
+  }
+
+  // Traça a rota da corrida (origem -> destino)
   if (dados.coordsOrig && dados.coordsDest && hubyMapa) {
     try {
       await hubyMapa.calcularRota(dados.coordsOrig, dados.coordsDest, '#38BDF8');
     } catch (err) {
-      console.warn('Erro ao plotar prévia da rota no mapa:', err);
+      console.warn('Erro ao calcular prévia:', err);
     }
   }
 
-  // 2. Exibe o card de decisão: "Confirmar Aceite" ou "Voltar/Recusar"
   const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
   if (feed) {
     feed.innerHTML = `
@@ -615,12 +615,12 @@ async function preVisualizarRotaPedido(dados) {
         </div>
         <div class="order-route">
           <span style="display: block; color: #F59E0B; font-weight: 800; font-size: 14px; margin-bottom: 6px;">
-            Confira o trajeto traçado no mapa antes de confirmar
+            Confira o trajeto traçado no mapa antes de aceitar
           </span>
           <span><strong>Origem:</strong> ${dados.origem}</span>
           <span><strong>Destino:</strong> ${dados.destino}</span>
           <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
-            📏 Distância: ${dados.dist} km • ⏱️ Estimativa: ~${dados.dur} min
+            📏 ${dados.dist} km • ⏱️ Estimativa: ~${dados.dur} min
           </small>
         </div>
         <div style="display: flex; gap: 8px; margin-top: 14px;">
@@ -634,12 +634,8 @@ async function preVisualizarRotaPedido(dados) {
       </div>
     `;
 
-    document.getElementById('btnRecusarPrevia')?.addEventListener('click', () => {
-      cancelarPrevia();
-    });
-
+    document.getElementById('btnRecusarPrevia')?.addEventListener('click', cancelarPrevia);
     document.getElementById('btnConfirmarAceite')?.addEventListener('click', () => {
-      // AGORA SIM: Motorista confirmou voluntariamente, altera o status para o cliente!
       efetivarAceiteChamada(dados.id, dados.coordsOrig, dados.coordsDest);
     });
   }
@@ -647,7 +643,7 @@ async function preVisualizarRotaPedido(dados) {
 
 function cancelarPrevia() {
   pedidoEmAnalise = null;
-  if (hubyMapa && hubyMapa.rotaLayer && hubyMapa.map) {
+  if (hubyMapa?.rotaLayer && hubyMapa.map) {
     hubyMapa.map.removeLayer(hubyMapa.rotaLayer);
     hubyMapa.rotaLayer = null;
   }
@@ -655,7 +651,7 @@ function cancelarPrevia() {
 }
 
 // ==========================================
-// 10. EFETIVAR ACEITE (NOTIFICA O CLIENTE)
+// 10. FLUXO POR ETAPAS (APENAS 1 BOTÃO PRINCIPAL POR VEZ)
 // ==========================================
 async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
   const token = localStorage.getItem('huby_token');
@@ -680,88 +676,105 @@ async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
 
     pedidoAceitoAtual = data.pedido;
     pedidoEmAnalise = null;
+    etapaCorridaAtual = 'a_caminho'; // ETAPA 1: Indo até o passageiro
 
     const btnChat = document.getElementById('btnAbrirChat');
     if (btnChat) btnChat.style.display = 'flex';
 
-    const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
-    if (feed) {
-      feed.innerHTML = `
-        <div class="order-card" style="border-color: #38BDF8;">
-          <div class="order-card-header">
-            <span class="order-badge" style="background: rgba(56,189,248,0.25); color: #38BDF8;">EM ATENDIMENTO</span>
-            <span class="order-price">R$ ${Number(pedidoAceitoAtual.valor_total).toFixed(2).replace('.', ',')}</span>
-          </div>
-          <div class="order-route">
-            <span style="display: block; color: #38BDF8; font-weight: 800; font-size: 15px; margin-bottom: 6px;" id="lblTempoPassageiro">
-              📍 A calcular GPS até ao cliente...
-            </span>
-            <span><strong>Recolha:</strong> ${pedidoAceitoAtual.origem_endereco || 'Local do passageiro'}</span>
-            <span><strong>Destino:</strong> ${pedidoAceitoAtual.destino_endereco}</span>
-            <small style="color: #10B981; font-weight: 700; display: block; margin-top: 4px;">⏱️ Viagem até destino: ~${pedidoAceitoAtual.duracao_min || 5} min</small>
-          </div>
-          <div style="display: flex; gap: 8px; margin-top: 14px;">
-            <button type="button" id="btnNavegarDestino" style="flex: 1; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer; transition: 0.2s;">
-              📍 Iniciar Viagem
-            </button>
-            <button type="button" id="btnConcluirCorrida" style="flex: 1; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 12px; font-weight: 800; cursor: pointer; transition: 0.2s;">
-              ✅ Concluir
-            </button>
-          </div>
-          <div style="display: flex; gap: 8px; margin-top: 8px;">
-            <button type="button" id="btnCancelarPeloMotorista" style="flex: 1; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
-              Cancelar Corrida
-            </button>
-            <button type="button" id="btnSosMotorista" style="flex: 1; background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; border-radius: 10px; padding: 10px; font-weight: 800; cursor: pointer;">
-              🚨 SOS Alerta
-            </button>
-          </div>
-        </div>
-      `;
-
-      document.getElementById('btnConcluirCorrida')?.addEventListener('click', concluirCorridaAtual);
-      document.getElementById('btnCancelarPeloMotorista')?.addEventListener('click', cancelarCorridaAtual);
-      configurarBotaoSosMotorista();
-      
-      document.getElementById('btnNavegarDestino')?.addEventListener('click', async () => {
-         if (coordsOrig && coordsDest && hubyMapa) {
-             await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981'); 
-             const lblTempo = document.getElementById('lblTempoPassageiro');
-             if (lblTempo) {
-               lblTempo.innerHTML = '🏁 A caminho do destino final!';
-               lblTempo.style.color = '#10B981';
-             }
-         }
+    // Rota GPS: Posição do Motorista -> Ponto de Embarque
+    if (coordsOrig && hubyMapa) {
+      if (hubyMapa.coordsOrigem) {
+        await hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsOrig, '#38BDF8');
+      }
+      hubyMapa.obterGPS(async (pos) => {
+        try {
+          const r = await hubyMapa.calcularRota([pos.lat, pos.lng], coordsOrig, '#38BDF8');
+          const lbl = document.getElementById('lblTempoPassageiro');
+          if (lbl) lbl.innerHTML = `⏳ Chega ao passageiro em <span style="font-size:18px;">${r.duracaoMin} min</span>`;
+        } catch(e) {}
       });
     }
 
-    // Traça rota até o cliente
-    if (coordsOrig && hubyMapa) {
-        if (hubyMapa.coordsOrigem) {
-           hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsOrig, '#38BDF8');
-        }
-        
-        hubyMapa.obterGPS(async (pos) => {
-            try {
-                const rotaAteCliente = await hubyMapa.calcularRota([pos.lat, pos.lng], coordsOrig, '#38BDF8');
-                const lblTempo = document.getElementById('lblTempoPassageiro');
-                if (lblTempo) {
-                    lblTempo.innerHTML = `⏳ Chega ao passageiro em <span style="font-size:18px;">${rotaAteCliente.duracaoMin} min</span>`;
-                }
-            } catch (e) {
-                console.warn('Erro ao traçar rota até cliente:', e);
-                const lblTempo = document.getElementById('lblTempoPassageiro');
-                if (lblTempo) lblTempo.textContent = '📍 Siga para o local de recolha';
-            }
-        });
-    }
-
+    renderizarCardEtapa(coordsOrig, coordsDest);
   } catch (err) {
     alert(err.message);
     cancelarPrevia();
   }
 }
 
+function renderizarCardEtapa(coordsOrig, coordsDest) {
+  const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
+  if (!feed || !pedidoAceitoAtual) return;
+
+  const estaACaminho = (etapaCorridaAtual === 'a_caminho');
+
+  feed.innerHTML = `
+    <div class="order-card" style="border-color: ${estaACaminho ? '#38BDF8' : '#10B981'};">
+      <div class="order-card-header">
+        <span class="order-badge" style="background: ${estaACaminho ? 'rgba(56,189,248,0.2)' : 'rgba(16,185,129,0.2)'}; color: ${estaACaminho ? '#38BDF8' : '#10B981'};">
+          ${estaACaminho ? 'A CAMINHO DO CLIENTE' : 'EM CORRIDA'}
+        </span>
+        <span class="order-price">R$ ${Number(pedidoAceitoAtual.valor_total).toFixed(2).replace('.', ',')}</span>
+      </div>
+      <div class="order-route">
+        <span style="display: block; color: ${estaACaminho ? '#38BDF8' : '#10B981'}; font-weight: 800; font-size: 15px; margin-bottom: 6px;" id="lblTempoPassageiro">
+          ${estaACaminho ? '📍 Indo buscar o passageiro...' : '🏁 A caminho do destino final!'}
+        </span>
+        <span><strong>Recolha:</strong> ${pedidoAceitoAtual.origem_endereco || 'Local do passageiro'}</span>
+        <span><strong>Destino:</strong> ${pedidoAceitoAtual.destino_endereco}</span>
+        <small style="color: #94A3B8; font-weight: 600; display: block; margin-top: 4px;">
+          ⏱️ Viagem: ~${pedidoAceitoAtual.duracao_min || 5} min • ${pedidoAceitoAtual.distancia_km} km
+        </small>
+      </div>
+
+      <!-- BOTÃO DE AÇÃO SEQUENCIAL (APENAS 1 DE CADA VEZ) -->
+      <div style="margin-top: 14px;">
+        ${estaACaminho ? `
+          <button type="button" id="btnIniciarViagemUnico" style="width: 100%; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; cursor: pointer;">
+            📍 Iniciar Viagem (Passageiro a Bordo)
+          </button>
+        ` : `
+          <button type="button" id="btnConcluirViagemUnico" style="width: 100%; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; cursor: pointer;">
+            ✅ Concluir Viagem
+          </button>
+        `}
+      </div>
+
+      <!-- BOTÕES DE APOIO -->
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <button type="button" id="btnCancelarPeloMotorista" style="flex: 1; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
+          Cancelar Corrida
+        </button>
+        <button type="button" id="btnSosMotorista" style="flex: 1; background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; border-radius: 10px; padding: 10px; font-weight: 800; cursor: pointer;">
+          🚨 SOS Alerta
+        </button>
+      </div>
+    </div>
+  `;
+
+  configurarBotaoSosMotorista();
+  document.getElementById('btnCancelarPeloMotorista')?.addEventListener('click', cancelarCorridaAtual);
+
+  if (estaACaminho) {
+    document.getElementById('btnIniciarViagemUnico')?.addEventListener('click', async () => {
+      etapaCorridaAtual = 'em_viagem';
+
+      // Atualiza o mapa para a rota da viagem até o destino
+      if (coordsOrig && coordsDest && hubyMapa) {
+        await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981');
+      }
+
+      // Re-renderiza o card exibindo apenas o botão Concluir
+      renderizarCardEtapa(coordsOrig, coordsDest);
+    });
+  } else {
+    document.getElementById('btnConcluirViagemUnico')?.addEventListener('click', concluirCorridaAtual);
+  }
+}
+
+// ==========================================
+// 11. CANCELAR E CONCLUIR
+// ==========================================
 async function cancelarCorridaAtual() {
   if (!pedidoAceitoAtual) return;
   if (!confirm('Tem certeza de que deseja cancelar este atendimento?')) return;
@@ -810,12 +823,13 @@ async function concluirCorridaAtual() {
 }
 
 function limparAtendimento() {
-  if (hubyMapa && hubyMapa.rotaLayer && hubyMapa.map) {
+  if (hubyMapa?.rotaLayer && hubyMapa.map) {
     hubyMapa.map.removeLayer(hubyMapa.rotaLayer);
     hubyMapa.rotaLayer = null;
   }
   pedidoAceitoAtual = null;
   pedidoEmAnalise = null;
+  etapaCorridaAtual = 'a_caminho';
 
   const btnChat = document.getElementById('btnAbrirChat');
   const modalChat = document.getElementById('modalChatCorrida');
