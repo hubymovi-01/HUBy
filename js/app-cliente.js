@@ -68,8 +68,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (hubyMapa) {
         hubyMapa.obterGPS((posicaoReal) => {
           if (coordsDestino) {
-            // AQUI ESTÁ A CORREÇÃO: '#10B981', false -> Não desenha a linha no cliente!
-            hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino, '#10B981', false).then(rota => {
+            // AQUI ESTÁ O AJUSTE: Linha laranja/amarela ativada (true)
+            hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], coordsDestino, '#F59E0B', true).then(rota => {
               rotaAtual = rota;
               atualizarResumoValores();
             });
@@ -233,8 +233,8 @@ function selecionarLocalPesquisado(local, nomeCurto) {
   if (txtDestino) txtDestino.textContent = nomeCurto;
   
   if (hubyMapa && hubyMapa.coordsOrigem) {
-    // AQUI ESTÁ A CORREÇÃO: '#10B981', false -> Não desenha a linha no cliente!
-    hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsDestino, '#10B981', false).then(rota => {
+    // AQUI ESTÁ O AJUSTE: Linha laranja/amarela ativada (true)
+    hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsDestino, '#F59E0B', true).then(rota => {
       rotaAtual = rota;
       atualizarResumoValores(); 
     });
