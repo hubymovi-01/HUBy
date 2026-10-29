@@ -8,12 +8,11 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
   const listaResultados = document.getElementById('listaResultadosPesquisa');
-  const btnPesquisar = document.getElementById('btnAcionarPesquisa'); // Novo botão
+  const btnPesquisar = document.getElementById('btnAcionarPesquisa');
   let timeoutPesquisa = null;
 
   if (!inputPesquisa || !listaResultados) return;
 
-  // Lógica central de busca no mapa
   const executarBusca = async (termo) => {
     if (termo.length < 3) return;
     try {
@@ -44,7 +43,8 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
           </div>
         `;
         
-        li.addEventListener('click', async () => {
+        li.addEventListener('click', async (e) => {
+          e.stopPropagation();
           const lat = parseFloat(local.lat);
           const lng = parseFloat(local.lon);
           
@@ -66,7 +66,7 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     }
   };
 
-  // Acionador 1: Enquanto o cliente digita (Automático)
+  // 1. Mostrar/Esconder o X ao digitar e busca automática
   inputPesquisa.addEventListener('input', (e) => {
     const termo = e.target.value.trim();
     if (termo.length > 0) {
@@ -81,19 +81,23 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     timeoutPesquisa = setTimeout(() => executarBusca(termo), 600);
   });
 
-  // Acionador 2: Clicar no botão da Lupa
-  btnPesquisar?.addEventListener('click', () => {
-    const termo = inputPesquisa.value.trim();
-    if (termo.length >= 3) {
-      clearTimeout(timeoutPesquisa);
-      executarBusca(termo);
-    }
-  });
+  // 2. Botão da Lupa (Forçar Busca)
+  if (btnPesquisar) {
+    btnPesquisar.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const termo = inputPesquisa.value.trim();
+      if (termo.length >= 3) {
+        clearTimeout(timeoutPesquisa);
+        executarBusca(termo);
+      }
+    });
+  }
 
-  // Acionador 3: Apertar a tecla "Enter" no teclado
+  // 3. Tecla Enter no teclado
   inputPesquisa.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
-      e.preventDefault(); // Evita recarregar a página
+      e.preventDefault();
       const termo = inputPesquisa.value.trim();
       if (termo.length >= 3) {
         clearTimeout(timeoutPesquisa);
@@ -102,17 +106,22 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     }
   });
 
-  // Limpar a pesquisa
-  btnLimpar?.addEventListener('click', () => {
-    inputPesquisa.value = '';
-    btnLimpar.style.display = 'none';
-    listaResultados.style.display = 'none';
-  });
+  // 4. Botão X (Limpar Caixa)
+  if (btnLimpar) {
+    btnLimpar.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      inputPesquisa.value = '';
+      btnLimpar.style.display = 'none';
+      listaResultados.style.display = 'none';
+      inputPesquisa.focus(); // Devolve o cursor piscante à caixa
+    });
+  }
   
-  // Fecha a lista se clicar fora
+  // Fechar lista ao clicar fora
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-floating-wrapper')) {
-      listaResultados.style.display = 'none';
+      if (listaResultados) listaResultados.style.display = 'none';
     }
   });
 }

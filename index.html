@@ -130,11 +130,10 @@
   <!-- BARRA DE PESQUISA FLUTUANTE (PREMIUM) -->
   <div class="search-floating-wrapper">
     <div class="search-glass-box">
-      <!-- A Lupa agora é um botão de acionamento -->
-      <button id="btnAcionarPesquisa" class="search-icon"
-        style="background:none; border:none; cursor:pointer;">🔍</button>
+      <button type="button" id="btnAcionarPesquisa" class="search-icon"
+        style="background:none; border:none; cursor:pointer; padding:0;">🔍</button>
       <input type="text" id="inputPesquisaLocal" placeholder="Para onde vamos?" autocomplete="off" />
-      <button id="btnLimparPesquisa" class="clear-btn" style="display: none;">❌</button>
+      <button type="button" id="btnLimparPesquisa" class="clear-btn" style="display: none; cursor:pointer;">❌</button>
     </div>
     <ul id="listaResultadosPesquisa" class="search-results-glass" style="display: none;"></ul>
   </div>
