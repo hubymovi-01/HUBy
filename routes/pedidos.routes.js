@@ -20,12 +20,16 @@ export function autenticarToken(req, res, next) {
 export default function pedidosRouter(io) {
   const router = express.Router();
 
+  // =========================================================================
+  // 1. CRIAR PEDIDO COM SUPORTE A CUPOM TRANSACIONAL E SEGURANÇA
+  // =========================================================================
   router.post('/', async (req, res) => {
     try {
       const {
         id, clienteId, tipo, subTipoId, subTipoLabel,
         origem, destino, coordsOrigem, coordsDestino,
-        distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto
+        distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto,
+        cupomCodigo
       } = req.body;
 
       if (!id || !valorTotal || !origem || !destino) {
@@ -33,7 +37,7 @@ export default function pedidosRouter(io) {
       }
 
       const formatarNum = (val) => Number(String(val).replace(',', '.')) || 0;
-      const vTotal = formatarNum(valorTotal);
+      let vTotal = formatarNum(valorTotal);
       const vAdic = formatarNum(valorAdicionais);
       const dKm = formatarNum(distanciaKm);
       const dMin = formatarNum(duracaoMin);
@@ -42,6 +46,42 @@ export default function pedidosRouter(io) {
       const origLng = coordsOrigem && coordsOrigem[1] ? Number(coordsOrigem[1]) : null;
       const destLat = coordsDestino && coordsDestino[0] ? Number(coordsDestino[0]) : null;
       const destLng = coordsDestino && coordsDestino[1] ? Number(coordsDestino[1]) : null;
+
+      // Validação Atômica de Cupom de Desconto
+      let descontoAplicado = 0;
+      if (cupomCodigo) {
+        const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
+        const cupons = await sql`
+          SELECT id, tipo, valor, limite_usos, usos_atuais, expira_em, ativo
+          FROM cupons_desconto
+          WHERE codigo = ${codigoFormatado} AND ativo = TRUE
+          LIMIT 1;
+        `;
+
+        if (cupons.length > 0) {
+          const cupom = cupons[0];
+          const agora = new Date();
+          const expirado = cupom.expira_em && new Date(cupom.expira_em) < agora;
+          const esgotado = cupom.limite_usos && cupom.usos_atuais >= cupom.limite_usos;
+
+          if (!expirado && !esgotado) {
+            if (cupom.tipo === 'porcentagem') {
+              descontoAplicado = Number(((vTotal * Number(cupom.valor)) / 100).toFixed(2));
+            } else {
+              descontoAplicado = Number(cupom.valor);
+            }
+
+            vTotal = Math.max(0.50, vTotal - descontoAplicado);
+
+            // Incremento atômico de utilização
+            await sql`
+              UPDATE cupons_desconto
+              SET usos_atuais = usos_atuais + 1
+              WHERE id = ${cupom.id};
+            `;
+          }
+        }
+      }
 
       await sql`
         INSERT INTO pedidos (
@@ -63,21 +103,48 @@ export default function pedidosRouter(io) {
         id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal
       });
 
-      res.status(201).json({ sucesso: true, id });
+      res.status(201).json({ sucesso: true, id, valorFinal: vTotal, desconto: descontoAplicado });
     } catch (error) {
       console.error('⚠️ ERRO AO GRAVAR PEDIDO:', error.message);
       res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados.' });
     }
   });
 
+  // =========================================================================
+  // 2. RADAR DE MOTORISTAS EM TEMPO REAL (TRANSMISSÃO GPS)
+  // =========================================================================
+  router.post('/motoristas/localizacao', autenticarToken, async (req, res) => {
+    try {
+      const motoristaId = req.usuario.id;
+      const { lat, lng, emCorrida } = req.body;
+
+      if (!lat || !lng) return res.status(400).json({ erro: 'Coordenadas incompletas.' });
+
+      io.emit('posicao_motorista', {
+        motoristaId,
+        lat: Number(lat),
+        lng: Number(lng),
+        emCorrida: !!emCorrida,
+        atualizadoEm: new Date().toISOString()
+      });
+
+      res.json({ sucesso: true });
+    } catch (err) {
+      res.status(500).json({ erro: 'Erro ao emitir localização.' });
+    }
+  });
+
+  // =========================================================================
+  // 3. CONSULTA DE CHAMADAS PENDENTES
+  // =========================================================================
   router.get('/pendentes', async (req, res) => {
     try {
       const { categoria } = req.query;
       let pedidos;
       if (categoria === 'moto') {
         pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo IN ('moto', 'flash_moto') ORDER BY criado_em DESC LIMIT 20;`;
-      } else if (categoria === 'cargo_pickup' || categoria === 'frete') {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo IN ('cargo_pickup', 'frete') ORDER BY criado_em DESC LIMIT 20;`;
+      } else if (categoria === 'cargo_pickup' || categoria === 'frete' || categoria === 'entrega') {
+        pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo IN ('cargo_pickup', 'frete', 'entrega') ORDER BY criado_em DESC LIMIT 20;`;
       } else {
         pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo = 'carro' ORDER BY criado_em DESC LIMIT 20;`;
       }
@@ -87,10 +154,13 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // =========================================================================
+  // 4. HISTÓRICO
+  // =========================================================================
   router.get('/historico', autenticarToken, async (req, res) => {
     try {
       const usuarioId = req.usuario.id;
-      const role = req.usuario.role;
+      const role = String(req.usuario.role || '').toLowerCase();
       let historico = role === 'motorista'
         ? await sql`SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, distancia_km, valor_total, status, criado_em, cliente_id FROM pedidos WHERE motorista_id = ${usuarioId} ORDER BY criado_em DESC LIMIT 30;`
         : await sql`SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, distancia_km, valor_total, status, criado_em, motorista_nome FROM pedidos WHERE cliente_id = ${usuarioId} ORDER BY criado_em DESC LIMIT 30;`;
@@ -100,6 +170,9 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // =========================================================================
+  // 5. STATUS DA VIAGEM
+  // =========================================================================
   router.get('/:id/status', async (req, res) => {
     try {
       const { id } = req.params;
@@ -111,6 +184,9 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // =========================================================================
+  // 6. ACEITAR VIAGEM
+  // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
@@ -132,6 +208,9 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // =========================================================================
+  // 7. CONCLUIR VIAGEM (CÁLCULO DINÂMICO E REPASSE)
+  // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
@@ -142,19 +221,40 @@ export default function pedidosRouter(io) {
       const pedido = pedidos[0];
       if (pedido.status === 'concluido') return res.status(400).json({ erro: 'Este pedido já foi finalizado.' });
 
+      // Lê a taxa configurada na plataforma (padrão 15% caso não exista)
+      let taxaPorcentagem = 15;
+      const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+      if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
+        taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
+      }
+
       const valorBruto = Number(pedido.valor_total) || 0;
-      const repasseMotorista = Number((valorBruto * 0.85).toFixed(2));
-      const taxaPlataforma = Number((valorBruto * 0.15).toFixed(2));
+      const taxaPlataforma = Number(((valorBruto * taxaPorcentagem) / 100).toFixed(2));
+      const repasseMotorista = Number((valorBruto - taxaPlataforma).toFixed(2));
 
       await sql`UPDATE pedidos SET status = 'concluido' WHERE id = ${id};`;
-      const condutorAtualizado = await sql`UPDATE motoristas SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista} WHERE id = ${motoristaId} RETURNING saldo_carteira;`;
+      const condutorAtualizado = await sql`
+        UPDATE motoristas 
+        SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista} 
+        WHERE id = ${motoristaId} 
+        RETURNING saldo_carteira;
+      `;
 
-      res.json({ sucesso: true, mensagem: 'Chamada concluída!', repasseLiquido: repasseMotorista, taxaHuby: taxaPlataforma, novoSaldoCarteira: condutorAtualizado[0].saldo_carteira });
+      res.json({ 
+        sucesso: true, 
+        mensagem: 'Chamada concluída!', 
+        repasseLiquido: repasseMotorista, 
+        taxaHuby: taxaPlataforma, 
+        novoSaldoCarteira: condutorAtualizado[0].saldo_carteira 
+      });
     } catch (err) {
       res.status(500).json({ erro: 'Falha interna ao processar valores.' });
     }
   });
 
+  // =========================================================================
+  // 8. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE AUTOMÁTICA
+  // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
@@ -166,13 +266,66 @@ export default function pedidosRouter(io) {
       const pedido = pedidos[0];
       const canceladoPor = pedido.cliente_id === usuarioId ? 'cliente' : (pedido.motorista_id === usuarioId ? 'motorista' : 'admin');
       const atualizado = await sql`UPDATE pedidos SET status = 'cancelado', motivo_cancelamento = ${motivo || 'Cancelado'}, cancelado_por = ${canceladoPor} WHERE id = ${id} RETURNING *;`;
+
+      // Auditoria Antifraude: Checar cancelamentos recentes consecutivos
+      const cancelamentosRecentes = await sql`
+        SELECT COUNT(*) AS total
+        FROM pedidos
+        WHERE cancelado_por = ${canceladoPor} 
+          AND (cliente_id = ${usuarioId} OR motorista_id = ${usuarioId})
+          AND criado_em >= NOW() - INTERVAL '2 hours';
+      `;
+
+      if (Number(cancelamentosRecentes[0]?.total || 0) >= 3) {
+        await sql`
+          INSERT INTO incidentes_seguranca (pedido_id, usuario_id, tipo_alerta, descricao)
+          VALUES (${id}, ${usuarioId}, 'cancelamentos_consecutivos', ${'Usuário acumulou 3 ou mais cancelamentos em menos de 2 horas.'});
+        `;
+        io.emit('alerta_seguranca_admin', {
+          tipo: 'cancelamentos_consecutivos',
+          usuarioId,
+          mensagem: 'Alerta Antifraude: Múltiplos cancelamentos consecutivos detectados.'
+        });
+      }
+
       res.json({ sucesso: true, mensagem: 'Chamada cancelada.', pedido: atualizado[0] });
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao processar cancelamento.' });
     }
   });
 
-  // Rota de Avaliação Rica (Notas + Comentário + Tags/Etiquetas)
+  // =========================================================================
+  // 9. CENTRAL DE INCIDENTES / BOTÃO DE PÂNICO SOS (SEGURANÇA MÁXIMA)
+  // =========================================================================
+  router.post('/:id/sos', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { lat, lng, relato } = req.body;
+      const usuarioId = req.usuario.id;
+
+      const alerta = await sql`
+        INSERT INTO incidentes_seguranca (pedido_id, usuario_id, tipo_alerta, descricao)
+        VALUES (${id}, ${usuarioId}, 'sos', ${relato || `EMERGÊNCIA ACIONADA! Coords: ${lat || '---'}, ${lng || '---'}`})
+        RETURNING *;
+      `;
+
+      io.emit('alerta_sos_admin', {
+        incidenteId: alerta[0].id,
+        pedidoId: id,
+        usuarioId,
+        coords: [lat, lng],
+        momento: new Date().toISOString()
+      });
+
+      res.status(201).json({ sucesso: true, mensagem: 'Alerta SOS registrado e equipe notificada!' });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao acionar alerta de segurança.' });
+    }
+  });
+
+  // =========================================================================
+  // 10. AVALIAÇÕES COM NOTA E COMENTÁRIOS
+  // =========================================================================
   router.post('/:id/avaliar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
@@ -217,7 +370,9 @@ export default function pedidosRouter(io) {
     }
   });
 
-  // Chat interno
+  // =========================================================================
+  // 11. CHAT INTERNO DA CORRIDA
+  // =========================================================================
   router.post('/:id/chat', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;

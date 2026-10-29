@@ -28,9 +28,9 @@ io.on('connection', (socket) => {
   });
 });
 
-// 1. CONFIGURAÇÃO DE CORS (Resolvendo o erro de Same-Origin)
+// 1. CONFIGURAÇÃO DE CORS
 app.use(cors({
-  origin: '*', // Permite que o GitHub Pages comunique com o Render
+  origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 }));
@@ -39,7 +39,7 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Inicialização das tabelas no Neon PostgreSQL
+// Inicialização automática das tabelas no Neon PostgreSQL com suporte aos novos módulos
 async function inicializarBanco() {
   try {
     await sql`
@@ -94,9 +94,43 @@ async function inicializarBanco() {
         solicitado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, pago_em TIMESTAMP
       );
     `;
+    // TABELAS DAS 6 NOVAS FUNCIONALIDADES PROFISSIONAIS
+    await sql`
+      CREATE TABLE IF NOT EXISTS cupons_desconto (
+        id SERIAL PRIMARY KEY,
+        codigo VARCHAR(30) UNIQUE NOT NULL,
+        tipo VARCHAR(20) NOT NULL DEFAULT 'fixo',
+        valor NUMERIC(10, 2) NOT NULL,
+        limite_usos INTEGER DEFAULT 100,
+        usos_atuais INTEGER DEFAULT 0,
+        expira_em TIMESTAMP WITH TIME ZONE,
+        ativo BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS notificacoes_globais (
+        id SERIAL PRIMARY KEY,
+        titulo VARCHAR(120) NOT NULL,
+        mensagem TEXT NOT NULL,
+        publico VARCHAR(20) NOT NULL DEFAULT 'todos',
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+    await sql`
+      CREATE TABLE IF NOT EXISTS incidentes_seguranca (
+        id SERIAL PRIMARY KEY,
+        pedido_id VARCHAR(50),
+        usuario_id TEXT,
+        tipo_alerta VARCHAR(50) NOT NULL,
+        descricao TEXT,
+        resolvido BOOLEAN DEFAULT FALSE,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_url TEXT;`;
-    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
+    console.log('Tabelas de alta segurança sincronizadas no Neon PostgreSQL.');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);
   }
@@ -107,7 +141,6 @@ app.get('/', (req, res) => {
   res.json({ status: 'HUBy API Online (Modularizada)', versao: '2.0.2', banco: 'Neon PostgreSQL' });
 });
 
-// 3. ROTA PARA LIMPAR O ERRO 404 DAS TARIFAS
 app.get('/api/config/tarifas', (req, res) => {
   res.json({}); 
 });
@@ -116,7 +149,7 @@ app.get('/api/config/tarifas', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', authRoutes); 
 app.use('/api/pedidos', pedidosRouter(io));
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
 
 server.listen(port, () => {
   console.log(`Servidor HUBy modularizado ativo na porta ${port}`);
