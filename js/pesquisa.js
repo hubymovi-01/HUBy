@@ -15,15 +15,38 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
 
   const executarBusca = async (termo) => {
     if (termo.length < 3) return;
+    
+    // ABRIR A CAIXA IMEDIATAMENTE COM AVISO DE CARREGAMENTO
+    listaResultados.innerHTML = `
+      <li class="search-result-item">
+        <div class="result-text">
+          <strong style="color: #38BDF8;">A procurar morada...</strong>
+          <small>A conectar ao satélite...</small>
+        </div>
+      </li>
+    `;
+    listaResultados.style.display = 'block';
+
     try {
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(termo)}&limit=5&countrycodes=br`);
+      // INJEÇÃO DE IDIOMA PARA O SERVIDOR NÃO BLOQUEAR O TELEMÓVEL
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(termo)}&limit=5&countrycodes=br`, {
+        headers: {
+          'Accept-Language': 'pt-BR,pt;q=0.9'
+        }
+      });
       const dados = await resp.json();
       
       listaResultados.innerHTML = '';
       
       if (dados.length === 0) {
-        listaResultados.innerHTML = '<li class="search-result-item"><div class="result-text"><strong style="color: #F59E0B;">Nenhum local encontrado</strong><small>Tente um nome diferente</small></div></li>';
-        listaResultados.style.display = 'block';
+        listaResultados.innerHTML = `
+          <li class="search-result-item">
+            <div class="result-text">
+              <strong style="color: #F59E0B;">Nenhum local encontrado</strong>
+              <small>Tente colocar o nome da cidade junto (ex: Simplício Mendes, PI)</small>
+            </div>
+          </li>
+        `;
         return;
       }
 
@@ -43,7 +66,6 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
           </div>
         `;
         
-        // Também blindamos a lista para reagir ao toque
         const selecionarLocal = async (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -65,9 +87,16 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
         listaResultados.appendChild(li);
       });
       
-      listaResultados.style.display = 'block';
     } catch (err) {
       console.error('Erro na pesquisa:', err);
+      listaResultados.innerHTML = `
+        <li class="search-result-item">
+          <div class="result-text">
+            <strong style="color: #EF4444;">Erro de Ligação</strong>
+            <small>Verifique a internet e tente novamente.</small>
+          </div>
+        </li>
+      `;
     }
   };
 
@@ -80,12 +109,10 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
       listaResultados.style.display = 'none';
       return;
     }
-
     clearTimeout(timeoutPesquisa);
-    timeoutPesquisa = setTimeout(() => executarBusca(termo), 600);
+    timeoutPesquisa = setTimeout(() => executarBusca(termo), 800);
   });
 
-  // Função para a Lupa
   const forcarPesquisa = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -96,7 +123,6 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     }
   };
 
-  // 2. Botão da Lupa reage a clique de rato E toque de dedo
   if (btnPesquisar) {
     btnPesquisar.addEventListener('click', forcarPesquisa);
     btnPesquisar.addEventListener('touchstart', forcarPesquisa, { passive: false });
@@ -113,7 +139,6 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     }
   });
 
-  // Função para o Botão X
   const limparCaixa = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -123,7 +148,6 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     inputPesquisa.focus();
   };
 
-  // 4. Botão X reage a clique E toque
   if (btnLimpar) {
     btnLimpar.addEventListener('click', limparCaixa);
     btnLimpar.addEventListener('touchstart', limparCaixa, { passive: false });
