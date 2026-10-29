@@ -43,7 +43,9 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
           </div>
         `;
         
-        li.addEventListener('click', async (e) => {
+        // Também blindamos a lista para reagir ao toque
+        const selecionarLocal = async (e) => {
+          e.preventDefault();
           e.stopPropagation();
           const lat = parseFloat(local.lat);
           const lng = parseFloat(local.lon);
@@ -55,7 +57,10 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
             const rota = await hubyMapa.calcularRota(hubyMapa.coordsOrigem, [lat, lng], '#F59E0B', true);
             aoSelecionarLocal(rota, [lat, lng], nomeCurto);
           }
-        });
+        };
+
+        li.addEventListener('click', selecionarLocal);
+        li.addEventListener('touchstart', selecionarLocal, { passive: false });
         
         listaResultados.appendChild(li);
       });
@@ -66,7 +71,6 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     }
   };
 
-  // 1. Mostrar/Esconder o X ao digitar e busca automática
   inputPesquisa.addEventListener('input', (e) => {
     const termo = e.target.value.trim();
     if (termo.length > 0) {
@@ -81,20 +85,23 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     timeoutPesquisa = setTimeout(() => executarBusca(termo), 600);
   });
 
-  // 2. Botão da Lupa (Forçar Busca)
+  // Função para a Lupa
+  const forcarPesquisa = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const termo = inputPesquisa.value.trim();
+    if (termo.length >= 3) {
+      clearTimeout(timeoutPesquisa);
+      executarBusca(termo);
+    }
+  };
+
+  // 2. Botão da Lupa reage a clique de rato E toque de dedo
   if (btnPesquisar) {
-    btnPesquisar.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const termo = inputPesquisa.value.trim();
-      if (termo.length >= 3) {
-        clearTimeout(timeoutPesquisa);
-        executarBusca(termo);
-      }
-    });
+    btnPesquisar.addEventListener('click', forcarPesquisa);
+    btnPesquisar.addEventListener('touchstart', forcarPesquisa, { passive: false });
   }
 
-  // 3. Tecla Enter no teclado
   inputPesquisa.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -106,19 +113,22 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal) {
     }
   });
 
-  // 4. Botão X (Limpar Caixa)
+  // Função para o Botão X
+  const limparCaixa = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    inputPesquisa.value = '';
+    btnLimpar.style.display = 'none';
+    listaResultados.style.display = 'none';
+    inputPesquisa.focus();
+  };
+
+  // 4. Botão X reage a clique E toque
   if (btnLimpar) {
-    btnLimpar.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      inputPesquisa.value = '';
-      btnLimpar.style.display = 'none';
-      listaResultados.style.display = 'none';
-      inputPesquisa.focus(); // Devolve o cursor piscante à caixa
-    });
+    btnLimpar.addEventListener('click', limparCaixa);
+    btnLimpar.addEventListener('touchstart', limparCaixa, { passive: false });
   }
   
-  // Fechar lista ao clicar fora
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-floating-wrapper')) {
       if (listaResultados) listaResultados.style.display = 'none';
