@@ -15,6 +15,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
   <link rel="apple-touch-icon" href="./img/icon-192.png">
+  <link rel="stylesheet" href="css/pesquisa.css">
   <title>HUBy</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -29,9 +30,24 @@
     }
 
     @keyframes encerrarSplashHUBy {
-      0% { opacity: 1; visibility: visible; pointer-events: all; }
-      99% { opacity: 0; visibility: hidden; pointer-events: none; }
-      100% { opacity: 0; visibility: hidden; display: none !important; pointer-events: none; }
+      0% {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: all;
+      }
+
+      99% {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      100% {
+        opacity: 0;
+        visibility: hidden;
+        display: none !important;
+        pointer-events: none;
+      }
     }
 
     .btn-floating-gps {
@@ -111,6 +127,15 @@
   </script>
 
   <div id="mapaCliente"></div>
+  <!-- BARRA DE PESQUISA FLUTUANTE (PREMIUM) -->
+  <div class="search-floating-wrapper">
+    <div class="search-glass-box">
+      <span class="search-icon">📍</span>
+      <input type="text" id="inputPesquisaLocal" placeholder="Para onde vamos?" autocomplete="off" />
+      <button id="btnLimparPesquisa" class="clear-btn" style="display: none;">❌</button>
+    </div>
+    <ul id="listaResultadosPesquisa" class="search-results-glass" style="display: none;"></ul>
+  </div>
 
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
@@ -120,7 +145,8 @@
       <span class="hub-txt">HUB</span><span class="y-txt">y</span>
     </div>
     <button type="button" id="btnNavViagens" class="btn-action-pill">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="10"></circle>
         <polyline points="12 6 12 12 16 14"></polyline>
       </svg>
@@ -149,9 +175,11 @@
         <span class="d-icon">🚘</span>
         <div class="d-info"><strong>Painel do Motorista</strong><small>Aceder ao modo parceiro</small></div>
       </a>
-      <a href="./admin.html" id="menuItemAdmin" class="drawer-item" style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
+      <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
+        style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
         <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
+            financeiro</small></div>
       </a>
       <!-- Link Direto para a Página de Perfil -->
       <a href="./perfil.html" class="drawer-item">
@@ -167,7 +195,8 @@
 
   <!-- BOTÃO FLUTUANTE DE GPS -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
       <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -177,7 +206,9 @@
   </button>
 
   <!-- BOTÃO FLUTUANTE DE CHAT -->
-  <button type="button" id="btnAbrirChat" class="btn-floating-gps" style="display: none; bottom: 300px; right: 18px; border-color: #38BDF8; color: #38BDF8; font-size: 20px; z-index: 9998;" aria-label="Abrir Chat">
+  <button type="button" id="btnAbrirChat" class="btn-floating-gps"
+    style="display: none; bottom: 300px; right: 18px; border-color: #38BDF8; color: #38BDF8; font-size: 20px; z-index: 9998;"
+    aria-label="Abrir Chat">
     💬
   </button>
 
@@ -185,10 +216,14 @@
     <div class="sheet-drag-handle"></div>
 
     <div class="category-slider" id="sliderCategorias">
-      <button type="button" class="category-chip active" data-id="carro"><span class="cat-icon">🚗</span><span class="cat-label">Carro</span></button>
-      <button type="button" class="category-chip" data-id="moto"><span class="cat-icon">🏍️</span><span class="cat-label">Moto</span></button>
-      <button type="button" class="category-chip" data-id="flash_moto"><span class="cat-icon">⚡</span><span class="cat-label">Flash</span></button>
-      <button type="button" class="category-chip" data-id="cargo_pickup"><span class="cat-icon">📦</span><span class="cat-label">Frete</span></button>
+      <button type="button" class="category-chip active" data-id="carro"><span class="cat-icon">🚗</span><span
+          class="cat-label">Carro</span></button>
+      <button type="button" class="category-chip" data-id="moto"><span class="cat-icon">🏍️</span><span
+          class="cat-label">Moto</span></button>
+      <button type="button" class="category-chip" data-id="flash_moto"><span class="cat-icon">⚡</span><span
+          class="cat-label">Flash</span></button>
+      <button type="button" class="category-chip" data-id="cargo_pickup"><span class="cat-icon">📦</span><span
+          class="cat-label">Frete</span></button>
     </div>
 
     <div id="blocoResumo" class="trip-summary-card">
@@ -216,34 +251,42 @@
     <!-- PAINEL PREMIUM: MOTORISTA ACEITOU -->
     <div id="painelMotoristaAceitou" style="display: none; width: 100%;">
       <div style="text-align: center; margin-bottom: 16px;">
-        <span style="background: rgba(16, 185, 129, 0.15); color: #10B981; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+        <span
+          style="background: rgba(16, 185, 129, 0.15); color: #10B981; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
           ✓ Motorista a Caminho
         </span>
       </div>
 
-      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px; margin-bottom: 16px;">
+      <div
+        style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px; margin-bottom: 16px;">
         <div style="display: flex; align-items: center; gap: 14px;">
-          <div style="width: 54px; height: 54px; background: #1F2937; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px;">
+          <div
+            style="width: 54px; height: 54px; background: #1F2937; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px;">
             🚘
           </div>
           <div>
-            <h3 id="lblMotoristaNome" style="margin: 0 0 4px 0; font-size: 18px; color: #FFF; font-weight: 800;">A carregar...</h3>
+            <h3 id="lblMotoristaNome" style="margin: 0 0 4px 0; font-size: 18px; color: #FFF; font-weight: 800;">A
+              carregar...</h3>
             <span style="font-size: 13px; color: #F59E0B; font-weight: 700;">★ 5.0</span>
           </div>
         </div>
         <div style="text-align: right;">
-          <div id="lblMotoristaPlaca" style="background: #E2E8F0; padding: 6px 10px; border-radius: 8px; font-size: 15px; color: #0F172A; font-weight: 900; letter-spacing: 1.5px; border: 1px solid #CBD5E1;">
+          <div id="lblMotoristaPlaca"
+            style="background: #E2E8F0; padding: 6px 10px; border-radius: 8px; font-size: 15px; color: #0F172A; font-weight: 900; letter-spacing: 1.5px; border: 1px solid #CBD5E1;">
             ---
           </div>
-          <div id="lblMotoristaVeiculo" style="font-size: 12px; color: #94A3B8; margin-top: 6px; font-weight: 600;">---</div>
+          <div id="lblMotoristaVeiculo" style="font-size: 12px; color: #94A3B8; margin-top: 6px; font-weight: 600;">---
+          </div>
         </div>
       </div>
 
       <div style="display: flex; gap: 12px;">
-        <button type="button" id="btnAbrirChatClienteCard" style="flex: 1; background: #38BDF8; color: #032017; padding: 14px; border-radius: 12px; border: none; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
+        <button type="button" id="btnAbrirChatClienteCard"
+          style="flex: 1; background: #38BDF8; color: #032017; padding: 14px; border-radius: 12px; border: none; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
           💬 Mensagem
         </button>
-        <a href="#" id="btnLigarMotorista" style="flex: 1; background: rgba(255, 255, 255, 0.05); color: #FFF; border: 1px solid rgba(255, 255, 255, 0.1); padding: 14px; border-radius: 12px; text-decoration: none; text-align: center; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <a href="#" id="btnLigarMotorista"
+          style="flex: 1; background: rgba(255, 255, 255, 0.05); color: #FFF; border: 1px solid rgba(255, 255, 255, 0.1); padding: 14px; border-radius: 12px; text-decoration: none; text-align: center; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
           📞 Ligar
         </a>
       </div>
@@ -259,12 +302,16 @@
         <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
       <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
-        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
+          tempo real.</p>
+        <div
+          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
+            contato cadastrado</div>
         </div>
-        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal"
+          style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
           <span>📲 Compartilhar Rota no WhatsApp</span>
         </button>
       </div>
@@ -276,7 +323,9 @@
       <div class="modal-header-row">
         <h3>Minhas Viagens</h3><button type="button" id="btnFecharHistorico" class="btn-icon-close">✕</button>
       </div>
-      <div id="listaHistoricoCorridas" class="historico-scroll-box"><p class="loading-txt">Carregando viagens...</p></div>
+      <div id="listaHistoricoCorridas" class="historico-scroll-box">
+        <p class="loading-txt">Carregando viagens...</p>
+      </div>
     </div>
   </div>
 
@@ -285,7 +334,8 @@
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
       <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
+          data-val="4">★</span><span data-val="5">★</span>
       </div>
       <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
       <div class="modal-btn-row">
@@ -325,17 +375,24 @@
 
   <!-- CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
-    <div class="modal-card" style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-      <div class="modal-header-row" style="padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
+    <div class="modal-card"
+      style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+      <div class="modal-header-row"
+        style="padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8;">💬 Mensagens da Viagem</h3>
         <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
       </div>
-      <div id="chatAreaMensagens" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
+      <div id="chatAreaMensagens"
+        style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
+        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
+          pessoais.</div>
       </div>
-      <div style="padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; gap: 8px;">
-        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." style="flex: 1; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
-        <button type="button" id="btnEnviarMsgChat" style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer; font-size: 14px;">Enviar</button>
+      <div
+        style="padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; gap: 8px;">
+        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..."
+          style="flex: 1; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
+        <button type="button" id="btnEnviarMsgChat"
+          style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer; font-size: 14px;">Enviar</button>
       </div>
     </div>
   </div>
@@ -391,22 +448,22 @@
     // =======================================================================
     document.getElementById('menuItemViagens')?.addEventListener('click', async (e) => {
       e.preventDefault();
-      document.getElementById('menuBackdrop')?.click(); 
-      
+      document.getElementById('menuBackdrop')?.click();
+
       const modalHist = document.getElementById('modalHistorico');
       const listaHist = document.getElementById('listaHistoricoCorridas');
       if (modalHist) modalHist.style.display = 'flex';
-      
+
       listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">A procurar viagens...</p>';
 
       try {
         const token = localStorage.getItem('huby_token');
         const API_URL = 'https://huby.onrender.com';
-        
+
         const resp = await fetch(`${API_URL}/api/pedidos/historico`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
-        
+
         const viagens = await resp.json();
 
         if (viagens.length === 0) {
@@ -449,13 +506,13 @@
     // =======================================================================
     // PASSO 3: LÓGICA DO MODAL DE AVALIAÇÕES 
     // =======================================================================
-    let notaSelecionada = 5; 
-    
+    let notaSelecionada = 5;
+
     const estrelas = document.querySelectorAll('#estrelasRating span');
     estrelas.forEach(estrela => {
-      estrela.style.color = '#F59E0B'; 
+      estrela.style.color = '#F59E0B';
       estrela.style.cursor = 'pointer';
-      
+
       estrela.addEventListener('click', (e) => {
         notaSelecionada = parseInt(e.target.getAttribute('data-val'));
         estrelas.forEach(s => {
@@ -481,7 +538,7 @@
       try {
         const token = localStorage.getItem('huby_token');
         const API_URL = 'https://huby.onrender.com';
-        
+
         const resp = await fetch(`${API_URL}/api/pedidos/${pedidoFinalizadoId}/avaliar`, {
           method: 'POST',
           headers: {
@@ -490,7 +547,7 @@
           },
           body: JSON.stringify({ nota: notaSelecionada, comentario })
         });
-        
+
         if (resp.ok) {
           alert('Obrigado! A sua avaliação ajuda a manter a qualidade HUBy.');
           document.getElementById('modalAvaliacao').style.display = 'none';
@@ -517,12 +574,12 @@
     // =======================================================================
     function atualizarMenuLateral() {
       const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
-      const fotoLocal = localStorage.getItem('huby_user_foto'); 
+      const fotoLocal = localStorage.getItem('huby_user_foto');
       const drawerBox = document.getElementById('drawerPerfilBox');
 
       if (drawerBox) {
         let avatarHTML = '';
-        
+
         if (fotoLocal && fotoLocal !== 'null' && fotoLocal !== 'undefined') {
           avatarHTML = `<img src="${fotoLocal}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981; box-shadow: 0 4px 12px rgba(0,0,0,0.4);" alt="Avatar" />`;
         } else {
@@ -545,4 +602,5 @@
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
 </body>
+
 </html>

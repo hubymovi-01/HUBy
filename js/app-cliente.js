@@ -1,5 +1,6 @@
 import { API_URL, CATEGORIAS, calcularPreco, sincronizarTarifasServidor, MULTIPLICADOR_PICO } from './config.js';
 import { HubyMapa } from './mapa.js';
+import { configurarPesquisaLocal } from './pesquisa.js';
 
 let hubyMapa = null;
 let coordsDestino = null;
@@ -113,9 +114,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   configurarModalAvaliacao();
   
-  // INICIA A MÁGICA DA BARRA DE PESQUISA
-  configurarPesquisaLocal();
+  // INICIA A MÁGICA DA BARRA DE PESQUISA MODULAR
+configurarPesquisaLocal(hubyMapa, (rota, coords, nomeCurto) => {
+  rotaAtual = rota;
+  coordsDestino = coords;
 
+  const txtDestino = document.getElementById('txtDestinoSelecionado');
+  if (txtDestino) txtDestino.textContent = nomeCurto;
+
+  atualizarResumoValores(); 
+});
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
   }
