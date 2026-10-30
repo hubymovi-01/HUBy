@@ -92,6 +92,10 @@ async function efetivarAceiteChamada(dados) {
     estado.pedidoAceitoAtual = data.pedido || {};
     estado.pedidoAceitoAtual.coordsOrigem = dados.coordsOrig;
     estado.pedidoAceitoAtual.coordsDestino = dados.coordsDest;
+    estado.pedidoAceitoAtual.origem_lat = dados.coordsOrig ? dados.coordsOrig[0] : null;
+    estado.pedidoAceitoAtual.origem_lng = dados.coordsOrig ? dados.coordsOrig[1] : null;
+    estado.pedidoAceitoAtual.destino_lat = dados.coordsDest ? dados.coordsDest[0] : null;
+    estado.pedidoAceitoAtual.destino_lng = dados.coordsDest ? dados.coordsDest[1] : null;
     estado.pedidoAceitoAtual.origem_endereco = dados.origem;
     estado.pedidoAceitoAtual.destino_endereco = dados.destino;
     estado.pedidoAceitoAtual.valor_total = dados.preco;
@@ -133,8 +137,8 @@ export function renderizarCardEtapa() {
 
   // Coordenadas para rota externa (Origem ou Destino dependendo da etapa)
   const coordsAlvo = estaACaminho 
-    ? estado.pedidoAceitoAtual.coordsOrigem 
-    : estado.pedidoAceitoAtual.coordsDestino;
+    ? (estado.pedidoAceitoAtual.coordsOrigem || [estado.pedidoAceitoAtual.origem_lat, estado.pedidoAceitoAtual.origem_lng])
+    : (estado.pedidoAceitoAtual.coordsDestino || [estado.pedidoAceitoAtual.destino_lat, estado.pedidoAceitoAtual.destino_lng]);
 
   const latAlvo = coordsAlvo ? coordsAlvo[0] : null;
   const lngAlvo = coordsAlvo ? coordsAlvo[1] : null;
@@ -221,9 +225,46 @@ export function renderizarCardEtapa() {
   if (estaACaminho) {
     document.getElementById('btnIniciarViagemUnico')?.addEventListener('click', async () => {
       estado.etapaCorridaAtual = 'em_viagem';
-      if (estado.pedidoAceitoAtual.coordsOrigem && estado.pedidoAceitoAtual.coordsDestino && estado.hubyMapa) {
-        await estado.hubyMapa.calcularRota(estado.pedidoAceitoAtual.coordsOrigem, estado.pedidoAceitoAtual.coordsDestino, '#10B981');
+
+      // 1. Extração segura das coordenadas de Destino
+      let destCoords = estado.pedidoAceitoAtual.coordsDestino;
+      if (!destCoords || !Array.isArray(destCoords)) {
+        const dLat = parseFloat(estado.pedidoAceitoAtual.destino_lat || estado.pedidoAceitoAtual.destinoLat);
+        const dLng = parseFloat(estado.pedidoAceitoAtual.destino_lng || estado.pedidoAceitoAtual.destinoLng);
+        if (!isNaN(dLat) && !isNaN(dLng)) {
+          destCoords = [dLat, dLng];
+          estado.pedidoAceitoAtual.coordsDestino = destCoords;
+        }
       }
+
+      // 2. Extração segura do ponto de partida (GPS atual do condutor ou ponto de embarque)
+      let origCoords = estado.hubyMapa?.coordsOrigem;
+      if (!origCoords || !Array.isArray(origCoords)) {
+        origCoords = estado.pedidoAceitoAtual.coordsOrigem;
+        if (!origCoords || !Array.isArray(origCoords)) {
+          const oLat = parseFloat(estado.pedidoAceitoAtual.origem_lat || estado.pedidoAceitoAtual.origemLat);
+          const oLng = parseFloat(estado.pedidoAceitoAtual.origem_lng || estado.pedidoAceitoAtual.origemLng);
+          if (!isNaN(oLat) && !isNaN(oLng)) {
+            origCoords = [oLat, oLng];
+          }
+        }
+      }
+
+      // 3. Limpa a rota anterior para evitar sobreposição ou travamento
+      if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
+        estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
+        estado.hubyMapa.rotaLayer = null;
+      }
+
+      // 4. Traça a nova rota até o destino final em verde (#10B981)
+      if (origCoords && destCoords && estado.hubyMapa) {
+        try {
+          await estado.hubyMapa.calcularRota(origCoords, destCoords, '#10B981');
+        } catch (err) {
+          console.warn('Erro ao traçar rota até o destino final:', err);
+        }
+      }
+
       renderizarCardEtapa();
     });
   } else {
