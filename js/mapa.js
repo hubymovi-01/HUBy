@@ -1,8 +1,8 @@
 /**
-- ============================================================================
-- HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
-- CÓDIGO FINAL - Rastreamento Contínuo e Zoom Inteligente (FIX LINHAS)
-- ============================================================================
+ * ============================================================================
+ * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
+ * CÓDIGO REFINADO - Geometria de Ruas, Padding Dinâmico e Zoom Focado
+ * ============================================================================
  */
 
 export class HubyMapa {
@@ -173,46 +173,86 @@ export class HubyMapa {
   }
 
   obterGPS(callbackSucesso) {
-    this.gpsFixo = false; 
+    this.gpsFixo = false;
     this.obterGPSReal(callbackSucesso);
   }
 
   async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true) {
     const lon1 = origem[1], lat1 = origem[0];
     const lon2 = destino[1], lat2 = destino[0];
-    const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`;
 
-    try {
-      const resp = await fetch(url);
-      const data = await resp.json();
-      if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-        const rota = data.routes[0];
-        const distanciaKm = Math.max(0.5, rota.distance / 1000);
-        const duracaoMin = Math.max(2, Math.round(rota.duration / 60));
+    // URLs dos serviços de rota com fallback
+    const urls = [
+      `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`,
+      `https://routing.openstreetmap.de/routed-car/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`
+    ];
 
-        if (this.rotaLayer && this.map) this.map.removeLayer(this.rotaLayer);
+    let data = null;
 
-        if (exibirLinha) {
-          const estiloTracado = cor === '#38BDF8' ? '12, 12' : null;
-          const pesoLinha = (cor === '#38BDF8' || cor === '#F59E0B') ? 4 : 5;
-
-          this.rotaLayer = L.geoJSON(rota.geometry, {
-            style: { color: cor, weight: pesoLinha, opacity: 0.9, dashArray: estiloTracado }
-          }).addTo(this.map);
-
-          setTimeout(() => {
-            if (this.map && this.rotaLayer) {
-              this.map.invalidateSize();
-              this.map.fitBounds(this.rotaLayer.getBounds(), { padding: [50, 50], maxZoom: 15, animate: true });
-            }
-          }, 400);
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.code === 'Ok' && json.routes && json.routes.length > 0) {
+            data = json;
+            break;
+          }
         }
-
-        return { distanciaKm: Number(distanciaKm.toFixed(1)), duracaoMin };
+      } catch (e) {
+        console.warn(`Falha no provedor de rotas (${url}), tentando alternativo...`);
       }
-    } catch (e) {
-      console.warn('Erro OSRM:', e);
     }
-    return { distanciaKm: 1.5, duracaoMin: 4 };
+
+    if (data && data.routes && data.routes.length > 0) {
+      const rota = data.routes[0];
+      const distanciaKm = Math.max(0.5, rota.distance / 1000);
+      const duracaoMin = Math.max(2, Math.round(rota.duration / 60));
+
+      if (this.rotaLayer && this.map) {
+        this.map.removeLayer(this.rotaLayer);
+        this.rotaLayer = null;
+      }
+
+      if (exibirLinha && this.map) {
+        const estiloTracado = cor === '#38BDF8' ? '10, 10' : null;
+        const pesoLinha = (cor === '#38BDF8' || cor === '#F59E0B') ? 4 : 5;
+
+        this.rotaLayer = L.geoJSON(rota.geometry, {
+          style: {
+            color: cor,
+            weight: pesoLinha,
+            opacity: 0.92,
+            dashArray: estiloTracado,
+            lineJoin: 'round',
+            lineCap: 'round'
+          }
+        }).addTo(this.map);
+
+        setTimeout(() => {
+          if (this.map && this.rotaLayer) {
+            this.map.invalidateSize();
+            // Padding que deixa 270px na parte inferior para o card não tapar a rota
+            this.map.fitBounds(this.rotaLayer.getBounds(), {
+              paddingTopLeft: [40, 50],
+              paddingBottomRight: [40, 270],
+              maxZoom: 16,
+              animate: true
+            });
+          }
+        }, 200);
+      }
+
+      return { distanciaKm: Number(distanciaKm.toFixed(1)), duracaoMin };
+    }
+
+    // Fallback de distância euclidiana caso nenhum serviço responda
+    const rad = Math.PI / 180;
+    const dLat = (lat2 - lat1) * rad;
+    const dLon = (lon2 - lon1) * rad;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
+    const distEstimada = Math.max(1.0, 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.3);
+
+    return { distanciaKm: Number(distEstimada.toFixed(1)), duracaoMin: Math.max(3, Math.round(distEstimada * 2.2)) };
   }
 }

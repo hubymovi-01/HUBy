@@ -6,6 +6,74 @@ import { carregarGanhosHoje } from './motorista-ganhos.js';
 import { carregarPerfilCompleto } from './motorista-perfil.js';
 import { fecharChat } from './motorista-chat.js';
 
+// Utilitário para limpar strings de coordenadas no texto do card
+function formatarTextoLocal(texto, fallbackPadrao = 'Local Marcado') {
+  if (!texto) return fallbackPadrao;
+  // Se for algo como "Destino no mapa (-8.3516, -42.2617)" ou "Partida (...)"
+  if (texto.includes('(') && texto.includes(')')) {
+    const parteAntes = texto.split('(')[0].trim();
+    if (parteAntes.length > 2) return parteAntes;
+    return fallbackPadrao;
+  }
+  return texto;
+}
+
+// Toast nativo animado no topo (sem bloquear o browser)
+function exibirToastConclusao(valorRepasse) {
+  const toastExistente = document.getElementById('hubyToastConclusao');
+  if (toastExistente) toastExistente.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'hubyToastConclusao';
+  toast.style.cssText = `
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-30px);
+    background: #0E131F;
+    border: 1.5px solid #10B981;
+    color: #FFF;
+    padding: 14px 22px;
+    border-radius: 14px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.3);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: inherit;
+    opacity: 0;
+    transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  `;
+
+  toast.innerHTML = `
+    <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(16, 185, 129, 0.2); display: flex; align-items: center; justify-content: center; font-size: 16px;">
+      ✓
+    </div>
+    <div>
+      <div style="font-size: 13px; font-weight: 800; color: #10B981;">Viagem Concluída!</div>
+      <div style="font-size: 12px; color: #94A3B8;">Repasse Líquido: <strong style="color: #FFF; font-size: 13px;">R$ ${Number(valorRepasse).toFixed(2).replace('.', ',')}</strong></div>
+    </div>
+  `;
+
+  document.body.appendChild(toast);
+
+  // Animação de entrada
+  setTimeout(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+  }, 50);
+
+  // Vibração suave se suportado
+  if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
+
+  // Remove após 3.5 segundos
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(-20px)';
+    setTimeout(() => toast.remove(), 400);
+  }, 3500);
+}
+
 export async function preVisualizarRotaPedido(dados) {
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
@@ -25,6 +93,9 @@ export async function preVisualizarRotaPedido(dados) {
 
   const feed = document.getElementById('listaChamadasPendentes');
   if (feed) {
+    const origemTxt = formatarTextoLocal(dados.origem, 'Local de Partida');
+    const destinoTxt = formatarTextoLocal(dados.destino, 'Destino do Passageiro');
+
     feed.innerHTML = `
       <div class="order-card" style="border: 2px solid #F59E0B; background: #0E131F;">
         <div class="order-card-header">
@@ -35,8 +106,12 @@ export async function preVisualizarRotaPedido(dados) {
           <span style="display: block; color: #F59E0B; font-weight: 800; font-size: 13px; margin-bottom: 4px;">
             Confira o trajeto traçado no mapa antes de aceitar
           </span>
-          <span><strong>Origem:</strong> ${dados.origem}</span>
-          <span><strong>Destino:</strong> ${dados.destino}</span>
+          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+            <strong>Origem:</strong> ${origemTxt}
+          </span>
+          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+            <strong>Destino:</strong> ${destinoTxt}
+          </span>
           <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
             📏 ${dados.dist} km • ⏱️ Estimativa: ~${dados.dur} min
           </small>
@@ -135,7 +210,7 @@ export function renderizarCardEtapa() {
 
   const estaACaminho = (estado.etapaCorridaAtual === 'a_caminho');
 
-  // Coordenadas para rota externa (Origem ou Destino dependendo da etapa)
+  // Coordenadas para rota externa
   const coordsAlvo = estaACaminho 
     ? (estado.pedidoAceitoAtual.coordsOrigem || [estado.pedidoAceitoAtual.origem_lat, estado.pedidoAceitoAtual.origem_lng])
     : (estado.pedidoAceitoAtual.coordsDestino || [estado.pedidoAceitoAtual.destino_lat, estado.pedidoAceitoAtual.destino_lng]);
@@ -143,7 +218,6 @@ export function renderizarCardEtapa() {
   const latAlvo = coordsAlvo ? coordsAlvo[0] : null;
   const lngAlvo = coordsAlvo ? coordsAlvo[1] : null;
 
-  // Links universais para Google Maps e Waze
   const linkGoogleMaps = (latAlvo && lngAlvo)
     ? `https://www.google.com/maps/dir/?api=1&destination=${latAlvo},${lngAlvo}`
     : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(estaACaminho ? (estado.pedidoAceitoAtual.origem_endereco || '') : estado.pedidoAceitoAtual.destino_endereco)}`;
@@ -151,6 +225,9 @@ export function renderizarCardEtapa() {
   const linkWaze = (latAlvo && lngAlvo)
     ? `https://waze.com/ul?ll=${latAlvo},${lngAlvo}&navigate=yes`
     : `https://waze.com/ul?q=${encodeURIComponent(estaACaminho ? (estado.pedidoAceitoAtual.origem_endereco || '') : estado.pedidoAceitoAtual.destino_endereco)}`;
+
+  const origemLimpa = formatarTextoLocal(estado.pedidoAceitoAtual.origem_endereco, 'Local de Embarque');
+  const destinoLimpo = formatarTextoLocal(estado.pedidoAceitoAtual.destino_endereco, 'Destino Final');
 
   feed.innerHTML = `
     <div class="order-card" style="border-color: ${estaACaminho ? '#38BDF8' : '#10B981'};">
@@ -164,8 +241,12 @@ export function renderizarCardEtapa() {
         <span style="display: block; color: ${estaACaminho ? '#38BDF8' : '#10B981'}; font-weight: 800; font-size: 14px; margin-bottom: 4px;" id="lblTempoPassageiro">
           ${estaACaminho ? '📍 A caminho do local de embarque...' : '🏁 A caminho do destino final!'}
         </span>
-        <span><strong>Recolha:</strong> ${estado.pedidoAceitoAtual.origem_endereco || 'Local do passageiro'}</span>
-        <span><strong>Destino:</strong> ${estado.pedidoAceitoAtual.destino_endereco}</span>
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+          <strong>Recolha:</strong> ${origemLimpa}
+        </span>
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
+          <strong>Destino:</strong> ${destinoLimpo}
+        </span>
         <small style="color: #94A3B8; font-weight: 600; display: block; margin-top: 4px;">
           ⏱️ Viagem: ~${estado.pedidoAceitoAtual.duracao_min || 5} min • ${estado.pedidoAceitoAtual.distancia_km} km
         </small>
@@ -237,7 +318,7 @@ export function renderizarCardEtapa() {
         }
       }
 
-      // 2. Extração segura do ponto de partida (GPS atual do condutor ou ponto de embarque)
+      // 2. Ponto de partida (GPS atual ou origem)
       let origCoords = estado.hubyMapa?.coordsOrigem;
       if (!origCoords || !Array.isArray(origCoords)) {
         origCoords = estado.pedidoAceitoAtual.coordsOrigem;
@@ -250,13 +331,13 @@ export function renderizarCardEtapa() {
         }
       }
 
-      // 3. Limpa a rota anterior para evitar sobreposição ou travamento
+      // 3. Limpeza da camada anterior
       if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
         estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
         estado.hubyMapa.rotaLayer = null;
       }
 
-      // 4. Traça a nova rota até o destino final em verde (#10B981)
+      // 4. Traçado da nova rota em verde
       if (origCoords && destCoords && estado.hubyMapa) {
         try {
           await estado.hubyMapa.calcularRota(origCoords, destCoords, '#10B981');
@@ -288,16 +369,15 @@ export async function concluirCorridaAtual() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.erro || 'Falha ao liquidar corrida.');
 
-    alert(`Viagem Concluída com sucesso!\n\nRepasse Líquido: R$ ${Number(data.repasseLiquido).toFixed(2).replace('.', ',')}`);
+    // Notificação elegante sem travar a tela
+    exibirToastConclusao(data.repasseLiquido || 0);
 
     limparAtendimento();
     await carregarPerfilCompleto();
     await carregarGanhosHoje();
 
-    // Se ativou o modo última viagem, coloca o parceiro offline automaticamente
     if (estado.modoUltimaViagem) {
       document.getElementById('btnToggleStatusOnline')?.click();
-      alert('Modo Última Viagem: Você foi colocado Offline para descansar.');
     }
   } catch (err) {
     alert(err.message);
