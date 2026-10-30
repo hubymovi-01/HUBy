@@ -156,6 +156,8 @@ app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : admi
 app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
 server.listen(port, () => {
   console.log(`Servidor HUBy modularizado ativo na porta ${port}`);

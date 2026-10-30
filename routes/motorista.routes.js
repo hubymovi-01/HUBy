@@ -52,9 +52,10 @@ router.get('/perfil', autenticarToken, async (req, res) => {
         COALESCE(m.veiculo_ano, '') AS veiculo_ano,
         COALESCE(m.chave_pix_padrao, '') AS chave_pix_padrao
       FROM motoristas m
-      LEFT JOIN usuarios u ON (m.usuario_id = u.id OR m.id = u.id)
+      FULL OUTER JOIN usuarios u ON (m.usuario_id = u.id OR m.id = u.id)
       WHERE m.id = ${usuarioId} 
          OR m.usuario_id = ${usuarioId} 
+         OR u.id = ${usuarioId}
          OR (m.email = ${emailUsuario} AND ${emailUsuario} != '')
       LIMIT 1;
     `;
@@ -63,37 +64,31 @@ router.get('/perfil', autenticarToken, async (req, res) => {
       return res.json(mot[0]);
     }
 
-    // Se só existir registro em usuários (primeiro acesso)
-    const usr = await sql`SELECT id, nome, email, telefone FROM usuarios WHERE id = ${usuarioId} LIMIT 1;`;
-    if (usr.length > 0) {
-      const u = usr[0];
-      return res.json({
-        id: u.id,
-        nome: u.nome || '',
-        email: u.email || '',
-        telefone: u.telefone || '',
-        categoria: 'carro',
-        saldo_carteira: 0,
-        status_aprovacao: 'aprovado',
-        veiculo_modelo: '',
-        veiculo_placa: '',
-        veiculo_cor: '',
-        veiculo_ano: '',
-        avaliacao_media: 5.0,
-        total_corridas: 0,
-        foto_perfil_url: '',
-        chave_pix_padrao: ''
-      });
-    }
-
-    res.status(404).json({ erro: 'Cadastro de motorista não encontrado.' });
+    // Fallback de segurança se não houver registros
+    res.json({
+      id: usuarioId,
+      nome: req.usuario.nome || '',
+      email: emailUsuario,
+      telefone: '',
+      categoria: 'carro',
+      saldo_carteira: 0,
+      status_aprovacao: 'aprovado',
+      foto_perfil_url: '',
+      avaliacao_media: 5.0,
+      total_corridas: 0,
+      veiculo_modelo: '',
+      veiculo_placa: '',
+      veiculo_cor: '',
+      veiculo_ano: '',
+      chave_pix_padrao: ''
+    });
   } catch (err) {
     console.error('Erro ao consultar perfil do motorista:', err);
     res.status(500).json({ erro: 'Falha ao obter perfil.' });
   }
 });
 
-// 3. Atualizar Dados do Perfil com Suporte a Foto Direta
+// 3. Atualizar Dados do Perfil com Suporte a Foto e Auto-Criação
 router.put('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -104,39 +99,75 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       chave_pix_padrao
     } = req.body;
 
-    const mot = await sql`
+    // Normaliza strings vazias para null
+    const fNome = (nome && nome.trim()) ? nome.trim() : null;
+    const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
+    const fFoto = (foto_perfil_url && foto_perfil_url.trim()) ? foto_perfil_url.trim() : null;
+    const fMod = (veiculo_modelo && veiculo_modelo.trim()) ? veiculo_modelo.trim() : null;
+    const fPlaca = (veiculo_placa && veiculo_placa.trim()) ? veiculo_placa.trim().toUpperCase() : null;
+    const fCor = (veiculo_cor && veiculo_cor.trim()) ? veiculo_cor.trim() : null;
+    const fAno = (veiculo_ano && veiculo_ano.trim()) ? veiculo_ano.trim() : null;
+    const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
+
+    // 1. Tenta atualizar se o motorista já existe
+    let mot = await sql`
       UPDATE motoristas
       SET 
-        nome = COALESCE(${nome || null}, nome),
-        telefone = COALESCE(${telefone || null}, telefone),
-        foto_perfil_url = COALESCE(${foto_perfil_url || null}, foto_perfil_url),
-        veiculo_modelo = COALESCE(${veiculo_modelo || null}, veiculo_modelo),
-        veiculo_placa = COALESCE(${veiculo_placa || null}, veiculo_placa),
-        veiculo_cor = COALESCE(${veiculo_cor || null}, veiculo_cor),
-        veiculo_ano = COALESCE(${veiculo_ano || null}, veiculo_ano),
-        chave_pix_padrao = COALESCE(${chave_pix_padrao || null}, chave_pix_padrao)
+        nome = COALESCE(${fNome}, nome),
+        telefone = COALESCE(${fTel}, telefone),
+        foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
+        veiculo_modelo = COALESCE(${fMod}, veiculo_modelo),
+        veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
+        veiculo_cor = COALESCE(${fCor}, veiculo_cor),
+        veiculo_ano = COALESCE(${fAno}, veiculo_ano),
+        chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao)
       WHERE id = ${usuarioId} 
          OR usuario_id = ${usuarioId} 
          OR (email = ${emailUsuario} AND ${emailUsuario} != '')
       RETURNING *;
     `;
 
-    // Atualiza tabela de usuarios simultaneamente
+    // 2. Se não existia registro na tabela motoristas, cria um registro agora (UPSERT)
+    if (mot.length === 0) {
+      mot = await sql`
+        INSERT INTO motoristas (
+          usuario_id, nome, email, telefone, foto_perfil_url,
+          veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, chave_pix_padrao,
+          categoria, saldo_carteira, status_aprovacao
+        ) VALUES (
+          ${usuarioId}, 
+          ${fNome || req.usuario.nome || 'Motorista'}, 
+          ${emailUsuario}, 
+          ${fTel || ''}, 
+          ${fFoto || ''}, 
+          ${fMod || ''}, 
+          ${fPlaca || ''}, 
+          ${fCor || ''}, 
+          ${fAno || ''}, 
+          ${fPix || ''},
+          'carro', 0, 'aprovado'
+        )
+        RETURNING *;
+      `;
+    }
+
+    // 3. Atualiza também a tabela de usuários para sincronizar
     await sql`
       UPDATE usuarios
       SET 
-        nome = COALESCE(${nome || null}, nome),
-        telefone = COALESCE(${telefone || null}, telefone),
-        foto_perfil_url = COALESCE(${foto_perfil_url || null}, foto_perfil_url)
+        nome = COALESCE(${fNome}, nome),
+        telefone = COALESCE(${fTel}, telefone),
+        foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url)
       WHERE id = ${usuarioId};
     `;
 
-    res.json({ sucesso: true, motorista: mot[0] });
+    res.json({ sucesso: true, motorista: mot[0] || {} });
   } catch (err) {
-    console.error('Erro ao atualizar perfil do motorista:', err);
-    res.status(500).json({ erro: 'Falha ao salvar dados do perfil.' });
+    console.error('Erro detalhado ao atualizar perfil do motorista:', err);
+    res.status(500).json({ erro: err.message || 'Falha ao salvar dados do perfil.' });
   }
 });
+
 // 4. Extrato Financeiro
 router.get('/extrato', autenticarToken, async (req, res) => {
   try {
@@ -163,6 +194,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
 
     res.json({ saques, corridas });
   } catch (err) {
+    console.error('Erro ao obter extrato:', err);
     res.status(500).json({ erro: 'Falha ao obter extrato.' });
   }
 });
