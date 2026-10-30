@@ -10,13 +10,18 @@
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/base.css?v=4.0.0">
+  <link rel="stylesheet" href="./css/base.css?v=5.0.0">
   <style>
     :root {
       --bg-dark: #090D16;
       --card-dark: #121826;
+      --card-alt: #1A2234;
       --border-dark: rgba(255, 255, 255, 0.08);
+      --border-light: rgba(255, 255, 255, 0.15);
       --emerald: #10B981;
+      --emerald-glow: rgba(16, 185, 129, 0.25);
+      --amber: #F59E0B;
+      --blue: #38BDF8;
       --rose: #EF4444;
       --text-pri: #F8FAFC;
       --text-sec: #94A3B8;
@@ -43,6 +48,7 @@
       z-index: 1;
     }
 
+    /* BARRA SUPERIOR */
     .top-driver-nav {
       position: absolute;
       top: 14px;
@@ -55,31 +61,43 @@
       pointer-events: none;
     }
 
-    .driver-pill, .btn-exit-partner {
+    .driver-pill, .btn-exit-partner, .btn-driver-profile-trigger {
       pointer-events: auto;
-      background: rgba(18, 24, 38, 0.92);
+      background: rgba(18, 24, 38, 0.94);
       border: 1px solid var(--border-dark);
-      backdrop-filter: blur(10px);
-      border-radius: 12px;
-      padding: 8px 14px;
+      backdrop-filter: blur(12px);
+      border-radius: 14px;
+      padding: 7px 12px;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      gap: 9px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
     }
 
-    .driver-pill strong {
-      font-size: 15px;
-      font-weight: 900;
-      color: #FFF;
+    .btn-driver-profile-trigger {
+      cursor: pointer;
+      transition: all 0.2s ease;
+      padding: 5px 10px;
     }
 
-    .driver-pill span { color: var(--emerald); }
+    .btn-driver-profile-trigger:active {
+      transform: scale(0.96);
+      border-color: var(--emerald);
+    }
+
+    .avatar-mini {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1.5px solid var(--emerald);
+      object-fit: cover;
+      background: #1F2937;
+    }
 
     .btn-exit-partner {
       color: var(--text-sec);
       text-decoration: none;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
       cursor: pointer;
     }
@@ -105,6 +123,7 @@
       font-size: 20px;
     }
 
+    /* DOCK INFERIOR */
     .driver-dock {
       position: absolute;
       bottom: 0;
@@ -227,12 +246,161 @@
       width: 100%;
     }
 
+    /* ========================================================
+       DRAWER LATERAL DE PERFIL E CARTEIRA
+    ======================================================== */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(5px);
+      z-index: 10001;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .drawer-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .driver-drawer {
+      position: fixed;
+      top: 0;
+      left: -340px;
+      width: 320px;
+      height: 100vh;
+      background: #0D121F;
+      border-right: 1px solid var(--border-dark);
+      z-index: 10002;
+      transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      box-shadow: 10px 0 30px rgba(0, 0, 0, 0.7);
+    }
+
+    .driver-drawer.active {
+      left: 0;
+    }
+
+    .drawer-header {
+      padding: 20px 18px 16px;
+      background: #121826;
+      border-bottom: 1px solid var(--border-dark);
+      position: relative;
+    }
+
+    .btn-close-drawer {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #FFF;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .drawer-profile-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 6px;
+    }
+
+    .drawer-avatar {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      border: 2px solid var(--emerald);
+      object-fit: cover;
+      background: #1E293B;
+      box-shadow: 0 0 12px var(--emerald-glow);
+    }
+
+    .drawer-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .drawer-section-card {
+      background: var(--card-alt);
+      border: 1px solid var(--border-dark);
+      border-radius: 12px;
+      padding: 12px 14px;
+    }
+
+    .drawer-section-card h4 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-sec);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* PLACA MERCOSUL ESTILIZADA */
+    .placa-mercosul {
+      display: inline-flex;
+      flex-direction: column;
+      border: 1.5px solid #FFF;
+      border-radius: 4px;
+      background: #FFF;
+      color: #000;
+      width: 105px;
+      overflow: hidden;
+      font-family: monospace;
+      font-weight: 900;
+      margin-top: 4px;
+    }
+
+    .placa-mercosul-header {
+      background: #003399;
+      color: #FFF;
+      font-size: 7px;
+      padding: 1px 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .placa-mercosul-body {
+      font-size: 13px;
+      letter-spacing: 1px;
+      text-align: center;
+      padding: 2px 0;
+    }
+
+    .item-extrato {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+    }
+
+    .item-extrato:last-child {
+      border-bottom: none;
+    }
+
+    /* MODAL DE SAQUE PIX */
     .modal-saque-backdrop {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.85);
       backdrop-filter: blur(8px);
-      z-index: 100;
+      z-index: 10005;
       display: none;
       align-items: center;
       justify-content: center;
@@ -306,20 +474,27 @@
 </head>
 <body>
 
+  <!-- NAVEGAÇÃO SUPERIOR -->
   <header class="top-driver-nav">
-    <div class="driver-pill">
-      <div style="width: 8px; height: 8px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px #10B981;"></div>
-      <strong>HUB<span>y</span> Motorista</strong>
+    <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil">
+      <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Motorista" class="avatar-mini" id="topAvatarImg">
+      <div style="display: flex; flex-direction: column;">
+        <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Motorista</strong>
+        <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
+      </div>
     </div>
     <a href="./index.html" class="btn-exit-partner">← Modo Passageiro</a>
   </header>
 
+  <!-- MAPA PRINCIPAL -->
   <div id="mapaMotorista"></div>
 
+  <!-- BOTÃO FLUTUANTE DE CHAT -->
   <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;" aria-label="Abrir Chat">
     💬
   </button>
 
+  <!-- DOCK DE CORRIDAS E SALDO RÁPIDO -->
   <section class="driver-dock">
     <div class="wallet-card-row">
       <div class="wallet-meta">
@@ -335,6 +510,68 @@
       <div class="dock-empty">Aguardando novas chamadas na região...</div>
     </div>
   </section>
+
+  <!-- ========================================================
+       DRAWER LATERAL DE PERFIL, VEÍCULO E EXTRATO
+  ======================================================== -->
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <aside class="driver-drawer" id="driverDrawer">
+    <div class="drawer-header">
+      <button type="button" class="btn-close-drawer" id="btnFecharDrawerPerfil">✕</button>
+      <div class="drawer-profile-info">
+        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
+        <div>
+          <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carregando...</strong>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
+          <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
+            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> • <span id="drawerTotalViagensTxt">0 viagens</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-content">
+      <!-- VEÍCULO CADASTRADO -->
+      <div class="drawer-section-card">
+        <h4>🚘 Veículo Cadastrado</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong style="font-size: 13px; color: #FFF;" id="drawerCarroModelo">Modelo do Carro</strong>
+            <div style="font-size: 11px; color: var(--text-sec);" id="drawerCarroDetalhes">Cor: --- • Ano: ---</div>
+          </div>
+          <div class="placa-mercosul">
+            <div class="placa-mercosul-header"><span>BRASIL</span> <span>🇧🇷</span></div>
+            <div class="placa-mercosul-body" id="drawerCarroPlaca">HUB-0000</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARTEIRA E EXTRATO RECENTE -->
+      <div class="drawer-section-card">
+        <h4>
+          <span>💰 Extrato & Ganhos</span>
+          <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
+        </h4>
+        <div id="drawerListaExtrato" style="max-height: 160px; overflow-y: auto; padding-right: 4px;">
+          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
+        </div>
+      </div>
+
+      <!-- DADOS DE RECEBIMENTO (CHAVE PIX PADRÃO) -->
+      <div class="drawer-section-card">
+        <h4>⚡ Chave Pix Padrão</h4>
+        <div style="display: flex; gap: 6px;">
+          <input type="text" id="drawerInputChavePix" placeholder="Chave Pix para saques" style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 6px; padding: 6px 8px; color: #FFF; font-size: 12px;">
+          <button type="button" id="btnSalvarChavePix" style="background: var(--blue); border: none; border-radius: 6px; color: #000; font-weight: 800; font-size: 11px; padding: 0 10px; cursor: pointer;">Salvar</button>
+        </div>
+      </div>
+
+      <!-- SAIR -->
+      <button type="button" id="btnLogoutMotorista" style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
+        🚪 Encerrar Sessão
+      </button>
+    </div>
+  </aside>
 
   <!-- MODAL DE SAQUE PIX -->
   <div id="modalSaquePix" class="modal-saque-backdrop">
@@ -389,7 +626,7 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Versão 4.0.0 limpa sem script redundante no rodapé -->
-  <script type="module" src="./js/app-motorista.js?v=4.0.0"></script>
+  <!-- Versão 5.0.0 com Drawer Lateral e Perfil Integrado -->
+  <script type="module" src="./js/app-motorista.js?v=5.0.0"></script>
 </body>
 </html>

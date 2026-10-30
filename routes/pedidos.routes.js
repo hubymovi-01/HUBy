@@ -171,39 +171,82 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 5. STATUS DA VIAGEM
+  // 5. STATUS DA VIAGEM (ENRIQUECIDO COM PERFIL E VEÍCULO DO MOTORISTA)
   // =========================================================================
   router.get('/:id/status', async (req, res) => {
     try {
       const { id } = req.params;
-      const pedidos = await sql`SELECT id, status, motorista_id, motorista_nome, motorista_telefone, motorista_veiculo, motorista_placa, valor_total, distancia_km FROM pedidos WHERE id = ${id} LIMIT 1;`;
+      const pedidos = await sql`
+        SELECT 
+          p.id, p.status, p.valor_total, p.distancia_km, p.duracao_min,
+          p.origem_endereco, p.destino_endereco,
+          p.motorista_id, 
+          COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
+          COALESCE(m.telefone, p.motorista_telefone) AS motorista_telefone,
+          COALESCE(m.veiculo_modelo, p.motorista_veiculo) AS motorista_veiculo,
+          COALESCE(m.veiculo_placa, p.motorista_placa) AS motorista_placa,
+          m.veiculo_cor,
+          m.veiculo_ano,
+          m.foto_perfil_url AS motorista_foto,
+          m.avaliacao_media AS motorista_avaliacao,
+          m.total_corridas AS motorista_corridas
+        FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        WHERE p.id = ${id} 
+        LIMIT 1;
+      `;
+
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Chamada não localizada.' });
       res.json(pedidos[0]);
     } catch (err) {
-      res.status(500).json({ erro: 'Falha ao consultar estado.' });
+      console.error('Erro ao consultar status:', err);
+      res.status(500).json({ erro: 'Falha ao consultar estado da chamada.' });
     }
   });
 
   // =========================================================================
-  // 6. ACEITAR VIAGEM
+  // 6. ACEITAR VIAGEM (COM SNAPSHOT COMPLETO DO CONDUTOR)
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const motoristaId = req.usuario.id;
-      const motoristas = await sql`SELECT id, nome, telefone, veiculo_modelo, veiculo_placa FROM motoristas WHERE id = ${motoristaId} LIMIT 1;`;
+      const motoristas = await sql`
+        SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, avaliacao_media, total_corridas
+        FROM motoristas 
+        WHERE id = ${motoristaId} 
+        LIMIT 1;
+      `;
       if (motoristas.length === 0) return res.status(404).json({ erro: 'Condutor não localizado.' });
 
       const mot = motoristas[0];
       const pedidoAtualizado = await sql`
         UPDATE pedidos 
-        SET status = 'aceito', motorista_id = ${mot.id}, motorista_nome = ${mot.nome}, motorista_telefone = ${mot.telefone}, motorista_veiculo = ${mot.veiculo_modelo || ''}, motorista_placa = ${mot.veiculo_placa || ''}
+        SET status = 'aceito', 
+            motorista_id = ${mot.id}, 
+            motorista_nome = ${mot.nome}, 
+            motorista_telefone = ${mot.telefone}, 
+            motorista_veiculo = ${mot.veiculo_modelo || ''}, 
+            motorista_placa = ${mot.veiculo_placa || ''}
         WHERE id = ${id} AND status = 'pendente'
         RETURNING *;
       `;
+      
       if (pedidoAtualizado.length === 0) return res.status(409).json({ erro: 'Este pedido já foi aceito por outro condutor.' });
-      res.json({ sucesso: true, pedido: pedidoAtualizado[0] });
+      
+      const payloadResposta = {
+        ...pedidoAtualizado[0],
+        motorista_foto: mot.foto_perfil_url,
+        motorista_avaliacao: mot.avaliacao_media,
+        motorista_corridas: mot.total_corridas,
+        veiculo_cor: mot.veiculo_cor
+      };
+
+      io.emit('corrida_aceita', { pedidoId: id, motoristaId: mot.id });
+
+      res.json({ sucesso: true, pedido: payloadResposta });
     } catch (err) {
+      console.error('Erro ao aceitar pedido:', err);
       res.status(500).json({ erro: 'Falha ao aceitar pedido.' });
     }
   });
@@ -221,7 +264,6 @@ export default function pedidosRouter(io) {
       const pedido = pedidos[0];
       if (pedido.status === 'concluido') return res.status(400).json({ erro: 'Este pedido já foi finalizado.' });
 
-      // Lê a taxa configurada na plataforma (padrão 15% caso não exista)
       let taxaPorcentagem = 15;
       const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
       if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
@@ -232,13 +274,21 @@ export default function pedidosRouter(io) {
       const taxaPlataforma = Number(((valorBruto * taxaPorcentagem) / 100).toFixed(2));
       const repasseMotorista = Number((valorBruto - taxaPlataforma).toFixed(2));
 
-      await sql`UPDATE pedidos SET status = 'concluido' WHERE id = ${id};`;
+      await sql`
+        UPDATE pedidos 
+        SET status = 'concluido', concluido_em = NOW() 
+        WHERE id = ${id};
+      `;
+      
       const condutorAtualizado = await sql`
         UPDATE motoristas 
-        SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista} 
+        SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
+            total_corridas = COALESCE(total_corridas, 0) + 1
         WHERE id = ${motoristaId} 
-        RETURNING saldo_carteira;
+        RETURNING saldo_carteira, total_corridas;
       `;
+
+      io.emit('corrida_finalizada', { pedidoId: id });
 
       res.json({ 
         sucesso: true, 
@@ -248,6 +298,7 @@ export default function pedidosRouter(io) {
         novoSaldoCarteira: condutorAtualizado[0].saldo_carteira 
       });
     } catch (err) {
+      console.error('Erro ao concluir corrida:', err);
       res.status(500).json({ erro: 'Falha interna ao processar valores.' });
     }
   });
@@ -267,7 +318,6 @@ export default function pedidosRouter(io) {
       const canceladoPor = pedido.cliente_id === usuarioId ? 'cliente' : (pedido.motorista_id === usuarioId ? 'motorista' : 'admin');
       const atualizado = await sql`UPDATE pedidos SET status = 'cancelado', motivo_cancelamento = ${motivo || 'Cancelado'}, cancelado_por = ${canceladoPor} WHERE id = ${id} RETURNING *;`;
 
-      // Auditoria Antifraude: Checar cancelamentos recentes consecutivos
       const cancelamentosRecentes = await sql`
         SELECT COUNT(*) AS total
         FROM pedidos
@@ -288,6 +338,8 @@ export default function pedidosRouter(io) {
         });
       }
 
+      io.emit('corrida_cancelada', { pedidoId: id });
+
       res.json({ sucesso: true, mensagem: 'Chamada cancelada.', pedido: atualizado[0] });
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao processar cancelamento.' });
@@ -295,7 +347,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CENTRAL DE INCIDENTES / BOTÃO DE PÂNICO SOS (SEGURANÇA MÁXIMA)
+  // 9. CENTRAL DE INCIDENTES / BOTÃO DE PÂNICO SOS
   // =========================================================================
   router.post('/:id/sos', autenticarToken, async (req, res) => {
     try {
@@ -358,7 +410,7 @@ export default function pedidosRouter(io) {
         `;
         await sql`
           UPDATE motoristas
-          SET avaliacao_media = ${stats[0].media}, total_avaliacoes = ${stats[0].total}
+          SET avaliacao_media = ${stats[0].media}, total_corridas = COALESCE(total_corridas, 0)
           WHERE id = ${motoristaId};
         `;
       }

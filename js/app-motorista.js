@@ -45,11 +45,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('Erro ao inicializar mapa do motorista:', err);
   }
 
+  configurarDrawerPerfil();
   configurarModalSaquePix();
   configurarChatMotorista();
   configurarFiltroDirecaoCasa();
 
-  await atualizarPerfilESaldo();
+  await carregarPerfilCompleto();
 
   if (statusAprovacaoAtual === 'aprovado') {
     iniciarRadarChamadas();
@@ -66,7 +67,211 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 1. TRANSMISSÃO TELEMÉTRICA GPS
+// 1. GESTÃO DO DRAWER DE PERFIL E EXTRATO
+// ==========================================
+function configurarDrawerPerfil() {
+  const btnAbrir = document.getElementById('btnAbrirDrawerPerfil');
+  const btnFechar = document.getElementById('btnFecharDrawerPerfil');
+  const overlay = document.getElementById('drawerOverlay');
+  const drawer = document.getElementById('driverDrawer');
+  const btnSalvarPix = document.getElementById('btnSalvarChavePix');
+  const btnLogout = document.getElementById('btnLogoutMotorista');
+
+  const abrir = () => {
+    drawer?.classList.add('active');
+    overlay?.classList.add('active');
+    carregarExtratoFinanceiro();
+  };
+
+  const fechar = () => {
+    drawer?.classList.remove('active');
+    overlay?.classList.remove('active');
+  };
+
+  btnAbrir?.addEventListener('click', abrir);
+  btnFechar?.addEventListener('click', fechar);
+  overlay?.addEventListener('click', fechar);
+
+  btnSalvarPix?.addEventListener('click', async () => {
+    const chave_pix_padrao = document.getElementById('drawerInputChavePix')?.value.trim();
+    if (!chave_pix_padrao) {
+      alert('Informe uma chave Pix válida.');
+      return;
+    }
+
+    const token = localStorage.getItem('huby_token');
+    try {
+      btnSalvarPix.disabled = true;
+      btnSalvarPix.textContent = '...';
+
+      const resp = await fetch(`${API_URL}/api/motoristas/perfil`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ chave_pix_padrao })
+      });
+
+      if (resp.ok) {
+        alert('Chave Pix padrão atualizada!');
+      } else {
+        alert('Erro ao atualizar chave Pix.');
+      }
+    } catch (e) {
+      alert('Falha de conexão.');
+    } finally {
+      btnSalvarPix.disabled = false;
+      btnSalvarPix.textContent = 'Salvar';
+    }
+  });
+
+  btnLogout?.addEventListener('click', () => {
+    if (confirm('Deseja realmente desconectar de sua conta?')) {
+      localStorage.clear();
+      window.location.replace('./login.html');
+    }
+  });
+}
+
+async function carregarPerfilCompleto() {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const resp = await fetch(`${API_URL}/api/motoristas/perfil`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        localStorage.clear();
+        window.location.replace('./login.html');
+      }
+      return;
+    }
+
+    const m = await resp.json();
+    statusAprovacaoAtual = m.status_aprovacao || 'aprovado';
+    categoriaMotorista = m.categoria || 'carro';
+
+    const saldoFormatado = `R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
+
+    // Atualiza Topo
+    const topNome = document.getElementById('topNomeMotorista');
+    const topNota = document.getElementById('topNotaMotorista');
+    const topAvatar = document.getElementById('topAvatarImg');
+    if (topNome) topNome.textContent = m.nome ? m.nome.split(' ')[0] : 'Motorista';
+    if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
+    if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
+
+    // Atualiza Saldo no Dock Inferior
+    const saldoEl = document.getElementById('saldoCarteiraValor');
+    if (saldoEl) saldoEl.textContent = saldoFormatado;
+
+    // Atualiza Drawer Lateral
+    const drawerNome = document.getElementById('drawerNomeCondutor');
+    const drawerCategoria = document.getElementById('drawerCategoriaBadge');
+    const drawerFoto = document.getElementById('drawerFotoImg');
+    const drawerNota = document.getElementById('drawerAvaliacaoTxt');
+    const drawerViagens = document.getElementById('drawerTotalViagensTxt');
+    const drawerModelo = document.getElementById('drawerCarroModelo');
+    const drawerDetalhes = document.getElementById('drawerCarroDetalhes');
+    const drawerPlaca = document.getElementById('drawerCarroPlaca');
+    const drawerSaldo = document.getElementById('drawerSaldoValor');
+    const inputPix = document.getElementById('drawerInputChavePix');
+
+    if (drawerNome) drawerNome.textContent = m.nome || 'Condutor Parceiro';
+    if (drawerCategoria) drawerCategoria.textContent = `HUBY ${(m.categoria || 'CARRO').toUpperCase()}`;
+    if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
+    if (drawerNota) drawerNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
+    if (drawerViagens) drawerViagens.textContent = `${m.total_corridas || 0} viagens`;
+    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Veículo Cadastrado';
+    if (drawerDetalhes) drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || 'Padrão'} • Ano: ${m.veiculo_ano || '---'}`;
+    if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'HUB-0000').toUpperCase();
+    if (drawerSaldo) drawerSaldo.textContent = saldoFormatado;
+    if (inputPix && m.chave_pix_padrao) inputPix.value = m.chave_pix_padrao;
+
+    // Preenche a chave Pix padrão no modal de saque, caso esteja vazia
+    const saquePixIn = document.getElementById('saqueChavePix');
+    if (saquePixIn && !saquePixIn.value && m.chave_pix_padrao) {
+      saquePixIn.value = m.chave_pix_padrao;
+    }
+
+    if (statusAprovacaoAtual !== 'aprovado') {
+      const feedEl = document.getElementById('listaChamadasPendentes');
+      if (feedEl) {
+        feedEl.innerHTML = `
+          <div class="dock-empty" style="color: #F59E0B; padding: 18px; text-align: center;">
+            <strong>Acesso em Análise (${statusAprovacaoAtual.toUpperCase()})</strong>
+            <p style="font-size: 12px; margin-top: 6px; color: #8F9CAE;">
+              Seus documentos estão em triagem. Você será notificado assim que aprovado.
+            </p>
+          </div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.warn('Erro ao carregar perfil completo:', err);
+  }
+}
+
+async function carregarExtratoFinanceiro() {
+  const listaEl = document.getElementById('drawerListaExtrato');
+  if (!listaEl) return;
+
+  const token = localStorage.getItem('huby_token');
+  try {
+    const resp = await fetch(`${API_URL}/api/motoristas/extrato`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!resp.ok) {
+      listaEl.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 8px;">Sem lançamentos recentes.</div>';
+      return;
+    }
+
+    const { saques, corridas } = await resp.json();
+
+    if ((!saques || saques.length === 0) && (!corridas || corridas.length === 0)) {
+      listaEl.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 8px;">Nenhuma movimentação registrada.</div>';
+      return;
+    }
+
+    let html = '';
+
+    (saques || []).slice(0, 5).forEach(s => {
+      const corStatus = s.status === 'pago' ? '#10B981' : (s.status === 'recusado' ? '#EF4444' : '#F59E0B');
+      html += `
+        <div class="item-extrato">
+          <div>
+            <strong style="color: #FFF; display: block;">Saque Pix</strong>
+            <small style="color: ${corStatus}; font-weight: 700; text-transform: uppercase;">${s.status}</small>
+          </div>
+          <span style="color: #EF4444; font-weight: 800;">- R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</span>
+        </div>
+      `;
+    });
+
+    (corridas || []).slice(0, 8).forEach(c => {
+      const repasse = Number(c.repasse_liquido || (Number(c.valor_total) * 0.85));
+      html += `
+        <div class="item-extrato">
+          <div>
+            <strong style="color: #FFF; display: block;">Viagem Concluída</strong>
+            <small style="color: var(--text-sec);">${c.destino_endereco ? c.destino_endereco.substring(0, 22) + '...' : 'Viagem'}</small>
+          </div>
+          <span style="color: #10B981; font-weight: 800;">+ R$ ${repasse.toFixed(2).replace('.', ',')}</span>
+        </div>
+      `;
+    });
+
+    listaEl.innerHTML = html;
+  } catch (err) {
+    listaEl.innerHTML = '<div style="text-align: center; color: var(--rose); font-size: 11px; padding: 8px;">Erro ao ler extrato.</div>';
+  }
+}
+
+// ==========================================
+// 2. TRANSMISSÃO TELEMÉTRICA GPS
 // ==========================================
 function iniciarTransmissaoTelemetria(posicaoInicial) {
   const token = localStorage.getItem('huby_token');
@@ -102,7 +307,7 @@ function iniciarTransmissaoTelemetria(posicaoInicial) {
 }
 
 // ==========================================
-// 2. FILTRO "DIREÇÃO DE CASA"
+// 3. FILTRO "DIREÇÃO DE CASA"
 // ==========================================
 function configurarFiltroDirecaoCasa() {
   const btnCasa = document.getElementById('btnFiltroCasa');
@@ -120,7 +325,7 @@ function configurarFiltroDirecaoCasa() {
       coordsCasaMotorista = { lat: latCasa, lng: lngCasa };
 
       try {
-        const resp = await fetch(`${API_URL}/api/motoristas-regras/filtro-destino`, {
+        const resp = await fetch(`${API_URL}/api/motoristas/filtro-destino`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -145,7 +350,7 @@ function configurarFiltroDirecaoCasa() {
       }
     } else {
       try {
-        await fetch(`${API_URL}/api/motoristas-regras/filtro-destino`, {
+        await fetch(`${API_URL}/api/motoristas/filtro-destino`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -166,7 +371,7 @@ function configurarFiltroDirecaoCasa() {
 }
 
 // ==========================================
-// 3. BOTÃO DE PÂNICO / SOS DO MOTORISTA
+// 4. BOTÃO DE PÂNICO / SOS
 // ==========================================
 function configurarBotaoSosMotorista() {
   const btnSos = document.getElementById('btnSosMotorista');
@@ -210,7 +415,7 @@ function configurarBotaoSosMotorista() {
 }
 
 // ==========================================
-// 4. ALERTA SONORO
+// 5. ALERTA SONORO
 // ==========================================
 function tocarAlertaSonoro() {
   try {
@@ -234,56 +439,9 @@ function tocarAlertaSonoro() {
     tocarTom(880, 0, 0.15);
     tocarTom(1174.66, 0.18, 0.25);
 
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200]);
-    }
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
   } catch (err) {
-    console.warn('Erro ao emitir som do radar:', err);
-  }
-}
-
-// ==========================================
-// 5. ATUALIZAR PERFIL E SALDO
-// ==========================================
-async function atualizarPerfilESaldo() {
-  const token = localStorage.getItem('huby_token');
-  try {
-    const resp = await fetch(`${API_URL}/api/motoristas/meu-saldo`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    if (!resp.ok) {
-      if (resp.status === 401) {
-        localStorage.clear();
-        window.location.replace('./login.html');
-      }
-      return;
-    }
-
-    const dados = await resp.json();
-    statusAprovacaoAtual = dados.status_aprovacao || 'aprovado';
-    categoriaMotorista = dados.categoria || 'carro';
-
-    const saldoEl = document.getElementById('saldoCarteiraValor') || document.getElementById('txtSaldoMotorista');
-    if (saldoEl) {
-      saldoEl.textContent = `R$ ${Number(dados.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
-    }
-
-    if (statusAprovacaoAtual !== 'aprovado') {
-      const feedEl = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
-      if (feedEl) {
-        feedEl.innerHTML = `
-          <div class="dock-empty" style="color: #F59E0B; padding: 18px; text-align: center;">
-            <strong>Acesso em Análise (${statusAprovacaoAtual.toUpperCase()})</strong>
-            <p style="font-size: 12px; margin-top: 6px; color: #8F9CAE;">
-              ${dados.motivo_recusa || 'Seus documentos estão em triagem pela administração. Você será notificado assim que aprovado.'}
-            </p>
-          </div>
-        `;
-      }
-    }
-  } catch (err) {
-    console.warn('Erro ao carregar perfil do motorista:', err);
+    console.warn('Erro sonoro:', err);
   }
 }
 
@@ -337,7 +495,8 @@ function configurarModalSaquePix() {
       const inValor = document.getElementById('saqueValor');
       if (inValor) inValor.value = '';
 
-      await atualizarPerfilESaldo();
+      await carregarPerfilCompleto();
+      carregarExtratoFinanceiro();
     } catch (err) {
       alert(err.message);
     } finally {
@@ -434,16 +593,10 @@ async function carregarMensagensChat() {
     
     msgs.forEach(m => {
       const souEu = (String(m.remetente_id) === String(meuId));
-      
-      const alinhamento = souEu ? 'flex-end' : 'flex-start';
-      const corFundo = souEu ? '#10B981' : '#1F2937'; 
-      const corTexto = souEu ? '#000' : '#FFF';
-      const borderRadius = souEu ? '12px 12px 0 12px' : '12px 12px 12px 0';
-      
       html += `
-        <div style="display: flex; flex-direction: column; align-items: ${alinhamento}; margin-bottom: 6px;">
+        <div style="display: flex; flex-direction: column; align-items: ${souEu ? 'flex-end' : 'flex-start'}; margin-bottom: 6px;">
           <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
-          <div style="background: ${corFundo}; color: ${corTexto}; padding: 8px 12px; border-radius: ${borderRadius}; font-size: 13px; max-width: 80%; word-wrap: break-word;">
+          <div style="background: ${souEu ? '#10B981' : '#1F2937'}; color: ${souEu ? '#000' : '#FFF'}; padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 80%;">
             ${m.mensagem}
           </div>
         </div>
@@ -510,7 +663,7 @@ async function buscarChamadasPendentes(tocarSomForcado = false) {
 }
 
 function renderizarRadar(pedidos) {
-  const feedEl = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
+  const feedEl = document.getElementById('listaChamadasPendentes');
   if (!feedEl) return;
 
   if (!pedidos || pedidos.length === 0) {
@@ -583,20 +736,18 @@ function renderizarRadar(pedidos) {
 }
 
 // ==========================================
-// 9. PRÉVIA DA ROTA (SEM ACEITAR NO BANCO)
+// 9. PRÉVIA DA ROTA NO MAPA
 // ==========================================
 async function preVisualizarRotaPedido(dados) {
   pedidoEmAnalise = dados;
 
   if (intervalRadar) clearInterval(intervalRadar);
 
-  // Limpa rota anterior do mapa se houver
   if (hubyMapa?.rotaLayer && hubyMapa.map) {
     hubyMapa.map.removeLayer(hubyMapa.rotaLayer);
     hubyMapa.rotaLayer = null;
   }
 
-  // Traça a rota da corrida (origem -> destino)
   if (dados.coordsOrig && dados.coordsDest && hubyMapa) {
     try {
       await hubyMapa.calcularRota(dados.coordsOrig, dados.coordsDest, '#38BDF8');
@@ -605,7 +756,7 @@ async function preVisualizarRotaPedido(dados) {
     }
   }
 
-  const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
+  const feed = document.getElementById('listaChamadasPendentes');
   if (feed) {
     feed.innerHTML = `
       <div class="order-card" style="border: 2px solid #F59E0B; background: #0E131F;">
@@ -636,7 +787,7 @@ async function preVisualizarRotaPedido(dados) {
 
     document.getElementById('btnRecusarPrevia')?.addEventListener('click', cancelarPrevia);
     document.getElementById('btnConfirmarAceite')?.addEventListener('click', () => {
-      efetivarAceiteChamada(dados.id, dados.coordsOrig, dados.coordsDest);
+      efetivarAceiteChamada(dados);
     });
   }
 }
@@ -651,9 +802,9 @@ function cancelarPrevia() {
 }
 
 // ==========================================
-// 10. FLUXO POR ETAPAS (APENAS UM BOTÃO DE AÇÃO POR VEZ)
+// 10. FLUXO POR ETAPAS COM BOTÃO ÚNICO
 // ==========================================
-async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
+async function efetivarAceiteChamada(dados) {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnConfirmarAceite');
 
@@ -663,7 +814,7 @@ async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
       btn.textContent = 'Confirmando...';
     }
 
-    const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/aceitar`, {
+    const resp = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -674,36 +825,43 @@ async function efetivarAceiteChamada(pedidoId, coordsOrig, coordsDest) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.erro || 'Não foi possível aceitar a chamada.');
 
-    pedidoAceitoAtual = data.pedido;
+    pedidoAceitoAtual = data.pedido || {};
+    pedidoAceitoAtual.coordsOrigem = dados.coordsOrig;
+    pedidoAceitoAtual.coordsDestino = dados.coordsDest;
+    pedidoAceitoAtual.origem_endereco = dados.origem;
+    pedidoAceitoAtual.destino_endereco = dados.destino;
+    pedidoAceitoAtual.valor_total = dados.preco;
+    pedidoAceitoAtual.distancia_km = dados.dist;
+    pedidoAceitoAtual.duracao_min = dados.dur;
+
     pedidoEmAnalise = null;
-    etapaCorridaAtual = 'a_caminho'; // Começa indo até o passageiro
+    etapaCorridaAtual = 'a_caminho';
 
     const btnChat = document.getElementById('btnAbrirChat');
     if (btnChat) btnChat.style.display = 'flex';
 
-    // Rota GPS: Posição do Motorista -> Ponto de Embarque
-    if (coordsOrig && hubyMapa) {
+    if (dados.coordsOrig && hubyMapa) {
       if (hubyMapa.coordsOrigem) {
-        await hubyMapa.calcularRota(hubyMapa.coordsOrigem, coordsOrig, '#38BDF8');
+        await hubyMapa.calcularRota(hubyMapa.coordsOrigem, dados.coordsOrig, '#38BDF8');
       }
       hubyMapa.obterGPS(async (pos) => {
         try {
-          const r = await hubyMapa.calcularRota([pos.lat, pos.lng], coordsOrig, '#38BDF8');
+          const r = await hubyMapa.calcularRota([pos.lat, pos.lng], dados.coordsOrig, '#38BDF8');
           const lbl = document.getElementById('lblTempoPassageiro');
           if (lbl) lbl.innerHTML = `⏳ Chega ao passageiro em <span style="font-size:18px;">${r.duracaoMin} min</span>`;
         } catch(e) {}
       });
     }
 
-    renderizarCardEtapa(coordsOrig, coordsDest);
+    renderizarCardEtapa();
   } catch (err) {
     alert(err.message);
     cancelarPrevia();
   }
 }
 
-function renderizarCardEtapa(coordsOrig, coordsDest) {
-  const feed = document.querySelector('.orders-feed') || document.getElementById('listaChamadasPendentes');
+function renderizarCardEtapa() {
+  const feed = document.getElementById('listaChamadasPendentes');
   if (!feed || !pedidoAceitoAtual) return;
 
   const estaACaminho = (etapaCorridaAtual === 'a_caminho');
@@ -718,7 +876,7 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
       </div>
       <div class="order-route">
         <span style="display: block; color: ${estaACaminho ? '#38BDF8' : '#10B981'}; font-weight: 800; font-size: 15px; margin-bottom: 6px;" id="lblTempoPassageiro">
-          ${estaACaminho ? '📍 Indo buscar o passageiro...' : '🏁 A caminho do destino final!'}
+          ${estaACaminho ? '📍 A caminho do local de embarque...' : '🏁 A caminho do destino final!'}
         </span>
         <span><strong>Recolha:</strong> ${pedidoAceitoAtual.origem_endereco || 'Local do passageiro'}</span>
         <span><strong>Destino:</strong> ${pedidoAceitoAtual.destino_endereco}</span>
@@ -727,7 +885,6 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
         </small>
       </div>
 
-      <!-- BOTÃO DE AÇÃO ÚNICO -->
       <div style="margin-top: 14px;">
         ${estaACaminho ? `
           <button type="button" id="btnIniciarViagemUnico" style="width: 100%; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; cursor: pointer;">
@@ -740,7 +897,6 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
         `}
       </div>
 
-      <!-- BOTÕES DE APOIO -->
       <div style="display: flex; gap: 8px; margin-top: 8px;">
         <button type="button" id="btnCancelarPeloMotorista" style="flex: 1; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
           Cancelar Corrida
@@ -759,13 +915,11 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
     document.getElementById('btnIniciarViagemUnico')?.addEventListener('click', async () => {
       etapaCorridaAtual = 'em_viagem';
 
-      // Atualiza o mapa para a rota final até o destino
-      if (coordsOrig && coordsDest && hubyMapa) {
-        await hubyMapa.calcularRota(coordsOrig, coordsDest, '#10B981');
+      if (pedidoAceitoAtual.coordsOrigem && pedidoAceitoAtual.coordsDestino && hubyMapa) {
+        await hubyMapa.calcularRota(pedidoAceitoAtual.coordsOrigem, pedidoAceitoAtual.coordsDestino, '#10B981');
       }
 
-      // Re-renderiza exibindo apenas o botão verde de Concluir
-      renderizarCardEtapa(coordsOrig, coordsDest);
+      renderizarCardEtapa();
     });
   } else {
     document.getElementById('btnConcluirViagemUnico')?.addEventListener('click', concluirCorridaAtual);
@@ -773,7 +927,7 @@ function renderizarCardEtapa(coordsOrig, coordsDest) {
 }
 
 // ==========================================
-// 11. CANCELAR E CONCLUIR
+// 11. CANCELAMENTO E CONCLUSÃO
 // ==========================================
 async function cancelarCorridaAtual() {
   if (!pedidoAceitoAtual) return;
@@ -790,7 +944,7 @@ async function cancelarCorridaAtual() {
       body: JSON.stringify({ motivo: 'Cancelado pelo motorista parceiro' })
     });
   } catch (err) {
-    console.warn('Erro ao notificar cancelamento:', err);
+    console.warn('Erro ao cancelar:', err);
   }
 
   limparAtendimento();
@@ -813,10 +967,11 @@ async function concluirCorridaAtual() {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.erro || 'Falha ao liquidar corrida.');
 
-    alert(`Viagem Concluída!\n\nLíquido do Parceiro: R$ ${Number(data.repasseLiquido).toFixed(2).replace('.', ',')}\nTaxa Plataforma: R$ ${Number(data.taxaHuby).toFixed(2).replace('.', ',')}`);
+    alert(`Viagem Concluída com sucesso!\n\nRepasse Líquido: R$ ${Number(data.repasseLiquido).toFixed(2).replace('.', ',')}`);
 
     limparAtendimento();
-    await atualizarPerfilESaldo();
+    await carregarPerfilCompleto();
+    carregarExtratoFinanceiro();
   } catch (err) {
     alert(err.message);
   }
