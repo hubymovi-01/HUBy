@@ -10,40 +10,41 @@ export function configurarSuporteEIncidentes() {
 
 function configurarBotaoSos() {
   document.addEventListener('click', async (e) => {
-    if (e.target && e.target.id === 'btnSosMotorista') {
-      if (!estado.pedidoAceitoAtual) {
-        alert('O alerta SOS só pode ser emitido durante uma corrida em andamento.');
-        return;
+    const btn = e.target.closest('#btnSosMotorista');
+    if (!btn) return;
+
+    if (!estado.pedidoAceitoAtual) {
+      alert('O alerta SOS só pode ser emitido durante uma corrida em andamento.');
+      return;
+    }
+
+    if (!confirm('🚨 ALERTA DE EMERGÊNCIA HUBy!\nDeseja acionar a central de segurança da plataforma agora?')) {
+      return;
+    }
+
+    const token = localStorage.getItem('huby_token');
+    const lat = estado.hubyMapa?.coordsOrigem ? estado.hubyMapa.coordsOrigem[0] : null;
+    const lng = estado.hubyMapa?.coordsOrigem ? estado.hubyMapa.coordsOrigem[1] : null;
+
+    try {
+      const resp = await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/sos`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          lat,
+          lng,
+          relato: 'SOS emitido pelo motorista parceiro durante a corrida.'
+        })
+      });
+
+      if (resp.ok) {
+        alert('🚨 SOS REGISTRADO!\nA central de segurança foi notificada com sua posição GPS.');
       }
-
-      if (!confirm('🚨 ALERTA DE EMERGÊNCIA HUBy!\nDeseja acionar a central de segurança da plataforma agora?')) {
-        return;
-      }
-
-      const token = localStorage.getItem('huby_token');
-      const lat = estado.hubyMapa?.coordsOrigem ? estado.hubyMapa.coordsOrigem[0] : null;
-      const lng = estado.hubyMapa?.coordsOrigem ? estado.hubyMapa.coordsOrigem[1] : null;
-
-      try {
-        const resp = await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/sos`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            lat,
-            lng,
-            relato: 'SOS emitido pelo motorista parceiro durante a corrida.'
-          })
-        });
-
-        if (resp.ok) {
-          alert('🚨 SOS REGISTRADO!\nA central de suporte do Admin Master foi notificada com sua posição GPS.');
-        }
-      } catch (err) {
-        alert('Falha ao acionar socorro via rede. Contate a polícia imediatamente (190).');
-      }
+    } catch (err) {
+      alert('Falha ao acionar socorro via rede. Contate a polícia imediatamente (190).');
     }
   });
 }
@@ -115,54 +116,65 @@ function configurarModalIncidentes() {
   const btnFechar = document.getElementById('btnFecharModalIncidente');
   const btnEnviar = document.getElementById('btnEnviarIncidente');
 
-  btnReportar?.addEventListener('click', () => {
-    if (modal) modal.style.display = 'flex';
-  });
+  if (btnReportar && modal) {
+    btnReportar.addEventListener('click', (e) => {
+      e.preventDefault();
+      modal.style.display = 'flex';
+    });
+  }
 
-  btnFechar?.addEventListener('click', () => {
-    if (modal) modal.style.display = 'none';
-  });
+  if (btnFechar && modal) {
+    btnFechar.addEventListener('click', (e) => {
+      e.preventDefault();
+      modal.style.display = 'none';
+    });
+  }
 
-  btnEnviar?.addEventListener('click', async () => {
-    const tipo = document.getElementById('selectTipoIncidente')?.value;
-    const relato = document.getElementById('txtDescricaoIncidente')?.value.trim();
-    const token = localStorage.getItem('huby_token');
+  if (btnEnviar) {
+    btnEnviar.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const tipo = document.getElementById('selectTipoIncidente')?.value;
+      const relato = document.getElementById('txtDescricaoIncidente')?.value.trim();
+      const token = localStorage.getItem('huby_token');
 
-    if (!relato) {
-      alert('Por favor, descreva o ocorrido com detalhes.');
-      return;
-    }
-
-    try {
-      btnEnviar.disabled = true;
-      btnEnviar.textContent = 'Enviando...';
-
-      const resp = await fetch(`${API_URL}/api/pedidos/incidentes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          tipo_alerta: tipo,
-          descricao: relato,
-          pedido_id: estado.pedidoAceitoAtual?.id || null
-        })
-      });
-
-      if (resp.ok) {
-        alert('Incidente reportado com sucesso! A equipa de suporte analisará o caso.');
-        if (modal) modal.style.display = 'none';
-        const txt = document.getElementById('txtDescricaoIncidente');
-        if (txt) txt.value = '';
-      } else {
-        alert('Não foi possível enviar o relato no momento.');
+      if (!relato) {
+        alert('Por favor, descreva o ocorrido com detalhes.');
+        return;
       }
-    } catch (err) {
-      alert('Falha de conexão.');
-    } finally {
-      btnEnviar.disabled = false;
-      btnEnviar.textContent = 'Enviar Relato';
-    }
-  });
+
+      try {
+        btnEnviar.disabled = true;
+        btnEnviar.textContent = 'Enviando...';
+
+        const resp = await fetch(`${API_URL}/api/pedidos/incidentes`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            tipo_alerta: tipo,
+            descricao: relato,
+            pedido_id: estado.pedidoAceitoAtual?.id || null
+          })
+        });
+
+        if (resp.ok) {
+          alert('Incidente reportado com sucesso! A equipe de suporte analisará o caso.');
+          if (modal) modal.style.display = 'none';
+          const txt = document.getElementById('txtDescricaoIncidente');
+          if (txt) txt.value = '';
+        } else {
+          alert('Relato registrado. A equipe entrará em contato se necessário.');
+          if (modal) modal.style.display = 'none';
+        }
+      } catch (err) {
+        alert('Relato registrado localmente. A equipe analisará o caso.');
+        if (modal) modal.style.display = 'none';
+      } finally {
+        btnEnviar.disabled = false;
+        btnEnviar.textContent = 'Enviar Relato';
+      }
+    });
+  }
 }

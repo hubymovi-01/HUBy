@@ -284,5 +284,25 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
     res.status(500).json({ erro: 'Falha ao obter resumo diário.' });
   }
 });
+// 6. Atualizar Status Online / Offline do Motorista
+router.put('/status-online', autenticarToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuario.id;
+    const { online } = req.body;
+
+    const mot = await sql`
+      UPDATE motoristas
+      SET status_online = ${!!online}
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text
+      RETURNING id, status_online;
+    `;
+
+    res.json({ sucesso: true, online: !!online, motorista: mot[0] || null });
+  } catch (err) {
+    console.error('Erro ao alternar status online:', err);
+    res.status(500).json({ erro: 'Falha ao atualizar status online.' });
+  }
+});
 
 export default router;

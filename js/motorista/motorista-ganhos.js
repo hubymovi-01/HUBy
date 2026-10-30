@@ -11,30 +11,39 @@ export async function carregarGanhosHoje() {
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    if (!resp.ok) return;
-    const dados = await resp.json();
-
-    estado.ganhosHoje = Number(dados.ganhosHoje || 0);
-    estado.corridasHoje = Number(dados.corridasHoje || 0);
-
-    renderizarCardGanhosHoje();
+    if (resp.ok) {
+      const dados = await resp.json();
+      estado.ganhosHoje = Number(dados.ganhosHoje || 0);
+      estado.corridasHoje = Number(dados.corridasHoje || 0);
+    }
   } catch (err) {
-    console.warn('Erro ao carregar ganhos diários:', err);
+    console.warn('Aviso: endpoint ganhos-hoje ainda não respondeu, usando valores locais:', err);
+  } finally {
+    renderizarCardGanhosHoje();
   }
 }
 
 export function configurarAjusteMetaDiaria() {
   const btnEditarMeta = document.getElementById('btnEditarMetaDiaria');
-  if (!btnEditarMeta) return;
+  if (!btnEditarMeta) {
+    console.warn('Botão #btnEditarMetaDiaria não encontrado no DOM.');
+    return;
+  }
 
-  btnEditarMeta.addEventListener('click', () => {
-    const novaMeta = prompt('Defina a sua meta diária de faturamento (R$):', estado.metaDiaria);
-    const valorNum = parseFloat(novaMeta);
-
-    if (!isNaN(valorNum) && valorNum > 0) {
-      estado.metaDiaria = valorNum;
-      localStorage.setItem('huby_meta_diaria', valorNum);
-      renderizarCardGanhosHoje();
+  btnEditarMeta.addEventListener('click', (e) => {
+    e.preventDefault();
+    const metaAtual = estado.metaDiaria || 200;
+    const novaMeta = prompt('Defina a sua meta diária de faturamento (R$):', metaAtual);
+    
+    if (novaMeta !== null) {
+      const valorNum = parseFloat(novaMeta.replace(',', '.'));
+      if (!isNaN(valorNum) && valorNum > 0) {
+        estado.metaDiaria = valorNum;
+        localStorage.setItem('huby_meta_diaria', valorNum);
+        renderizarCardGanhosHoje();
+      } else {
+        alert('Por favor, informe um valor numérico válido.');
+      }
     }
   });
 }
@@ -45,12 +54,12 @@ export function renderizarCardGanhosHoje() {
   const barraProgresso = document.getElementById('barraProgressoMeta');
   const lblMetaTxt = document.getElementById('lblMetaDiariaTxt');
 
-  const ganhos = estado.ganhosHoje;
-  const meta = estado.metaDiaria;
+  const ganhos = estado.ganhosHoje || 0;
+  const meta = estado.metaDiaria || 200;
   const percentual = Math.min(Math.round((ganhos / meta) * 100), 100);
 
   if (lblValor) lblValor.textContent = `R$ ${ganhos.toFixed(2).replace('.', ',')}`;
-  if (lblQtd) lblQtd.textContent = `${estado.corridasHoje} ${estado.corridasHoje === 1 ? 'viagem' : 'viagens'}`;
+  if (lblQtd) lblQtd.textContent = `${estado.corridasHoje || 0} ${estado.corridasHoje === 1 ? 'viagem' : 'viagens'}`;
   if (lblMetaTxt) lblMetaTxt.textContent = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} (${percentual}%)`;
 
   if (barraProgresso) {
@@ -77,7 +86,7 @@ export async function carregarExtratoFinanceiro() {
     const { saques, corridas } = await resp.json();
 
     if ((!saques || saques.length === 0) && (!corridas || corridas.length === 0)) {
-      listaEl.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 8px;">Nenhuma movimentação registada.</div>';
+      listaEl.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 8px;">Nenhuma movimentação registrada.</div>';
       return;
     }
 
