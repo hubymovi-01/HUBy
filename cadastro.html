@@ -69,7 +69,7 @@
 
         <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
         <div id="blocoMotorista" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
-          <h4 style="margin-bottom: 12px; color: #10B981;">Dados do Veículo e CNH</h4>
+          <h4 style="margin-bottom: 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do Veículo e CNH</h4>
           
           <div class="input-group">
             <label>Nº da CNH (11 dígitos)</label>
@@ -86,14 +86,23 @@
             </select>
           </div>
 
-          <div style="display: flex; gap: 10px;">
-            <div class="input-group" style="flex: 2;">
-              <label>Modelo</label>
-              <input type="text" id="cadModelo" placeholder="Ex: Onix">
+          <div class="input-group">
+            <label>Modelo do Veículo</label>
+            <input type="text" id="cadModelo" placeholder="Ex: Chevrolet Onix 1.0 / Honda CG 160">
+          </div>
+
+          <div style="display: flex; gap: 8px;">
+            <div class="input-group" style="flex: 1.2;">
+              <label>Placa Mercosul</label>
+              <input type="text" id="cadPlaca" placeholder="ABC1D23" style="text-transform: uppercase;" maxlength="7">
             </div>
             <div class="input-group" style="flex: 1;">
-              <label>Placa</label>
-              <input type="text" id="cadPlaca" placeholder="ABC1D23" style="text-transform: uppercase;">
+              <label>Cor</label>
+              <input type="text" id="cadCor" placeholder="Ex: Prata">
+            </div>
+            <div class="input-group" style="flex: 0.9;">
+              <label>Ano</label>
+              <input type="number" id="cadAno" placeholder="2022" min="1990" max="2027">
             </div>
           </div>
 
@@ -162,7 +171,7 @@
     btnCliente.addEventListener('click', () => alternarPerfil('cliente'));
     btnMotorista.addEventListener('click', () => alternarPerfil('motorista'));
 
-    // MÁSCARA CPF MELHORADA
+    // MÁSCARA CPF
     const inputCpf = document.getElementById('cadCPF');
     inputCpf.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
@@ -193,11 +202,40 @@
       input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
         const reader = new FileReader();
-        reader.onloadend = () => {
-          callback(reader.result);
-          box.classList.add('has-file');
-          box.innerHTML = '✅ Fotografia guardada com sucesso!';
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_WIDTH = 900;
+            const MAX_HEIGHT = 900;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height *= MAX_WIDTH / width;
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width *= MAX_HEIGHT / height;
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            const base64Comprimido = canvas.toDataURL('image/jpeg', 0.82);
+            callback(base64Comprimido);
+            box.classList.add('has-file');
+            box.innerHTML = '✅ Fotografia guardada com sucesso!';
+          };
+          img.src = event.target.result;
         };
         reader.readAsDataURL(file);
       });
@@ -213,7 +251,6 @@
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
         email: document.getElementById('cadEmail').value.trim(),
-        // CORREÇÃO CRUCIAL: Remove os pontos e traços antes de enviar
         telefone: inputTel.value.replace(/\D/g, ''),
         cpf: inputCpf.value.replace(/\D/g, ''),
         senha: document.getElementById('cadSenha').value,
@@ -227,15 +264,19 @@
 
       if (roleAtual === 'motorista') {
         payload.cnh = document.getElementById('cadCNH').value.replace(/\D/g, '');
+        payload.cnh_numero = payload.cnh;
         payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
+        payload.categoria = payload.categoria_veiculo;
         payload.veiculo_modelo = document.getElementById('cadModelo').value.trim();
-        payload.veiculo_placa = document.getElementById('cadPlaca').value.trim();
-        // Permite testar a API mesmo sem fazer upload das imagens
+        payload.veiculo_placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
+        payload.veiculo_cor = document.getElementById('cadCor').value.trim();
+        payload.veiculo_ano = document.getElementById('cadAno').value.trim();
+
         payload.doc_cnh_url = cnhBase64 || 'data:image/png;base64,mock';
         payload.doc_crlv_url = crlvBase64 || 'data:image/png;base64,mock';
 
         if (!payload.cnh || !payload.veiculo_modelo || !payload.veiculo_placa) {
-          exibirAlerta('Preencha todos os dados da CNH e do veículo.', 'error');
+          exibirAlerta('Preencha os dados da CNH, Modelo e Placa do veículo.', 'error');
           return;
         }
       }

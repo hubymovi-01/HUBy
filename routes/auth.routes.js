@@ -39,7 +39,8 @@ const processarCadastro = async (req, res) => {
     const {
       nome, email, telefone, cpf, senha, role = 'cliente',
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
-      cnh, veiculo_modelo, veiculo_placa, categoria_veiculo,
+      cnh, categoria, categoria_veiculo,
+      veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
       doc_cnh_url, doc_crlv_url 
     } = req.body;
 
@@ -48,7 +49,7 @@ const processarCadastro = async (req, res) => {
     }
 
     const emailLimpo = email ? String(email).trim().toLowerCase() : null;
-    const telLimpo = telefone ? String(telefone).trim() : null;
+    const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
     const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : null;
 
     if (cpfLimpo && !validarNumeroCPF(cpfLimpo)) {
@@ -73,20 +74,36 @@ const processarCadastro = async (req, res) => {
       }
 
       const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const corLimpa = veiculo_cor ? String(veiculo_cor).trim() : 'Não informada';
+      const anoLimpo = veiculo_ano ? String(veiculo_ano).trim() : '2022';
+      const catFinal = categoria || categoria_veiculo || 'carro';
       const novoId = 'mot_' + Date.now().toString(36);
 
+      // Insere na tabela motoristas já com Modelo, Placa Mercosul, Cor e Ano
       const resultado = await sql`
         INSERT INTO motoristas (
-          id, nome, email, telefone, cpf, data_nascimento, senha_hash,
-          cnh_numero, categoria, veiculo_modelo, veiculo_placa,
-          doc_cnh_url, doc_crlv_url, status_aprovacao
+          id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
+          cnh_numero, categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+          saldo_carteira, status_aprovacao, avaliacao_media, total_corridas,
+          doc_cnh_url, doc_crlv_url
         ) VALUES (
-          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
+          ${novoId}, ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
           ${dataNascSql}, ${senhaHash},
-          ${cnhLimpa}, ${categoria_veiculo || 'carro'}, ${veiculo_modelo.trim()}, ${placaLimpa},
-          ${doc_cnh_url || null}, ${doc_crlv_url || null}, 'pendente'
+          ${cnhLimpa}, ${catFinal}, ${veiculo_modelo.trim()}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
+          0.00, 'aprovado', 5.00, 0,
+          ${doc_cnh_url || null}, ${doc_crlv_url || null}
         )
-        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
+        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria;
+      `;
+
+      // Insere simultaneamente na tabela usuarios para manter login unificado
+      await sql`
+        INSERT INTO usuarios (
+          id, nome, email, telefone, cpf, data_nascimento, senha_hash, role
+        ) VALUES (
+          ${novoId}, ${nome.trim()}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash}, 'motorista'
+        )
+        ON CONFLICT (id) DO NOTHING;
       `;
 
       const motoristaCriado = resultado[0];
@@ -103,6 +120,7 @@ const processarCadastro = async (req, res) => {
       });
     }
 
+    // Fluxo de Cadastro de PASSAGEIRO (Cliente)
     const novoId = 'usr_' + Date.now().toString(36);
     const resultado = await sql`
       INSERT INTO usuarios (
@@ -129,7 +147,7 @@ const processarCadastro = async (req, res) => {
     res.status(201).json({ sucesso: true, token, usuario: utilizadorCriado });
   } catch (err) {
     console.error('ERRO DETALHADO NO CADASTRO:', err);
-    if (err.message && err.message.includes('unique constraint')) {
+    if (err.message && (err.message.includes('unique constraint') || err.message.includes('conflito'))) {
       return res.status(409).json({ erro: 'Este e-mail, telefone ou CPF já está registrado.' });
     }
     res.status(500).json({ erro: `Erro no Banco: ${err.message}` });
@@ -213,6 +231,7 @@ const processarLogin = async (req, res) => {
 router.post('/cadastro', processarCadastro);
 router.post('/login', processarLogin);
 
+// LOGIN EXCLUSIVO DE MOTORISTA (Sem senha, validação via CNH e Placa)
 router.post('/login-motorista', async (req, res) => {
   try {
     const { email, cnh, veiculo_placa } = req.body;
@@ -220,7 +239,7 @@ router.post('/login-motorista', async (req, res) => {
 
     const emailLimpo = String(email).trim().toLowerCase();
     const cnhLimpa = String(cnh).replace(/\D/g, '');
-    const placaLimpa = String(veiculo_placa).trim().toUpperCase();
+    const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
     const motoristas = await sql`
       SELECT * FROM motoristas
@@ -242,8 +261,21 @@ router.post('/login-motorista', async (req, res) => {
     );
 
     res.json({
-      sucesso: true, token,
-      usuario: { id: mot.id, nome: mot.nome, email: mot.email, telefone: mot.telefone, role: 'motorista', veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`, saldo: mot.saldo_carteira }
+      sucesso: true, 
+      token,
+      usuario: { 
+        id: mot.id, 
+        nome: mot.nome, 
+        email: mot.email, 
+        telefone: mot.telefone, 
+        role: 'motorista', 
+        veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`,
+        veiculo_modelo: mot.veiculo_modelo,
+        veiculo_placa: mot.veiculo_placa,
+        veiculo_cor: mot.veiculo_cor,
+        veiculo_ano: mot.veiculo_ano,
+        saldo: mot.saldo_carteira 
+      }
     });
   } catch (err) {
     console.error('Erro no login do motorista:', err);
@@ -252,7 +284,7 @@ router.post('/login-motorista', async (req, res) => {
 });
 
 // ============================================================================
-// ROTAS DE PERFIL CORRIGIDAS (ÚNICAS E BLINDADAS)
+// ROTAS DE PERFIL
 // ============================================================================
 
 router.get('/perfil', async (req, res) => {
@@ -265,9 +297,16 @@ router.get('/perfil', async (req, res) => {
     let user;
 
     if (payload.role === 'motorista') {
-      user = await sql`SELECT id, nome, email, telefone, foto_url FROM motoristas WHERE id = ${payload.id} LIMIT 1`;
+      user = await sql`
+        SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, foto_url) AS foto_url,
+               veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano
+        FROM motoristas WHERE id::text = ${payload.id}::text LIMIT 1;
+      `;
     } else {
-      user = await sql`SELECT id, nome, email, telefone, foto_url FROM usuarios WHERE id = ${payload.id} LIMIT 1`;
+      user = await sql`
+        SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, foto_url) AS foto_url 
+        FROM usuarios WHERE id::text = ${payload.id}::text LIMIT 1;
+      `;
     }
     
     if (user.length === 0) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
@@ -284,25 +323,26 @@ router.put('/perfil', async (req, res) => {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    // Extraímos apenas o nome e foto. Ignoramos email e telefone para não quebrar o NOT NULL!
     const { nome, foto_url } = req.body; 
     let atualizado;
 
     if (payload.role === 'motorista') {
       atualizado = await sql`
         UPDATE motoristas
-        SET nome = ${nome ?? 'Utilizador'}, 
-            foto_url = ${foto_url ?? null}
-        WHERE id = ${payload.id}
-        RETURNING id, nome, email, telefone, foto_url;
+        SET nome = COALESCE(${nome || null}, nome), 
+            foto_perfil_url = COALESCE(${foto_url || null}, foto_perfil_url),
+            foto_url = COALESCE(${foto_url || null}, foto_url)
+        WHERE id::text = ${payload.id}::text
+        RETURNING id, nome, email, telefone, foto_perfil_url, veiculo_modelo, veiculo_placa;
       `;
     } else {
       atualizado = await sql`
         UPDATE usuarios
-        SET nome = ${nome ?? 'Utilizador'}, 
-            foto_url = ${foto_url ?? null}
-        WHERE id = ${payload.id}
-        RETURNING id, nome, email, telefone, foto_url;
+        SET nome = COALESCE(${nome || null}, nome), 
+            foto_perfil_url = COALESCE(${foto_url || null}, foto_perfil_url),
+            foto_url = COALESCE(${foto_url || null}, foto_url)
+        WHERE id::text = ${payload.id}::text
+        RETURNING id, nome, email, telefone, foto_perfil_url;
       `;
     }
 
