@@ -1,422 +1,558 @@
+// js/admin.js - Orquestrador Geral do Painel Master
 import { API_URL } from './config.js';
-import { inicializarRadarMaster, carregarZonasDinamicas, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
+import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
-// ==========================================
-// 1. SEGURANÇA E ACESSO
-// ==========================================
-const token = localStorage.getItem('huby_token');
-let role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
+let chartFinanceiroInstance = null;
+let chartCategoriasInstance = null;
+const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
-if (token && !role) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
+document.addEventListener('DOMContentLoaded', async () => {
+  const token = localStorage.getItem('huby_token');
+  const role = localStorage.getItem('huby_user_role');
 
-    const payload = JSON.parse(jsonPayload);
-    role = String(payload.role || payload.funcao || payload.tipo || '').toLowerCase();
-    if (role) localStorage.setItem('huby_user_role', role);
-  } catch (e) {
-    console.warn('Erro na validação do token:', e);
+  if (!token || (role !== 'admin' && role !== 'administrador')) {
+    alert('Acesso restrito ao Painel Administrativo Master.');
+    window.location.replace('./login.html');
+    return;
   }
-}
 
-if (!token || (role !== 'admin' && role !== 'administrador')) {
-  window.location.replace('./welcome.html');
-}
+  // 1. Inicializa o Radar no Mapa (Leaflet)
+  inicializarRadarMaster(token);
 
-// ==========================================
-// 2. SOCKET.IO PARA ALERTAS E RADAR DINÂMICO
-// ==========================================
-let socket = null;
-try {
-  socket = io(API_URL);
-  socket.on('connect', () => console.log('Admin Master conectado ao Socket.IO'));
-  
-  socket.on('alerta_sos_admin', (dados) => {
-    alert(`🚨 ALERTA SOS CRÍTICO!\nChamada: #${dados.pedidoId}\nO passageiro/motorista acionou socorro imediato!`);
-    carregarSeguranca();
-  });
+  // 2. Conecta ao Socket.IO para Telemetria em Tempo Real e Alertas
+  conectarSocketAdmin();
 
-  socket.on('alerta_seguranca_admin', () => {
-    carregarSeguranca();
-  });
+  // 3. Controle de Troca de Abas
+  configurarNavegacaoAbas();
 
-  // Atualiza a posição do condutor através do módulo admin-radar.js
-  socket.on('posicao_motorista', (dados) => {
-    atualizarPosicaoCondutorNoMapa(dados);
-  });
-} catch(err) {
-  console.warn('Socket indisponível:', err);
-}
+  // 4. Carregamento Inicial de Dados
+  await sincronizarTudo(token);
 
-// ==========================================
-// 3. NAVEGAÇÃO POR ABAS
-// ==========================================
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
-    
-    btn.classList.add('active');
-    const pane = document.getElementById(btn.dataset.tab);
-    if (pane) pane.classList.add('active');
+  // 5. Handlers de Formulários
+  configurarFormCupons(token);
+  configurarFormBroadcast(token);
+  configurarFormTarifas(token);
+  configurarModalDocumentos();
 
-    if (btn.dataset.tab === 'tabMetricas') carregarMetricas();
-    if (btn.dataset.tab === 'tabRadar') inicializarRadarMaster(token);
-    if (btn.dataset.tab === 'tabCupons') carregarCupons();
-    if (btn.dataset.tab === 'tabSeguranca') carregarSeguranca();
-  });
+  // 6. Botões Globais do Topo
+  document.getElementById('btnSincronizar')?.addEventListener('click', () => sincronizarTudo(token));
+  document.getElementById('btnBaixarCSV')?.addEventListener('click', exportarRelatorioCSV);
 });
 
-const fMoeda = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(val) || 0);
+// ============================================================================
+// CARREGAMENTO E SINCRONIZAÇÃO GERAL
+// ============================================================================
+async function sincronizarTudo(token) {
+  await Promise.all([
+    carregarMetricasECards(token),
+    carregarTabelaCupons(token),
+    carregarTabelaSeguranca(token),
+    carregarTabelaSaques(token),
+    carregarTabelaFrota(token),
+    carregarTabelaViagens(token),
+    carregarTarifasConfig(token)
+  ]);
+}
 
-let chartFin = null;
-let chartCat = null;
-
-// ==========================================
-// 4. CARREGAR MÉTRICAS E GRÁFICOS
-// ==========================================
-async function carregarMetricas() {
+// 1. Métricas e Gráficos
+async function carregarMetricasECards(token) {
   try {
-    const res = await fetch(`${API_URL}/api/admin/metricas`, { headers: { 'Authorization': `Bearer ${token}` } });
-    if (!res.ok) throw new Error('Falha ao obter dados.');
-    const dados = await res.json();
+    const res = await fetch(`${API_URL}/api/admin/metricas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const m = await res.json();
 
-    const bruto = Number(dados.financeiro?.faturamento_total ?? dados.faturamentoBruto ?? 0);
-    const repasse = Number(dados.financeiro?.total_pago_motoristas ?? dados.repasseMotoristas ?? 0);
-    const liquido = Number(dados.financeiro?.lucro_plataforma ?? dados.receitaPlataforma ?? 0);
-    const pedidos = dados.pedidos || { pendentes: dados.chamadasEmAberto || 0, concluidos: dados.totalCorridas || 0, cancelados: 0 };
+    const faturamentoBruto = Number(m.faturamento_bruto || (m.receita_huby_hoje ? m.receita_huby_hoje / 0.15 : 0));
+    const lucroLiquido = Number(m.receita_huby_hoje || (faturamentoBruto * 0.15));
+    const repasseMotoristas = Math.max(0, faturamentoBruto - lucroLiquido);
 
-    document.getElementById('metricBruto').textContent = fMoeda(bruto);
-    document.getElementById('metricLiquido').textContent = fMoeda(liquido);
-    document.getElementById('metricRepasse').textContent = fMoeda(repasse);
-    document.getElementById('metricConcluidas').textContent = pedidos.concluidos || 0;
+    document.getElementById('metricBruto').textContent = `R$ ${faturamentoBruto.toFixed(2).replace('.', ',')}`;
+    document.getElementById('metricLiquido').textContent = `R$ ${lucroLiquido.toFixed(2).replace('.', ',')}`;
+    document.getElementById('metricRepasse').textContent = `R$ ${repasseMotoristas.toFixed(2).replace('.', ',')}`;
+    document.getElementById('metricConcluidas').textContent = m.viagens_concluidas || m.corridas_ativas || 0;
+    document.getElementById('metricAlertas').textContent = m.incidentes_ativos || 0;
 
-    renderizarGraficos(bruto, liquido, repasse, pedidos);
+    renderizarGraficos(faturamentoBruto, lucroLiquido, repasseMotoristas, m.distribuicao_categorias || {});
   } catch (err) {
-    console.error("Erro nas métricas:", err);
+    console.warn('Erro ao ler KPIs:', err);
   }
 }
 
-function renderizarGraficos(bruto, liquido, repasse, pedidos) {
-  const canvasFin = document.getElementById('chartFinanceiro');
-  const canvasCat = document.getElementById('chartCategorias');
-  if (!canvasFin || !canvasCat) return;
-
-  if (chartFin) chartFin.destroy();
-  chartFin = new Chart(canvasFin.getContext('2d'), {
-    type: 'doughnut',
-    data: {
-      labels: ['Lucro HUBy', 'Repasse Parceiros'],
-      datasets: [{
-        data: [liquido > 0 ? liquido : 1, repasse > 0 ? repasse : 1],
-        backgroundColor: ['#38BDF8', '#F59E0B'],
-        borderWidth: 0
-      }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#FFF' } } } }
-  });
-
-  if (chartCat) chartCat.destroy();
-  chartCat = new Chart(canvasCat.getContext('2d'), {
-    type: 'bar',
-    data: {
-      labels: ['Pendentes', 'Concluídos', 'Cancelados'],
-      datasets: [{
-        label: 'Viagens',
-        data: [pedidos.pendentes || 0, pedidos.concluidos || 0, pedidos.cancelados || 0],
-        backgroundColor: ['#F59E0B', '#10B981', '#EF4444'],
-        borderRadius: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        y: { beginAtZero: true, ticks: { color: '#64748B' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        x: { ticks: { color: '#64748B' }, grid: { display: false } }
+function renderizarGraficos(bruto, lucro, repasse, categorias) {
+  // Gráfico Financeiro (Doughnut)
+  const ctxFin = document.getElementById('chartFinanceiro')?.getContext('2d');
+  if (ctxFin) {
+    if (chartFinanceiroInstance) chartFinanceiroInstance.destroy();
+    chartFinanceiroInstance = new Chart(ctxFin, {
+      type: 'doughnut',
+      data: {
+        labels: ['Repasse Condutores (85%)', 'Taxa HUBy (15%)'],
+        datasets: [{
+          data: [repasse || 85, lucro || 15],
+          backgroundColor: ['#F59E0B', '#38BDF8'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { color: '#94A3B8' } } }
       }
-    }
-  });
+    });
+  }
+
+  // Gráfico de Categorias (Bar)
+  const ctxCat = document.getElementById('chartCategorias')?.getContext('2d');
+  if (ctxCat) {
+    if (chartCategoriasInstance) chartCategoriasInstance.destroy();
+    chartCategoriasInstance = new Chart(ctxCat, {
+      type: 'bar',
+      data: {
+        labels: ['HUBy Carro', 'HUBy Moto', 'HUBy Entrega'],
+        datasets: [{
+          label: 'Viagens',
+          data: [categorias.carro || 12, categorias.moto || 8, categorias.entrega || 4],
+          backgroundColor: ['#10B981', '#F59E0B', '#A855F7'],
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#94A3B8' }, grid: { display: false } },
+          y: { ticks: { color: '#94A3B8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+        }
+      }
+    });
+  }
 }
 
-// ==========================================
-// 5. CUPONS DE DESCONTO & MARKETING
-// ==========================================
-async function carregarCupons() {
+// 2. Cupons de Desconto
+async function carregarTabelaCupons(token) {
   const tbody = document.getElementById('tabelaCuponsBody');
   if (!tbody) return;
-  try {
-    const res = await fetch(`${API_URL}/api/admin/cupons`, { headers: { 'Authorization': `Bearer ${token}` } });
-    const cupons = await res.json();
-
-    if (!cupons || cupons.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted); padding:20px;">Nenhum cupom ativo no momento.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = cupons.map(c => {
-      const valTxt = c.tipo === 'porcentagem' ? `${c.valor}% OFF` : fMoeda(c.valor);
-      const badgeCss = c.ativo ? 'badge-ativo' : 'badge-inativo';
-      const statusTxt = c.ativo ? 'Ativo' : 'Pausado';
-
-      return `<tr>
-        <td><strong style="color:var(--blue); font-family:monospace; font-size:14px;">${c.codigo}</strong></td>
-        <td><strong style="color:var(--primary);">${valTxt}</strong></td>
-        <td>${c.usos_atuais || 0} / ${c.limite_usos || '∞'}</td>
-        <td><span class="badge ${badgeCss}">${statusTxt}</span></td>
-        <td>
-          <button class="btn-tbl alt" onclick="toggleCupom(${c.id})">${c.ativo ? 'Pausar' : 'Ativar'}</button>
-          <button class="btn-tbl rej" onclick="excluirCupom(${c.id})" style="margin-left:4px;">✕</button>
-        </td>
-      </tr>`;
-    }).join('');
-  } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--rose);">Erro ao consultar cupons.</td></tr>';
-  }
-}
-
-document.getElementById('formNovoCupom')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const codigo = document.getElementById('cupomCodigo').value;
-  const tipo = document.getElementById('cupomTipo').value;
-  const valor = document.getElementById('cupomValor').value;
-  const limite_usos = document.getElementById('cupomLimite').value;
-  const expira_em = document.getElementById('cupomExpira').value || null;
 
   try {
     const res = await fetch(`${API_URL}/api/admin/cupons`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ codigo, tipo, valor, limite_usos, expira_em })
+      headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) {
-      alert('Cupom criado com sucesso!');
-      e.target.reset();
-      carregarCupons();
-    } else {
-      const err = await res.json();
-      alert(`Erro: ${err.erro}`);
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Nenhum cupom ativo registrado.</td></tr>';
+      return;
     }
+    const cupons = await res.json();
+    if (!cupons.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Nenhum cupom cadastrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = cupons.map(c => `
+      <tr>
+        <td><strong>${c.codigo}</strong></td>
+        <td>${c.tipo === 'porcentagem' ? `${c.valor}%` : `R$ ${Number(c.valor).toFixed(2).replace('.', ',')}`}</td>
+        <td>${c.usos_atuais || 0} / ${c.limite_usos || '∞'}</td>
+        <td><span class="badge ${c.ativo ? 'badge-ativo' : 'badge-inativo'}">${c.ativo ? 'Ativo' : 'Pausado'}</span></td>
+        <td>
+          <button class="btn-tbl alt" onclick="alternarCupom('${c.id}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
+          <button class="btn-tbl rej" onclick="excluirCupom('${c.id}')">Excluir</button>
+        </td>
+      </tr>
+    `).join('');
   } catch (e) {
-    alert('Erro de conexão ao salvar cupom.');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--rose);">Erro ao ler cupons.</td></tr>';
   }
-});
+}
 
-window.toggleCupom = async (id) => {
-  try {
-    await fetch(`${API_URL}/api/admin/cupons/${id}/toggle`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
-    carregarCupons();
-  } catch (e) { alert('Erro ao alterar cupom.'); }
-};
-
-window.excluirCupom = async (id) => {
-  if (!confirm('Deseja realmente eliminar este cupom?')) return;
-  try {
-    await fetch(`${API_URL}/api/admin/cupons/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
-    carregarCupons();
-  } catch (e) { alert('Erro ao remover cupom.'); }
-};
-
-// ==========================================
-// 6. CENTRAL DE SEGURANÇA E SOS
-// ==========================================
-async function carregarSeguranca() {
+// 3. Incidentes e SOS
+async function carregarTabelaSeguranca(token) {
   const tbody = document.getElementById('tabelaSegurancaBody');
   if (!tbody) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/admin/seguranca/incidentes`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(`${API_URL}/api/admin/incidentes`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
     const incidentes = await res.json();
 
-    const pendentes = (incidentes || []).filter(i => !i.resolvido);
-    document.getElementById('metricAlertas').textContent = pendentes.length;
-
-    if (!incidentes || incidentes.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:20px;">Nenhum alerta registrado.</td></tr>';
+    if (!incidentes.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">Sem incidentes pendentes. Frota segura!</td></tr>';
       return;
     }
 
-    tbody.innerHTML = incidentes.map(inc => {
-      const isSos = inc.tipo_alerta === 'sos';
-      const badgeCls = inc.resolvido ? 'badge-concluido' : (isSos ? 'badge-sos' : 'badge-pendente');
-      const dataFmt = new Date(inc.criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
-      return `<tr>
-        <td>#${inc.id}</td>
-        <td><span class="badge ${badgeCls}">${inc.tipo_alerta.toUpperCase()}</span></td>
-        <td><strong>${inc.descricao}</strong><br><small style="color:var(--muted)">Viagem: ${inc.pedido_id || 'N/A'}</small></td>
-        <td>${dataFmt}</td>
-        <td>${inc.resolvido ? 'Resolvido' : '<strong style="color:var(--rose);">Pendente</strong>'}</td>
+    tbody.innerHTML = incidentes.map(i => `
+      <tr>
+        <td>#${String(i.id).slice(-4)}</td>
+        <td><span class="badge ${i.tipo === 'sos' ? 'badge-sos' : 'badge-pendente'}">${i.tipo.toUpperCase()}</span></td>
+        <td>${i.descricao || 'Alerta disparado na corrida'}</td>
+        <td>${new Date(i.criado_em).toLocaleString('pt-BR')}</td>
+        <td><span class="badge ${i.resolvido ? 'badge-concluido' : 'badge-pendente'}">${i.resolvido ? 'Resolvido' : 'Pendente'}</span></td>
         <td>
-          ${!inc.resolvido ? `<button class="btn-tbl app" onclick="resolverIncidente(${inc.id})">Arquivar</button>` : '<small style="color:var(--muted);">OK</small>'}
+          ${!i.resolvido ? `<button class="btn-tbl app" onclick="resolverIncidente(${i.id})">Resolver</button>` : '---'}
         </td>
-      </tr>`;
-    }).join('');
-  } catch (err) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--rose);">Falha ao sincronizar alertas.</td></tr>';
-  }
+      </tr>
+    `).join('');
+  } catch (e) {}
 }
 
-window.resolverIncidente = async (id) => {
-  try {
-    await fetch(`${API_URL}/api/admin/seguranca/incidentes/${id}/resolver`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
-    carregarSeguranca();
-  } catch (e) { alert('Erro ao arquivar alerta.'); }
-};
-
-// ==========================================
-// 7. BROADCAST PUSH EM MASSA
-// ==========================================
-document.getElementById('formBroadcast')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const publico = document.getElementById('broadPublico').value;
-  const titulo = document.getElementById('broadTitulo').value;
-  const mensagem = document.getElementById('broadMensagem').value;
-
-  try {
-    const res = await fetch(`${API_URL}/api/admin/notificacoes/broadcast`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ publico, titulo, mensagem })
-    });
-    if (res.ok) {
-      alert('Mensagem enviada com sucesso para os utilizadores online!');
-      e.target.reset();
-    } else {
-      alert('Erro ao disparar mensagem.');
-    }
-  } catch (err) {
-    alert('Erro de conexão ao emitir broadcast.');
-  }
-});
-
-// ==========================================
-// 8. EXPORTAÇÃO CSV
-// ==========================================
-document.getElementById('btnBaixarCSV')?.addEventListener('click', () => {
-  window.open(`${API_URL}/api/admin/relatorios/corridas.csv?token=${token}`, '_blank');
-});
-
-// ==========================================
-// 9. SAQUES, CONDUTORES E TARIFAS
-// ==========================================
-async function carregarSaques() {
+// 4. Moderação de Saques Pix
+async function carregarTabelaSaques(token) {
   const tbody = document.getElementById('tabelaSaquesBody');
   if (!tbody) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/admin/saques`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(`${API_URL}/api/admin/saques`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
     const saques = await res.json();
-    if (!saques || saques.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:20px;">Nenhum saque solicitado.</td></tr>';
+
+    if (!saques.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">Nenhum pedido de saque registrado.</td></tr>';
       return;
     }
-    tbody.innerHTML = saques.map(s => `<tr>
-      <td>#${s.id}</td>
-      <td><strong>${s.motorista_nome}</strong></td>
-      <td><span style="color:var(--blue); font-family:monospace;">${s.chave_pix}</span> (${s.tipo_chave})</td>
-      <td style="color:var(--primary); font-weight:800;">${fMoeda(s.valor)}</td>
-      <td><span class="badge ${s.status === 'pago' ? 'badge-pago' : 'badge-pendente'}">${s.status}</span></td>
-      <td>${s.status === 'pendente' ? `<button class="btn-tbl app" onclick="aprovarSaque(${s.id})">Pagar</button><button class="btn-tbl rej" onclick="rejeitarSaque(${s.id})" style="margin-left:4px;">Recusar</button>` : '<small style="color:var(--muted);">Processado</small>'}</td>
-    </tr>`).join('');
-  } catch (err) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--rose);">Erro ao carregar saques.</td></tr>'; }
+
+    tbody.innerHTML = saques.map(s => {
+      const badgeClass = s.status === 'pago' ? 'badge-pago' : (s.status === 'recusado' ? 'badge-recusado' : 'badge-pendente');
+      return `
+        <tr>
+          <td>#${s.id}</td>
+          <td><strong>${s.motorista_nome || 'Condutor'}</strong><br><small style="color:var(--muted);">${s.motorista_telefone || ''}</small></td>
+          <td><code>${s.chave_pix}</code> (${s.tipo_chave})</td>
+          <td style="font-weight: 800; color: #FFF;">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</td>
+          <td><span class="badge ${badgeClass}">${s.status.toUpperCase()}</span></td>
+          <td>
+            ${s.status === 'pendente' ? `
+              <button class="btn-tbl app" onclick="processarSaqueMaster(${s.id}, 'pago')">Pagar Pix</button>
+              <button class="btn-tbl rej" onclick="processarSaqueMaster(${s.id}, 'recusado')">Recusar</button>
+            ` : '---'}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {}
 }
 
-window.aprovarSaque = async (id) => {
-  if (!confirm('Confirma o envio do Pix?')) return;
-  await fetch(`${API_URL}/api/admin/saques/${id}/aprovar`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
-  carregarSaques();
-  carregarMetricas();
-};
-
-window.rejeitarSaque = async (id) => {
-  const motivo = prompt("Motivo:");
-  if (!motivo) return;
-  await fetch(`${API_URL}/api/admin/saques/${id}/rejeitar`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ motivo }) });
-  carregarSaques();
-};
-
-async function carregarFrota() {
+// 5. Gestão de Frota e Documentos
+async function carregarTabelaFrota(token) {
   const tbody = document.getElementById('tabelaFrotaBody');
   if (!tbody) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/admin/motoristas`, { headers: { 'Authorization': `Bearer ${token}` } });
+    const res = await fetch(`${API_URL}/api/admin/motoristas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
     const motoristas = await res.json();
-    tbody.innerHTML = motoristas.map(m => `<tr>
-      <td><strong>${m.nome}</strong><br><small style="color:var(--muted);">${m.telefone || '---'}</small></td>
-      <td>${m.veiculo_modelo || 'Veículo'}<br><strong style="letter-spacing:1px; color:#FFF;">${m.veiculo_placa || '---'}</strong></td>
-      <td>${(m.categoria_veiculo || m.categoria || '').toUpperCase()}</td>
-      <td style="color:var(--primary); font-weight:800;">${fMoeda(m.saldo_carteira)}</td>
-      <td><span class="badge ${m.status_aprovacao === 'aprovado' ? 'badge-aprovado' : 'badge-pendente'}">${m.status_aprovacao}</span></td>
-      <td>${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="verDoc('${m.doc_crlv_url}')">Ver Doc</button>` : '<small>Sem doc</small>'}</td>
-      <td>${m.status_aprovacao === 'pendente' ? `<button class="btn-tbl app" onclick="alterarStatusMot('${m.id}', 'aprovar')">Aprovar</button><button class="btn-tbl rej" onclick="alterarStatusMot('${m.id}', 'recusar')" style="margin-left:4px;">Bloquear</button>` : `<button class="btn-tbl rej" onclick="alterarStatusMot('${m.id}', 'recusar')">Suspender</button>`}</td>
-    </tr>`).join('');
-  } catch (err) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--rose);">Erro ao carregar frota.</td></tr>'; }
+
+    if (!motoristas.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">Nenhum parceiro cadastrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = motoristas.map(m => {
+      const badgeStatus = {
+        aprovado: 'badge-aprovado',
+        pendente: 'badge-pendente',
+        bloqueado: 'badge-recusado'
+      }[m.status_aprovacao] || 'badge-pendente';
+
+      return `
+        <tr>
+          <td>
+            <strong>${m.nome}</strong><br>
+            <small style="color:var(--muted);">CNH: ${m.cnh || '---'}</small>
+          </td>
+          <td>
+            ${m.veiculo_modelo || 'Não inf.'}<br>
+            <small style="color:var(--blue); font-weight:700;">${(m.veiculo_placa || 'SEM PLACA').toUpperCase()}</small>
+          </td>
+          <td><span class="badge badge-aceito">${(m.categoria || 'carro').toUpperCase()}</span></td>
+          <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
+          <td><span class="badge ${badgeStatus}">${m.status_aprovacao.toUpperCase()}</span></td>
+          <td>
+            ${m.foto_perfil_url ? `
+              <button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.foto_perfil_url}')">Ver Foto</button>
+            ` : '<small style="color:var(--muted);">Sem foto</small>'}
+          </td>
+          <td>
+            <div style="display:flex; gap:4px;">
+              ${m.status_aprovacao !== 'aprovado' ? `
+                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovado')">Aprovar</button>
+              ` : ''}
+              ${m.status_aprovacao !== 'bloqueado' ? `
+                <button class="btn-tbl rej" onclick="alterarStatusCondutor('${m.id}', 'bloqueado')">Bloquear</button>
+              ` : `
+                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovado')">Liberar</button>
+              `}
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {}
 }
 
-window.alterarStatusMot = async (id, acao) => {
-  if (!confirm(`Deseja aplicar a ação "${acao}"?`)) return;
-  await fetch(`${API_URL}/api/admin/motoristas/${id}/triagem`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ acao }) });
-  carregarFrota();
-};
-
-window.verDoc = (url) => {
-  const img = document.getElementById('imgPreviewVeiculo');
-  const modal = document.getElementById('modalPreviewFoto');
-  if (img && modal) { img.src = url; modal.style.display = 'flex'; }
-};
-
-document.getElementById('btnFecharModalPreview')?.addEventListener('click', () => {
-  const modal = document.getElementById('modalPreviewFoto');
-  if (modal) modal.style.display = 'none';
-});
-
-async function carregarViagens() {
+// 6. Monitor de Viagens em Tempo Real
+async function carregarTabelaViagens(token) {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
+
   try {
-    const res = await fetch(`${API_URL}/api/admin/pedidos`, { headers: { 'Authorization': `Bearer ${token}` } });
-    const viagens = await res.json();
-    tbody.innerHTML = viagens.map(v => `<tr>
-      <td><small style="color:var(--muted)">${String(v.id).substring(0,8)}</small></td>
-      <td>${v.sub_tipo_label || v.tipo}</td>
-      <td>${Number(v.distancia_km || 0).toFixed(1)} km</td>
-      <td style="color:var(--amber); font-weight:800;">${fMoeda(v.valor_total)}</td>
-      <td style="color:var(--blue); font-weight:800;">+ ${fMoeda(Number(v.valor_total || 0) * 0.15)}</td>
-      <td>${v.motorista_nome || 'Aguardando'}</td>
-      <td><span class="badge ${v.status === 'concluido' ? 'badge-concluido' : 'badge-pendente'}">${v.status}</span></td>
-    </tr>`).join('');
-  } catch (e) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--rose);">Erro ao carregar viagens.</td></tr>'; }
+    const res = await fetch(`${API_URL}/api/pedidos/historico`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const corridas = await res.json();
+
+    if (!corridas.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">Nenhuma corrida realizada.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = corridas.slice(0, 15).map(c => {
+      const taxa = Number(c.valor_total) * 0.15;
+      return `
+        <tr>
+          <td>#${String(c.id).slice(-4)}</td>
+          <td>${c.sub_tipo_label || 'HUBy'}</td>
+          <td>${c.distancia_km} km</td>
+          <td style="font-weight:800; color:#FFF;">R$ ${Number(c.valor_total).toFixed(2).replace('.', ',')}</td>
+          <td style="color:var(--blue); font-weight:700;">R$ ${taxa.toFixed(2).replace('.', ',')}</td>
+          <td>${c.motorista_nome || 'Buscando...'}</td>
+          <td><span class="badge ${c.status === 'concluido' ? 'badge-concluido' : (c.status === 'cancelado' ? 'badge-recusado' : 'badge-aceito')}">${c.status.toUpperCase()}</span></td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {}
 }
 
-document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const taxa_plataforma = Number(document.getElementById('cfgTaxaPlataforma').value);
-  const tarifa_km_carro = Number(document.getElementById('cfgKmCarro').value);
-  const tarifa_km_moto = Number(document.getElementById('cfgKmMoto').value);
-  const tarifa_km_entrega = Number(document.getElementById('cfgKmEntrega').value);
+// 7. Tarifas e Configurações
+async function carregarTarifasConfig(token) {
+  try {
+    const res = await fetch(`${API_URL}/api/config`);
+    if (!res.ok) return;
+    const cfg = await res.json();
 
-  const res = await fetch(`${API_URL}/api/admin/tarifas`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify({ taxa_plataforma, tarifa_km_carro, tarifa_km_moto, tarifa_km_entrega })
+    if (cfg.taxa_plataforma) document.getElementById('cfgTaxaPlataforma').value = cfg.taxa_plataforma;
+    if (cfg.km_carro) document.getElementById('cfgKmCarro').value = cfg.km_carro;
+    if (cfg.km_moto) document.getElementById('cfgKmMoto').value = cfg.km_moto;
+    if (cfg.km_entrega) document.getElementById('cfgKmEntrega').value = cfg.km_entrega;
+  } catch (e) {}
+}
+
+// ============================================================================
+// FORMULÁRIOS E AÇÕES ADMINISTRATIVAS
+// ============================================================================
+function configurarFormCupons(token) {
+  document.getElementById('formNovoCupom')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const codigo = document.getElementById('cupomCodigo').value.trim().toUpperCase();
+    const tipo = document.getElementById('cupomTipo').value;
+    const valor = parseFloat(document.getElementById('cupomValor').value);
+    const limite_usos = parseInt(document.getElementById('cupomLimite').value, 10);
+    const expira_em = document.getElementById('cupomExpira').value || null;
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/cupons`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ codigo, tipo, valor, limite_usos, expira_em })
+      });
+      if (res.ok) {
+        alert('Cupom cadastrado com sucesso!');
+        e.target.reset();
+        carregarTabelaCupons(token);
+      } else {
+        const d = await res.json();
+        alert(`Erro: ${d.erro || 'Falha ao salvar cupom'}`);
+      }
+    } catch (err) {
+      alert('Falha de conexão.');
+    }
   });
-  if (res.ok) alert('Parâmetros salvos com sucesso!');
-  else alert('Erro ao salvar parâmetros.');
-});
+}
 
-document.getElementById('btnSincronizar')?.addEventListener('click', () => {
-  carregarMetricas(); carregarSaques(); carregarFrota(); carregarViagens(); carregarCupons(); carregarSeguranca();
-  carregarZonasDinamicas(token);
-});
+function configurarFormBroadcast(token) {
+  document.getElementById('formBroadcast')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const publico = document.getElementById('broadPublico').value;
+    const titulo = document.getElementById('broadTitulo').value.trim();
+    const mensagem = document.getElementById('broadMensagem').value.trim();
 
-// Inicialização imediata
-carregarMetricas();
-carregarSaques();
-carregarFrota();
-carregarViagens();
-carregarCupons();
-carregarSeguranca();
+    try {
+      const res = await fetch(`${API_URL}/api/admin/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ publico, titulo, mensagem })
+      });
+      if (res.ok) {
+        alert('📢 Notificação transmitida com sucesso para os usuários conectados!');
+        e.target.reset();
+      } else {
+        alert('Erro ao enviar notificação.');
+      }
+    } catch (err) {
+      alert('Falha de rede.');
+    }
+  });
+}
+
+function configurarFormTarifas(token) {
+  document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const taxa_plataforma = Number(document.getElementById('cfgTaxaPlataforma').value);
+    const km_carro = Number(document.getElementById('cfgKmCarro').value);
+    const km_moto = Number(document.getElementById('cfgKmMoto').value);
+    const km_entrega = Number(document.getElementById('cfgKmEntrega').value);
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ taxa_plataforma, km_carro, km_moto, km_entrega })
+      });
+      if (res.ok) {
+        alert('Parâmetros e tarifas atualizados com sucesso!');
+      } else {
+        alert('Erro ao atualizar tarifas.');
+      }
+    } catch (err) {
+      alert('Falha ao comunicar com o servidor.');
+    }
+  });
+}
+
+// Modal de visualização de fotos
+function configurarModalDocumentos() {
+  const modal = document.getElementById('modalPreviewFoto');
+  const btnFechar = document.getElementById('btnFecharModalPreview');
+
+  window.abrirFotoDocumento = (url) => {
+    const img = document.getElementById('imgPreviewVeiculo');
+    if (img && modal) {
+      img.src = url;
+      modal.style.display = 'flex';
+    }
+  };
+
+  btnFechar?.addEventListener('click', () => {
+    if (modal) modal.style.display = 'none';
+  });
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+}
+
+// Navegação das abas
+function configurarNavegacaoAbas() {
+  const botoes = document.querySelectorAll('.tab-btn');
+  const paineis = document.querySelectorAll('.tab-pane');
+
+  botoes.forEach(btn => {
+    btn.addEventListener('click', () => {
+      botoes.forEach(b => b.classList.remove('active'));
+      paineis.forEach(p => p.classList.remove('active'));
+
+      btn.classList.add('active');
+      const tabAlvo = document.getElementById(btn.getAttribute('data-tab'));
+      if (tabAlvo) tabAlvo.classList.add('active');
+    });
+  });
+}
+
+// Conexão em tempo real do Admin
+function conectarSocketAdmin() {
+  const ioClient = getSocketIO();
+  if (!ioClient) return;
+
+  const socket = ioClient(API_URL);
+  socket.on('posicao_motorista', (dados) => {
+    atualizarPosicaoCondutorNoMapa(dados);
+  });
+
+  socket.on('alerta_sos', (dados) => {
+    alert(`🚨 ALERTA SOS EM TEMPO REAL!\n\nViagem: #${dados.pedidoId}\nDescrição: ${dados.relato || 'Emergência reportada!'}`);
+    const token = localStorage.getItem('huby_token');
+    carregarTabelaSeguranca(token);
+    carregarMetricasECards(token);
+  });
+}
+
+// ============================================================================
+// AÇÕES INLINE GLOBAIS (WINDOW)
+// ============================================================================
+window.alterarStatusCondutor = async (id, status) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/motoristas/${id}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status })
+    });
+    if (res.ok) {
+      await carregarTabelaFrota(token);
+      await carregarMetricasECards(token);
+    }
+  } catch (e) {
+    alert('Erro ao alterar status do parceiro.');
+  }
+};
+
+window.processarSaqueMaster = async (id, acao) => {
+  const token = localStorage.getItem('huby_token');
+  if (!confirm(`Deseja marcar este saque como ${acao.toUpperCase()}?`)) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/saques/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ acao })
+    });
+    if (res.ok) {
+      await carregarTabelaSaques(token);
+      await carregarMetricasECards(token);
+    }
+  } catch (e) {
+    alert('Erro ao processar saque.');
+  }
+};
+
+window.resolverIncidente = async (id) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/incidentes/${id}/resolver`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      await carregarTabelaSeguranca(token);
+      await carregarMetricasECards(token);
+    }
+  } catch (e) {
+    alert('Erro ao resolver incidente.');
+  }
+};
+
+function exportarRelatorioCSV() {
+  const linhas = [
+    ['ID', 'Data', 'Tipo', 'Distancia_KM', 'Valor_Total', 'Status']
+  ];
+  const trs = document.querySelectorAll('#tabelaCorridasBody tr');
+  trs.forEach(tr => {
+    const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.replace(/\n/g, ' ').trim());
+    if (tds.length >= 6) linhas.push(tds);
+  });
+
+  const conteudoCSV = 'data:text/csv;charset=utf-8,' + linhas.map(e => e.join(';')).join('\n');
+  const encodedUri = encodeURI(conteudoCSV);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `huby_relatorio_${Date.now()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
