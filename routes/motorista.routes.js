@@ -256,4 +256,33 @@ router.get('/extrato', autenticarToken, async (req, res) => {
   }
 });
 
+// 5. Ganhos de Hoje e Estatísticas do Turno
+router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuario.id;
+
+    // Busca corridas concluídas a partir da meia-noite de hoje (horário local/servidor)
+    const corridasHoje = await sql`
+      SELECT 
+        COUNT(*)::int AS total_corridas,
+        COALESCE(SUM(valor_total * 0.85), 0) AS ganhos_liquidos
+      FROM pedidos
+      WHERE motorista_id::text = ${usuarioId}::text
+        AND status = 'concluido'
+        AND concluido_em >= CURRENT_DATE;
+    `;
+
+    const dados = corridasHoje[0] || { total_corridas: 0, ganhos_liquidos: 0 };
+
+    res.json({
+      sucesso: true,
+      corridasHoje: dados.total_corridas,
+      ganhosHoje: Number(dados.ganhos_liquidos)
+    });
+  } catch (err) {
+    console.error('Erro ao calcular ganhos do dia:', err);
+    res.status(500).json({ erro: 'Falha ao obter resumo diário.' });
+  }
+});
+
 export default router;

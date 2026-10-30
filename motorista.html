@@ -439,7 +439,7 @@
 
 <body>
 
-  <!-- NAVEGAÇÃO SUPERIOR -->
+  <!-- NAVEGAÇÃO SUPERIOR REESTRUTURADA -->
   <header class="top-driver-nav">
     <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil">
       <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
@@ -449,7 +449,20 @@
         <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
       </div>
     </div>
-    <a href="./index.html" class="btn-exit-partner">← Modo Passageiro</a>
+
+    <!-- BOTAO TOGGLE ONLINE / OFFLINE PROFISSIONAL -->
+    <button type="button" id="btnToggleStatusOnline"
+      style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 20px; padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); backdrop-filter: blur(10px); transition: all 0.3s ease;">
+      <span>⚪</span> <strong>Ficar Online</strong>
+    </button>
+
+    <div style="display: flex; gap: 6px; pointer-events: auto;">
+      <button type="button" id="btnToggleHeatmap"
+        style="background: rgba(18, 24, 38, 0.94); border: 1px solid var(--border-dark); color: var(--text-sec); border-radius: 12px; padding: 7px 10px; font-size: 11px; font-weight: 800; cursor: pointer;">
+        🔥 Calor
+      </button>
+      <a href="./index.html" class="btn-exit-partner">← Sair</a>
+    </div>
   </header>
 
   <!-- MAPA PRINCIPAL -->
@@ -474,6 +487,39 @@
     <div class="orders-feed" id="listaChamadasPendentes">
       <div class="dock-empty">Aguardando novas chamadas na região...</div>
     </div>
+
+    <!-- CARD RESUMO DO DIA E META DIÁRIA -->
+    <div
+      style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <div>
+          <small
+            style="font-size: 10px; font-weight: 800; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px;">Ganhos
+            de Hoje</small>
+          <div style="font-size: 19px; font-weight: 900; color: #FFF;" id="lblGanhosHojeValor">R$ 0,00</div>
+        </div>
+        <div style="text-align: right;">
+          <button type="button" id="btnEditarMetaDiaria"
+            style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">
+            ✏️ Definir Meta
+          </button>
+          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0
+            viagens</small>
+        </div>
+      </div>
+
+      <!-- Barra de Progresso da Meta -->
+      <div
+        style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 6px;">
+        <div id="barraProgressoMeta" style="background: #38BDF8; width: 0%; height: 100%; transition: width 0.4s ease;">
+        </div>
+      </div>
+      <div
+        style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-sec); margin-top: 4px;">
+        <span id="lblMetaDiariaTxt">Meta: R$ 200,00 (0%)</span>
+        <span style="color: #10B981; font-weight: 700;">85% repasse líquido</span>
+      </div>
+    </div>
   </section>
 
   <!-- DRAWER LATERAL -->
@@ -486,9 +532,11 @@
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carregando...</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY
+            CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
-            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> • <span id="drawerTotalViagensTxt">0 viagens</span>
+            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> • <span
+              id="drawerTotalViagensTxt">0 viagens</span>
           </div>
         </div>
       </div>
@@ -521,7 +569,8 @@
           <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
         <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
+          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando
+            histórico...</div>
         </div>
       </div>
 
@@ -539,6 +588,11 @@
       <button type="button" id="btnLogoutMotorista"
         style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
         🚪 Encerrar Sessão
+      </button>
+
+      <button type="button" id="btnAbrirModalIncidente"
+        style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.25); color: #EF4444; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        🛡️ Reportar Problema ou Objeto Esquecido
       </button>
     </div>
   </aside>
@@ -565,7 +619,8 @@
           </label>
         </div>
         <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
-        <small style="color: var(--text-sec); font-size: 10px; margin-top: 6px;">Toque na câmera para tirar foto ou escolher da galeria</small>
+        <small style="color: var(--text-sec); font-size: 10px; margin-top: 6px;">Toque na câmera para tirar foto ou
+          escolher da galeria</small>
       </div>
 
       <div class="form-group-driver">
@@ -602,7 +657,8 @@
         <button type="button" id="btnCancelarEdicao"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
+          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
+          Alterações</button>
       </div>
     </div>
   </div>
@@ -638,7 +694,8 @@
         <button type="button" id="btnFecharModalSaque"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnConfirmarSaquePix"
-          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
+          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar
+          Saque</button>
       </div>
     </div>
   </div>
@@ -661,6 +718,41 @@
           style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
         <button type="button" id="btnEnviarMsgChat"
           style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer;">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- MODAL PROFISSIONAL DE REPORTAR INCIDENTE / SUPORTE -->
+  <div id="modalReportarIncidente" class="modal-backdrop-custom">
+    <div class="modal-box-edit" style="max-width: 380px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 15px; color: #EF4444;">🛡️ Central de Ajuda & Incidentes</h3>
+        <button type="button" id="btnFecharModalIncidente" style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
+      </div>
+
+      <div class="form-group-driver">
+        <label>Tipo de Ocorrência</label>
+        <select id="selectTipoIncidente" style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 10px; color: #FFF; font-weight: 600;">
+          <option value="passageiro_ausente">Passageiro não apareceu no local</option>
+          <option value="item_esquecido">Objeto/item esquecido no veículo</option>
+          <option value="desentendimento">Problema de conduta com passageiro</option>
+          <option value="valor_divergente">Divergência no valor da corrida</option>
+          <option value="outro">Outro problema operacional</option>
+        </select>
+      </div>
+
+      <div class="form-group-driver">
+        <label>Descrição do Ocorrido</label>
+        <textarea id="txtDescricaoIncidente" rows="4" placeholder="Descreva detalhadamente o que aconteceu..." 
+          style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 10px; color: #FFF; font-size: 13px; font-family: inherit; resize: vertical; outline: none;"></textarea>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button type="button" onclick="document.getElementById('modalReportarIncidente').style.display='none'" 
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnEnviarIncidente" 
+          style="flex: 1.4; background: #EF4444; border: none; color: #FFF; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Enviar Relato</button>
       </div>
     </div>
   </div>
