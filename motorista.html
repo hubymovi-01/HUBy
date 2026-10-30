@@ -10,14 +10,13 @@
   
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/base.css?v=5.0.0">
+  <link rel="stylesheet" href="./css/base.css?v=6.0.0">
   <style>
     :root {
       --bg-dark: #090D16;
       --card-dark: #121826;
       --card-alt: #1A2234;
       --border-dark: rgba(255, 255, 255, 0.08);
-      --border-light: rgba(255, 255, 255, 0.15);
       --emerald: #10B981;
       --emerald-glow: rgba(16, 185, 129, 0.25);
       --amber: #F59E0B;
@@ -48,7 +47,6 @@
       z-index: 1;
     }
 
-    /* BARRA SUPERIOR */
     .top-driver-nav {
       position: absolute;
       top: 14px;
@@ -61,7 +59,7 @@
       pointer-events: none;
     }
 
-    .driver-pill, .btn-exit-partner, .btn-driver-profile-trigger {
+    .btn-driver-profile-trigger, .btn-exit-partner {
       pointer-events: auto;
       background: rgba(18, 24, 38, 0.94);
       border: 1px solid var(--border-dark);
@@ -72,12 +70,7 @@
       align-items: center;
       gap: 9px;
       box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
-    }
-
-    .btn-driver-profile-trigger {
       cursor: pointer;
-      transition: all 0.2s ease;
-      padding: 5px 10px;
     }
 
     .btn-driver-profile-trigger:active {
@@ -86,10 +79,10 @@
     }
 
     .avatar-mini {
-      width: 32px;
-      height: 32px;
+      width: 34px;
+      height: 34px;
       border-radius: 50%;
-      border: 1.5px solid var(--emerald);
+      border: 2px solid var(--emerald);
       object-fit: cover;
       background: #1F2937;
     }
@@ -99,7 +92,6 @@
       text-decoration: none;
       font-size: 11px;
       font-weight: 700;
-      cursor: pointer;
     }
 
     .btn-floating-chat {
@@ -119,11 +111,9 @@
       z-index: 9998;
       cursor: pointer;
       backdrop-filter: blur(8px);
-      transition: all 0.2s ease;
       font-size: 20px;
     }
 
-    /* DOCK INFERIOR */
     .driver-dock {
       position: absolute;
       bottom: 0;
@@ -246,9 +236,7 @@
       width: 100%;
     }
 
-    /* ========================================================
-       DRAWER LATERAL DE PERFIL E CARTEIRA
-    ======================================================== */
+    /* DRAWER LATERAL */
     .drawer-overlay {
       position: fixed;
       inset: 0;
@@ -313,8 +301,8 @@
     }
 
     .drawer-avatar {
-      width: 58px;
-      height: 58px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       border: 2px solid var(--emerald);
       object-fit: cover;
@@ -349,7 +337,6 @@
       align-items: center;
     }
 
-    /* PLACA MERCOSUL ESTILIZADA */
     .placa-mercosul {
       display: inline-flex;
       flex-direction: column;
@@ -390,85 +377,57 @@
       font-size: 12px;
     }
 
-    .item-extrato:last-child {
-      border-bottom: none;
-    }
-
-    /* MODAL DE SAQUE PIX */
-    .modal-saque-backdrop {
+    /* MODAL DE EDIÇÃO DO PERFIL */
+    .modal-backdrop-custom {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.85);
       backdrop-filter: blur(8px);
-      z-index: 10005;
+      z-index: 10006;
       display: none;
       align-items: center;
       justify-content: center;
       padding: 16px;
     }
 
-    .modal-saque-card {
-      background: var(--card-dark);
+    .modal-box-edit {
+      background: #111726;
       border: 1px solid var(--border-dark);
       border-radius: 16px;
       width: 100%;
-      max-width: 380px;
+      max-width: 390px;
+      max-height: 90vh;
+      overflow-y: auto;
       padding: 18px;
     }
 
-    .form-field-saque {
-      margin-bottom: 10px;
-      text-align: left;
+    .form-group-driver {
+      margin-bottom: 11px;
     }
 
-    .form-field-saque label {
+    .form-group-driver label {
       display: block;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       color: var(--text-sec);
+      margin-bottom: 4px;
       text-transform: uppercase;
-      margin-bottom: 3px;
     }
 
-    .form-field-saque input, .form-field-saque select {
+    .form-group-driver input {
       width: 100%;
-      background: #090D16;
+      background: #080C14;
       border: 1px solid var(--border-dark);
       border-radius: 8px;
-      padding: 8px 10px;
+      padding: 9px 12px;
       color: #FFF;
       font-size: 13px;
-      font-weight: 700;
+      font-weight: 600;
+      outline: none;
     }
 
-    .modal-saque-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 14px;
-    }
-
-    .btn-modal-cancel {
-      flex: 1;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid var(--border-dark);
-      color: var(--text-sec);
-      padding: 9px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .btn-modal-submit {
-      flex: 1.5;
-      background: var(--emerald);
-      border: none;
-      color: #032017;
-      padding: 9px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 800;
-      cursor: pointer;
+    .form-group-driver input:focus {
+      border-color: var(--emerald);
     }
   </style>
 </head>
@@ -489,12 +448,10 @@
   <!-- MAPA PRINCIPAL -->
   <div id="mapaMotorista"></div>
 
-  <!-- BOTÃO FLUTUANTE DE CHAT -->
-  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;" aria-label="Abrir Chat">
-    💬
-  </button>
+  <!-- BOTÃO CHAT -->
+  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;" aria-label="Abrir Chat">💬</button>
 
-  <!-- DOCK DE CORRIDAS E SALDO RÁPIDO -->
+  <!-- DOCK DE CORRIDAS E SALDO -->
   <section class="driver-dock">
     <div class="wallet-card-row">
       <div class="wallet-meta">
@@ -511,16 +468,14 @@
     </div>
   </section>
 
-  <!-- ========================================================
-       DRAWER LATERAL DE PERFIL, VEÍCULO E EXTRATO
-  ======================================================== -->
+  <!-- DRAWER LATERAL -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
   <aside class="driver-drawer" id="driverDrawer">
     <div class="drawer-header">
       <button type="button" class="btn-close-drawer" id="btnFecharDrawerPerfil">✕</button>
       <div class="drawer-profile-info">
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
-        <div>
+        <div style="flex: 1;">
           <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carregando...</strong>
           <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
@@ -528,6 +483,9 @@
           </div>
         </div>
       </div>
+      <button type="button" id="btnAbrirModalEdicaoPerfil" style="margin-top: 12px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 7px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer;">
+        ✏️ Editar Dados e Foto
+      </button>
     </div>
 
     <div class="drawer-content">
@@ -536,7 +494,7 @@
         <h4>🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <strong style="font-size: 13px; color: #FFF;" id="drawerCarroModelo">Modelo do Carro</strong>
+            <strong style="font-size: 13px; color: #FFF;" id="drawerCarroModelo">Carro Padrão</strong>
             <div style="font-size: 11px; color: var(--text-sec);" id="drawerCarroDetalhes">Cor: --- • Ano: ---</div>
           </div>
           <div class="placa-mercosul">
@@ -546,18 +504,18 @@
         </div>
       </div>
 
-      <!-- CARTEIRA E EXTRATO RECENTE -->
+      <!-- CARTEIRA E EXTRATO -->
       <div class="drawer-section-card">
         <h4>
           <span>💰 Extrato & Ganhos</span>
           <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
-        <div id="drawerListaExtrato" style="max-height: 160px; overflow-y: auto; padding-right: 4px;">
+        <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
           <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
         </div>
       </div>
 
-      <!-- DADOS DE RECEBIMENTO (CHAVE PIX PADRÃO) -->
+      <!-- CHAVE PIX PADRÃO -->
       <div class="drawer-section-card">
         <h4>⚡ Chave Pix Padrão</h4>
         <div style="display: flex; gap: 6px;">
@@ -566,22 +524,71 @@
         </div>
       </div>
 
-      <!-- SAIR -->
       <button type="button" id="btnLogoutMotorista" style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
         🚪 Encerrar Sessão
       </button>
     </div>
   </aside>
 
-  <!-- MODAL DE SAQUE PIX -->
-  <div id="modalSaquePix" class="modal-saque-backdrop">
-    <div class="modal-saque-card">
-      <h3 style="margin: 0 0 6px; font-size: 16px; font-weight: 800; color: #FFF;">Solicitar Saque Pix</h3>
-      <p style="margin: 0 0 14px; font-size: 11px; color: var(--text-sec);">O valor é debitado do saldo e enviado à sua chave após liquidação.</p>
+  <!-- MODAL DE EDIÇÃO DE PERFIL PROFISSIONAL -->
+  <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
+    <div class="modal-box-edit">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 15px; color: #FFF;">Editar Informações do Parceiro</h3>
+        <button type="button" id="btnFecharModalEdicao" style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
+      </div>
 
-      <div class="form-field-saque">
+      <div class="form-group-driver">
+        <label>URL da Foto de Perfil</label>
+        <input type="url" id="editFotoUrl" placeholder="https://exemplo.com/sua-foto.jpg">
+      </div>
+
+      <div class="form-group-driver">
+        <label>Nome Completo</label>
+        <input type="text" id="editNome" placeholder="Seu nome profissional">
+      </div>
+
+      <div class="form-group-driver">
+        <label>Telefone de Contato</label>
+        <input type="tel" id="editTelefone" placeholder="(00) 00000-0000">
+      </div>
+
+      <div class="form-group-driver">
+        <label>Modelo do Veículo</label>
+        <input type="text" id="editCarroModelo" placeholder="Ex: Chevrolet Onix 1.0">
+      </div>
+
+      <div style="display: flex; gap: 8px;">
+        <div class="form-group-driver" style="flex: 1;">
+          <label>Placa Mercosul</label>
+          <input type="text" id="editCarroPlaca" placeholder="ABC1D23" style="text-transform: uppercase;">
+        </div>
+        <div class="form-group-driver" style="flex: 1;">
+          <label>Cor</label>
+          <input type="text" id="editCarroCor" placeholder="Ex: Prata">
+        </div>
+        <div class="form-group-driver" style="flex: 0.8;">
+          <label>Ano</label>
+          <input type="text" id="editCarroAno" placeholder="2023">
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button type="button" id="btnCancelarEdicao" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnSalvarEdicaoPerfil" style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE SAQUE PIX -->
+  <div id="modalSaquePix" class="modal-backdrop-custom">
+    <div class="modal-box-edit" style="max-width: 360px;">
+      <h3 style="margin: 0 0 6px; font-size: 15px; color: #FFF;">Solicitar Saque Pix</h3>
+      <p style="margin: 0 0 12px; font-size: 11px; color: var(--text-sec);">O valor cai na sua chave após aprovação.</p>
+
+      <div class="form-group-driver">
         <label>Tipo de Chave</label>
-        <select id="saqueTipoChave">
+        <select id="saqueTipoChave" style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 9px; color: #FFF; font-weight: 600;">
           <option value="cpf">CPF</option>
           <option value="telefone">Telefone</option>
           <option value="email">E-mail</option>
@@ -589,44 +596,39 @@
         </select>
       </div>
 
-      <div class="form-field-saque">
-        <label>Chave Pix de Recebimento</label>
-        <input type="text" id="saqueChavePix" placeholder="Digite sua chave Pix">
+      <div class="form-group-driver">
+        <label>Chave Pix</label>
+        <input type="text" id="saqueChavePix" placeholder="Digite sua chave">
       </div>
 
-      <div class="form-field-saque">
-        <label>Valor Pretendido (R$)</label>
-        <input type="number" step="1" id="saqueValor" placeholder="Ex: 50.00">
+      <div class="form-group-driver">
+        <label>Valor (R$)</label>
+        <input type="number" step="1" id="saqueValor" placeholder="50.00">
       </div>
 
-      <div class="modal-saque-actions">
-        <button type="button" id="btnFecharModalSaque" class="btn-modal-cancel">Cancelar</button>
-        <button type="button" id="btnConfirmarSaquePix" class="btn-modal-submit">Confirmar Saque</button>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button type="button" id="btnFecharModalSaque" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnConfirmarSaquePix" style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL DO CHAT INTERNO -->
-  <div id="modalChatCorrida" class="modal-saque-backdrop" style="display: none; z-index: 10005;">
-    <div class="modal-saque-card" style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-      <div style="padding: 14px; border-bottom: 1px solid var(--border-dark); background: var(--card-dark); display: flex; justify-content: space-between; align-items: center;">
+  <!-- MODAL CHAT -->
+  <div id="modalChatCorrida" class="modal-backdrop-custom" style="z-index: 10007;">
+    <div class="modal-box-edit" style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+      <div style="padding: 14px; border-bottom: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8;">💬 Mensagens com o Passageiro</h3>
         <button type="button" id="btnFecharChat" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
-      
-      <div id="chatAreaMensagens" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
-        <div style="text-align: center; color: var(--text-sec); font-size: 11px;">O chat foi iniciado.</div>
-      </div>
-      
-      <div style="padding: 12px; border-top: 1px solid var(--border-dark); background: var(--card-dark); display: flex; gap: 8px;">
+      <div id="chatAreaMensagens" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);"></div>
+      <div style="padding: 12px; border-top: 1px solid var(--border-dark); display: flex; gap: 8px;">
         <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
-        <button type="button" id="btnEnviarMsgChat" style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer; font-size: 14px;">Enviar</button>
+        <button type="button" id="btnEnviarMsgChat" style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer;">Enviar</button>
       </div>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Versão 5.0.0 com Drawer Lateral e Perfil Integrado -->
-  <script type="module" src="./js/app-motorista.js?v=5.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=6.0.0"></script>
 </body>
 </html>

@@ -18,6 +18,9 @@ let intervalTelemetria = null;
 // ETAPA DA CORRIDA: 'a_caminho' ou 'em_viagem'
 let etapaCorridaAtual = 'a_caminho';
 
+// DADOS EM MEMÓRIA DO MOTORISTA PARA PREENCHIMENTO E EDIÇÃO
+let dadosMotoristaMemoria = {};
+
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');
@@ -67,7 +70,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ==========================================
-// 1. GESTÃO DO DRAWER DE PERFIL E EXTRATO
+// 1. GESTÃO DO DRAWER DE PERFIL E EDIÇÃO
 // ==========================================
 function configurarDrawerPerfil() {
   const btnAbrir = document.getElementById('btnAbrirDrawerPerfil');
@@ -76,6 +79,13 @@ function configurarDrawerPerfil() {
   const drawer = document.getElementById('driverDrawer');
   const btnSalvarPix = document.getElementById('btnSalvarChavePix');
   const btnLogout = document.getElementById('btnLogoutMotorista');
+
+  // Elementos do Modal de Edição de Perfil
+  const modalEdicao = document.getElementById('modalEdicaoPerfil');
+  const btnAbrirEdicao = document.getElementById('btnAbrirModalEdicaoPerfil');
+  const btnFecharEdicao = document.getElementById('btnFecharModalEdicao');
+  const btnCancelarEdicao = document.getElementById('btnCancelarEdicao');
+  const btnSalvarEdicao = document.getElementById('btnSalvarEdicaoPerfil');
 
   const abrir = () => {
     drawer?.classList.add('active');
@@ -92,6 +102,76 @@ function configurarDrawerPerfil() {
   btnFechar?.addEventListener('click', fechar);
   overlay?.addEventListener('click', fechar);
 
+  // Abertura do modal populando campos com o estado atual em memória
+  btnAbrirEdicao?.addEventListener('click', () => {
+    if (modalEdicao) {
+      document.getElementById('editFotoUrl').value = dadosMotoristaMemoria.foto_perfil_url || '';
+      document.getElementById('editNome').value = dadosMotoristaMemoria.nome || '';
+      document.getElementById('editTelefone').value = dadosMotoristaMemoria.telefone || '';
+      document.getElementById('editCarroModelo').value = dadosMotoristaMemoria.veiculo_modelo || '';
+      document.getElementById('editCarroPlaca').value = dadosMotoristaMemoria.veiculo_placa || '';
+      document.getElementById('editCarroCor').value = dadosMotoristaMemoria.veiculo_cor || '';
+      document.getElementById('editCarroAno').value = dadosMotoristaMemoria.veiculo_ano || '';
+      modalEdicao.style.display = 'flex';
+    }
+  });
+
+  const fecharModalEdicao = () => {
+    if (modalEdicao) modalEdicao.style.display = 'none';
+  };
+
+  btnFecharEdicao?.addEventListener('click', fecharModalEdicao);
+  btnCancelarEdicao?.addEventListener('click', fecharModalEdicao);
+
+  // Submissão da edição de perfil profissional para o servidor
+  btnSalvarEdicao?.addEventListener('click', async () => {
+    const token = localStorage.getItem('huby_token');
+    const foto_perfil_url = document.getElementById('editFotoUrl')?.value.trim();
+    const nome = document.getElementById('editNome')?.value.trim();
+    const telefone = document.getElementById('editTelefone')?.value.trim();
+    const veiculo_modelo = document.getElementById('editCarroModelo')?.value.trim();
+    const veiculo_placa = document.getElementById('editCarroPlaca')?.value.trim().toUpperCase();
+    const veiculo_cor = document.getElementById('editCarroCor')?.value.trim();
+    const veiculo_ano = document.getElementById('editCarroAno')?.value.trim();
+
+    try {
+      btnSalvarEdicao.disabled = true;
+      btnSalvarEdicao.textContent = 'Salvando...';
+
+      const resp = await fetch(`${API_URL}/api/motoristas/perfil`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          foto_perfil_url,
+          nome,
+          telefone,
+          veiculo_modelo,
+          veiculo_placa,
+          veiculo_cor,
+          veiculo_ano
+        })
+      });
+
+      if (resp.ok) {
+        alert('Perfil atualizado com sucesso!');
+        fecharModalEdicao();
+        await carregarPerfilCompleto();
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        alert(`Erro ao salvar: ${err.erro || 'Falha na requisição'}`);
+      }
+    } catch (e) {
+      alert('Falha de conexão com o servidor.');
+    } finally {
+      btnSalvarEdicao.disabled = false;
+      btnSalvarEdicao.textContent = 'Salvar Alterações';
+    }
+  });
+
+  // Salvar Chave Pix Padrão
   btnSalvarPix?.addEventListener('click', async () => {
     const chave_pix_padrao = document.getElementById('drawerInputChavePix')?.value.trim();
     if (!chave_pix_padrao) {
@@ -115,6 +195,7 @@ function configurarDrawerPerfil() {
 
       if (resp.ok) {
         alert('Chave Pix padrão atualizada!');
+        dadosMotoristaMemoria.chave_pix_padrao = chave_pix_padrao;
       } else {
         alert('Erro ao atualizar chave Pix.');
       }
@@ -150,12 +231,14 @@ async function carregarPerfilCompleto() {
     }
 
     const m = await resp.json();
+    dadosMotoristaMemoria = m; // Preserva todos os dados do condutor em memória
+
     statusAprovacaoAtual = m.status_aprovacao || 'aprovado';
     categoriaMotorista = m.categoria || 'carro';
 
     const saldoFormatado = `R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
 
-    // Atualiza Topo
+    // 1. Atualiza Topo
     const topNome = document.getElementById('topNomeMotorista');
     const topNota = document.getElementById('topNotaMotorista');
     const topAvatar = document.getElementById('topAvatarImg');
@@ -163,11 +246,11 @@ async function carregarPerfilCompleto() {
     if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
     if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
 
-    // Atualiza Saldo no Dock Inferior
+    // 2. Atualiza Saldo no Dock Inferior
     const saldoEl = document.getElementById('saldoCarteiraValor');
     if (saldoEl) saldoEl.textContent = saldoFormatado;
 
-    // Atualiza Drawer Lateral
+    // 3. Atualiza Drawer Lateral
     const drawerNome = document.getElementById('drawerNomeCondutor');
     const drawerCategoria = document.getElementById('drawerCategoriaBadge');
     const drawerFoto = document.getElementById('drawerFotoImg');
@@ -185,12 +268,12 @@ async function carregarPerfilCompleto() {
     if (drawerNota) drawerNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
     if (drawerViagens) drawerViagens.textContent = `${m.total_corridas || 0} viagens`;
     if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Veículo Cadastrado';
-    if (drawerDetalhes) drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || 'Padrão'} • Ano: ${m.veiculo_ano || '---'}`;
+    if (drawerDetalhes) drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || 'Não informada'} • Ano: ${m.veiculo_ano || '---'}`;
     if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'HUB-0000').toUpperCase();
     if (drawerSaldo) drawerSaldo.textContent = saldoFormatado;
     if (inputPix && m.chave_pix_padrao) inputPix.value = m.chave_pix_padrao;
 
-    // Preenche a chave Pix padrão no modal de saque, caso esteja vazia
+    // Preenche a chave padrão no modal de saque caso esteja vazia
     const saquePixIn = document.getElementById('saqueChavePix');
     if (saquePixIn && !saquePixIn.value && m.chave_pix_padrao) {
       saquePixIn.value = m.chave_pix_padrao;
