@@ -8,8 +8,10 @@
   --border-subtle: rgba(255, 255, 255, 0.08);
   --primary-green: #10B981;
   --primary-green-dark: #059669;
+  --emerald-glow: rgba(16, 185, 129, 0.25);
   --accent-blue: #38BDF8;
   --accent-orange: #FF6B00;
+  --accent-amber: #F59E0B;
   --accent-red: #EF4444;
   --text-main: #FFFFFF;
   --text-muted: #94A3B8;
@@ -41,4 +43,201 @@ a {
 
 input, button, select {
   font-family: inherit;
+}
+
+/* ==========================================================================
+   CARD DO MOTORISTA ACEITO (VISÃO DO PASSAGEIRO)
+   ========================================================================== */
+
+.driver-card-accepted {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.driver-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.driver-avatar-container {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  flex-shrink: 0;
+}
+
+.driver-avatar-img {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-green);
+  background: #1F2937;
+  box-shadow: 0 0 12px var(--emerald-glow);
+}
+
+.badge-verified-driver {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: var(--primary-green);
+  color: #02261C;
+  font-size: 11px;
+  font-weight: 900;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #111726;
+}
+
+.driver-header-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.driver-header-meta h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.driver-rating-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 3px;
+  color: var(--text-muted);
+}
+
+/* CAIXA DE IDENTIFICAÇÃO DO VEÍCULO */
+.driver-vehicle-box {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+
+.vehicle-desc strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.vehicle-desc small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* PLACA MERCOSUL ESTILIZADA */
+.mercosul-plate-passenger {
+  display: inline-flex;
+  flex-direction: column;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 4px;
+  background: #FFFFFF;
+  color: #000000;
+  width: 95px;
+  overflow: hidden;
+  font-family: monospace;
+  font-weight: 900;
+  flex-shrink: 0;
+}
+
+.mercosul-plate-header {
+  background: #003399;
+  color: #FFFFFF;
+  font-size: 7px;
+  padding: 1px 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mercosul-plate-body {
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-align: center;
+  padding: 1px 0;
+}
+
+/* AÇÕES RÁPIDAS (LIGAÇÃO / CHAT) */
+.driver-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.btn-contact-call {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-contact-call:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-contact-chat {
+  flex: 1.2;
+  background: var(--accent-blue);
+  border: none;
+  color: #031B26;
+  padding: 10px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-contact-chat:active {
+  transform: scale(0.97);
+  filter: brightness(0.92);
 }

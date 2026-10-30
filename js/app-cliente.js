@@ -527,7 +527,7 @@ function iniciarPollingStatus() {
 
       const pedido = await resp.json();
 
-      if (pedido.status === 'aceito') {
+      if (pedido.status === 'aceito' || pedido.status === 'em_viagem') {
         atualizarInterfaceMotoristaAceitou(pedido);
 
         if (hubyMapa && hubyMapa.map && typeof L !== 'undefined' && !markerMotoristaAaminho) {
@@ -562,6 +562,9 @@ function iniciarPollingStatus() {
   }, 3000);
 }
 
+// ============================================================================
+// CARD DO MOTORISTA ACEITO (COM FOTO REAL, PLACA MERCOSUL E AVALIAÇÃO)
+// ============================================================================
 function atualizarInterfaceMotoristaAceitou(pedido) {
   const sliderCategorias = document.getElementById('sliderCategorias');
   const blocoResumo = document.getElementById('blocoResumo');
@@ -574,30 +577,76 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
   if (btnPedirHuby) btnPedirHuby.style.display = 'none';
 
   const painelMotorista = document.getElementById('painelMotoristaAceitou');
-  if (painelMotorista) {
-    painelMotorista.style.display = 'block';
-    
-    document.getElementById('lblMotoristaNome').textContent = pedido.motorista_nome || 'Motorista Parceiro';
-    document.getElementById('lblMotoristaPlaca').textContent = pedido.motorista_placa || '---';
-    document.getElementById('lblMotoristaVeiculo').textContent = pedido.motorista_veiculo || 'Carro HUBy';
-    
-    const btnLigar = document.getElementById('btnLigarMotorista');
-    if (btnLigar) btnLigar.href = `tel:${pedido.motorista_telefone}`;
+  if (!painelMotorista) return;
 
-    let divTempo = document.getElementById('boxCronometroChegada');
-    if (!divTempo) {
-      divTempo = document.createElement('div');
-      divTempo.id = 'boxCronometroChegada';
-      divTempo.style = "text-align: center; margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 12px; border-radius: 12px;";
-      painelMotorista.insertBefore(divTempo, painelMotorista.firstChild);
-    }
+  painelMotorista.style.display = 'block';
 
-    tempoEstimado = 5; 
-    divTempo.innerHTML = `<div style="color: #10B981; font-size: 14px; font-weight: 800; text-transform: uppercase;">🚘 Motorista a caminho</div>
-                          <div style="color: #FFF; font-size: 22px; font-weight: 900; margin-top: 4px;">Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${tempoEstimado} min</span></div>`;
+  const foto = pedido.motorista_foto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
+  const nome = pedido.motorista_nome || 'Motorista Parceiro';
+  const nota = Number(pedido.motorista_avaliacao || 5.0).toFixed(1);
+  const totalViagens = pedido.motorista_corridas || 0;
+  const modelo = pedido.motorista_veiculo || 'Carro HUBy';
+  const cor = pedido.veiculo_cor ? `Cor: ${pedido.veiculo_cor}` : 'Cor padrão';
+  const placa = (pedido.motorista_placa || 'HUB-0000').toUpperCase();
+  const telefone = pedido.motorista_telefone || '';
 
-    if (cronometroChegada) clearInterval(cronometroChegada);
-    
+  painelMotorista.innerHTML = `
+    <!-- CRONÔMETRO DE CHEGADA -->
+    <div id="boxCronometroChegada" style="text-align: center; margin-bottom: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 10px; border-radius: 12px;">
+      <div style="color: #10B981; font-size: 13px; font-weight: 800; text-transform: uppercase;">
+        ${pedido.status === 'aceito' ? '🚘 Motorista a caminho' : '🏁 Viagem em andamento'}
+      </div>
+      <div style="color: #FFF; font-size: 20px; font-weight: 900; margin-top: 3px;">
+        Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${tempoEstimado} min</span>
+      </div>
+    </div>
+
+    <!-- CARD DO MOTORISTA -->
+    <div class="driver-card-accepted">
+      <!-- Topo: Foto, Nome e Reputação -->
+      <div class="driver-card-top">
+        <div class="driver-avatar-container">
+          <img src="${foto}" alt="${nome}" class="driver-avatar-img">
+          <span class="badge-verified-driver">✓</span>
+        </div>
+        <div class="driver-header-meta">
+          <h4>${nome}</h4>
+          <div class="driver-rating-row">
+            <span style="color: #F59E0B; font-weight: 800;">⭐ ${nota}</span>
+            <span>•</span>
+            <span>${totalViagens} viagens</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Veículo e Placa Mercosul Estilizada -->
+      <div class="driver-vehicle-box">
+        <div class="vehicle-desc">
+          <strong>${modelo}</strong>
+          <small>${cor}</small>
+        </div>
+        <div class="mercosul-plate-passenger">
+          <div class="mercosul-plate-header"><span>BRASIL</span> <span>🇧🇷</span></div>
+          <div class="mercosul-plate-body">${placa}</div>
+        </div>
+      </div>
+
+      <!-- Ações Rápidas -->
+      <div class="driver-card-actions">
+        ${telefone ? `
+          <a href="tel:${telefone}" class="btn-contact-call">
+            📞 Ligar
+          </a>
+        ` : ''}
+        <button type="button" id="btnAbrirChatClienteCard" class="btn-contact-chat">
+          💬 Mensagem
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Gerenciamento do cronômetro regressivo
+  if (!cronometroChegada) {
     cronometroChegada = setInterval(() => {
       tempoEstimado--;
       const txtMinutos = document.getElementById('txtMinutosChegada');
@@ -607,7 +656,7 @@ function atualizarInterfaceMotoristaAceitou(pedido) {
         if (txtMinutos) txtMinutos.textContent = `A chegar!`;
         clearInterval(cronometroChegada);
       }
-    }, 60000); 
+    }, 60000);
   }
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
@@ -849,7 +898,10 @@ function resetarPainelCliente() {
   if (btnLimpar) btnLimpar.style.display = 'none';
 
   const painelMotorista = document.getElementById('painelMotoristaAceitou');
-  if (painelMotorista) painelMotorista.style.display = 'none';
+  if (painelMotorista) {
+    painelMotorista.style.display = 'none';
+    painelMotorista.innerHTML = '';
+  }
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) btnChatFlutuante.style.display = 'none';
