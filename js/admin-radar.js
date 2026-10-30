@@ -14,7 +14,9 @@ const autorizarAdmin = (req, res, next) => {
   next();
 };
 
-// 1. Resumo Operacional (KPIs)
+// ============================================================================
+// 1. RESUMO OPERACIONAL E KPIs (PARA CARDS E CHART.JS)
+// ============================================================================
 router.get('/metricas', autenticarToken, autorizarAdmin, async (req, res) => {
   try {
     const kpis = await sql`
@@ -23,15 +25,37 @@ router.get('/metricas', autenticarToken, autorizarAdmin, async (req, res) => {
         (SELECT COUNT(*)::int FROM pedidos WHERE status IN ('pendente', 'aceito', 'em_viagem')) AS corridas_ativas,
         (SELECT COUNT(*)::int FROM saques WHERE status = 'pendente') AS saques_pendentes,
         (SELECT COUNT(*)::int FROM motoristas WHERE status_aprovacao = 'pendente') AS motoristas_pendentes,
-        (SELECT COALESCE(SUM(valor_total * 0.15), 0) FROM pedidos WHERE status = 'concluido' AND concluido_em >= CURRENT_DATE) AS receita_huby_hoje;
+        (SELECT COUNT(*)::int FROM pedidos WHERE status = 'concluido') AS viagens_concluidas,
+        (SELECT COALESCE(SUM(valor_total), 0)::float FROM pedidos WHERE status = 'concluido') AS faturamento_bruto,
+        (SELECT COALESCE(SUM(valor_total * 0.15), 0)::float FROM pedidos WHERE status = 'concluido' AND concluido_em >= CURRENT_DATE) AS receita_huby_hoje,
+        (SELECT COUNT(*)::int FROM incidentes_seguranca WHERE resolvido = false) AS incidentes_ativos;
     `;
-    res.json(kpis[0] || {});
+
+    // Distribuição por categoria para o gráfico de barras
+    const categorias = await sql`
+      SELECT tipo, COUNT(*)::int AS total
+      FROM pedidos
+      GROUP BY tipo;
+    `;
+
+    const distribuicao_categorias = { carro: 0, moto: 0, entrega: 0 };
+    categorias.forEach(c => {
+      if (c.tipo) distribuicao_categorias[c.tipo.toLowerCase()] = c.total;
+    });
+
+    res.json({
+      ...(kpis[0] || {}),
+      distribuicao_categorias
+    });
   } catch (err) {
+    console.error('Erro ao buscar métricas:', err);
     res.status(500).json({ erro: 'Falha ao buscar métricas.' });
   }
 });
 
-// 2. Listagem de Motoristas para Aprovação / Gestão
+// ============================================================================
+// 2. GESTÃO E APROVAÇÃO DE MOTORISTAS
+// ============================================================================
 router.get('/motoristas', autenticarToken, autorizarAdmin, async (req, res) => {
   try {
     const motoristas = await sql`
@@ -63,7 +87,6 @@ router.get('/motoristas', autenticarToken, autorizarAdmin, async (req, res) => {
   }
 });
 
-// 3. Atualizar Status de Aprovação do Motorista
 router.put('/motoristas/:id/status', autenticarToken, autorizarAdmin, async (req, res) => {
   try {
     const { id } = req.params;
@@ -85,7 +108,9 @@ router.put('/motoristas/:id/status', autenticarToken, autorizarAdmin, async (req
   }
 });
 
-// 4. Listagem e Moderação de Saques Pix
+// ============================================================================
+// 3. SAQUES PIX
+// ============================================================================
 router.get('/saques', autenticarToken, autorizarAdmin, async (req, res) => {
   try {
     const saques = await sql`
@@ -119,7 +144,6 @@ router.put('/saques/:id', autenticarToken, autorizarAdmin, async (req, res) => {
       return res.status(400).json({ erro: 'Ação inválida.' });
     }
 
-    // Se recusado, devolve o saldo para a carteira do motorista
     if (acao === 'recusado') {
       const saque = await sql`SELECT motorista_id, valor, status FROM saques WHERE id = ${id}`;
       if (saque.length > 0 && saque[0].status === 'pendente') {
@@ -143,10 +167,125 @@ router.put('/saques/:id', autenticarToken, autorizarAdmin, async (req, res) => {
   }
 });
 
-// 5. Zonas de Tarifa Dinâmica
+// ============================================================================
+// 4. CUPONS DE DESCONTO
+// ============================================================================
+router.get('/cupons', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const cupons = await sql`SELECT * FROM cupons ORDER BY criado_em DESC;`;
+    res.json(cupons);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+router.post('/cupons', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const { codigo, tipo, valor, limite_usos, expira_em } = req.body;
+    await sql`
+      INSERT INTO cupons (codigo, tipo, valor, limite_usos, expira_em, ativo)
+      VALUES (${codigo.toUpperCase()}, ${tipo}, ${valor}, ${limite_usos || 100}, ${expira_em || null}, true);
+    `;
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao criar cupom.' });
+  }
+});
+
+router.put('/cupons/:id/toggle', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await sql`UPDATE cupons SET ativo = NOT ativo WHERE id = ${id};`;
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao alterar cupom.' });
+  }
+});
+
+router.delete('/cupons/:id', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await sql`DELETE FROM cupons WHERE id = ${id};`;
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao excluir cupom.' });
+  }
+});
+
+// ============================================================================
+// 5. INCIDENTES DE SEGURANÇA E SOS
+// ============================================================================
+router.get('/incidentes', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const incidentes = await sql`
+      SELECT * FROM incidentes_seguranca 
+      ORDER BY criado_em DESC 
+      LIMIT 50;
+    `;
+    res.json(incidentes);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
+router.put('/incidentes/:id/resolver', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await sql`
+      UPDATE incidentes_seguranca 
+      SET resolvido = true, resolvido_em = NOW() 
+      WHERE id = ${id};
+    `;
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao resolver incidente.' });
+  }
+});
+
+// ============================================================================
+// 6. BROADCAST (ALERTA EM MASSA VIA SOCKET.IO)
+// ============================================================================
+router.post('/broadcast', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const { publico, titulo, mensagem } = req.body;
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('alerta_broadcast_geral', { publico, titulo, mensagem });
+    }
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao emitir broadcast.' });
+  }
+});
+
+// ============================================================================
+// 7. TARIFAS E PARÂMETROS GLOBAIS
+// ============================================================================
+router.put('/config', autenticarToken, autorizarAdmin, async (req, res) => {
+  try {
+    const { taxa_plataforma, km_carro, km_moto, km_entrega } = req.body;
+    await sql`
+      INSERT INTO configuracoes_plataforma (id, taxa_plataforma, km_carro, km_moto, km_entrega, atualizado_em)
+      VALUES (1, ${taxa_plataforma}, ${km_carro}, ${km_moto}, ${km_entrega}, NOW())
+      ON CONFLICT (id) DO UPDATE 
+      SET taxa_plataforma = EXCLUDED.taxa_plataforma,
+          km_carro = EXCLUDED.km_carro,
+          km_moto = EXCLUDED.km_moto,
+          km_entrega = EXCLUDED.km_entrega,
+          atualizado_em = NOW();
+    `;
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao salvar configurações de tarifas.' });
+  }
+});
+
+// ============================================================================
+// 8. ZONAS DE TARIFA DINÂMICA
+// ============================================================================
 router.get('/dinamica', async (req, res) => {
   try {
-    const zonas = await sql`SELECT * FROM zonas_dinamicas ORDER BY id DESC`;
+    const zonas = await sql`SELECT * FROM zonas_dinamicas ORDER BY id DESC;`;
     res.json(zonas);
   } catch (err) {
     res.status(500).json({ erro: 'Falha ao listar zonas dinâmicas.' });
@@ -169,7 +308,7 @@ router.post('/dinamica', autenticarToken, autorizarAdmin, async (req, res) => {
 router.put('/dinamica/:id/toggle', autenticarToken, autorizarAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    await sql`UPDATE zonas_dinamicas SET ativa = NOT ativa WHERE id = ${id}`;
+    await sql`UPDATE zonas_dinamicas SET ativa = NOT ativa WHERE id = ${id};`;
     res.json({ sucesso: true });
   } catch (err) {
     res.status(500).json({ erro: 'Falha ao alterar estado da zona.' });
@@ -179,7 +318,7 @@ router.put('/dinamica/:id/toggle', autenticarToken, autorizarAdmin, async (req, 
 router.delete('/dinamica/:id', autenticarToken, autorizarAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    await sql`DELETE FROM zonas_dinamicas WHERE id = ${id}`;
+    await sql`DELETE FROM zonas_dinamicas WHERE id = ${id};`;
     res.json({ sucesso: true });
   } catch (err) {
     res.status(500).json({ erro: 'Falha ao remover zona.' });
