@@ -38,11 +38,11 @@ app.use(cors({
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization']
 }));
 
-// 2. LIMITE DE 50MB PARA AS FOTOS DE PERFIL
+// 2. PARSERS DE JSON COM SUPORTE A FOTOS GRANDES (ANTES DAS ROTAS)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Inicialização automática das tabelas no Neon PostgreSQL com suporte aos novos módulos
+// Inicialização automática das tabelas no Neon PostgreSQL
 async function inicializarBanco() {
   try {
     await sql`
@@ -54,12 +54,14 @@ async function inicializarBanco() {
     `;
     await sql`
       CREATE TABLE IF NOT EXISTS motoristas (
-        id TEXT PRIMARY KEY, nome TEXT NOT NULL, email TEXT UNIQUE, telefone TEXT UNIQUE,
-        cpf TEXT UNIQUE, data_nascimento DATE, senha_hash TEXT NOT NULL, cnh_numero TEXT NOT NULL,
-        categoria TEXT DEFAULT 'carro', veiculo_modelo TEXT NOT NULL, veiculo_placa TEXT NOT NULL,
-        veiculo_cor TEXT, saldo_carteira NUMERIC(10,2) DEFAULT 0.00, status_online BOOLEAN DEFAULT FALSE,
+        id TEXT PRIMARY KEY, usuario_id TEXT, nome TEXT NOT NULL, email TEXT UNIQUE, telefone TEXT UNIQUE,
+        cpf TEXT UNIQUE, data_nascimento DATE, senha_hash TEXT, cnh_numero TEXT,
+        categoria TEXT DEFAULT 'carro', veiculo_modelo TEXT, veiculo_placa TEXT,
+        veiculo_cor TEXT, veiculo_ano TEXT, saldo_carteira NUMERIC(10,2) DEFAULT 0.00, status_online BOOLEAN DEFAULT FALSE,
         status_aprovacao TEXT DEFAULT 'aprovado', motivo_recusa TEXT, doc_cnh_url TEXT, doc_crlv_url TEXT,
-        avaliacao_media NUMERIC(3,2) DEFAULT 5.00, total_avaliacoes INT DEFAULT 0, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        foto_perfil_url TEXT, chave_pix_padrao TEXT,
+        avaliacao_media NUMERIC(3,2) DEFAULT 5.00, total_avaliacoes INT DEFAULT 0, total_corridas INT DEFAULT 0,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
     await sql`
@@ -69,7 +71,8 @@ async function inicializarBanco() {
         origem_endereco TEXT, destino_endereco TEXT, origem_lat NUMERIC, origem_lng NUMERIC,
         destino_lat NUMERIC, destino_lng NUMERIC, distancia_km NUMERIC, duracao_min NUMERIC,
         valor_total NUMERIC(10,2), valor_adicionais NUMERIC(10,2) DEFAULT 0.00, metodo_pgto TEXT,
-        status TEXT DEFAULT 'pendente', motivo_cancelamento TEXT, cancelado_por TEXT, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        status TEXT DEFAULT 'pendente', motivo_cancelamento TEXT, cancelado_por TEXT, concluido_em TIMESTAMP,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
     await sql`
@@ -91,13 +94,12 @@ async function inicializarBanco() {
     `;
     await sql`
       CREATE TABLE IF NOT EXISTS saques_motoristas (
-        id SERIAL PRIMARY KEY, motorista_id TEXT NOT NULL, motorista_nome TEXT NOT NULL,
+        id SERIAL PRIMARY KEY, motorista_id TEXT NOT NULL, motorista_nome TEXT,
         chave_pix TEXT NOT NULL, tipo_chave TEXT DEFAULT 'cpf', valor NUMERIC(10,2) NOT NULL,
         status TEXT DEFAULT 'pendente', comprovante_url TEXT, motivo_recusa TEXT,
-        solicitado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, pago_em TIMESTAMP
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, solicitado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, pago_em TIMESTAMP
       );
     `;
-    // TABELAS DAS 6 NOVAS FUNCIONALIDADES PROFISSIONAIS
     await sql`
       CREATE TABLE IF NOT EXISTS cupons_desconto (
         id SERIAL PRIMARY KEY,
@@ -131,9 +133,19 @@ async function inicializarBanco() {
         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
-    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_url TEXT;`;
-    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_url TEXT;`;
-    console.log('Tabelas de alta segurança sincronizadas no Neon PostgreSQL.');
+
+    // Garante colunas adicionais em tabelas já existentes
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS total_corridas INT DEFAULT 0;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMP;`;
+    await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
+
+    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);
   }
@@ -141,23 +153,24 @@ async function inicializarBanco() {
 inicializarBanco();
 
 app.get('/', (req, res) => {
-  res.json({ status: 'HUBy API Online (Modularizada)', versao: '2.0.2', banco: 'Neon PostgreSQL' });
+  res.json({ status: 'HUBy API Online (Modularizada)', versao: '2.0.3', banco: 'Neon PostgreSQL' });
 });
 
 app.get('/api/config/tarifas', (req, res) => {
   res.json({}); 
 });
 
-// Registo de Rotas Modulares
+// REGISTRO DE ROTAS MODULARES
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', authRoutes); 
 app.use('/api/pedidos', pedidosRouter(io));
 app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
 app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
+
+// Suporta tanto /api/motoristas quanto /api/motoristas-regras
+app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ limit: '15mb', extended: true }));
 
 server.listen(port, () => {
   console.log(`Servidor HUBy modularizado ativo na porta ${port}`);
