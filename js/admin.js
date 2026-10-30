@@ -80,7 +80,6 @@ async function carregarMetricasECards(token) {
 }
 
 function renderizarGraficos(bruto, lucro, repasse, categorias) {
-  // Gráfico Financeiro (Doughnut)
   const ctxFin = document.getElementById('chartFinanceiro')?.getContext('2d');
   if (ctxFin) {
     if (chartFinanceiroInstance) chartFinanceiroInstance.destroy();
@@ -102,7 +101,6 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
     });
   }
 
-  // Gráfico de Categorias (Bar)
   const ctxCat = document.getElementById('chartCategorias')?.getContext('2d');
   if (ctxCat) {
     if (chartCategoriasInstance) chartCategoriasInstance.destroy();
@@ -485,6 +483,33 @@ function conectarSocketAdmin() {
 // ============================================================================
 // AÇÕES INLINE GLOBAIS (WINDOW)
 // ============================================================================
+window.alterarCupom = async (id) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/cupons/${id}/toggle`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) carregarTabelaCupons(token);
+  } catch (e) {
+    alert('Erro ao alternar cupom.');
+  }
+};
+
+window.excluirCupom = async (id) => {
+  if (!confirm('Deseja realmente excluir este cupom?')) return;
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/cupons/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) carregarTabelaCupons(token);
+  } catch (e) {
+    alert('Erro ao excluir cupom.');
+  }
+};
+
 window.alterarStatusCondutor = async (id, status) => {
   const token = localStorage.getItem('huby_token');
   try {

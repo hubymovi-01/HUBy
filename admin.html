@@ -5,12 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>HUBy - Painel Master Corporativo</title>
   
-  <!-- CSS Base, Leaflet para Radar e FontAwesome para Ícones -->
+  <!-- CSS Base e Leaflet -->
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
   <style>
     :root {
@@ -511,6 +508,12 @@
     <button type="button" id="btnFecharModalPreview" style="position: absolute; top: 20px; right: 20px; background: #FFF; border: none; padding: 10px 16px; border-radius: 50%; font-weight: 800; cursor: pointer;">✕</button>
   </div>
 
-  <script type="module" src="./js/admin.js?v=5.0.0"></script>
+  <!-- SCRIPTS GLOBAIS (Carregados antes dos módulos ES6) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+  <!-- MÓDULO PRINCIPAL DO ADMIN (Com versionamento de cache para evitar ler arquivos obsoletos) -->
+  <script type="module" src="./js/admin.js?v=5.0.1"></script>
 </body>
 </html>
