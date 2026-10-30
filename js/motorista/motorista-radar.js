@@ -8,6 +8,9 @@ const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null))
 export function iniciarRadarChamadas() {
   if (!estado.isOnline) return;
 
+  // Solicita permissão do navegador para notificações se ainda não concedida
+  solicitarPermissaoNotificacoes();
+
   buscarChamadasPendentes();
 
   if (!estado.socketRadar) {
@@ -59,6 +62,7 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     if ((existeNovaChamada && pedidos.length > 0) || tocarSomForcado) {
       tocarAlertaSonoro();
+      dispararNotificacaoNovaChamada(pedidos.length);
     }
 
     estado.chamadasAnterioresIds = new Set(idsAtuais);
@@ -167,5 +171,36 @@ export function tocarAlertaSonoro() {
     if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
   } catch (err) {
     console.warn('Erro sonoro:', err);
+  }
+}
+
+export function solicitarPermissaoNotificacoes() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+export function dispararNotificacaoNovaChamada(qtd) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+  // Dispara a notificação apenas se o motorista estiver com a aba em segundo plano ou celular bloqueado
+  if (document.visibilityState === 'hidden') {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.ready.then((reg) => {
+        reg.showNotification('🚘 HUBy: Nova corrida disponível!', {
+          body: `${qtd} chamada(s) aguardando atendimento. Toque para aceitar.`,
+          icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=192&q=80',
+          vibrate: [300, 150, 300],
+          tag: 'nova-chamada-huby',
+          renotify: true,
+          data: { url: './motorista.html' }
+        });
+      });
+    } else {
+      new Notification('🚘 HUBy: Nova corrida disponível!', {
+        body: `${qtd} chamada(s) aguardando atendimento. Toque para aceitar.`,
+        icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=192&q=80'
+      });
+    }
   }
 }

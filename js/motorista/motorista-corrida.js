@@ -131,6 +131,23 @@ export function renderizarCardEtapa() {
 
   const estaACaminho = (estado.etapaCorridaAtual === 'a_caminho');
 
+  // Coordenadas para rota externa (Origem ou Destino dependendo da etapa)
+  const coordsAlvo = estaACaminho 
+    ? estado.pedidoAceitoAtual.coordsOrigem 
+    : estado.pedidoAceitoAtual.coordsDestino;
+
+  const latAlvo = coordsAlvo ? coordsAlvo[0] : null;
+  const lngAlvo = coordsAlvo ? coordsAlvo[1] : null;
+
+  // Links universais para Google Maps e Waze
+  const linkGoogleMaps = (latAlvo && lngAlvo)
+    ? `https://www.google.com/maps/dir/?api=1&destination=${latAlvo},${lngAlvo}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(estaACaminho ? (estado.pedidoAceitoAtual.origem_endereco || '') : estado.pedidoAceitoAtual.destino_endereco)}`;
+
+  const linkWaze = (latAlvo && lngAlvo)
+    ? `https://waze.com/ul?ll=${latAlvo},${lngAlvo}&navigate=yes`
+    : `https://waze.com/ul?q=${encodeURIComponent(estaACaminho ? (estado.pedidoAceitoAtual.origem_endereco || '') : estado.pedidoAceitoAtual.destino_endereco)}`;
+
   feed.innerHTML = `
     <div class="order-card" style="border-color: ${estaACaminho ? '#38BDF8' : '#10B981'};">
       <div class="order-card-header">
@@ -150,8 +167,20 @@ export function renderizarCardEtapa() {
         </small>
       </div>
 
+      <!-- BOTÕES DE NAVEGAÇÃO EXTERNA (GOOGLE MAPS E WAZE) -->
+      <div style="display: flex; gap: 8px; margin-top: 10px;">
+        <a href="${linkGoogleMaps}" target="_blank" rel="noopener noreferrer" 
+          style="flex: 1; text-decoration: none; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38BDF8; border-radius: 8px; padding: 9px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🗺️ Google Maps
+        </a>
+        <a href="${linkWaze}" target="_blank" rel="noopener noreferrer" 
+          style="flex: 1; text-decoration: none; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10B981; border-radius: 8px; padding: 9px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🚗 Waze
+        </a>
+      </div>
+
       <!-- BOTÃO PRINCIPAL DE AÇÃO -->
-      <div style="margin-top: 12px;">
+      <div style="margin-top: 10px;">
         ${estaACaminho ? `
           <button type="button" id="btnIniciarViagemUnico" style="width: 100%; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 14px; cursor: pointer;">
             📍 Iniciar Viagem (Passageiro a Bordo)
@@ -163,7 +192,7 @@ export function renderizarCardEtapa() {
         `}
       </div>
 
-      <!-- BOTÃO ÚLTIMA VIAGEM (MODO PROFISSIONAL) -->
+      <!-- BOTÃO ÚLTIMA VIAGEM -->
       <div style="margin-top: 8px;">
         <button type="button" id="btnToggleUltimaViagem" style="width: 100%; background: ${estado.modoUltimaViagem ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${estado.modoUltimaViagem ? '#F59E0B' : 'rgba(255,255,255,0.08)'}; color: ${estado.modoUltimaViagem ? '#F59E0B' : 'var(--text-sec)'}; padding: 8px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer;">
           ${estado.modoUltimaViagem ? '🛑 Última Viagem Ativa (Ficará Offline ao terminar)' : '☕ Parar de receber chamadas após esta viagem'}
