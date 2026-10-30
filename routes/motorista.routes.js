@@ -16,7 +16,7 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
       SET destino_casa_lat = ${lat ? Number(lat) : null},
           destino_casa_lng = ${lng ? Number(lng) : null},
           destino_casa_ativo = ${!!ativo}
-      WHERE id = ${usuarioId} OR usuario_id = ${usuarioId}
+      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
       RETURNING id, destino_casa_lat, destino_casa_lng, destino_casa_ativo;
     `;
 
@@ -28,52 +28,110 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
   }
 });
 
-// 2. Obter Perfil Completo com Dados Reais do Formulário de Cadastro
+// 2. Obter Perfil Completo com Dados Reais do Formulário de Cadastro (Sem JOIN problemático)
 router.get('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
     const emailUsuario = req.usuario.email || '';
 
+    // 1. Consulta direta na tabela de motoristas
     const mot = await sql`
       SELECT 
-        m.id, 
-        COALESCE(m.nome, u.nome, '') AS nome,
-        COALESCE(m.email, u.email, '') AS email,
-        COALESCE(m.telefone, u.telefone, '') AS telefone,
-        COALESCE(m.categoria, 'carro') AS categoria, 
-        COALESCE(m.saldo_carteira, 0) AS saldo_carteira,
-        COALESCE(m.status_aprovacao, 'aprovado') AS status_aprovacao,
-        COALESCE(m.foto_perfil_url, u.foto_perfil_url, '') AS foto_perfil_url,
-        COALESCE(m.avaliacao_media, 5.0) AS avaliacao_media,
-        COALESCE(m.total_corridas, 0) AS total_corridas,
-        COALESCE(m.veiculo_modelo, '') AS veiculo_modelo,
-        COALESCE(m.veiculo_placa, '') AS veiculo_placa,
-        COALESCE(m.veiculo_cor, '') AS veiculo_cor,
-        COALESCE(m.veiculo_ano, '') AS veiculo_ano,
-        COALESCE(m.chave_pix_padrao, '') AS chave_pix_padrao
-      FROM motoristas m
-      FULL OUTER JOIN usuarios u ON (m.usuario_id = u.id OR m.id = u.id)
-      WHERE m.id = ${usuarioId} 
-         OR m.usuario_id = ${usuarioId} 
-         OR u.id = ${usuarioId}
-         OR (m.email = ${emailUsuario} AND ${emailUsuario} != '')
+        id, usuario_id, nome, email, telefone, categoria,
+        saldo_carteira, status_aprovacao, foto_perfil_url,
+        avaliacao_media, total_corridas,
+        veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+        chave_pix_padrao
+      FROM motoristas
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text 
+         OR (email = ${emailUsuario} AND ${emailUsuario} != '')
       LIMIT 1;
     `;
 
     if (mot.length > 0) {
-      return res.json(mot[0]);
+      const m = mot[0];
+      return res.json({
+        id: m.id,
+        nome: m.nome || '',
+        email: m.email || '',
+        telefone: m.telefone || '',
+        categoria: m.categoria || 'carro',
+        saldo_carteira: Number(m.saldo_carteira || 0),
+        status_aprovacao: m.status_aprovacao || 'aprovado',
+        foto_perfil_url: m.foto_perfil_url || '',
+        avaliacao_media: Number(m.avaliacao_media || 5.0),
+        total_corridas: Number(m.total_corridas || 0),
+        veiculo_modelo: m.veiculo_modelo || '',
+        veiculo_placa: m.veiculo_placa || '',
+        veiculo_cor: m.veiculo_cor || '',
+        veiculo_ano: m.veiculo_ano || '',
+        chave_pix_padrao: m.chave_pix_padrao || ''
+      });
     }
 
-    // Fallback de segurança se não houver registros
-    res.json({
+    // 2. Fallback: Se não encontrou em motoristas, busca em usuarios
+    const usr = await sql`
+      SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, '') AS foto_perfil_url
+      FROM usuarios 
+      WHERE id::text = ${usuarioId}::text 
+      LIMIT 1;
+    `;
+
+    const u = usr[0] || {};
+    const nomeFinal = u.nome || req.usuario.nome || 'Motorista Parceiro';
+    const emailFinal = u.email || emailUsuario;
+    const telefoneFinal = u.telefone || '';
+    const fotoFinal = u.foto_perfil_url || '';
+
+    // 3. Cria automaticamente o registro do motorista
+    try {
+      const novo = await sql`
+        INSERT INTO motoristas (
+          id, usuario_id, nome, email, telefone, foto_perfil_url,
+          categoria, saldo_carteira, status_aprovacao, avaliacao_media, total_corridas
+        ) VALUES (
+          ${usuarioId}, ${usuarioId}, ${nomeFinal}, ${emailFinal}, ${telefoneFinal}, ${fotoFinal},
+          'carro', 0, 'aprovado', 5.0, 0
+        )
+        ON CONFLICT (id) DO UPDATE 
+        SET nome = EXCLUDED.nome
+        RETURNING *;
+      `;
+
+      if (novo.length > 0) {
+        const n = novo[0];
+        return res.json({
+          id: n.id,
+          nome: n.nome || '',
+          email: n.email || '',
+          telefone: n.telefone || '',
+          categoria: n.categoria || 'carro',
+          saldo_carteira: Number(n.saldo_carteira || 0),
+          status_aprovacao: n.status_aprovacao || 'aprovado',
+          foto_perfil_url: n.foto_perfil_url || '',
+          avaliacao_media: Number(n.avaliacao_media || 5.0),
+          total_corridas: Number(n.total_corridas || 0),
+          veiculo_modelo: n.veiculo_modelo || '',
+          veiculo_placa: n.veiculo_placa || '',
+          veiculo_cor: n.veiculo_cor || '',
+          veiculo_ano: n.veiculo_ano || '',
+          chave_pix_padrao: n.chave_pix_padrao || ''
+        });
+      }
+    } catch (insertErr) {
+      console.warn('Aviso no auto-registro de motorista:', insertErr.message);
+    }
+
+    return res.json({
       id: usuarioId,
-      nome: req.usuario.nome || '',
-      email: emailUsuario,
-      telefone: '',
+      nome: nomeFinal,
+      email: emailFinal,
+      telefone: telefoneFinal,
       categoria: 'carro',
       saldo_carteira: 0,
       status_aprovacao: 'aprovado',
-      foto_perfil_url: '',
+      foto_perfil_url: fotoFinal,
       avaliacao_media: 5.0,
       total_corridas: 0,
       veiculo_modelo: '',
@@ -84,11 +142,11 @@ router.get('/perfil', autenticarToken, async (req, res) => {
     });
   } catch (err) {
     console.error('Erro ao consultar perfil do motorista:', err);
-    res.status(500).json({ erro: 'Falha ao obter perfil.' });
+    res.status(500).json({ erro: 'Falha ao consultar perfil.' });
   }
 });
 
-// 3. Atualizar Dados do Perfil com Suporte a Foto e Auto-Criação
+// 3. Atualizar Dados do Perfil com Suporte a Foto e Auto-Criação Segura
 router.put('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -99,7 +157,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       chave_pix_padrao
     } = req.body;
 
-    // Normaliza strings vazias para null
     const fNome = (nome && nome.trim()) ? nome.trim() : null;
     const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
     const fFoto = (foto_perfil_url && foto_perfil_url.trim()) ? foto_perfil_url.trim() : null;
@@ -109,7 +166,7 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     const fAno = (veiculo_ano && veiculo_ano.trim()) ? veiculo_ano.trim() : null;
     const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
 
-    // 1. Tenta atualizar se o motorista já existe
+    // Tenta atualizar registro existente
     let mot = await sql`
       UPDATE motoristas
       SET 
@@ -121,21 +178,21 @@ router.put('/perfil', autenticarToken, async (req, res) => {
         veiculo_cor = COALESCE(${fCor}, veiculo_cor),
         veiculo_ano = COALESCE(${fAno}, veiculo_ano),
         chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao)
-      WHERE id = ${usuarioId} 
-         OR usuario_id = ${usuarioId} 
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text 
          OR (email = ${emailUsuario} AND ${emailUsuario} != '')
       RETURNING *;
     `;
 
-    // 2. Se não existia registro na tabela motoristas, cria um registro agora (UPSERT)
+    // Se ainda não existia linha em motoristas, insere com chave primária id garantida
     if (mot.length === 0) {
       mot = await sql`
         INSERT INTO motoristas (
-          usuario_id, nome, email, telefone, foto_perfil_url,
+          id, usuario_id, nome, email, telefone, foto_perfil_url,
           veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, chave_pix_padrao,
           categoria, saldo_carteira, status_aprovacao
         ) VALUES (
-          ${usuarioId}, 
+          ${usuarioId}, ${usuarioId}, 
           ${fNome || req.usuario.nome || 'Motorista'}, 
           ${emailUsuario}, 
           ${fTel || ''}, 
@@ -151,14 +208,14 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       `;
     }
 
-    // 3. Atualiza também a tabela de usuários para sincronizar
+    // Sincroniza também na tabela de usuários
     await sql`
       UPDATE usuarios
       SET 
         nome = COALESCE(${fNome}, nome),
         telefone = COALESCE(${fTel}, telefone),
         foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url)
-      WHERE id = ${usuarioId};
+      WHERE id::text = ${usuarioId}::text;
     `;
 
     res.json({ sucesso: true, motorista: mot[0] || {} });
@@ -176,7 +233,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
     const saques = await sql`
       SELECT id, valor, chave_pix, tipo_chave, status, criado_em
       FROM saques_motoristas
-      WHERE motorista_id = ${usuarioId}
+      WHERE motorista_id::text = ${usuarioId}::text
       ORDER BY criado_em DESC
       LIMIT 15;
     `;
@@ -187,7 +244,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
         (valor_total * 0.85) AS repasse_liquido,
         valor_gorjeta, concluido_em, origem_endereco, destino_endereco
       FROM pedidos
-      WHERE motorista_id = ${usuarioId} AND status = 'concluido'
+      WHERE motorista_id::text = ${usuarioId}::text AND status = 'concluido'
       ORDER BY concluido_em DESC
       LIMIT 15;
     `;
