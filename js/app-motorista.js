@@ -1,7 +1,8 @@
 import { API_URL } from './config.js';
 import { HubyMapa } from './mapa.js';
-import { io } from 'https://cdn.socket.io/4.7.2/socket.io.esm.min.js';
 
+// Usa o io global carregado via CDN tradicional com fallback
+const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 let hubyMapa = null;
 let pedidoAceitoAtual = null;
 let pedidoEmAnalise = null;
@@ -715,8 +716,12 @@ function iniciarRadarChamadas() {
   buscarChamadasPendentes();
 
   if (!socketRadar) {
-    socketRadar = io(API_URL);
-    
+    const ioClient = getSocketIO();
+    if (ioClient) {
+      socketRadar = ioClient(API_URL);
+    } else {
+      console.warn('Socket.IO não disponível no momento, operando via polling HTTP.');
+    }
     socketRadar.on('nova_chamada', () => {
       if (!pedidoAceitoAtual && !pedidoEmAnalise && statusAprovacaoAtual === 'aprovado') {
         buscarChamadasPendentes(true); 
