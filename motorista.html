@@ -1,13 +1,15 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>HUBy Motorista • Modo Parceiro</title>
-  
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/base.css?v=6.0.0">
@@ -26,7 +28,9 @@
       --text-sec: #94A3B8;
     }
 
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
 
     body {
       margin: 0;
@@ -59,7 +63,8 @@
       pointer-events: none;
     }
 
-    .btn-driver-profile-trigger, .btn-exit-partner {
+    .btn-driver-profile-trigger,
+    .btn-exit-partner {
       pointer-events: auto;
       background: rgba(18, 24, 38, 0.94);
       border: 1px solid var(--border-dark);
@@ -431,12 +436,14 @@
     }
   </style>
 </head>
+
 <body>
 
   <!-- NAVEGAÇÃO SUPERIOR -->
   <header class="top-driver-nav">
     <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil">
-      <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Motorista" class="avatar-mini" id="topAvatarImg">
+      <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
+        alt="Motorista" class="avatar-mini" id="topAvatarImg">
       <div style="display: flex; flex-direction: column;">
         <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Motorista</strong>
         <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
@@ -449,7 +456,8 @@
   <div id="mapaMotorista"></div>
 
   <!-- BOTÃO CHAT -->
-  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;" aria-label="Abrir Chat">💬</button>
+  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
+    aria-label="Abrir Chat">💬</button>
 
   <!-- DOCK DE CORRIDAS E SALDO -->
   <section class="driver-dock">
@@ -474,16 +482,20 @@
     <div class="drawer-header">
       <button type="button" class="btn-close-drawer" id="btnFecharDrawerPerfil">✕</button>
       <div class="drawer-profile-info">
-        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
+        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
+          alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carregando...</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY
+            CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
-            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> • <span id="drawerTotalViagensTxt">0 viagens</span>
+            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> • <span
+              id="drawerTotalViagensTxt">0 viagens</span>
           </div>
         </div>
       </div>
-      <button type="button" id="btnAbrirModalEdicaoPerfil" style="margin-top: 12px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 7px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer;">
+      <button type="button" id="btnAbrirModalEdicaoPerfil"
+        style="margin-top: 12px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 7px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer;">
         ✏️ Editar Dados e Foto
       </button>
     </div>
@@ -511,7 +523,8 @@
           <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
         <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
+          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando
+            histórico...</div>
         </div>
       </div>
 
@@ -519,12 +532,15 @@
       <div class="drawer-section-card">
         <h4>⚡ Chave Pix Padrão</h4>
         <div style="display: flex; gap: 6px;">
-          <input type="text" id="drawerInputChavePix" placeholder="Chave Pix para saques" style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 6px; padding: 6px 8px; color: #FFF; font-size: 12px;">
-          <button type="button" id="btnSalvarChavePix" style="background: var(--blue); border: none; border-radius: 6px; color: #000; font-weight: 800; font-size: 11px; padding: 0 10px; cursor: pointer;">Salvar</button>
+          <input type="text" id="drawerInputChavePix" placeholder="Chave Pix para saques"
+            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 6px; padding: 6px 8px; color: #FFF; font-size: 12px;">
+          <button type="button" id="btnSalvarChavePix"
+            style="background: var(--blue); border: none; border-radius: 6px; color: #000; font-weight: 800; font-size: 11px; padding: 0 10px; cursor: pointer;">Salvar</button>
         </div>
       </div>
 
-      <button type="button" id="btnLogoutMotorista" style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
+      <button type="button" id="btnLogoutMotorista"
+        style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
         🚪 Encerrar Sessão
       </button>
     </div>
@@ -533,19 +549,32 @@
   <!-- MODAL DE EDIÇÃO DE PERFIL PROFISSIONAL -->
   <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
     <div class="modal-box-edit">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
         <h3 style="margin: 0; font-size: 15px; color: #FFF;">Editar Informações do Parceiro</h3>
-        <button type="button" id="btnFecharModalEdicao" style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
+        <button type="button" id="btnFecharModalEdicao"
+          style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
+      </div>
+
+      <!-- SELETOR DE FOTO (CÂMERA OU GALERIA) -->
+      <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 16px;">
+        <div style="position: relative; width: 84px; height: 84px;">
+          <img id="previewFotoModal"
+            src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80"
+            alt="Preview Foto"
+            style="width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 2px solid var(--emerald); box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);">
+          <label for="inputUploadFotoPerfil"
+            style="position: absolute; bottom: 0; right: 0; background: var(--emerald); color: #02261C; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);">
+            📷
+          </label>
+        </div>
+        <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
+        <small style="color: var(--text-sec); font-size: 10px; margin-top: 6px;">Toque na câmera para tirar foto ou
+          escolher da galeria</small>
       </div>
 
       <div class="form-group-driver">
-        <label>URL da Foto de Perfil</label>
-        <input type="url" id="editFotoUrl" placeholder="https://exemplo.com/sua-foto.jpg">
-      </div>
-
-      <div class="form-group-driver">
-        <label>Nome Completo</label>
-        <input type="text" id="editNome" placeholder="Seu nome profissional">
+        <label>Nome Completo (Cadastro)</label>
+        <input type="text" id="editNome" placeholder="Seu nome completo">
       </div>
 
       <div class="form-group-driver">
@@ -559,8 +588,8 @@
       </div>
 
       <div style="display: flex; gap: 8px;">
-        <div class="form-group-driver" style="flex: 1;">
-          <label>Placa Mercosul</label>
+        <div class="form-group-driver" style="flex: 1.2;">
+          <label>Placa</label>
           <input type="text" id="editCarroPlaca" placeholder="ABC1D23" style="text-transform: uppercase;">
         </div>
         <div class="form-group-driver" style="flex: 1;">
@@ -574,12 +603,14 @@
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button type="button" id="btnCancelarEdicao" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
-        <button type="button" id="btnSalvarEdicaoPerfil" style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
+        <button type="button" id="btnCancelarEdicao"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnSalvarEdicaoPerfil"
+          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
+          Alterações</button>
       </div>
     </div>
   </div>
-
   <!-- MODAL DE SAQUE PIX -->
   <div id="modalSaquePix" class="modal-backdrop-custom">
     <div class="modal-box-edit" style="max-width: 360px;">
@@ -588,7 +619,8 @@
 
       <div class="form-group-driver">
         <label>Tipo de Chave</label>
-        <select id="saqueTipoChave" style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 9px; color: #FFF; font-weight: 600;">
+        <select id="saqueTipoChave"
+          style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 9px; color: #FFF; font-weight: 600;">
           <option value="cpf">CPF</option>
           <option value="telefone">Telefone</option>
           <option value="email">E-mail</option>
@@ -607,23 +639,33 @@
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button type="button" id="btnFecharModalSaque" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
-        <button type="button" id="btnConfirmarSaquePix" style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
+        <button type="button" id="btnFecharModalSaque"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnConfirmarSaquePix"
+          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar
+          Saque</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL CHAT -->
   <div id="modalChatCorrida" class="modal-backdrop-custom" style="z-index: 10007;">
-    <div class="modal-box-edit" style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-      <div style="padding: 14px; border-bottom: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center;">
+    <div class="modal-box-edit"
+      style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
+      <div
+        style="padding: 14px; border-bottom: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8;">💬 Mensagens com o Passageiro</h3>
-        <button type="button" id="btnFecharChat" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+        <button type="button" id="btnFecharChat"
+          style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
-      <div id="chatAreaMensagens" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);"></div>
+      <div id="chatAreaMensagens"
+        style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
+      </div>
       <div style="padding: 12px; border-top: 1px solid var(--border-dark); display: flex; gap: 8px;">
-        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
-        <button type="button" id="btnEnviarMsgChat" style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer;">Enviar</button>
+        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..."
+          style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
+        <button type="button" id="btnEnviarMsgChat"
+          style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer;">Enviar</button>
       </div>
     </div>
   </div>
@@ -631,4 +673,5 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./js/app-motorista.js?v=6.0.0"></script>
 </body>
+
 </html>

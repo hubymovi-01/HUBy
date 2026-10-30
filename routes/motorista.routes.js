@@ -28,29 +28,28 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
   }
 });
 
-// 2. Obter Perfil Completo com Dados de Cadastro
+// 2. Obter Perfil Completo com Dados Reais do Formulário de Cadastro
 router.get('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
     const emailUsuario = req.usuario.email || '';
 
-    // Busca tanto pelo id direto quanto por usuario_id ou email
     const mot = await sql`
       SELECT 
         m.id, 
-        COALESCE(m.nome, u.nome, 'Motorista') AS nome,
-        COALESCE(m.email, u.email) AS email,
-        COALESCE(m.telefone, u.telefone, '---') AS telefone,
+        COALESCE(m.nome, u.nome, '') AS nome,
+        COALESCE(m.email, u.email, '') AS email,
+        COALESCE(m.telefone, u.telefone, '') AS telefone,
         COALESCE(m.categoria, 'carro') AS categoria, 
         COALESCE(m.saldo_carteira, 0) AS saldo_carteira,
         COALESCE(m.status_aprovacao, 'aprovado') AS status_aprovacao,
         COALESCE(m.foto_perfil_url, u.foto_perfil_url, '') AS foto_perfil_url,
         COALESCE(m.avaliacao_media, 5.0) AS avaliacao_media,
         COALESCE(m.total_corridas, 0) AS total_corridas,
-        COALESCE(m.veiculo_modelo, 'Carro Padrão') AS veiculo_modelo,
-        COALESCE(m.veiculo_placa, 'HUB-0000') AS veiculo_placa,
-        COALESCE(m.veiculo_cor, 'Não informada') AS veiculo_cor,
-        COALESCE(m.veiculo_ano, '2022') AS veiculo_ano,
+        COALESCE(m.veiculo_modelo, '') AS veiculo_modelo,
+        COALESCE(m.veiculo_placa, '') AS veiculo_placa,
+        COALESCE(m.veiculo_cor, '') AS veiculo_cor,
+        COALESCE(m.veiculo_ano, '') AS veiculo_ano,
         COALESCE(m.chave_pix_padrao, '') AS chave_pix_padrao
       FROM motoristas m
       LEFT JOIN usuarios u ON (m.usuario_id = u.id OR m.id = u.id)
@@ -64,21 +63,26 @@ router.get('/perfil', autenticarToken, async (req, res) => {
       return res.json(mot[0]);
     }
 
-    // Se ainda não existir registro na tabela motoristas, lê de usuarios e cria
+    // Se só existir registro em usuários (primeiro acesso)
     const usr = await sql`SELECT id, nome, email, telefone FROM usuarios WHERE id = ${usuarioId} LIMIT 1;`;
     if (usr.length > 0) {
       const u = usr[0];
-      const novoMot = await sql`
-        INSERT INTO motoristas (usuario_id, nome, email, telefone, categoria, status_aprovacao, saldo_carteira)
-        VALUES (${u.id}, ${u.nome}, ${u.email}, ${u.telefone || ''}, 'carro', 'aprovado', 0)
-        ON CONFLICT DO NOTHING
-        RETURNING *;
-      `;
-      return res.json(novoMot[0] || {
-        id: u.id, nome: u.nome, email: u.email, telefone: u.telefone,
-        categoria: 'carro', saldo_carteira: 0, status_aprovacao: 'aprovado',
-        veiculo_modelo: 'Carro Padrão', veiculo_placa: 'HUB-0000', veiculo_cor: 'Não informada',
-        veiculo_ano: '2022', avaliacao_media: 5.0, total_corridas: 0, foto_perfil_url: '', chave_pix_padrao: ''
+      return res.json({
+        id: u.id,
+        nome: u.nome || '',
+        email: u.email || '',
+        telefone: u.telefone || '',
+        categoria: 'carro',
+        saldo_carteira: 0,
+        status_aprovacao: 'aprovado',
+        veiculo_modelo: '',
+        veiculo_placa: '',
+        veiculo_cor: '',
+        veiculo_ano: '',
+        avaliacao_media: 5.0,
+        total_corridas: 0,
+        foto_perfil_url: '',
+        chave_pix_padrao: ''
       });
     }
 
@@ -89,15 +93,15 @@ router.get('/perfil', autenticarToken, async (req, res) => {
   }
 });
 
-// 3. Atualizar Dados do Perfil (Foto, Veículo, Nome, Chave Pix)
+// 3. Atualizar Dados do Perfil com Suporte a Foto Direta
 router.put('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
     const emailUsuario = req.usuario.email || '';
-    const { 
-      nome, telefone, foto_perfil_url, 
-      veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, 
-      chave_pix_padrao 
+    const {
+      nome, telefone, foto_perfil_url,
+      veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+      chave_pix_padrao
     } = req.body;
 
     const mot = await sql`
@@ -117,11 +121,12 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       RETURNING *;
     `;
 
-    // Sincroniza também nome e foto na tabela de usuários
+    // Atualiza tabela de usuarios simultaneamente
     await sql`
       UPDATE usuarios
       SET 
         nome = COALESCE(${nome || null}, nome),
+        telefone = COALESCE(${telefone || null}, telefone),
         foto_perfil_url = COALESCE(${foto_perfil_url || null}, foto_perfil_url)
       WHERE id = ${usuarioId};
     `;
@@ -132,7 +137,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     res.status(500).json({ erro: 'Falha ao salvar dados do perfil.' });
   }
 });
-
 // 4. Extrato Financeiro
 router.get('/extrato', autenticarToken, async (req, res) => {
   try {

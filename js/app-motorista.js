@@ -9,7 +9,7 @@ let intervalRadar = null;
 let chamadasAnterioresIds = new Set();
 let statusAprovacaoAtual = 'aprovado';
 let categoriaMotorista = 'carro';
-let socketRadar = null; 
+let socketRadar = null;
 
 let direcaoCasaAtiva = false;
 let coordsCasaMotorista = null;
@@ -72,6 +72,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 // ==========================================
 // 1. GESTÃO DO DRAWER DE PERFIL E EDIÇÃO
 // ==========================================
+let dadosMotoristaMemoria = {};
+let novaFotoBase64Temp = null;
+
 function configurarDrawerPerfil() {
   const btnAbrir = document.getElementById('btnAbrirDrawerPerfil');
   const btnFechar = document.getElementById('btnFecharDrawerPerfil');
@@ -80,12 +83,14 @@ function configurarDrawerPerfil() {
   const btnSalvarPix = document.getElementById('btnSalvarChavePix');
   const btnLogout = document.getElementById('btnLogoutMotorista');
 
-  // Elementos do Modal de Edição de Perfil
+  // Elementos do Modal de Edição
   const modalEdicao = document.getElementById('modalEdicaoPerfil');
   const btnAbrirEdicao = document.getElementById('btnAbrirModalEdicaoPerfil');
   const btnFecharEdicao = document.getElementById('btnFecharModalEdicao');
   const btnCancelarEdicao = document.getElementById('btnCancelarEdicao');
   const btnSalvarEdicao = document.getElementById('btnSalvarEdicaoPerfil');
+  const inputUploadFoto = document.getElementById('inputUploadFotoPerfil');
+  const previewFotoModal = document.getElementById('previewFotoModal');
 
   const abrir = () => {
     drawer?.classList.add('active');
@@ -102,10 +107,28 @@ function configurarDrawerPerfil() {
   btnFechar?.addEventListener('click', fechar);
   overlay?.addEventListener('click', fechar);
 
-  // Abertura do modal populando campos com o estado atual em memória
+  // Leitor de arquivo da Câmera ou Galeria do Celular
+  inputUploadFoto?.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      novaFotoBase64Temp = event.target.result;
+      if (previewFotoModal) {
+        previewFotoModal.src = novaFotoBase64Temp;
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Abertura do modal preenchendo EXATAMENTE os dados que vieram do formulário de cadastro
   btnAbrirEdicao?.addEventListener('click', () => {
     if (modalEdicao) {
-      document.getElementById('editFotoUrl').value = dadosMotoristaMemoria.foto_perfil_url || '';
+      novaFotoBase64Temp = null;
+      if (previewFotoModal) {
+        previewFotoModal.src = dadosMotoristaMemoria.foto_perfil_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
+      }
       document.getElementById('editNome').value = dadosMotoristaMemoria.nome || '';
       document.getElementById('editTelefone').value = dadosMotoristaMemoria.telefone || '';
       document.getElementById('editCarroModelo').value = dadosMotoristaMemoria.veiculo_modelo || '';
@@ -123,10 +146,9 @@ function configurarDrawerPerfil() {
   btnFecharEdicao?.addEventListener('click', fecharModalEdicao);
   btnCancelarEdicao?.addEventListener('click', fecharModalEdicao);
 
-  // Submissão da edição de perfil profissional para o servidor
+  // Gravação das Alterações
   btnSalvarEdicao?.addEventListener('click', async () => {
     const token = localStorage.getItem('huby_token');
-    const foto_perfil_url = document.getElementById('editFotoUrl')?.value.trim();
     const nome = document.getElementById('editNome')?.value.trim();
     const telefone = document.getElementById('editTelefone')?.value.trim();
     const veiculo_modelo = document.getElementById('editCarroModelo')?.value.trim();
@@ -138,25 +160,30 @@ function configurarDrawerPerfil() {
       btnSalvarEdicao.disabled = true;
       btnSalvarEdicao.textContent = 'Salvando...';
 
+      const payload = {
+        nome,
+        telefone,
+        veiculo_modelo,
+        veiculo_placa,
+        veiculo_cor,
+        veiculo_ano
+      };
+
+      if (novaFotoBase64Temp) {
+        payload.foto_perfil_url = novaFotoBase64Temp;
+      }
+
       const resp = await fetch(`${API_URL}/api/motoristas/perfil`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({
-          foto_perfil_url,
-          nome,
-          telefone,
-          veiculo_modelo,
-          veiculo_placa,
-          veiculo_cor,
-          veiculo_ano
-        })
+        body: JSON.stringify(payload)
       });
 
       if (resp.ok) {
-        alert('Perfil atualizado com sucesso!');
+        alert('Perfil profissional atualizado com sucesso!');
         fecharModalEdicao();
         await carregarPerfilCompleto();
       } else {
@@ -213,6 +240,80 @@ function configurarDrawerPerfil() {
       window.location.replace('./login.html');
     }
   });
+}
+
+async function carregarPerfilCompleto() {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const resp = await fetch(`${API_URL}/api/motoristas/perfil`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        localStorage.clear();
+        window.location.replace('./login.html');
+      }
+      return;
+    }
+
+    const m = await resp.json();
+    dadosMotoristaMemoria = m; // Preserva todos os dados do condutor em memória
+
+    statusAprovacaoAtual = m.status_aprovacao || 'aprovado';
+    categoriaMotorista = m.categoria || 'carro';
+
+    const saldoFormatado = `R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
+
+    // 1. Atualiza Topo
+    const topNome = document.getElementById('topNomeMotorista');
+    const topNota = document.getElementById('topNotaMotorista');
+    const topAvatar = document.getElementById('topAvatarImg');
+    if (topNome) topNome.textContent = m.nome ? m.nome.split(' ')[0] : 'Motorista';
+    if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
+    if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
+
+    // 2. Atualiza Saldo no Dock Inferior
+    const saldoEl = document.getElementById('saldoCarteiraValor');
+    if (saldoEl) saldoEl.textContent = saldoFormatado;
+
+    // 3. Atualiza Drawer Lateral com Dados Reais do Cadastro
+    const drawerNome = document.getElementById('drawerNomeCondutor');
+    const drawerCategoria = document.getElementById('drawerCategoriaBadge');
+    const drawerFoto = document.getElementById('drawerFotoImg');
+    const drawerNota = document.getElementById('drawerAvaliacaoTxt');
+    const drawerViagens = document.getElementById('drawerTotalViagensTxt');
+    const drawerModelo = document.getElementById('drawerCarroModelo');
+    const drawerDetalhes = document.getElementById('drawerCarroDetalhes');
+    const drawerPlaca = document.getElementById('drawerCarroPlaca');
+    const drawerSaldo = document.getElementById('drawerSaldoValor');
+    const inputPix = document.getElementById('drawerInputChavePix');
+
+    if (drawerNome) drawerNome.textContent = m.nome || 'Condutor Parceiro';
+    if (drawerCategoria) drawerCategoria.textContent = `HUBY ${(m.categoria || 'CARRO').toUpperCase()}`;
+    if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
+    if (drawerNota) drawerNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
+    if (drawerViagens) drawerViagens.textContent = `${m.total_corridas || 0} viagens`;
+
+    // Mostra o que veio do formulário de cadastro
+    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Veículo não informado';
+    if (drawerDetalhes) {
+      const corTxt = m.veiculo_cor ? m.veiculo_cor : 'Cor não informada';
+      const anoTxt = m.veiculo_ano ? m.veiculo_ano : 'Ano não informado';
+      drawerDetalhes.textContent = `${corTxt} • ${anoTxt}`;
+    }
+    if (drawerPlaca) drawerPlaca.textContent = m.veiculo_placa ? m.veiculo_placa.toUpperCase() : 'SEM PLACA';
+    if (drawerSaldo) drawerSaldo.textContent = saldoFormatado;
+    if (inputPix && m.chave_pix_padrao) inputPix.value = m.chave_pix_padrao;
+
+    // Preenche a chave padrão no modal de saque caso esteja vazia
+    const saquePixIn = document.getElementById('saqueChavePix');
+    if (saquePixIn && !saquePixIn.value && m.chave_pix_padrao) {
+      saquePixIn.value = m.chave_pix_padrao;
+    }
+  } catch (err) {
+    console.warn('Erro ao carregar perfil completo:', err);
+  }
 }
 
 async function carregarPerfilCompleto() {
@@ -638,9 +739,9 @@ async function enviarMensagemChat() {
   try {
     await fetch(`${API_URL}/api/pedidos/${pedidoAceitoAtual.id}/chat`, {
       method: 'POST',
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}` 
+        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({ mensagem: txt })
     });
@@ -653,13 +754,13 @@ async function enviarMensagemChat() {
 async function carregarMensagensChat() {
   if (!pedidoAceitoAtual || !pedidoAceitoAtual.id) return;
   const token = localStorage.getItem('huby_token');
-  
+
   let meuId = null;
   if (token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       meuId = payload.id;
-    } catch(e) {}
+    } catch (e) { }
   }
 
   const areaMensagens = document.getElementById('chatAreaMensagens');
@@ -671,9 +772,9 @@ async function carregarMensagensChat() {
     });
     if (!resp.ok) return;
     const msgs = await resp.json();
-    
+
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat é monitorizado por segurança.</div>';
-    
+
     msgs.forEach(m => {
       const souEu = (String(m.remetente_id) === String(meuId));
       html += `
@@ -701,10 +802,10 @@ function iniciarRadarChamadas() {
 
   if (!socketRadar) {
     socketRadar = io(API_URL);
-    
+
     socketRadar.on('nova_chamada', () => {
       if (!pedidoAceitoAtual && !pedidoEmAnalise && statusAprovacaoAtual === 'aprovado') {
-        buscarChamadasPendentes(true); 
+        buscarChamadasPendentes(true);
       }
     });
 
@@ -932,7 +1033,7 @@ async function efetivarAceiteChamada(dados) {
           const r = await hubyMapa.calcularRota([pos.lat, pos.lng], dados.coordsOrig, '#38BDF8');
           const lbl = document.getElementById('lblTempoPassageiro');
           if (lbl) lbl.innerHTML = `⏳ Chega ao passageiro em <span style="font-size:18px;">${r.duracaoMin} min</span>`;
-        } catch(e) {}
+        } catch (e) { }
       });
     }
 
