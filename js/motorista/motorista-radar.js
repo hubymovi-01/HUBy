@@ -2,14 +2,34 @@
 import { API_URL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
+import { iniciarAlertaSonoroChamada, pararAlertaSonoroChamada } from './motorista-utilidades.js';
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
-export function iniciarRadarChamadas() {
-  if (!estado.isOnline) return;
+// Alternar status online/offline na base de dados
+export async function alternarStatusOnline() {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const resp = await fetch(`${API_URL}/api/motoristas/meu-status-online`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+    const dados = await resp.json();
+    const online = Boolean(dados.online);
+    estado.isOnline = online;
+    return online;
+  } catch (err) {
+    console.warn('Erro ao alternar status do motorista:', err);
+    return false;
+  }
+}
 
-  // Solicita permissão do navegador para notificações se ainda não concedida
+export function iniciarRadarChamadas() {
   solicitarPermissaoNotificacoes();
+  estado.isOnline = true;
 
   buscarChamadasPendentes();
 
@@ -19,7 +39,7 @@ export function iniciarRadarChamadas() {
       estado.socketRadar = ioClient(API_URL);
 
       estado.socketRadar.on('nova_chamada', () => {
-        if (estado.isOnline && !estado.pedidoAceitoAtual && !estado.pedidoEmAnalise && estado.statusAprovacaoAtual === 'aprovado') {
+        if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise && estado.statusAprovacaoAtual === 'aprovado') {
           buscarChamadasPendentes(true);
         }
       });
@@ -34,10 +54,10 @@ export function iniciarRadarChamadas() {
 
   pararRadarChamadas();
   estado.intervalRadar = setInterval(() => {
-    if (estado.isOnline && !estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
+    if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
       buscarChamadasPendentes(false);
     }
-  }, 10000);
+  }, 4000);
 }
 
 export function pararRadarChamadas() {
@@ -45,23 +65,38 @@ export function pararRadarChamadas() {
     clearInterval(estado.intervalRadar);
     estado.intervalRadar = null;
   }
+  pararAlertaSonoroChamada();
 }
 
 export async function buscarChamadasPendentes(tocarSomForcado = false) {
-  if (!estado.isOnline || estado.pedidoAceitoAtual || estado.pedidoEmAnalise || estado.statusAprovacaoAtual !== 'aprovado') {
+  if (estado.pedidoAceitoAtual || estado.pedidoEmAnalise) {
+    pararAlertaSonoroChamada();
     return;
   }
 
   try {
-    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(estado.categoriaMotorista)}`);
+    const cat = estado.categoriaMotorista || 'carro';
+    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}`);
     if (!resp.ok) return;
 
     const pedidos = await resp.json();
-    const idsAtuais = pedidos.map((p) => p.id);
+    const idsAtuais = Array.isArray(pedidos) ? pedidos.map((p) => p.id) : [];
+
+    if (!idsAtuais.length) {
+      pararAlertaSonoroChamada();
+      renderizarRadar([]);
+      return;
+    }
+
+    if (!estado.chamadasAnterioresIds) {
+      estado.chamadasAnterioresIds = new Set();
+    }
+
     const existeNovaChamada = idsAtuais.some((id) => !estado.chamadasAnterioresIds.has(id));
 
-    if ((existeNovaChamada && pedidos.length > 0) || tocarSomForcado) {
-      tocarAlertaSonoro();
+    if (existeNovaChamada || tocarSomForcado) {
+      // Dispara o bipe de alta atenção contínuo em loop
+      iniciarAlertaSonoroChamada();
       dispararNotificacaoNovaChamada(pedidos.length);
     }
 
@@ -77,7 +112,7 @@ function renderizarRadar(pedidos) {
   if (!feedEl) return;
 
   if (!pedidos || pedidos.length === 0) {
-    feedEl.innerHTML = '<div class="dock-empty">Aguardando novas chamadas na região...</div>';
+    feedEl.innerHTML = '<div class="dock-empty" style="text-align: center; color: var(--text-sec); font-size: 12px; padding: 18px 0;">Aguardando novas chamadas na região...</div>';
     return;
   }
 
@@ -88,23 +123,30 @@ function renderizarRadar(pedidos) {
     const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
 
     return `
-      <div class="order-card">
-        <div class="order-card-header">
-          <span class="order-badge">${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}</span>
-          <span class="order-price">R$ ${Number(p.valor_total).toFixed(2).replace('.', ',')}</span>
+      <div class="order-card" style="border: 2px solid #10B981; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px;">
+        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span class="order-badge" style="background: rgba(16,185,129,0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
+            ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
+          </span>
+          <span class="order-price" style="font-size: 17px; font-weight: 900; color: #FFF;">
+            R$ ${Number(p.valor_total).toFixed(2).replace('.', ',')}
+          </span>
         </div>
-        <div class="order-route">
-          <span><strong>Partida:</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
-          <span><strong>Destino:</strong> ${p.destino_endereco}</span>
-          <small style="color: #10B981; font-weight: 700;">${p.distancia_km} km • ${p.duracao_min || 5} min</small>
+        <div class="order-route" style="font-size: 13px; line-height: 1.5; color: #E2E8F0;">
+          <span style="display: block;"><strong>Partida:</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
+          <span style="display: block;"><strong>Destino:</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
+          <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
+            📏 ${p.distancia_km || '1.5'} km • ⏱️ ${p.duracao_min || 5} min
+          </small>
         </div>
         <button type="button" 
                 class="btn-accept-order" 
+                style="width: 100%; margin-top: 10px; background: #10B981; color: #022C22; border: none; border-radius: 10px; padding: 12px; font-weight: 900; font-size: 13px; cursor: pointer;"
                 data-id="${p.id}" 
                 data-preco="${p.valor_total}"
                 data-origem="${p.origem_endereco || 'Local do passageiro'}"
                 data-destino="${p.destino_endereco}"
-                data-dist="${p.distancia_km}"
+                data-dist="${p.distancia_km || '1.5'}"
                 data-dur="${p.duracao_min || 5}"
                 data-lat-orig="${latOrig}" 
                 data-lng-orig="${lngOrig}" 
@@ -118,6 +160,9 @@ function renderizarRadar(pedidos) {
 
   feedEl.querySelectorAll('.btn-accept-order').forEach((btn) => {
     btn.addEventListener('click', () => {
+      // Interrompe imediatamente o alerta sonoro contínuo ao interagir
+      pararAlertaSonoroChamada();
+
       const id = btn.getAttribute('data-id');
       const preco = btn.getAttribute('data-preco');
       const origem = btn.getAttribute('data-origem');
@@ -146,34 +191,6 @@ function renderizarRadar(pedidos) {
   });
 }
 
-export function tocarAlertaSonoro() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const audioCtx = new AudioCtx();
-
-    const tocarTom = (freq, inicio, duracao) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, audioCtx.currentTime + inicio);
-      gain.gain.setValueAtTime(0.2, audioCtx.currentTime + inicio);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + inicio + duracao);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(audioCtx.currentTime + inicio);
-      osc.stop(audioCtx.currentTime + inicio + duracao);
-    };
-
-    tocarTom(880, 0, 0.15);
-    tocarTom(1174.66, 0.18, 0.25);
-
-    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-  } catch (err) {
-    console.warn('Erro sonoro:', err);
-  }
-}
-
 export function solicitarPermissaoNotificacoes() {
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
@@ -183,7 +200,6 @@ export function solicitarPermissaoNotificacoes() {
 export function dispararNotificacaoNovaChamada(qtd) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
 
-  // Dispara a notificação apenas se o motorista estiver com a aba em segundo plano ou celular bloqueado
   if (document.visibilityState === 'hidden') {
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
       navigator.serviceWorker.ready.then((reg) => {
