@@ -1,328 +1,178 @@
-// routes/admin.routes.js
-import express from 'express';
-import { sql } from '../db.js';
-import { autenticarToken } from '../middlewares/auth.middleware.js';
+// js/admin-radar.js
+import { API_URL } from './config.js';
 
-const router = express.Router();
+let mapaAdmin = null;
+let camadasZonas = [];
+let marcadoresMotoristas = {};
 
-// Middleware para autorizar apenas nível de acesso 'admin'
-const autorizarAdmin = (req, res, next) => {
-  const role = String(req.usuario?.role || req.usuario?.tipo || '').toLowerCase();
-  if (role !== 'admin' && role !== 'administrador') {
-    return res.status(403).json({ erro: 'Acesso restrito ao Painel Master.' });
-  }
-  next();
-};
+export function inicializarRadarMaster(token) {
+  const container = document.getElementById('mapaRadarContainer');
+  if (!container) return;
 
-// ============================================================================
-// 1. RESUMO OPERACIONAL E KPIs (PARA CARDS E CHART.JS)
-// ============================================================================
-router.get('/metricas', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const kpis = await sql`
-      SELECT 
-        (SELECT COUNT(*)::int FROM motoristas WHERE status_online = true) AS motoristas_online,
-        (SELECT COUNT(*)::int FROM pedidos WHERE status IN ('pendente', 'aceito', 'em_viagem')) AS corridas_ativas,
-        (SELECT COUNT(*)::int FROM saques WHERE status = 'pendente') AS saques_pendentes,
-        (SELECT COUNT(*)::int FROM motoristas WHERE status_aprovacao = 'pendente') AS motoristas_pendentes,
-        (SELECT COUNT(*)::int FROM pedidos WHERE status = 'concluido') AS viagens_concluidas,
-        (SELECT COALESCE(SUM(valor_total), 0)::float FROM pedidos WHERE status = 'concluido') AS faturamento_bruto,
-        (SELECT COALESCE(SUM(valor_total * 0.15), 0)::float FROM pedidos WHERE status = 'concluido' AND concluido_em >= CURRENT_DATE) AS receita_huby_hoje,
-        (SELECT COUNT(*)::int FROM incidentes_seguranca WHERE resolvido = false) AS incidentes_ativos;
-    `;
+  if (!mapaAdmin) {
+    mapaAdmin = L.map('mapaRadarContainer').setView([-8.3580, -42.2460], 13);
 
-    // Distribuição por categoria para o gráfico de barras
-    const categorias = await sql`
-      SELECT tipo, COUNT(*)::int AS total
-      FROM pedidos
-      GROUP BY tipo;
-    `;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors | HUBy Radar'
+    }).addTo(mapaAdmin);
 
-    const distribuicao_categorias = { carro: 0, moto: 0, entrega: 0 };
-    categorias.forEach(c => {
-      if (c.tipo) distribuicao_categorias[c.tipo.toLowerCase()] = c.total;
-    });
+    mapaAdmin.on('click', async (e) => {
+      const nome = prompt('Nome da Zona de Demanda (ex: Centro / Show / Chuva):');
+      if (!nome || !nome.trim()) return;
 
-    res.json({
-      ...(kpis[0] || {}),
-      distribuicao_categorias
-    });
-  } catch (err) {
-    console.error('Erro ao buscar métricas:', err);
-    res.status(500).json({ erro: 'Falha ao buscar métricas.' });
-  }
-});
-
-// ============================================================================
-// 2. GESTÃO E APROVAÇÃO DE MOTORISTAS
-// ============================================================================
-router.get('/motoristas', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const motoristas = await sql`
-      SELECT 
-        m.id,
-        m.usuario_id,
-        u.nome,
-        u.email,
-        u.telefone,
-        m.cnh,
-        m.veiculo_modelo,
-        m.veiculo_placa,
-        m.veiculo_cor,
-        m.veiculo_ano,
-        m.categoria,
-        m.status_aprovacao,
-        m.status_online,
-        m.saldo_carteira,
-        m.avaliacao_media,
-        m.foto_perfil_url,
-        m.criado_em
-      FROM motoristas m
-      JOIN usuarios u ON u.id::text = m.usuario_id::text
-      ORDER BY m.criado_em DESC;
-    `;
-    res.json(motoristas);
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao buscar motoristas.' });
-  }
-});
-
-router.put('/motoristas/:id/status', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body; // 'aprovado' | 'pendente' | 'bloqueado'
-
-    if (!['aprovado', 'pendente', 'bloqueado'].includes(status)) {
-      return res.status(400).json({ erro: 'Status inválido.' });
-    }
-
-    await sql`
-      UPDATE motoristas 
-      SET status_aprovacao = ${status} 
-      WHERE id::text = ${id}::text OR usuario_id::text = ${id}::text;
-    `;
-
-    res.json({ sucesso: true, status });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao atualizar status do condutor.' });
-  }
-});
-
-// ============================================================================
-// 3. SAQUES PIX
-// ============================================================================
-router.get('/saques', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const saques = await sql`
-      SELECT 
-        s.id,
-        s.motorista_id,
-        u.nome AS motorista_nome,
-        u.telefone AS motorista_telefone,
-        s.valor,
-        s.chave_pix,
-        s.tipo_chave,
-        s.status,
-        s.solicitado_em
-      FROM saques s
-      JOIN motoristas m ON m.id::text = s.motorista_id::text
-      JOIN usuarios u ON u.id::text = m.usuario_id::text
-      ORDER BY s.solicitado_em DESC;
-    `;
-    res.json(saques);
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao listar saques.' });
-  }
-});
-
-router.put('/saques/:id', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { acao } = req.body; // 'pago' | 'recusado'
-
-    if (!['pago', 'recusado'].includes(acao)) {
-      return res.status(400).json({ erro: 'Ação inválida.' });
-    }
-
-    if (acao === 'recusado') {
-      const saque = await sql`SELECT motorista_id, valor, status FROM saques WHERE id = ${id}`;
-      if (saque.length > 0 && saque[0].status === 'pendente') {
-        await sql`
-          UPDATE motoristas 
-          SET saldo_carteira = saldo_carteira + ${saque[0].valor} 
-          WHERE id::text = ${saque[0].motorista_id}::text;
-        `;
+      const multInput = prompt('Multiplicador de Tarifa Dinâmica (ex: 1.30 para +30%):', '1.20');
+      if (!multInput) return;
+      const multiplicador = Number(multInput.replace(',', '.'));
+      if (isNaN(multiplicador) || multiplicador <= 0) {
+        alert('Multiplicador inválido.');
+        return;
       }
-    }
 
-    await sql`
-      UPDATE saques 
-      SET status = ${acao}, processado_em = NOW() 
-      WHERE id = ${id};
-    `;
+      const raioInput = prompt('Raio da área em metros (ex: 1500):', '2000');
+      if (!raioInput) return;
+      const raio_metros = Number(raioInput);
+      if (isNaN(raio_metros) || raio_metros <= 0) {
+        alert('Raio inválido.');
+        return;
+      }
 
-    res.json({ sucesso: true, status: acao });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao processar saque.' });
+      try {
+        const res = await fetch(`${API_URL}/api/dinamica`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            nome: nome.trim(),
+            multiplicador,
+            centro_lat: e.latlng.lat,
+            centro_lng: e.latlng.lng,
+            raio_metros
+          })
+        });
+
+        if (res.ok) {
+          alert('Zona Dinâmica criada e ativa no sistema!');
+          carregarZonasDinamicas(token);
+        } else {
+          const erro = await res.json().catch(() => ({}));
+          alert(`Erro ao criar zona: ${erro.erro || 'Falha na requisição'}`);
+        }
+      } catch (err) {
+        console.error('Erro na criação de zona dinâmica:', err);
+        alert('Falha de conexão com o servidor.');
+      }
+    });
+
+    window.toggleZonaAdmin = async (id) => {
+      try {
+        await fetch(`${API_URL}/api/dinamica/${id}/toggle`, {
+          method: 'PUT',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        carregarZonasDinamicas(token);
+      } catch (e) {
+        alert('Erro ao alternar zona.');
+      }
+    };
+
+    window.excluirZonaAdmin = async (id) => {
+      if (!confirm('Deseja realmente remover esta zona de demanda?')) return;
+      try {
+        await fetch(`${API_URL}/api/dinamica/${id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        carregarZonasDinamicas(token);
+      } catch (e) {
+        alert('Erro ao remover zona.');
+      }
+    };
   }
-});
 
-// ============================================================================
-// 4. CUPONS DE DESCONTO
-// ============================================================================
-router.get('/cupons', autenticarToken, autorizarAdmin, async (req, res) => {
+  setTimeout(() => {
+    if (mapaAdmin) mapaAdmin.invalidateSize();
+  }, 300);
+  carregarZonasDinamicas(token);
+}
+
+export async function carregarZonasDinamicas(token) {
+  if (!mapaAdmin) return;
+
   try {
-    const cupons = await sql`SELECT * FROM cupons ORDER BY criado_em DESC;`;
-    res.json(cupons);
-  } catch (err) {
-    res.json([]);
-  }
-});
+    const res = await fetch(`${API_URL}/api/dinamica`);
+    if (!res.ok) return;
+    const zonas = await res.json();
 
-router.post('/cupons', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { codigo, tipo, valor, limite_usos, expira_em } = req.body;
-    await sql`
-      INSERT INTO cupons (codigo, tipo, valor, limite_usos, expira_em, ativo)
-      VALUES (${codigo.toUpperCase()}, ${tipo}, ${valor}, ${limite_usos || 100}, ${expira_em || null}, true);
-    `;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao criar cupom.' });
-  }
-});
+    camadasZonas.forEach(c => mapaAdmin.removeLayer(c));
+    camadasZonas = [];
 
-router.put('/cupons/:id/toggle', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await sql`UPDATE cupons SET ativo = NOT ativo WHERE id = ${id};`;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao alterar cupom.' });
-  }
-});
+    zonas.forEach(z => {
+      if (!z.ativa) return;
 
-router.delete('/cupons/:id', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await sql`DELETE FROM cupons WHERE id = ${id};`;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao excluir cupom.' });
-  }
-});
+      const centroLat = Number(z.centro_lat);
+      const centroLng = Number(z.centro_lng);
+      const raio = Number(z.raio_metros) || 2000;
 
-// ============================================================================
-// 5. INCIDENTES DE SEGURANÇA E SOS
-// ============================================================================
-router.get('/incidentes', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const incidentes = await sql`
-      SELECT * FROM incidentes_seguranca 
-      ORDER BY criado_em DESC 
-      LIMIT 50;
-    `;
-    res.json(incidentes);
-  } catch (err) {
-    res.json([]);
-  }
-});
+      const circulo = L.circle([centroLat, centroLng], {
+        color: '#F59E0B',
+        fillColor: '#F59E0B',
+        fillOpacity: 0.20,
+        weight: 2,
+        radius: raio
+      }).addTo(mapaAdmin);
 
-router.put('/incidentes/:id/resolver', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await sql`
-      UPDATE incidentes_seguranca 
-      SET resolvido = true, resolvido_em = NOW() 
-      WHERE id = ${id};
-    `;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao resolver incidente.' });
-  }
-});
+      circulo.bindPopup(`
+        <div style="font-family: inherit; font-size: 13px; color: #111;">
+          <strong style="font-size: 14px;">📍 ${z.nome}</strong><br>
+          <span style="color: #D97706; font-weight: 800;">Taxa: ${Number(z.multiplicador).toFixed(2)}x</span><br>
+          <small style="color: #6B7280;">Raio: ${raio} metros</small>
+          <div style="margin-top: 8px; display: flex; gap: 6px;">
+            <button onclick="toggleZonaAdmin(${z.id})" style="background: #F59E0B; border: none; padding: 4px 8px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 11px;">Pausar</button>
+            <button onclick="excluirZonaAdmin(${z.id})" style="background: #EF4444; color: #FFF; border: none; padding: 4px 8px; border-radius: 4px; font-weight: 700; cursor: pointer; font-size: 11px;">Excluir</button>
+          </div>
+        </div>
+      `);
 
-// ============================================================================
-// 6. BROADCAST (ALERTA EM MASSA VIA SOCKET.IO)
-// ============================================================================
-router.post('/broadcast', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { publico, titulo, mensagem } = req.body;
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('alerta_broadcast_geral', { publico, titulo, mensagem });
-    }
-    res.json({ sucesso: true });
+      camadasZonas.push(circulo);
+    });
   } catch (err) {
-    res.status(500).json({ erro: 'Falha ao emitir broadcast.' });
+    console.warn('Erro ao plotar zonas dinâmicas:', err);
   }
-});
+}
 
-// ============================================================================
-// 7. TARIFAS E PARÂMETROS GLOBAIS
-// ============================================================================
-router.put('/config', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { taxa_plataforma, km_carro, km_moto, km_entrega } = req.body;
-    await sql`
-      INSERT INTO configuracoes_plataforma (id, taxa_plataforma, km_carro, km_moto, km_entrega, atualizado_em)
-      VALUES (1, ${taxa_plataforma}, ${km_carro}, ${km_moto}, ${km_entrega}, NOW())
-      ON CONFLICT (id) DO UPDATE 
-      SET taxa_plataforma = EXCLUDED.taxa_plataforma,
-          km_carro = EXCLUDED.km_carro,
-          km_moto = EXCLUDED.km_moto,
-          km_entrega = EXCLUDED.km_entrega,
-          atualizado_em = NOW();
-    `;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao salvar configurações de tarifas.' });
+export function atualizarPosicaoCondutorNoMapa(dado) {
+  if (!mapaAdmin) return;
+  const { motoristaId, lat, lng, emCorrida } = dado;
+  if (!lat || !lng) return;
+
+  const numLat = Number(lat);
+  const numLng = Number(lng);
+  const corPino = emCorrida ? '#F59E0B' : '#10B981';
+  const textoStatus = emCorrida ? 'Em Corrida' : 'Disponível';
+
+  if (marcadoresMotoristas[motoristaId]) {
+    marcadoresMotoristas[motoristaId].setLatLng([numLat, numLng]);
+    const popupContent = `<b>Motorista:</b> #${motoristaId}<br><b>Status:</b> <span style="color: ${corPino}; font-weight: 700;">${textoStatus}</span>`;
+    marcadoresMotoristas[motoristaId].setPopupContent(popupContent);
+  } else {
+    const iconDiv = L.divIcon({
+      className: 'driver-marker',
+      html: `<div style="width:26px;height:26px;background:#0B0F19;border:2.5px solid ${corPino};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px ${corPino};font-size:12px;">🚖</div>`,
+      iconSize: [26, 26],
+      iconAnchor: [13, 13]
+    });
+
+    const marcador = L.marker([numLat, numLng], { icon: iconDiv }).addTo(mapaAdmin);
+    marcador.bindPopup(`<b>Motorista:</b> #${motoristaId}<br><b>Status:</b> <span style="color: ${corPino}; font-weight: 700;">${textoStatus}</span>`);
+    marcadoresMotoristas[motoristaId] = marcador;
   }
-});
 
-// ============================================================================
-// 8. ZONAS DE TARIFA DINÂMICA
-// ============================================================================
-router.get('/dinamica', async (req, res) => {
-  try {
-    const zonas = await sql`SELECT * FROM zonas_dinamicas ORDER BY id DESC;`;
-    res.json(zonas);
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao listar zonas dinâmicas.' });
+  const contadorEl = document.getElementById('txtCondutoresOnline');
+  if (contadorEl) {
+    const total = Object.keys(marcadoresMotoristas).length;
+    contadorEl.textContent = `${total} parceiro${total === 1 ? '' : 's'} monitorado${total === 1 ? '' : 's'}`;
   }
-});
-
-router.post('/dinamica', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { nome, multiplicador, centro_lat, centro_lng, raio_metros } = req.body;
-    await sql`
-      INSERT INTO zonas_dinamicas (nome, multiplicador, centro_lat, centro_lng, raio_metros, ativa)
-      VALUES (${nome}, ${multiplicador}, ${centro_lat}, ${centro_lng}, ${raio_metros}, true);
-    `;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao criar zona de demanda.' });
-  }
-});
-
-router.put('/dinamica/:id/toggle', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await sql`UPDATE zonas_dinamicas SET ativa = NOT ativa WHERE id = ${id};`;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao alterar estado da zona.' });
-  }
-});
-
-router.delete('/dinamica/:id', autenticarToken, autorizarAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    await sql`DELETE FROM zonas_dinamicas WHERE id = ${id};`;
-    res.json({ sucesso: true });
-  } catch (err) {
-    res.status(500).json({ erro: 'Falha ao remover zona.' });
-  }
-});
-
-export default router;
+}
