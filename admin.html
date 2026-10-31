@@ -37,6 +37,8 @@
       margin-bottom: 24px;
       padding-bottom: 16px;
       border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 14px;
     }
     .brand-title {
       font-size: 22px;
@@ -62,6 +64,17 @@
     .btn-action.secondary {
       background: rgba(255,255,255,0.08);
       color: #FFF;
+    }
+    .select-periodo {
+      background: rgba(18, 24, 38, 0.95);
+      border: 1px solid var(--border);
+      color: #FFF;
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
     }
     .metrics-grid {
       display: grid;
@@ -180,7 +193,7 @@
     }
     .split-grid {
       display: grid;
-      grid-template-columns: 350px 1fr;
+      grid-template-columns: 360px 1fr;
       gap: 20px;
     }
     @media(max-width: 900px) {
@@ -220,30 +233,56 @@
       border: 1px solid var(--border);
       z-index: 1;
     }
+    /* MODAL DE ZOOM COM AÇÕES RÁPIDAS */
     .modal-preview {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.85);
-      z-index: 9999;
+      background: rgba(0,0,0,0.88);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
       align-items: center;
       justify-content: center;
+      padding: 20px;
     }
-    .modal-preview img {
-      max-width: 90%;
-      max-height: 80vh;
+    .modal-preview-box {
+      background: #111726;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 650px;
+      width: 100%;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .modal-preview-box img {
+      max-width: 100%;
+      max-height: 65vh;
       border-radius: 10px;
+      object-fit: contain;
+      border: 1px solid var(--border);
     }
   </style>
 </head>
 <body>
 
+  <!-- CABEÇALHO MASTER COM FILTRO DE PERÍODO -->
   <header>
     <div>
       <div class="brand-title">HUBy <span>Painel Master</span></div>
       <small style="color: var(--muted); font-size: 11px;">Central Operacional & Inteligência de Frota</small>
     </div>
-    <div style="display: flex; gap: 10px; align-items: center;">
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <!-- SELETOR DE PERÍODO DINÂMICO -->
+      <select id="selectFiltroPeriodo" class="select-periodo" title="Filtrar Métricas">
+        <option value="hoje">📅 Hoje</option>
+        <option value="7d">📅 Últimos 7 Dias</option>
+        <option value="mes">📅 Mês Atual</option>
+        <option value="total" selected>🌐 Todo o Histórico</option>
+      </select>
+
       <button type="button" id="btnBaixarCSV" class="btn-action secondary">📥 Exportar CSV</button>
       <a href="./index.html" style="color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600;">Voltar ao Mapa</a>
       <button type="button" id="btnSincronizar" class="btn-action">↻ Atualizar</button>
@@ -257,11 +296,11 @@
       <div id="metricBruto" class="metric-value">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Lucro HUBy</div>
+      <div class="metric-title">Lucro HUBy (15%)</div>
       <div id="metricLiquido" class="metric-value" style="color: var(--blue);">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Repasse Motoristas</div>
+      <div class="metric-title">Repasse Motoristas (85%)</div>
       <div id="metricRepasse" class="metric-value" style="color: var(--amber);">R$ 0,00</div>
     </div>
     <div class="metric-card">
@@ -278,8 +317,9 @@
   <nav class="tabs-nav">
     <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
+    <button type="button" class="tab-btn" data-tab="tabZonas">🛡️ Zonas de Risco</button>
     <button type="button" class="tab-btn" data-tab="tabCupons">🎟️ Cupons & Marketing</button>
-    <button type="button" class="tab-btn" data-tab="tabSeguranca">🚨 Segurança & SOS</button>
+    <button type="button" class="tab-btn" data-tab="tabSeguranca">🚨 Incidentes & SOS</button>
     <button type="button" class="tab-btn" data-tab="tabBroadcast">📢 Notificações Push</button>
     <button type="button" class="tab-btn" data-tab="tabSaques">💰 Saques Pix</button>
     <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Condutores</button>
@@ -308,6 +348,76 @@
       <span id="txtCondutoresOnline" style="font-size: 13px; font-weight: 700; color: var(--primary);">0 parceiros ativos</span>
     </div>
     <div id="mapaRadarContainer"></div>
+  </section>
+
+  <!-- ABA NOVA: GESTÃO DE ZONAS DE RISCO / RESTRIÇÃO NOTURNA -->
+  <section id="tabZonas" class="tab-pane">
+    <div class="split-grid">
+      <div class="card-panel">
+        <h3 style="margin-top: 0; font-size: 16px; color: var(--rose);">Demarcar Área de Risco</h3>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">
+          Define um perímetro preventivo com alerta ao motorista durante horários noturnos.
+        </p>
+        <form id="formZonaRisco">
+          <div class="form-group">
+            <label>Nome do Local / Bairro</label>
+            <input type="text" id="zonaNome" placeholder="Ex: Região Norte - Perímetro A" required>
+          </div>
+          <div class="form-group">
+            <label>Nível de Perigo</label>
+            <select id="zonaNivel">
+              <option value="alto">Alto Risco (Alerta Crítico)</option>
+              <option value="medio">Médio (Atenção Redobrada)</option>
+              <option value="baixo">Monitoramento Preventivo</option>
+            </select>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <div class="form-group" style="flex: 1;">
+              <label>Latitude</label>
+              <input type="number" step="any" id="zonaLat" placeholder="-8.3580" required>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Longitude</label>
+              <input type="number" step="any" id="zonaLng" placeholder="-42.2460" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Raio de Cobertura (Metros)</label>
+            <input type="number" id="zonaRaio" value="500" min="100" max="5000">
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <div class="form-group" style="flex: 1;">
+              <label>Início Restrição</label>
+              <input type="time" id="zonaHoraInicio" value="20:00">
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label>Fim Restrição</label>
+              <input type="time" id="zonaHoraFim" value="05:00">
+            </div>
+          </div>
+          <button type="submit" class="btn-action" style="width: 100%; justify-content: center; background: var(--rose); color: #FFF;">
+            Salvar Zona de Risco
+          </button>
+        </form>
+      </div>
+
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th>Área Demarcada</th>
+              <th>Nível</th>
+              <th>Raio</th>
+              <th>Horário Ativo</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaZonasBody">
+            <tr><td colspan="5" style="text-align: center; color: var(--muted);">Consultando áreas cadastradas...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <!-- ABA 3: CUPONS & MARKETING -->
@@ -432,7 +542,7 @@
     </div>
   </section>
 
-  <!-- ABA 7: GESTÃO DE FROTA -->
+  <!-- ABA 7: GESTÃO DE FROTA COM PRÉVIA DE DOCUMENTOS -->
   <section id="tabFrota" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -443,7 +553,7 @@
             <th>Categoria</th>
             <th>Saldo</th>
             <th>Status</th>
-            <th>Documento</th>
+            <th>Documentos</th>
             <th>Ações</th>
           </tr>
         </thead>
@@ -502,18 +612,27 @@
     </div>
   </section>
 
-  <!-- MODAL DE VISUALIZAÇÃO DE DOCUMENTO -->
+  <!-- MODAL DE VISUALIZAÇÃO AMPLIADA (ZOOM) DE DOCUMENTOS -->
   <div id="modalPreviewFoto" class="modal-preview">
-    <img id="imgPreviewVeiculo" src="" alt="Documento do Veículo">
-    <button type="button" id="btnFecharModalPreview" style="position: absolute; top: 20px; right: 20px; background: #FFF; border: none; padding: 10px 16px; border-radius: 50%; font-weight: 800; cursor: pointer;">✕</button>
+    <div class="modal-preview-box">
+      <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h4 id="lblTituloDocModal" style="margin: 0; color: #FFF; font-size: 15px;">Documentação do Condutor</h4>
+        <button type="button" id="btnFecharModalPreview" style="background: rgba(255,255,255,0.15); border: none; color: #FFF; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; font-size: 14px;">✕</button>
+      </div>
+      <img id="imgPreviewVeiculo" src="" alt="Documento do Motorista">
+      <div style="margin-top: 14px; width: 100%; display: flex; gap: 10px; justify-content: flex-end;">
+        <button type="button" id="btnRecusarDocModal" class="btn-tbl rej" style="display: none;">Recusar Perfil</button>
+        <button type="button" id="btnAprovarDocModal" class="btn-tbl app" style="display: none;">Aprovar Perfil</button>
+      </div>
+    </div>
   </div>
 
-  <!-- SCRIPTS GLOBAIS (Carregados antes dos módulos ES6) -->
+  <!-- SCRIPTS GLOBAIS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 
-  <!-- MÓDULO PRINCIPAL DO ADMIN (Com versionamento de cache para evitar ler arquivos obsoletos) -->
-  <script type="module" src="./js/admin.js?v=5.0.1"></script>
+  <!-- MÓDULO PRINCIPAL DO ADMIN -->
+  <script type="module" src="./js/admin.js?v=6.0.0"></script>
 </body>
 </html>

@@ -4,6 +4,8 @@ import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-
 
 let chartFinanceiroInstance = null;
 let chartCategoriasInstance = null;
+let motoristaFocadoModalId = null;
+
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -16,32 +18,34 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // 1. REGISTRA AS ABAS E FORMULÁRIOS PRIMEIRO (Evita qualquer travamento na interface)
+  // 1. REGISTRA NAVEGAÇÃO, FORMULÁRIOS E MODAIS
   configurarNavegacaoAbas();
+  configurarFiltroPeriodo(token);
+  configurarFormZonasRisco(token);
   configurarFormCupons(token);
   configurarFormBroadcast(token);
   configurarFormTarifas(token);
-  configurarModalDocumentos();
+  configurarModalDocumentos(token);
 
-  // Botões do Topo
+  // Botões do Cabeçalho
   document.getElementById('btnSincronizar')?.addEventListener('click', () => sincronizarTudo(token));
-  document.getElementById('btnBaixarCSV')?.addEventListener('click', exportarRelatorioCSV);
+  document.getElementById('btnBaixarCSV')?.addEventListener('click', () => exportarRelatorioCSV(token));
 
-  // 2. INICIALIZAÇÃO SEGURA DO RADAR (Sem quebrar o restante se o Leaflet atrasar)
+  // 2. INICIALIZAÇÃO SEGURA DO RADAR
   try {
     inicializarRadarMaster(token);
   } catch (err) {
     console.warn('Radar inicializado em segundo plano:', err);
   }
 
-  // 3. CONECTA AO SOCKET.IO
+  // 3. CONECTA AO SOCKET.IO PARA ALERTAS EM TEMPO REAL
   try {
     conectarSocketAdmin();
   } catch (err) {
     console.warn('Socket indisponível:', err);
   }
 
-  // 4. CARREGAMENTO DOS DADOS (Assíncrono em segundo plano)
+  // 4. CARREGAMENTO INICIAL DOS DADOS
   sincronizarTudo(token);
 });
 
@@ -51,9 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
 async function sincronizarTudo(token) {
   if (!token) return;
 
-  // Usa allSettled para que o erro de uma tabela nunca impeça as outras de carregar
+  const periodoAtual = document.getElementById('selectFiltroPeriodo')?.value || 'total';
+
   await Promise.allSettled([
-    carregarMetricasECards(token),
+    carregarMetricasECards(token, periodoAtual),
+    carregarTabelaZonasRisco(token),
     carregarTabelaCupons(token),
     carregarTabelaSeguranca(token),
     carregarTabelaSaques(token),
@@ -63,22 +69,32 @@ async function sincronizarTudo(token) {
   ]);
 }
 
-// 1. Métricas e Gráficos
-async function carregarMetricasECards(token) {
+// 1. Filtro de Período Dinâmico
+function configurarFiltroPeriodo(token) {
+  const select = document.getElementById('selectFiltroPeriodo');
+  if (!select) return;
+
+  select.addEventListener('change', () => {
+    const periodo = select.value;
+    carregarMetricasECards(token, periodo);
+  });
+}
+
+// 2. Métricas e Gráficos Filtrados
+async function carregarMetricasECards(token, periodo = 'total') {
   try {
-    const res = await fetch(`${API_URL}/api/admin/metricas`, {
+    const res = await fetch(`${API_URL}/api/admin/metricas?periodo=${periodo}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) return;
     const m = await res.json();
 
     const faturamentoBruto = Number(m.faturamentoBruto || m.financeiro?.faturamento_total || 0);
-    const lucroLiquido = Number(m.receitaPlataforma || m.financeiro?.lucro_plataforma || (faturamentoBruto * 0.15));
+    const lucroLiquido = Number(m.lucroHuby || m.receitaPlataforma || m.financeiro?.lucro_plataforma || (faturamentoBruto * 0.15));
     const repasseMotoristas = Number(m.repasseMotoristas || m.financeiro?.total_pago_motoristas || (faturamentoBruto * 0.85));
-    const viagensConcluidas = Number(m.pedidos?.concluidos || m.viagens_concluidas || 0);
+    const viagensConcluidas = Number(m.viagensConcluidas || m.pedidos?.concluidos || 0);
     const incidentesAtivos = Number(m.incidentes_ativos || 0);
 
-    // Suporte flexível a ambos os padrões de IDs existentes no HTML
     const setTexto = (id1, id2, valor) => {
       const el = document.getElementById(id1) || document.getElementById(id2);
       if (el) el.textContent = valor;
@@ -131,7 +147,7 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
         labels: ['HUBy Carro', 'HUBy Moto', 'HUBy Entrega'],
         datasets: [{
           label: 'Viagens',
-          data: [categorias.carro || 1, categorias.moto || 0, categorias.entrega || 0],
+          data: [categorias.carro || 0, categorias.moto || 0, categorias.entrega || 0],
           backgroundColor: ['#10B981', '#F59E0B', '#A855F7'],
           borderRadius: 6
         }]
@@ -149,7 +165,77 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
   }
 }
 
-// 2. Cupons de Desconto
+// 3. Zonas de Risco / Restrição Noturna
+async function carregarTabelaZonasRisco(token) {
+  const tbody = document.getElementById('tabelaZonasBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/seguranca/zonas-risco`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Nenhuma área restrita cadastrada.</td></tr>';
+      return;
+    }
+    const zonas = await res.json();
+    if (!zonas.length) {
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Nenhuma zona de risco cadastrada.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = zonas.map(z => `
+      <tr>
+        <td>
+          <strong>${z.nome}</strong><br>
+          <small style="color:var(--muted);">${z.descricao || 'Área demarcada'}</small>
+        </td>
+        <td><span class="badge ${z.nivel_risco === 'alto' ? 'badge-recusado' : 'badge-pendente'}">${(z.nivel_risco || 'ALTO').toUpperCase()}</span></td>
+        <td>${z.raio_metros || 500}m</td>
+        <td><code style="color:var(--blue);">${z.horario_inicio || '20:00'} às ${z.horario_fim || '05:00'}</code></td>
+        <td>
+          <button class="btn-tbl rej" onclick="excluirZonaRisco(${z.id})">Remover</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--rose);">Erro ao consultar áreas de risco.</td></tr>';
+  }
+}
+
+function configurarFormZonasRisco(token) {
+  document.getElementById('formZonaRisco')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nome = document.getElementById('zonaNome').value.trim();
+    const nivel_risco = document.getElementById('zonaNivel').value;
+    const lat = parseFloat(document.getElementById('zonaLat').value);
+    const lng = parseFloat(document.getElementById('zonaLng').value);
+    const raio_metros = parseInt(document.getElementById('zonaRaio').value, 10) || 500;
+    const horario_inicio = document.getElementById('zonaHoraInicio').value || '20:00:00';
+    const horario_fim = document.getElementById('zonaHoraFim').value || '05:00:00';
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/seguranca/zonas-risco`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ nome, nivel_risco, lat, lng, raio_metros, horario_inicio, horario_fim })
+      });
+
+      if (res.ok) {
+        alert('Zona de risco delimitada com sucesso!');
+        e.target.reset();
+        carregarTabelaZonasRisco(token);
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(`Erro: ${d.erro || 'Falha ao registrar zona de risco'}`);
+      }
+    } catch (err) {
+      alert('Falha de conexão com o servidor.');
+    }
+  });
+}
+
+// 4. Cupons de Desconto
 async function carregarTabelaCupons(token) {
   const tbody = document.getElementById('tabelaCuponsBody');
   if (!tbody) return;
@@ -185,7 +271,7 @@ async function carregarTabelaCupons(token) {
   }
 }
 
-// 3. Incidentes e SOS
+// 5. Incidentes e SOS
 async function carregarTabelaSeguranca(token) {
   const tbody = document.getElementById('tabelaSegurancaBody');
   if (!tbody) return;
@@ -217,7 +303,7 @@ async function carregarTabelaSeguranca(token) {
   } catch (e) {}
 }
 
-// 4. Moderação de Saques Pix
+// 6. Moderação de Saques Pix
 async function carregarTabelaSaques(token) {
   const tbody = document.getElementById('tabelaSaquesBody');
   if (!tbody) return;
@@ -255,7 +341,7 @@ async function carregarTabelaSaques(token) {
   } catch (e) {}
 }
 
-// 5. Gestão de Frota e Documentos
+// 7. Gestão de Frota e Documentos com Visualização Ampliada
 async function carregarTabelaFrota(token) {
   const tbody = document.getElementById('tabelaFrotaBody');
   if (!tbody) return;
@@ -295,9 +381,11 @@ async function carregarTabelaFrota(token) {
           <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
           <td><span class="badge ${badgeStatus}">${statusLimpo.toUpperCase()}</span></td>
           <td>
-            ${m.doc_crlv_url ? `
-              <button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.doc_crlv_url}')">Ver CRLV</button>
-            ` : '<small style="color:var(--muted);">Sem doc</small>'}
+            <div style="display:flex; gap:4px; flex-wrap:wrap;">
+              ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.doc_crlv_url}', 'CRLV do Veículo - ${m.nome}', '${m.id}')">CRLV</button>` : ''}
+              ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.doc_cnh_url}', 'CNH - ${m.nome}', '${m.id}')">CNH</button>` : ''}
+              ${!m.doc_crlv_url && !m.doc_cnh_url ? '<small style="color:var(--muted);">Sem doc</small>' : ''}
+            </div>
           </td>
           <td>
             <div style="display:flex; gap:4px;">
@@ -317,7 +405,7 @@ async function carregarTabelaFrota(token) {
   } catch (e) {}
 }
 
-// 6. Monitor de Viagens em Tempo Real
+// 8. Monitor de Viagens em Tempo Real
 async function carregarTabelaViagens(token) {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
@@ -351,7 +439,7 @@ async function carregarTabelaViagens(token) {
   } catch (e) {}
 }
 
-// 7. Tarifas e Configurações
+// 9. Tarifas e Configurações
 async function carregarTarifasConfig(token) {
   try {
     const res = await fetch(`${API_URL}/api/config`);
@@ -366,7 +454,7 @@ async function carregarTarifasConfig(token) {
 }
 
 // ============================================================================
-// FORMULÁRIOS
+// FORMULÁRIOS E MODAIS
 // ============================================================================
 function configurarFormCupons(token) {
   document.getElementById('formNovoCupom')?.addEventListener('submit', async (e) => {
@@ -447,17 +535,43 @@ function configurarFormTarifas(token) {
   });
 }
 
-function configurarModalDocumentos() {
+function configurarModalDocumentos(token) {
   const modal = document.getElementById('modalPreviewFoto');
   const btnFechar = document.getElementById('btnFecharModalPreview');
+  const btnAprovar = document.getElementById('btnAprovarDocModal');
+  const btnRecusar = document.getElementById('btnRecusarDocModal');
 
-  window.abrirFotoDocumento = (url) => {
+  window.abrirFotoDocumento = (url, titulo = 'Documento do Condutor', motoristaId = null) => {
     const img = document.getElementById('imgPreviewVeiculo');
+    const lblTitulo = document.getElementById('lblTituloDocModal');
+
+    motoristaFocadoModalId = motoristaId;
+
     if (img && modal) {
       img.src = url;
+      if (lblTitulo) lblTitulo.textContent = titulo;
       modal.style.display = 'flex';
+
+      if (btnAprovar && btnRecusar) {
+        btnAprovar.style.display = motoristaId ? 'inline-block' : 'none';
+        btnRecusar.style.display = motoristaId ? 'inline-block' : 'none';
+      }
     }
   };
+
+  btnAprovar?.addEventListener('click', async () => {
+    if (motoristaFocadoModalId) {
+      await window.alterarStatusCondutor(motoristaFocadoModalId, 'aprovar');
+      if (modal) modal.style.display = 'none';
+    }
+  });
+
+  btnRecusar?.addEventListener('click', async () => {
+    if (motoristaFocadoModalId) {
+      await window.alterarStatusCondutor(motoristaFocadoModalId, 'recusar');
+      if (modal) modal.style.display = 'none';
+    }
+  });
 
   btnFechar?.addEventListener('click', () => {
     if (modal) modal.style.display = 'none';
@@ -467,7 +581,6 @@ function configurarModalDocumentos() {
   });
 }
 
-// SWITCH DE NAVEGAÇÃO ENTRE ABAS BLINDADO
 function configurarNavegacaoAbas() {
   const botoes = document.querySelectorAll('.tab-btn, [data-tab]');
   const paineis = document.querySelectorAll('.tab-pane, section[id^="tab"]');
@@ -490,7 +603,6 @@ function configurarNavegacaoAbas() {
         tabAlvo.classList.add('active');
         tabAlvo.style.display = 'block';
 
-        // Se clicou na aba do radar, recalcula o tamanho do mapa Leaflet
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
             window.dispatchEvent(new Event('resize'));
@@ -521,6 +633,23 @@ function conectarSocketAdmin() {
 // ============================================================================
 // AÇÕES INLINE GLOBAIS
 // ============================================================================
+window.excluirZonaRisco = async (id) => {
+  if (!confirm('Deseja realmente remover esta zona de risco?')) return;
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/seguranca/zonas-risco/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      alert('Zona de risco excluída com sucesso.');
+      carregarTabelaZonasRisco(token);
+    }
+  } catch (e) {
+    alert('Erro ao excluir área demarcada.');
+  }
+};
+
 window.alternarCupom = async (id) => {
   const token = localStorage.getItem('huby_token');
   try {
@@ -600,6 +729,7 @@ window.resolverIncidente = async (id) => {
   }
 };
 
-function exportarRelatorioCSV() {
-  window.open(`${API_URL}/api/admin/relatorios/corridas.csv`, '_blank');
+function exportarRelatorioCSV(token) {
+  const tokenUrl = token || localStorage.getItem('huby_token') || '';
+  window.open(`${API_URL}/api/admin/relatorios/corridas.csv?token=${encodeURIComponent(tokenUrl)}`, '_blank');
 }

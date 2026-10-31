@@ -21,40 +21,80 @@ function autenticarCsv(req, res, next) {
   return autenticarToken(req, res, next);
 }
 
+// Garante criação da tabela de zonas de risco no banco Neon
+async function inicializarTabelasAdmin() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS zonas_risco (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        descricao TEXT,
+        nivel_risco VARCHAR(20) DEFAULT 'alto',
+        raio_metros INT DEFAULT 500,
+        lat NUMERIC NOT NULL,
+        lng NUMERIC NOT NULL,
+        horario_inicio TIME DEFAULT '20:00:00',
+        horario_fim TIME DEFAULT '05:00:00',
+        ativo BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+  } catch (err) {
+    console.warn('Aviso ao sincronizar tabela de zonas de risco:', err.message);
+  }
+}
+inicializarTabelasAdmin();
+
 export default function adminRoutes(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. MÉTRICAS DA PLATAFORMA (SINCRONIZADAS COM O PAINEL MASTER)
+  // 1. MÉTRICAS DA PLATAFORMA COM FILTRO DE PERÍODO (HOJE, 7D, MÊS, TOTAL)
   // =========================================================================
   router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
+      const periodo = String(req.query.periodo || 'total').toLowerCase();
+
+      // Monta cláusula SQL dinâmica para filtragem temporal
+      let filtroPeriodo = sql``;
+      if (periodo === 'hoje') {
+        filtroPeriodo = sql`AND criado_em >= CURRENT_DATE`;
+      } else if (periodo === '7d') {
+        filtroPeriodo = sql`AND criado_em >= NOW() - INTERVAL '7 days'`;
+      } else if (periodo === 'mes') {
+        filtroPeriodo = sql`AND criado_em >= DATE_TRUNC('month', CURRENT_DATE)`;
+      }
+
+      // Faturamento e repasses com o filtro aplicado
       const statsFinanceiro = await sql`
         SELECT 
           COUNT(id) AS total_corridas_concluidas,
           COALESCE(SUM(valor_total), 0) AS faturamento_bruto
         FROM pedidos
-        WHERE status = 'concluido';
+        WHERE status = 'concluido' ${filtroPeriodo};
       `;
 
       const faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_bruto || 0);
       const receitaPlataforma = Number((faturamentoBruto * 0.15).toFixed(2));
       const repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
 
+      // Contadores de corridas e incidentes
       const statsUsuarios = await sql`
         SELECT 
           (SELECT COUNT(*) FROM motoristas WHERE status_aprovacao = 'aprovado') AS motoristas_ativos,
-          (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente') AS chamadas_em_aberto,
-          (SELECT COUNT(*) FROM pedidos WHERE status = 'concluido') AS chamadas_concluidas,
-          (SELECT COUNT(*) FROM pedidos WHERE status = 'cancelado') AS chamadas_canceladas,
+          (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente' ${filtroPeriodo}) AS chamadas_em_aberto,
+          (SELECT COUNT(*) FROM pedidos WHERE status = 'concluido' ${filtroPeriodo}) AS chamadas_concluidas,
+          (SELECT COUNT(*) FROM pedidos WHERE status = 'cancelado' ${filtroPeriodo}) AS chamadas_canceladas,
           (SELECT COUNT(*) FROM incidentes_seguranca WHERE resolvido = FALSE) AS incidentes_ativos;
       `;
 
+      // Distribuição por categoria (Carro, Moto, Entrega) no período
       const statsCategorias = await sql`
         SELECT 
           COALESCE(sub_tipo_id, tipo, 'carro') AS categoria,
           COUNT(id) AS total
         FROM pedidos
+        WHERE 1=1 ${filtroPeriodo}
         GROUP BY COALESCE(sub_tipo_id, tipo, 'carro');
       `;
 
@@ -62,18 +102,21 @@ export default function adminRoutes(io) {
       statsCategorias.forEach(c => {
         const cat = String(c.categoria).toLowerCase();
         if (cat.includes('moto')) distribuicao_categorias.moto = Number(c.total);
-        else if (cat.includes('entrega')) distribuicao_categorias.entrega = Number(c.total);
+        else if (cat.includes('entrega') || cat.includes('frete')) distribuicao_categorias.entrega = Number(c.total);
         else distribuicao_categorias.carro = Number(c.total);
       });
 
+      // Últimas chamadas dentro do intervalo selecionado
       const ultimasChamadas = await sql`
         SELECT id, status, tipo, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
         FROM pedidos
+        WHERE 1=1 ${filtroPeriodo}
         ORDER BY criado_em DESC
         LIMIT 20;
       `;
 
       res.json({
+        periodoSelecionado: periodo,
         financeiro: {
           faturamento_total: faturamentoBruto,
           lucro_plataforma: receitaPlataforma,
@@ -87,7 +130,6 @@ export default function adminRoutes(io) {
         motoristas: {
           total: Number(statsUsuarios[0]?.motoristas_ativos || 0)
         },
-        // Chaves diretas compatíveis com o frontend
         faturamentoBruto,
         receitaPlataforma,
         lucroHuby: receitaPlataforma,
@@ -98,21 +140,22 @@ export default function adminRoutes(io) {
         ultimasChamadas
       });
     } catch (err) {
-      console.error('Erro nas métricas admin:', err);
+      console.error('Erro nas métricas admin filtradas:', err);
       res.status(500).json({ erro: 'Falha ao extrair métricas do sistema.' });
     }
   });
 
   // =========================================================================
-  // 2. GESTÃO DE MOTORISTAS & FROTA
+  // 2. GESTÃO DE MOTORISTAS & FROTA (COM FOTO, CNH E CRLV PARA ZOOM)
   // =========================================================================
   router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const motoristas = await sql`
         SELECT id, nome, email, telefone, cnh_numero AS cnh, 
                categoria AS categoria_veiculo, veiculo_modelo, veiculo_placa,
-               doc_crlv_url, saldo_carteira, status_aprovacao, status_online,
-               avaliacao_media, criado_em
+               veiculo_cor, veiculo_ano, doc_cnh_url, doc_crlv_url, foto_perfil_url,
+               saldo_carteira, status_aprovacao, status_online,
+               avaliacao_media, total_corridas, criado_em
         FROM motoristas
         ORDER BY criado_em DESC;
       `;
@@ -350,7 +393,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. CENTRAL DE SEGURANÇA, SOS E ANTIFRAUDE
+  // 7. CENTRAL DE SEGURANÇA, SOS E ZONAS DE RISCO (NOVO)
   // =========================================================================
   router.get('/seguranca/incidentes', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -377,6 +420,62 @@ export default function adminRoutes(io) {
       res.json({ sucesso: true, mensagem: 'Incidente arquivado como resolvido.' });
     } catch (err) {
       res.status(500).json({ erro: 'Erro ao atualizar incidente.' });
+    }
+  });
+
+  // Zonas de risco / Restrição noturna
+  router.get('/seguranca/zonas-risco', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const zonas = await sql`
+        SELECT id, nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim, ativo, criado_em
+        FROM zonas_risco
+        ORDER BY criado_em DESC;
+      `;
+      res.json(zonas);
+    } catch (err) {
+      console.error('Erro ao listar zonas de risco:', err);
+      res.status(500).json({ erro: 'Falha ao listar áreas de risco.' });
+    }
+  });
+
+  router.post('/seguranca/zonas-risco', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const { nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim } = req.body;
+
+      if (!nome || !lat || !lng) {
+        return res.status(400).json({ erro: 'Nome e coordenadas geográficas são obrigatórios.' });
+      }
+
+      const novaZona = await sql`
+        INSERT INTO zonas_risco (nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim, ativo)
+        VALUES (
+          ${nome}, 
+          ${descricao || 'Área de atenção especial'}, 
+          ${nivel_risco || 'alto'}, 
+          ${Number(raio_metros) || 500}, 
+          ${Number(lat)}, 
+          ${Number(lng)}, 
+          ${horario_inicio || '20:00:00'}, 
+          ${horario_fim || '05:00:00'}, 
+          TRUE
+        )
+        RETURNING *;
+      `;
+
+      res.status(201).json({ sucesso: true, zona: novaZona[0] });
+    } catch (err) {
+      console.error('Erro ao criar zona de risco:', err);
+      res.status(500).json({ erro: 'Falha ao cadastrar zona de risco.' });
+    }
+  });
+
+  router.delete('/seguranca/zonas-risco/:id', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await sql`DELETE FROM zonas_risco WHERE id = ${id};`;
+      res.json({ sucesso: true, mensagem: 'Zona de risco removida com sucesso.' });
+    } catch (err) {
+      res.status(500).json({ erro: 'Erro ao excluir zona de risco.' });
     }
   });
 
