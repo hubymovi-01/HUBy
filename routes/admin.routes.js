@@ -12,11 +12,20 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
+// Suporte para autenticar via query parameter no download do CSV via navegador
+function autenticarCsv(req, res, next) {
+  const tokenUrl = req.query.token;
+  if (tokenUrl && !req.headers.authorization) {
+    req.headers.authorization = `Bearer ${tokenUrl}`;
+  }
+  return autenticarToken(req, res, next);
+}
+
 export default function adminRoutes(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. MÉTRICAS DA PLATAFORMA (BLINDADO)
+  // 1. MÉTRICAS DA PLATAFORMA (SINCRONIZADAS COM O PAINEL MASTER)
   // =========================================================================
   router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -37,8 +46,25 @@ export default function adminRoutes(io) {
           (SELECT COUNT(*) FROM motoristas WHERE status_aprovacao = 'aprovado') AS motoristas_ativos,
           (SELECT COUNT(*) FROM pedidos WHERE status = 'pendente') AS chamadas_em_aberto,
           (SELECT COUNT(*) FROM pedidos WHERE status = 'concluido') AS chamadas_concluidas,
-          (SELECT COUNT(*) FROM pedidos WHERE status = 'cancelado') AS chamadas_canceladas;
+          (SELECT COUNT(*) FROM pedidos WHERE status = 'cancelado') AS chamadas_canceladas,
+          (SELECT COUNT(*) FROM incidentes_seguranca WHERE resolvido = FALSE) AS incidentes_ativos;
       `;
+
+      const statsCategorias = await sql`
+        SELECT 
+          COALESCE(sub_tipo_id, tipo, 'carro') AS categoria,
+          COUNT(id) AS total
+        FROM pedidos
+        GROUP BY COALESCE(sub_tipo_id, tipo, 'carro');
+      `;
+
+      const distribuicao_categorias = { carro: 0, moto: 0, entrega: 0 };
+      statsCategorias.forEach(c => {
+        const cat = String(c.categoria).toLowerCase();
+        if (cat.includes('moto')) distribuicao_categorias.moto = Number(c.total);
+        else if (cat.includes('entrega')) distribuicao_categorias.entrega = Number(c.total);
+        else distribuicao_categorias.carro = Number(c.total);
+      });
 
       const ultimasChamadas = await sql`
         SELECT id, status, tipo, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
@@ -61,9 +87,14 @@ export default function adminRoutes(io) {
         motoristas: {
           total: Number(statsUsuarios[0]?.motoristas_ativos || 0)
         },
+        // Chaves diretas compatíveis com o frontend
         faturamentoBruto,
         receitaPlataforma,
+        lucroHuby: receitaPlataforma,
         repasseMotoristas,
+        viagensConcluidas: Number(statsUsuarios[0]?.chamadas_concluidas || 0),
+        incidentes_ativos: Number(statsUsuarios[0]?.incidentes_ativos || 0),
+        distribuicao_categorias,
         ultimasChamadas
       });
     } catch (err) {
@@ -246,7 +277,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. GESTÃO DE CUPONS DE DESCONTO & MARKETING (NOVO)
+  // 6. GESTÃO DE CUPONS DE DESCONTO & MARKETING
   // =========================================================================
   router.get('/cupons', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -319,7 +350,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. CENTRAL DE SEGURANÇA, SOS E ANTIFRAUDE (NOVO)
+  // 7. CENTRAL DE SEGURANÇA, SOS E ANTIFRAUDE
   // =========================================================================
   router.get('/seguranca/incidentes', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -350,7 +381,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 8. DISPARO DE NOTIFICAÇÕES GLOBAIS EM MASSA (BROADCAST) (NOVO)
+  // 8. DISPARO DE NOTIFICAÇÕES GLOBAIS EM MASSA (BROADCAST)
   // =========================================================================
   router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -367,8 +398,9 @@ export default function adminRoutes(io) {
         RETURNING *;
       `;
 
-      if (io) {
-        io.emit('alerta_broadcast_geral', {
+      const socketInstancia = req.io || io;
+      if (socketInstancia) {
+        socketInstancia.emit('alerta_broadcast_geral', {
           titulo,
           mensagem,
           publico: publicoDestino,
@@ -376,17 +408,17 @@ export default function adminRoutes(io) {
         });
       }
 
-      res.status(201).json({ sucesso: true, notificacao: novaNotificacao[0] });
+      return res.status(201).json({ sucesso: true, notificacao: novaNotificacao[0] });
     } catch (err) {
       console.error('Erro ao enviar broadcast:', err);
-      res.status(500).json({ erro: 'Falha ao enviar notificação global.' });
+      return res.status(500).json({ erro: 'Falha ao enviar notificação global.' });
     }
   });
 
   // =========================================================================
-  // 9. RELATÓRIO EXECUTIVO CSV
+  // 9. RELATÓRIO EXECUTIVO CSV (COM SUPORTE A TOKEN VIA URL)
   // =========================================================================
-  router.get('/relatorios/corridas.csv', autenticarToken, verificarAdmin, async (req, res) => {
+  router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
       const registros = await sql`
         SELECT id, criado_em, sub_tipo_label, distancia_km, valor_total,
