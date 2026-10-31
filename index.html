@@ -166,6 +166,7 @@
   </script>
 
   <div id="mapaCliente"></div>
+
   <!-- BARRA DE PESQUISA FLUTUANTE (PREMIUM) -->
   <div class="search-floating-wrapper" style="top: 80px;">
     <div class="search-glass-box">
@@ -224,7 +225,6 @@
         <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
             financeiro</small></div>
       </a>
-      <!-- Link Direto para a Página de Perfil -->
       <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
         <div class="d-info"><strong>Meu Perfil</strong><small>Editar foto e dados</small></div>
@@ -267,7 +267,7 @@
           class="cat-label">Entrega</span></button>
     </div>
 
-    <!-- FORMULÁRIO INTELIGENTE DE ENTREGA (Escondido por padrão) -->
+    <!-- FORMULÁRIO INTELIGENTE DE ENTREGA -->
     <div id="blocoDetalhesEntrega" style="display: none; margin-bottom: 16px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 14px;">
       <div style="font-size: 11px; color: #10B981; font-weight: 800; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">📋 Detalhes da Encomenda</div>
       
@@ -455,6 +455,8 @@
 
   <script type="module" src="./js/app-cliente.js?v=5.0.0"></script>
   <script type="module">
+    import { API_URL } from './js/config.js';
+
     // LÓGICA DO MODAL DE SEGURANÇA
     const modalSeg = document.getElementById('modalSeguranca');
     const btnMenuSeg = document.getElementById('menuItemSeguranca');
@@ -492,14 +494,16 @@
       const token = localStorage.getItem('huby_token');
       const role = localStorage.getItem('huby_user_role');
       const btnAdmin = document.getElementById('menuItemAdmin');
-      if (btnAdmin && token && role === 'admin') { btnAdmin.style.display = 'flex'; }
+      if (btnAdmin && token && (role === 'admin' || role === 'administrador')) {
+        btnAdmin.style.display = 'flex';
+      }
     }
 
     checarAdminInstantaneo();
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
 
     // =======================================================================
-    // PASSO 1: HISTÓRICO DE VIAGENS
+    // HISTÓRICO DE VIAGENS
     // =======================================================================
     document.getElementById('menuItemViagens')?.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -509,69 +513,64 @@
       const listaHist = document.getElementById('listaHistoricoCorridas');
       if (modalHist) modalHist.style.display = 'flex';
 
-      listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">A procurar viagens...</p>';
+      if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">A procurar viagens...</p>';
 
       try {
         const token = localStorage.getItem('huby_token');
-        const API_URL = 'https://huby.onrender.com';
-
         const resp = await fetch(`${API_URL}/api/pedidos/historico`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        const viagens = await resp.json();
-
-        if (viagens.length === 0) {
-          listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">Nenhuma viagem encontrada.</p>';
+        if (!resp.ok) {
+          if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">Nenhuma viagem encontrada.</p>';
           return;
         }
 
-        listaHist.innerHTML = viagens.map(v => `
-          <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-              <span style="font-size: 12px; color: #94A3B8; font-weight: 700;">${new Date(v.criado_em).toLocaleDateString('pt-BR')}</span>
-              <span style="font-size: 14px; color: #10B981; font-weight: 900;">R$ ${Number(v.valor_total || 0).toFixed(2)}</span>
+        const data = await resp.json();
+        const viagens = Array.isArray(data) ? data : (data.viagens || data.pedidos || []);
+
+        if (viagens.length === 0) {
+          if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">Nenhuma viagem encontrada.</p>';
+          return;
+        }
+
+        if (listaHist) {
+          listaHist.innerHTML = viagens.map(v => `
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span style="font-size: 12px; color: #94A3B8; font-weight: 700;">${new Date(v.criado_em || Date.now()).toLocaleDateString('pt-BR')}</span>
+                <span style="font-size: 14px; color: #10B981; font-weight: 900;">R$ ${Number(v.valor_total || 0).toFixed(2).replace('.', ',')}</span>
+              </div>
+              <div style="font-size: 13px; color: #FFF; margin-bottom: 6px;"><strong>📍 De:</strong> ${v.origem_endereco || 'Local não registado'}</div>
+              <div style="font-size: 13px; color: #FFF; margin-bottom: 10px;"><strong>🏁 Para:</strong> ${v.destino_endereco || 'Local não registado'}</div>
+              <div style="font-size: 11px; color: #38BDF8; font-weight: 800; text-transform: uppercase;">Status: ${v.status}</div>
             </div>
-            <div style="font-size: 13px; color: #FFF; margin-bottom: 6px;"><strong>📍 De:</strong> ${v.origem_endereco || 'Local não registado'}</div>
-            <div style="font-size: 13px; color: #FFF; margin-bottom: 10px;"><strong>🏁 Para:</strong> ${v.destino_endereco || 'Local não registado'}</div>
-            <div style="font-size: 11px; color: #38BDF8; font-weight: 800; text-transform: uppercase;">Status: ${v.status}</div>
-          </div>
-        `).join('');
+          `).join('');
+        }
 
       } catch (err) {
-        listaHist.innerHTML = '<p style="text-align:center; color:#EF4444; padding: 20px;">Erro de rede ao carregar histórico.</p>';
+        if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#EF4444; padding: 20px;">Erro de conexão ao carregar histórico.</p>';
       }
     });
 
     document.getElementById('btnFecharHistorico')?.addEventListener('click', () => {
-      document.getElementById('modalHistorico').style.display = 'none';
+      const modalHist = document.getElementById('modalHistorico');
+      if (modalHist) modalHist.style.display = 'none';
     });
 
     // =======================================================================
-    // PASSO 2: MOVIMENTAÇÃO SUAVE NO MAPA
-    // =======================================================================
-    const styleS = document.createElement('style');
-    styleS.innerHTML = `
-      .leaflet-marker-icon {
-        transition: transform 1s linear !important;
-      }
-    `;
-    document.head.appendChild(styleS);
-
-    // =======================================================================
-    // PASSO 3: LÓGICA DO MODAL DE AVALIAÇÕES 
+    // AVALIAÇÃO DE VIAGEM
     // =======================================================================
     let notaSelecionada = 5;
-
     const estrelas = document.querySelectorAll('#estrelasRating span');
     estrelas.forEach(estrela => {
       estrela.style.color = '#F59E0B';
       estrela.style.cursor = 'pointer';
 
       estrela.addEventListener('click', (e) => {
-        notaSelecionada = parseInt(e.target.getAttribute('data-val'));
+        notaSelecionada = parseInt(e.target.getAttribute('data-val'), 10);
         estrelas.forEach(s => {
-          const val = parseInt(s.getAttribute('data-val'));
+          const val = parseInt(s.getAttribute('data-val'), 10);
           s.style.color = val <= notaSelecionada ? '#F59E0B' : '#475569';
         });
       });
@@ -581,19 +580,20 @@
       const pedidoFinalizadoId = localStorage.getItem('huby_ultima_corrida_id');
       if (!pedidoFinalizadoId) {
         alert('Nenhuma corrida recente para avaliar.');
-        document.getElementById('modalAvaliacao').style.display = 'none';
+        const modalAv = document.getElementById('modalAvaliacao');
+        if (modalAv) modalAv.style.display = 'none';
         return;
       }
 
-      const comentario = document.getElementById('txtComentarioAvaliacao').value;
+      const comentario = document.getElementById('txtComentarioAvaliacao')?.value || '';
       const btn = document.getElementById('btnEnviarAvaliacao');
-      btn.textContent = 'A enviar...';
-      btn.disabled = true;
+      if (btn) {
+        btn.textContent = 'A enviar...';
+        btn.disabled = true;
+      }
 
       try {
         const token = localStorage.getItem('huby_token');
-        const API_URL = 'https://huby.onrender.com';
-
         const resp = await fetch(`${API_URL}/api/pedidos/${pedidoFinalizadoId}/avaliar`, {
           method: 'POST',
           headers: {
@@ -605,27 +605,31 @@
 
         if (resp.ok) {
           alert('Obrigado! A sua avaliação ajuda a manter a qualidade HUBy.');
-          document.getElementById('modalAvaliacao').style.display = 'none';
+          const modalAv = document.getElementById('modalAvaliacao');
+          if (modalAv) modalAv.style.display = 'none';
           localStorage.removeItem('huby_ultima_corrida_id');
         } else {
-          const erro = await resp.json();
-          alert('Aviso: ' + erro.erro);
+          const erro = await resp.json().catch(() => ({}));
+          alert('Aviso: ' + (erro.erro || 'Falha ao registrar avaliação'));
         }
       } catch (err) {
         console.error('Erro ao avaliar:', err);
       } finally {
-        btn.textContent = 'Enviar';
-        btn.disabled = false;
+        if (btn) {
+          btn.textContent = 'Enviar';
+          btn.disabled = false;
+        }
       }
     });
 
     document.getElementById('btnPularAvaliacao')?.addEventListener('click', () => {
-      document.getElementById('modalAvaliacao').style.display = 'none';
+      const modalAv = document.getElementById('modalAvaliacao');
+      if (modalAv) modalAv.style.display = 'none';
       localStorage.removeItem('huby_ultima_corrida_id');
     });
 
     // =======================================================================
-    // PASSO 4: ATUALIZAR FOTO E NOME NO MENU LATERAL
+    // ATUALIZAR DADOS DO PERFIL NO MENU
     // =======================================================================
     function atualizarMenuLateral() {
       const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
@@ -634,7 +638,6 @@
 
       if (drawerBox) {
         let avatarHTML = '';
-
         if (fotoLocal && fotoLocal !== 'null' && fotoLocal !== 'undefined') {
           avatarHTML = `<img src="${fotoLocal}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981; box-shadow: 0 4px 12px rgba(0,0,0,0.4);" alt="Avatar" />`;
         } else {
