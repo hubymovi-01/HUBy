@@ -64,7 +64,7 @@ export function inicializarRadarMaster(token) {
         }
       });
     } catch (e) {
-      console.warn('Erro ao configurar Leaflet:', e);
+      console.warn('Erro ao montar mapa Leaflet:', e);
     }
   }
 
@@ -100,7 +100,7 @@ export async function carregarZonasDinamicas(token) {
       camadasZonas.push(circulo);
     });
   } catch (err) {
-    console.warn('Erro ao carregar zonas:', err);
+    console.warn('Falha ao carregar zonas:', err);
   }
 }
 
