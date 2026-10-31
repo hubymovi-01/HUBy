@@ -5,11 +5,14 @@ import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
 import { carregarGanhosHoje } from './motorista-ganhos.js';
 import { carregarPerfilCompleto } from './motorista-perfil.js';
 import { fecharChat } from './motorista-chat.js';
+import { abrirWidgetFlutuantePiP, fecharWidgetFlutuantePiP } from './motorista-utilidades.js';
+import { iniciarContadorEspera, pararContadorEspera, formatarTempo } from './motorista-espera.js';
 
-// Utilitário para limpar strings de coordenadas no texto do card
+let chegouAoPontoEmbarque = false;
+let taxaEsperaAcumulada = 0;
+
 function formatarTextoLocal(texto, fallbackPadrao = 'Local Marcado') {
   if (!texto) return fallbackPadrao;
-  // Se for algo como "Destino no mapa (-8.3516, -42.2617)" ou "Partida (...)"
   if (texto.includes('(') && texto.includes(')')) {
     const parteAntes = texto.split('(')[0].trim();
     if (parteAntes.length > 2) return parteAntes;
@@ -18,7 +21,6 @@ function formatarTextoLocal(texto, fallbackPadrao = 'Local Marcado') {
   return texto;
 }
 
-// Toast nativo animado no topo (sem bloquear o browser)
 function exibirToastConclusao(valorRepasse) {
   const toastExistente = document.getElementById('hubyToastConclusao');
   if (toastExistente) toastExistente.remove();
@@ -40,7 +42,6 @@ function exibirToastConclusao(valorRepasse) {
     display: flex;
     align-items: center;
     gap: 12px;
-    font-family: inherit;
     opacity: 0;
     transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   `;
@@ -56,17 +57,13 @@ function exibirToastConclusao(valorRepasse) {
   `;
 
   document.body.appendChild(toast);
-
-  // Animação de entrada
   setTimeout(() => {
     toast.style.opacity = '1';
     toast.style.transform = 'translateX(-50%) translateY(0)';
   }, 50);
 
-  // Vibração suave se suportado
   if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
 
-  // Remove após 3.5 segundos
   setTimeout(() => {
     toast.style.opacity = '0';
     toast.style.transform = 'translateX(-50%) translateY(-20px)';
@@ -164,6 +161,9 @@ async function efetivarAceiteChamada(dados) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.erro || 'Não foi possível aceitar a chamada.');
 
+    chegouAoPontoEmbarque = false;
+    taxaEsperaAcumulada = 0;
+
     estado.pedidoAceitoAtual = data.pedido || {};
     estado.pedidoAceitoAtual.coordsOrigem = dados.coordsOrig;
     estado.pedidoAceitoAtual.coordsDestino = dados.coordsDest;
@@ -173,7 +173,8 @@ async function efetivarAceiteChamada(dados) {
     estado.pedidoAceitoAtual.destino_lng = dados.coordsDest ? dados.coordsDest[1] : null;
     estado.pedidoAceitoAtual.origem_endereco = dados.origem;
     estado.pedidoAceitoAtual.destino_endereco = dados.destino;
-    estado.pedidoAceitoAtual.valor_total = dados.preco;
+    estado.pedidoAceitoAtual.valor_base = Number(dados.preco);
+    estado.pedidoAceitoAtual.valor_total = Number(dados.preco);
     estado.pedidoAceitoAtual.distancia_km = dados.dist;
     estado.pedidoAceitoAtual.duracao_min = dados.dur;
 
@@ -210,7 +211,6 @@ export function renderizarCardEtapa() {
 
   const estaACaminho = (estado.etapaCorridaAtual === 'a_caminho');
 
-  // Coordenadas para rota externa
   const coordsAlvo = estaACaminho 
     ? (estado.pedidoAceitoAtual.coordsOrigem || [estado.pedidoAceitoAtual.origem_lat, estado.pedidoAceitoAtual.origem_lng])
     : (estado.pedidoAceitoAtual.coordsDestino || [estado.pedidoAceitoAtual.destino_lat, estado.pedidoAceitoAtual.destino_lng]);
@@ -229,17 +229,31 @@ export function renderizarCardEtapa() {
   const origemLimpa = formatarTextoLocal(estado.pedidoAceitoAtual.origem_endereco, 'Local de Embarque');
   const destinoLimpo = formatarTextoLocal(estado.pedidoAceitoAtual.destino_endereco, 'Destino Final');
 
+  const valorExibicao = (Number(estado.pedidoAceitoAtual.valor_base || estado.pedidoAceitoAtual.valor_total) + taxaEsperaAcumulada);
+
   feed.innerHTML = `
-    <div class="order-card" style="border-color: ${estaACaminho ? '#38BDF8' : '#10B981'};">
+    <div class="order-card" style="border-color: ${estaACaminho ? (chegouAoPontoEmbarque ? '#F59E0B' : '#38BDF8') : '#10B981'};">
       <div class="order-card-header">
-        <span class="order-badge" style="background: ${estaACaminho ? 'rgba(56,189,248,0.2)' : 'rgba(16,185,129,0.2)'}; color: ${estaACaminho ? '#38BDF8' : '#10B981'};">
-          ${estaACaminho ? 'A CAMINHO DO CLIENTE' : 'EM CORRIDA'}
+        <span class="order-badge" style="background: ${estaACaminho ? (chegouAoPontoEmbarque ? 'rgba(245,158,11,0.2)' : 'rgba(56,189,248,0.2)') : 'rgba(16,185,129,0.2)'}; color: ${estaACaminho ? (chegouAoPontoEmbarque ? '#F59E0B' : '#38BDF8') : '#10B981'};">
+          ${estaACaminho ? (chegouAoPontoEmbarque ? 'AGUARDANDO PASSAGEIRO' : 'A CAMINHO DO CLIENTE') : 'EM CORRIDA'}
         </span>
-        <span class="order-price">R$ ${Number(estado.pedidoAceitoAtual.valor_total).toFixed(2).replace('.', ',')}</span>
+        <span class="order-price" id="lblPrecoCorridaCard">R$ ${valorExibicao.toFixed(2).replace('.', ',')}</span>
       </div>
+
+      <!-- PAINEL DE CRONÔMETRO DE ESPERA -->
+      <div id="painelEsperaEmbarque" style="display: ${chegouAoPontoEmbarque && estaACaminho ? 'block' : 'none'}; background: rgba(245, 158, 11, 0.1); border: 1px dashed #F59E0B; border-radius: 8px; padding: 10px; margin: 8px 0; text-align: center;">
+        <span style="font-size: 11px; color: #F59E0B; font-weight: 800; display: block;">⏱️ CRONÔMETRO NO LOCAL DE EMBARQUE</span>
+        <div id="txtTempoEsperaStatus" style="font-size: 15px; font-weight: 900; color: #FFF; margin-top: 3px;">
+          Cortesia: 03:00 restantes
+        </div>
+        <small id="txtTaxaEsperaAdicional" style="color: #94A3B8; font-size: 11px; display: block; margin-top: 2px;">
+          Taxa de espera: R$ 0,00 (+R$ 0,40/min após cortesia)
+        </small>
+      </div>
+
       <div class="order-route">
         <span style="display: block; color: ${estaACaminho ? '#38BDF8' : '#10B981'}; font-weight: 800; font-size: 14px; margin-bottom: 4px;" id="lblTempoPassageiro">
-          ${estaACaminho ? '📍 A caminho do local de embarque...' : '🏁 A caminho do destino final!'}
+          ${estaACaminho ? (chegouAoPontoEmbarque ? '📍 No ponto de embarque' : '📍 A caminho do local de embarque...') : '🏁 A caminho do destino final!'}
         </span>
         <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
           <strong>Recolha:</strong> ${origemLimpa}
@@ -247,28 +261,31 @@ export function renderizarCardEtapa() {
         <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
           <strong>Destino:</strong> ${destinoLimpo}
         </span>
-        <small style="color: #94A3B8; font-weight: 600; display: block; margin-top: 4px;">
-          ⏱️ Viagem: ~${estado.pedidoAceitoAtual.duracao_min || 5} min • ${estado.pedidoAceitoAtual.distancia_km} km
-        </small>
       </div>
 
-      <!-- BOTÕES DE NAVEGAÇÃO EXTERNA (GOOGLE MAPS E WAZE) -->
+      <!-- BOTÕES DE NAVEGAÇÃO EXTERNA COM PiP AUTOMÁTICO -->
       <div style="display: flex; gap: 8px; margin-top: 10px;">
-        <a href="${linkGoogleMaps}" target="_blank" rel="noopener noreferrer" 
+        <a href="${linkGoogleMaps}" target="_blank" rel="noopener noreferrer" id="btnNavegarGoogle"
           style="flex: 1; text-decoration: none; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38BDF8; border-radius: 8px; padding: 9px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 5px;">
           🗺️ Google Maps
         </a>
-        <a href="${linkWaze}" target="_blank" rel="noopener noreferrer" 
+        <a href="${linkWaze}" target="_blank" rel="noopener noreferrer" id="btnNavegarWaze"
           style="flex: 1; text-decoration: none; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10B981; border-radius: 8px; padding: 9px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 5px;">
           🚗 Waze
         </a>
       </div>
 
-      <!-- BOTÃO PRINCIPAL DE AÇÃO -->
-      <div style="margin-top: 10px;">
+      <!-- BOTÕES DE ETAPA -->
+      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+        ${estaACaminho && !chegouAoPontoEmbarque ? `
+          <button type="button" id="btnChegueiLocal" style="width: 100%; background: #F59E0B; color: #000; border: none; border-radius: 10px; padding: 13px; font-weight: 900; font-size: 14px; cursor: pointer;">
+            📍 Cheguei ao Ponto de Embarque
+          </button>
+        ` : ''}
+
         ${estaACaminho ? `
           <button type="button" id="btnIniciarViagemUnico" style="width: 100%; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 14px; cursor: pointer;">
-            📍 Iniciar Viagem (Passageiro a Bordo)
+            ▶ Iniciar Viagem (Passageiro a Bordo)
           </button>
         ` : `
           <button type="button" id="btnConcluirViagemUnico" style="width: 100%; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 14px; cursor: pointer;">
@@ -277,10 +294,9 @@ export function renderizarCardEtapa() {
         `}
       </div>
 
-      <!-- BOTÃO ÚLTIMA VIAGEM -->
       <div style="margin-top: 8px;">
         <button type="button" id="btnToggleUltimaViagem" style="width: 100%; background: ${estado.modoUltimaViagem ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${estado.modoUltimaViagem ? '#F59E0B' : 'rgba(255,255,255,0.08)'}; color: ${estado.modoUltimaViagem ? '#F59E0B' : 'var(--text-sec)'}; padding: 8px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer;">
-          ${estado.modoUltimaViagem ? '🛑 Última Viagem Ativa (Ficará Offline ao terminar)' : '☕ Parar de receber chamadas após esta viagem'}
+          ${estado.modoUltimaViagem ? '🛑 Última Viagem Ativa' : '☕ Parar após esta viagem'}
         </button>
       </div>
 
@@ -295,7 +311,40 @@ export function renderizarCardEtapa() {
     </div>
   `;
 
-  // Listener da Última Viagem
+  // Listener para PiP ao abrir navegação externa
+  const acionarPiP = () => {
+    const textoDest = estaACaminho ? 'Indo ao passageiro' : 'Indo ao destino final';
+    const precoTxt = `R$ ${valorExibicao.toFixed(2).replace('.', ',')}`;
+    abrirWidgetFlutuantePiP(textoDest, precoTxt, () => window.focus());
+  };
+  document.getElementById('btnNavegarGoogle')?.addEventListener('click', acionarPiP);
+  document.getElementById('btnNavegarWaze')?.addEventListener('click', acionarPiP);
+
+  // Listener "Cheguei ao Ponto de Embarque"
+  document.getElementById('btnChegueiLocal')?.addEventListener('click', () => {
+    chegouAoPontoEmbarque = true;
+    renderizarCardEtapa();
+
+    iniciarContadorEspera((info) => {
+      const txtStatus = document.getElementById('txtTempoEsperaStatus');
+      const txtTaxa = document.getElementById('txtTaxaEsperaAdicional');
+      const lblPreco = document.getElementById('lblPrecoCorridaCard');
+
+      taxaEsperaAcumulada = info.taxaAdicional;
+      const novoTotal = (Number(estado.pedidoAceitoAtual.valor_base) + taxaEsperaAcumulada);
+      estado.pedidoAceitoAtual.valor_total = novoTotal;
+
+      if (lblPreco) lblPreco.textContent = `R$ ${novoTotal.toFixed(2).replace('.', ',')}`;
+
+      if (info.emCortesia) {
+        if (txtStatus) txtStatus.textContent = `Cortesia: ${formatarTempo(info.segundosRestantesCortesia)} restantes`;
+      } else {
+        if (txtStatus) txtStatus.innerHTML = `<span style="color:#EF4444;">Aguardando: +${formatarTempo(info.segundosPassados - 180)}</span>`;
+        if (txtTaxa) txtTaxa.innerHTML = `Taxa extra: <strong style="color:#FFF;">+ R$ ${info.taxaAdicional.toFixed(2).replace('.', ',')}</strong>`;
+      }
+    });
+  });
+
   document.getElementById('btnToggleUltimaViagem')?.addEventListener('click', () => {
     estado.modoUltimaViagem = !estado.modoUltimaViagem;
     renderizarCardEtapa();
@@ -305,44 +354,37 @@ export function renderizarCardEtapa() {
 
   if (estaACaminho) {
     document.getElementById('btnIniciarViagemUnico')?.addEventListener('click', async () => {
+      pararContadorEspera();
+      fecharWidgetFlutuantePiP();
       estado.etapaCorridaAtual = 'em_viagem';
 
-      // 1. Extração segura das coordenadas de Destino
       let destCoords = estado.pedidoAceitoAtual.coordsDestino;
       if (!destCoords || !Array.isArray(destCoords)) {
         const dLat = parseFloat(estado.pedidoAceitoAtual.destino_lat || estado.pedidoAceitoAtual.destinoLat);
         const dLng = parseFloat(estado.pedidoAceitoAtual.destino_lng || estado.pedidoAceitoAtual.destinoLng);
-        if (!isNaN(dLat) && !isNaN(dLng)) {
-          destCoords = [dLat, dLng];
-          estado.pedidoAceitoAtual.coordsDestino = destCoords;
-        }
+        if (!isNaN(dLat) && !isNaN(dLng)) destCoords = [dLat, dLng];
       }
 
-      // 2. Ponto de partida (GPS atual ou origem)
       let origCoords = estado.hubyMapa?.coordsOrigem;
       if (!origCoords || !Array.isArray(origCoords)) {
         origCoords = estado.pedidoAceitoAtual.coordsOrigem;
         if (!origCoords || !Array.isArray(origCoords)) {
           const oLat = parseFloat(estado.pedidoAceitoAtual.origem_lat || estado.pedidoAceitoAtual.origemLat);
           const oLng = parseFloat(estado.pedidoAceitoAtual.origem_lng || estado.pedidoAceitoAtual.origemLng);
-          if (!isNaN(oLat) && !isNaN(oLng)) {
-            origCoords = [oLat, oLng];
-          }
+          if (!isNaN(oLat) && !isNaN(oLng)) origCoords = [oLat, oLng];
         }
       }
 
-      // 3. Limpeza da camada anterior
       if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
         estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
         estado.hubyMapa.rotaLayer = null;
       }
 
-      // 4. Traçado da nova rota em verde
       if (origCoords && destCoords && estado.hubyMapa) {
         try {
           await estado.hubyMapa.calcularRota(origCoords, destCoords, '#10B981');
         } catch (err) {
-          console.warn('Erro ao traçar rota até o destino final:', err);
+          console.warn('Erro ao traçar rota:', err);
         }
       }
 
@@ -357,20 +399,26 @@ export async function concluirCorridaAtual() {
   if (!estado.pedidoAceitoAtual) return;
   const token = localStorage.getItem('huby_token');
 
+  fecharWidgetFlutuantePiP();
+  pararContadorEspera();
+
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/concluir`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
-      }
+      },
+      body: JSON.stringify({
+        taxa_espera: taxaEsperaAcumulada,
+        valor_final: estado.pedidoAceitoAtual.valor_total
+      })
     });
 
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.erro || 'Falha ao liquidar corrida.');
 
-    // Notificação elegante sem travar a tela
-    exibirToastConclusao(data.repasseLiquido || 0);
+    exibirToastConclusao(data.repasseLiquido || (estado.pedidoAceitoAtual.valor_total * 0.85));
 
     limparAtendimento();
     await carregarPerfilCompleto();
@@ -386,7 +434,10 @@ export async function concluirCorridaAtual() {
 
 export async function cancelarCorridaAtual() {
   if (!estado.pedidoAceitoAtual) return;
-  if (!confirm('Tem certeza de que deseja cancelar este atendimento?')) return;
+  if (!confirm('Deseja realmente cancelar este atendimento?')) return;
+
+  fecharWidgetFlutuantePiP();
+  pararContadorEspera();
 
   const token = localStorage.getItem('huby_token');
   try {
@@ -406,6 +457,11 @@ export async function cancelarCorridaAtual() {
 }
 
 export function limparAtendimento() {
+  fecharWidgetFlutuantePiP();
+  pararContadorEspera();
+  chegouAoPontoEmbarque = false;
+  taxaEsperaAcumulada = 0;
+
   if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
     estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
     estado.hubyMapa.rotaLayer = null;

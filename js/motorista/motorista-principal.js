@@ -4,7 +4,7 @@ import { HubyMapa } from '../mapa.js';
 import { carregarPerfilCompleto } from './motorista-perfil.js';
 import { carregarGanhosHoje } from './motorista-ganhos.js';
 import { alternarStatusOnline, iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
-import { ativarWakeLock, liberarWakeLock } from './motorista-utilidades.js';
+import { ativarWakeLock, liberarWakeLock, inicializarMonitorConexao } from './motorista-utilidades.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
@@ -17,7 +17,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Inicializa o mapa base na vista do motorista
+  // 1. Inicializa o monitor de rede offline/online
+  inicializarMonitorConexao();
+
+  // 2. Inicializa o mapa base na vista do motorista
   try {
     estado.hubyMapa = new HubyMapa('mapaMotoristaContainer');
     estado.hubyMapa.inicializar();
@@ -25,14 +28,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('Erro ao inicializar mapa do motorista:', err);
   }
 
-  // 2. Carrega informações de perfil e histórico de ganhos de hoje
+  // 3. Carrega informações de perfil e histórico de ganhos de hoje
   await carregarPerfilCompleto();
   await carregarGanhosHoje();
 
-  // 3. Configura os listeners dos botões principais
+  // 4. Configura os listeners dos botões principais
   configurarBotoesAcao();
 
-  // 4. Se já estava marcado como online anteriormente, restaura o estado e o Wake Lock
+  // 5. Se já estava marcado como online anteriormente, restaura o estado e o Wake Lock
   const statusSalvo = localStorage.getItem('huby_motorista_online') === 'true';
   if (statusSalvo) {
     ativarEstadoOnlineVisual(true);
