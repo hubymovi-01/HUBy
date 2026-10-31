@@ -63,15 +63,18 @@ async function carregarMetricasECards(token) {
     if (!res.ok) return;
     const m = await res.json();
 
-    const faturamentoBruto = Number(m.faturamento_bruto || (m.receita_huby_hoje ? m.receita_huby_hoje / 0.15 : 0));
-    const lucroLiquido = Number(m.receita_huby_hoje || (faturamentoBruto * 0.15));
-    const repasseMotoristas = Math.max(0, faturamentoBruto - lucroLiquido);
+    // Compatibilidade com a estrutura do routes/admin.routes.js
+    const faturamentoBruto = Number(m.faturamentoBruto || m.financeiro?.faturamento_total || 0);
+    const lucroLiquido = Number(m.receitaPlataforma || m.financeiro?.lucro_plataforma || (faturamentoBruto * 0.15));
+    const repasseMotoristas = Number(m.repasseMotoristas || m.financeiro?.total_pago_motoristas || (faturamentoBruto * 0.85));
+    const viagensConcluidas = Number(m.pedidos?.concluidos || m.viagens_concluidas || 0);
+    const incidentesAtivos = Number(m.incidentes_ativos || 0);
 
     document.getElementById('metricBruto').textContent = `R$ ${faturamentoBruto.toFixed(2).replace('.', ',')}`;
     document.getElementById('metricLiquido').textContent = `R$ ${lucroLiquido.toFixed(2).replace('.', ',')}`;
     document.getElementById('metricRepasse').textContent = `R$ ${repasseMotoristas.toFixed(2).replace('.', ',')}`;
-    document.getElementById('metricConcluidas').textContent = m.viagens_concluidas || m.corridas_ativas || 0;
-    document.getElementById('metricAlertas').textContent = m.incidentes_ativos || 0;
+    document.getElementById('metricConcluidas').textContent = viagensConcluidas;
+    document.getElementById('metricAlertas').textContent = incidentesAtivos;
 
     renderizarGraficos(faturamentoBruto, lucroLiquido, repasseMotoristas, m.distribuicao_categorias || {});
   } catch (err) {
@@ -88,7 +91,7 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
       data: {
         labels: ['Repasse Condutores (85%)', 'Taxa HUBy (15%)'],
         datasets: [{
-          data: [repasse || 85, lucro || 15],
+          data: [repasse > 0 ? repasse : 85, lucro > 0 ? lucro : 15],
           backgroundColor: ['#F59E0B', '#38BDF8'],
           borderWidth: 0
         }]
@@ -110,7 +113,7 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
         labels: ['HUBy Carro', 'HUBy Moto', 'HUBy Entrega'],
         datasets: [{
           label: 'Viagens',
-          data: [categorias.carro || 12, categorias.moto || 8, categorias.entrega || 4],
+          data: [categorias.carro || 1, categorias.moto || 0, categorias.entrega || 0],
           backgroundColor: ['#10B981', '#F59E0B', '#A855F7'],
           borderRadius: 6
         }]
@@ -164,13 +167,13 @@ async function carregarTabelaCupons(token) {
   }
 }
 
-// 3. Incidentes e SOS
+// 3. Incidentes e SOS (Rota ajustada para /seguranca/incidentes)
 async function carregarTabelaSeguranca(token) {
   const tbody = document.getElementById('tabelaSegurancaBody');
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/incidentes`, {
+    const res = await fetch(`${API_URL}/api/admin/seguranca/incidentes`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) return;
@@ -184,8 +187,8 @@ async function carregarTabelaSeguranca(token) {
     tbody.innerHTML = incidentes.map(i => `
       <tr>
         <td>#${String(i.id).slice(-4)}</td>
-        <td><span class="badge ${i.tipo === 'sos' ? 'badge-sos' : 'badge-pendente'}">${i.tipo.toUpperCase()}</span></td>
-        <td>${i.descricao || 'Alerta disparado na corrida'}</td>
+        <td><span class="badge ${i.tipo_alerta === 'sos' ? 'badge-sos' : 'badge-pendente'}">${(i.tipo_alerta || 'ALERTA').toUpperCase()}</span></td>
+        <td>${i.descricao || 'Alerta reportado'}</td>
         <td>${new Date(i.criado_em).toLocaleString('pt-BR')}</td>
         <td><span class="badge ${i.resolvido ? 'badge-concluido' : 'badge-pendente'}">${i.resolvido ? 'Resolvido' : 'Pendente'}</span></td>
         <td>
@@ -218,7 +221,7 @@ async function carregarTabelaSaques(token) {
       return `
         <tr>
           <td>#${s.id}</td>
-          <td><strong>${s.motorista_nome || 'Condutor'}</strong><br><small style="color:var(--muted);">${s.motorista_telefone || ''}</small></td>
+          <td><strong>${s.motorista_nome || 'Condutor'}</strong></td>
           <td><code>${s.chave_pix}</code> (${s.tipo_chave})</td>
           <td style="font-weight: 800; color: #FFF;">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</td>
           <td><span class="badge ${badgeClass}">${s.status.toUpperCase()}</span></td>
@@ -252,11 +255,13 @@ async function carregarTabelaFrota(token) {
     }
 
     tbody.innerHTML = motoristas.map(m => {
+      const statusLimpo = m.status_aprovacao || 'pendente';
       const badgeStatus = {
         aprovado: 'badge-aprovado',
         pendente: 'badge-pendente',
-        bloqueado: 'badge-recusado'
-      }[m.status_aprovacao] || 'badge-pendente';
+        bloqueado: 'badge-recusado',
+        recusado: 'badge-recusado'
+      }[statusLimpo] || 'badge-pendente';
 
       return `
         <tr>
@@ -268,23 +273,23 @@ async function carregarTabelaFrota(token) {
             ${m.veiculo_modelo || 'Não inf.'}<br>
             <small style="color:var(--blue); font-weight:700;">${(m.veiculo_placa || 'SEM PLACA').toUpperCase()}</small>
           </td>
-          <td><span class="badge badge-aceito">${(m.categoria || 'carro').toUpperCase()}</span></td>
+          <td><span class="badge badge-aceito">${(m.categoria_veiculo || 'carro').toUpperCase()}</span></td>
           <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
-          <td><span class="badge ${badgeStatus}">${m.status_aprovacao.toUpperCase()}</span></td>
+          <td><span class="badge ${badgeStatus}">${statusLimpo.toUpperCase()}</span></td>
           <td>
-            ${m.foto_perfil_url ? `
-              <button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.foto_perfil_url}')">Ver Foto</button>
-            ` : '<small style="color:var(--muted);">Sem foto</small>'}
+            ${m.doc_crlv_url ? `
+              <button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.doc_crlv_url}')">Ver CRLV</button>
+            ` : '<small style="color:var(--muted);">Sem doc</small>'}
           </td>
           <td>
             <div style="display:flex; gap:4px;">
-              ${m.status_aprovacao !== 'aprovado' ? `
-                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovado')">Aprovar</button>
+              ${statusLimpo !== 'aprovado' ? `
+                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovar')">Aprovar</button>
               ` : ''}
-              ${m.status_aprovacao !== 'bloqueado' ? `
-                <button class="btn-tbl rej" onclick="alterarStatusCondutor('${m.id}', 'bloqueado')">Bloquear</button>
+              ${statusLimpo !== 'recusado' && statusLimpo !== 'bloqueado' ? `
+                <button class="btn-tbl rej" onclick="alterarStatusCondutor('${m.id}', 'recusar')">Recusar</button>
               ` : `
-                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovado')">Liberar</button>
+                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovar')">Liberar</button>
               `}
             </div>
           </td>
@@ -294,13 +299,13 @@ async function carregarTabelaFrota(token) {
   } catch (e) {}
 }
 
-// 6. Monitor de Viagens em Tempo Real
+// 6. Monitor de Viagens em Tempo Real (Rota /pedidos)
 async function carregarTabelaViagens(token) {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/pedidos/historico`, {
+    const res = await fetch(`${API_URL}/api/admin/pedidos`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) return;
@@ -316,11 +321,11 @@ async function carregarTabelaViagens(token) {
       return `
         <tr>
           <td>#${String(c.id).slice(-4)}</td>
-          <td>${c.sub_tipo_label || 'HUBy'}</td>
+          <td>${c.sub_tipo_label || c.tipo || 'HUBy'}</td>
           <td>${c.distancia_km} km</td>
           <td style="font-weight:800; color:#FFF;">R$ ${Number(c.valor_total).toFixed(2).replace('.', ',')}</td>
           <td style="color:var(--blue); font-weight:700;">R$ ${taxa.toFixed(2).replace('.', ',')}</td>
-          <td>${c.motorista_nome || 'Buscando...'}</td>
+          <td>${c.motorista_nome || 'Aguardando...'}</td>
           <td><span class="badge ${c.status === 'concluido' ? 'badge-concluido' : (c.status === 'cancelado' ? 'badge-recusado' : 'badge-aceito')}">${c.status.toUpperCase()}</span></td>
         </tr>
       `;
@@ -343,7 +348,7 @@ async function carregarTarifasConfig(token) {
 }
 
 // ============================================================================
-// FORMULÁRIOS E AÇÕES ADMINISTRATIVAS
+// FORMULÁRIOS
 // ============================================================================
 function configurarFormCupons(token) {
   document.getElementById('formNovoCupom')?.addEventListener('submit', async (e) => {
@@ -382,7 +387,7 @@ function configurarFormBroadcast(token) {
     const mensagem = document.getElementById('broadMensagem').value.trim();
 
     try {
-      const res = await fetch(`${API_URL}/api/admin/broadcast`, {
+      const res = await fetch(`${API_URL}/api/admin/notificacoes/broadcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ publico, titulo, mensagem })
@@ -408,7 +413,7 @@ function configurarFormTarifas(token) {
     const km_entrega = Number(document.getElementById('cfgKmEntrega').value);
 
     try {
-      const res = await fetch(`${API_URL}/api/admin/config`, {
+      const res = await fetch(`${API_URL}/api/admin/tarifas`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ taxa_plataforma, km_carro, km_moto, km_entrega })
@@ -424,7 +429,6 @@ function configurarFormTarifas(token) {
   });
 }
 
-// Modal de visualização de fotos
 function configurarModalDocumentos() {
   const modal = document.getElementById('modalPreviewFoto');
   const btnFechar = document.getElementById('btnFecharModalPreview');
@@ -445,7 +449,6 @@ function configurarModalDocumentos() {
   });
 }
 
-// Navegação das abas
 function configurarNavegacaoAbas() {
   const botoes = document.querySelectorAll('.tab-btn');
   const paineis = document.querySelectorAll('.tab-pane');
@@ -462,7 +465,6 @@ function configurarNavegacaoAbas() {
   });
 }
 
-// Conexão em tempo real do Admin
 function conectarSocketAdmin() {
   const ioClient = getSocketIO();
   if (!ioClient) return;
@@ -481,7 +483,7 @@ function conectarSocketAdmin() {
 }
 
 // ============================================================================
-// AÇÕES INLINE GLOBAIS (WINDOW)
+// AÇÕES INLINE GLOBAIS
 // ============================================================================
 window.alterarCupom = async (id) => {
   const token = localStorage.getItem('huby_token');
@@ -510,13 +512,13 @@ window.excluirCupom = async (id) => {
   }
 };
 
-window.alterarStatusCondutor = async (id, status) => {
+window.alterarStatusCondutor = async (id, acao) => {
   const token = localStorage.getItem('huby_token');
   try {
-    const res = await fetch(`${API_URL}/api/admin/motoristas/${id}/status`, {
+    const res = await fetch(`${API_URL}/api/admin/motoristas/${id}/triagem`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ acao })
     });
     if (res.ok) {
       await carregarTabelaFrota(token);
@@ -527,15 +529,15 @@ window.alterarStatusCondutor = async (id, status) => {
   }
 };
 
-window.processarSaqueMaster = async (id, acao) => {
+window.processarSaqueMaster = async (id, status) => {
   const token = localStorage.getItem('huby_token');
-  if (!confirm(`Deseja marcar este saque como ${acao.toUpperCase()}?`)) return;
+  if (!confirm(`Deseja marcar este saque como ${status.toUpperCase()}?`)) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/saques/${id}`, {
+    const res = await fetch(`${API_URL}/api/admin/saques/${id}/processar`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ acao })
+      body: JSON.stringify({ status })
     });
     if (res.ok) {
       await carregarTabelaSaques(token);
@@ -549,7 +551,7 @@ window.processarSaqueMaster = async (id, acao) => {
 window.resolverIncidente = async (id) => {
   const token = localStorage.getItem('huby_token');
   try {
-    const res = await fetch(`${API_URL}/api/admin/incidentes/${id}/resolver`, {
+    const res = await fetch(`${API_URL}/api/admin/seguranca/incidentes/${id}/resolver`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -563,21 +565,5 @@ window.resolverIncidente = async (id) => {
 };
 
 function exportarRelatorioCSV() {
-  const linhas = [
-    ['ID', 'Data', 'Tipo', 'Distancia_KM', 'Valor_Total', 'Status']
-  ];
-  const trs = document.querySelectorAll('#tabelaCorridasBody tr');
-  trs.forEach(tr => {
-    const tds = Array.from(tr.querySelectorAll('td')).map(td => td.innerText.replace(/\n/g, ' ').trim());
-    if (tds.length >= 6) linhas.push(tds);
-  });
-
-  const conteudoCSV = 'data:text/csv;charset=utf-8,' + linhas.map(e => e.join(';')).join('\n');
-  const encodedUri = encodeURI(conteudoCSV);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `huby_relatorio_${Date.now()}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  window.open(`${API_URL}/api/admin/relatorios/corridas.csv`, '_blank');
 }
