@@ -1,120 +1,123 @@
-// js/motorista/motorista-radar.js
-import { API_URL } from '../config.js';
-import { estado } from './motorista-estado.js';
-import { preVisualizarRotaPedido } from './motorista-corrida.js';
-import { iniciarAlertaSonoroChamada, pararAlertaSonoroChamada } from './motorista-utilidades.js';
+// js/admin-radar.js
+import { API_URL } from './config.js';
 
-let intervaloPolling = null;
+let mapaAdmin = null;
+let camadasZonas = [];
+let marcadoresMotoristas = {};
 
-// Alternar status online/offline na base de dados
-export async function alternarStatusOnline() {
-  const token = localStorage.getItem('huby_token');
-  try {
-    const resp = await fetch(`${API_URL}/api/motoristas/meu-status-online`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      }
-    });
-    const dados = await resp.json();
-    return dados.online;
-  } catch (err) {
-    console.warn('Erro ao alternar status do motorista:', err);
-    return false;
+export function inicializarRadarMaster(token) {
+  const container = document.getElementById('mapaRadarContainer');
+  if (!container) return;
+
+  if (typeof L === 'undefined') {
+    setTimeout(() => inicializarRadarMaster(token), 300);
+    return;
   }
-}
 
-// Inicia a escuta periódica por corridas pendentes na região
-export function iniciarRadarChamadas() {
-  pararRadarChamadas();
+  if (!mapaAdmin) {
+    try {
+      mapaAdmin = L.map('mapaRadarContainer').setView([-8.3580, -42.2460], 13);
 
-  buscarChamadasDisponiveis();
-  intervaloPolling = setInterval(() => {
-    // Só procura novas viagens se não estiver em atendimento nem a analisar rota
-    if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
-      buscarChamadasDisponiveis();
-    }
-  }, 3500);
-}
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors | HUBy Radar'
+      }).addTo(mapaAdmin);
 
-// Para a pesquisa e desliga qualquer som ativo
-export function pararRadarChamadas() {
-  if (intervaloPolling) {
-    clearInterval(intervaloPolling);
-    intervaloPolling = null;
-  }
-  pararAlertaSonoroChamada();
-}
+      mapaAdmin.on('click', async (e) => {
+        const nome = prompt('Nome da Zona de Demanda (ex: Centro / Show / Chuva):');
+        if (!nome || !nome.trim()) return;
 
-async function buscarChamadasDisponiveis() {
-  const token = localStorage.getItem('huby_token');
-  const feed = document.getElementById('listaChamadasPendentes');
-  if (!feed || !token) return;
+        const multInput = prompt('Multiplicador de Tarifa Dinâmica (ex: 1.20):', '1.20');
+        if (!multInput) return;
+        const multiplicador = Number(multInput.replace(',', '.'));
+        if (isNaN(multiplicador) || multiplicador <= 0) return alert('Multiplicador inválido.');
 
-  try {
-    const resp = await fetch(`${API_URL}/api/pedidos/pendentes`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!resp.ok) return;
+        const raioInput = prompt('Raio da área em metros (ex: 1500):', '2000');
+        if (!raioInput) return;
+        const raio_metros = Number(raioInput);
+        if (isNaN(raio_metros) || raio_metros <= 0) return alert('Raio inválido.');
 
-    const pedidos = await resp.json();
+        try {
+          const res = await fetch(`${API_URL}/api/dinamica`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              nome: nome.trim(),
+              multiplicador,
+              centro_lat: e.latlng.lat,
+              centro_lng: e.latlng.lng,
+              raio_metros
+            })
+          });
 
-    if (!Array.isArray(pedidos) || pedidos.length === 0) {
-      pararAlertaSonoroChamada();
-      feed.innerHTML = `
-        <div style="text-align: center; padding: 24px 12px; color: var(--text-sec); font-size: 13px;">
-          <div style="font-size: 20px; margin-bottom: 6px;">📡</div>
-          Aguardando novas chamadas na região...
-        </div>
-      `;
-      return;
-    }
-
-    // Pega na primeira chamada disponível
-    const p = pedidos[0];
-
-    // Aciona o alerta sonoro em loop e vibração contínua
-    iniciarAlertaSonoroChamada();
-
-    feed.innerHTML = `
-      <div class="order-card" style="border: 2px solid #10B981; background: #0E131F;">
-        <div class="order-card-header">
-          <span class="order-badge" style="background: rgba(16,185,129,0.2); color: #10B981;">NOVA CHAMADA</span>
-          <span class="order-price">R$ ${Number(p.valor_total).toFixed(2).replace('.', ',')}</span>
-        </div>
-        <div class="order-route">
-          <span><strong>Partida:</strong> ${p.origem_endereco || 'Local informado pelo passageiro'}</span>
-          <span><strong>Destino:</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
-          <small style="color: #94A3B8; font-weight: 600; display: block; margin-top: 4px;">
-            📏 ${p.distancia_km || '1.5'} km • ⏱️ Estimativa: ~${p.duracao_min || 4} min
-          </small>
-        </div>
-        <div style="margin-top: 12px;">
-          <button type="button" id="btnAnalisarRotaChamada" style="width: 100%; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 12px; font-weight: 900; cursor: pointer; font-size: 14px;">
-            Visualizar Rota no Mapa
-          </button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('btnAnalisarRotaChamada')?.addEventListener('click', () => {
-      // Para o bipe sonoro quando o condutor clica para ver a rota
-      pararAlertaSonoroChamada();
-
-      preVisualizarRotaPedido({
-        id: p.id,
-        origem: p.origem_endereco,
-        destino: p.destino_endereco,
-        coordsOrig: [Number(p.origem_lat), Number(p.origem_lng)],
-        coordsDest: [Number(p.destino_lat), Number(p.destino_lng)],
-        preco: p.valor_total,
-        dist: p.distancia_km || '1.5',
-        dur: p.duracao_min || 4
+          if (res.ok) {
+            alert('Zona Dinâmica criada com sucesso!');
+            carregarZonasDinamicas(token);
+          } else {
+            alert('Erro ao criar zona.');
+          }
+        } catch (err) {
+          alert('Falha ao comunicar com o servidor.');
+        }
       });
-    });
+    } catch (e) {
+      console.warn('Erro ao configurar Leaflet:', e);
+    }
+  }
 
+  setTimeout(() => {
+    if (mapaAdmin) mapaAdmin.invalidateSize();
+  }, 400);
+
+  carregarZonasDinamicas(token);
+}
+
+export async function carregarZonasDinamicas(token) {
+  if (!mapaAdmin) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/dinamica`);
+    if (!res.ok) return;
+    const zonas = await res.json();
+
+    camadasZonas.forEach(c => mapaAdmin.removeLayer(c));
+    camadasZonas = [];
+
+    (Array.isArray(zonas) ? zonas : []).forEach(z => {
+      if (!z.ativa) return;
+
+      const circulo = L.circle([Number(z.centro_lat), Number(z.centro_lng)], {
+        color: '#F59E0B',
+        fillColor: '#F59E0B',
+        fillOpacity: 0.20,
+        weight: 2,
+        radius: Number(z.raio_metros) || 2000
+      }).addTo(mapaAdmin);
+
+      camadasZonas.push(circulo);
+    });
   } catch (err) {
-    console.warn('Erro ao sondar chamadas:', err);
+    console.warn('Erro ao carregar zonas:', err);
+  }
+}
+
+export function atualizarPosicaoCondutorNoMapa(dado) {
+  if (!mapaAdmin || !dado || !dado.lat || !dado.lng) return;
+  const { motoristaId, lat, lng, emCorrida } = dado;
+  const cor = emCorrida ? '#F59E0B' : '#10B981';
+
+  if (marcadoresMotoristas[motoristaId]) {
+    marcadoresMotoristas[motoristaId].setLatLng([Number(lat), Number(lng)]);
+  } else {
+    const iconDiv = L.divIcon({
+      className: 'driver-marker',
+      html: `<div style="width:24px;height:24px;background:#0B0F19;border:2px solid ${cor};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;">🚖</div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    marcadoresMotoristas[motoristaId] = L.marker([Number(lat), Number(lng)], { icon: iconDiv }).addTo(mapaAdmin);
   }
 }

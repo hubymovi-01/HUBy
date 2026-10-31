@@ -6,7 +6,7 @@ let chartFinanceiroInstance = null;
 let chartCategoriasInstance = null;
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
-document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');
 
@@ -16,34 +16,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Inicializa o Radar no Mapa (Leaflet)
-  inicializarRadarMaster(token);
-
-  // 2. Conecta ao Socket.IO para Telemetria em Tempo Real e Alertas
-  conectarSocketAdmin();
-
-  // 3. Controle de Troca de Abas
+  // 1. REGISTRA AS ABAS E FORMULÁRIOS PRIMEIRO (Evita qualquer travamento na interface)
   configurarNavegacaoAbas();
-
-  // 4. Carregamento Inicial de Dados
-  await sincronizarTudo(token);
-
-  // 5. Handlers de Formulários
   configurarFormCupons(token);
   configurarFormBroadcast(token);
   configurarFormTarifas(token);
   configurarModalDocumentos();
 
-  // 6. Botões Globais do Topo
+  // Botões do Topo
   document.getElementById('btnSincronizar')?.addEventListener('click', () => sincronizarTudo(token));
   document.getElementById('btnBaixarCSV')?.addEventListener('click', exportarRelatorioCSV);
+
+  // 2. INICIALIZAÇÃO SEGURA DO RADAR (Sem quebrar o restante se o Leaflet atrasar)
+  try {
+    inicializarRadarMaster(token);
+  } catch (err) {
+    console.warn('Radar inicializado em segundo plano:', err);
+  }
+
+  // 3. CONECTA AO SOCKET.IO
+  try {
+    conectarSocketAdmin();
+  } catch (err) {
+    console.warn('Socket indisponível:', err);
+  }
+
+  // 4. CARREGAMENTO DOS DADOS (Assíncrono em segundo plano)
+  sincronizarTudo(token);
 });
 
 // ============================================================================
 // CARREGAMENTO E SINCRONIZAÇÃO GERAL
 // ============================================================================
 async function sincronizarTudo(token) {
-  await Promise.all([
+  if (!token) return;
+
+  // Usa allSettled para que o erro de uma tabela nunca impeça as outras de carregar
+  await Promise.allSettled([
     carregarMetricasECards(token),
     carregarTabelaCupons(token),
     carregarTabelaSeguranca(token),
@@ -63,18 +72,23 @@ async function carregarMetricasECards(token) {
     if (!res.ok) return;
     const m = await res.json();
 
-    // Compatibilidade com a estrutura do routes/admin.routes.js
     const faturamentoBruto = Number(m.faturamentoBruto || m.financeiro?.faturamento_total || 0);
     const lucroLiquido = Number(m.receitaPlataforma || m.financeiro?.lucro_plataforma || (faturamentoBruto * 0.15));
     const repasseMotoristas = Number(m.repasseMotoristas || m.financeiro?.total_pago_motoristas || (faturamentoBruto * 0.85));
     const viagensConcluidas = Number(m.pedidos?.concluidos || m.viagens_concluidas || 0);
     const incidentesAtivos = Number(m.incidentes_ativos || 0);
 
-    document.getElementById('metricBruto').textContent = `R$ ${faturamentoBruto.toFixed(2).replace('.', ',')}`;
-    document.getElementById('metricLiquido').textContent = `R$ ${lucroLiquido.toFixed(2).replace('.', ',')}`;
-    document.getElementById('metricRepasse').textContent = `R$ ${repasseMotoristas.toFixed(2).replace('.', ',')}`;
-    document.getElementById('metricConcluidas').textContent = viagensConcluidas;
-    document.getElementById('metricAlertas').textContent = incidentesAtivos;
+    // Suporte flexível a ambos os padrões de IDs existentes no HTML
+    const setTexto = (id1, id2, valor) => {
+      const el = document.getElementById(id1) || document.getElementById(id2);
+      if (el) el.textContent = valor;
+    };
+
+    setTexto('metricBruto', 'faturamentoBrutoTotal', `R$ ${faturamentoBruto.toFixed(2).replace('.', ',')}`);
+    setTexto('metricLiquido', 'lucroLiquidoHuby', `R$ ${lucroLiquido.toFixed(2).replace('.', ',')}`);
+    setTexto('metricRepasse', 'repasseMotoristasTotal', `R$ ${repasseMotoristas.toFixed(2).replace('.', ',')}`);
+    setTexto('metricConcluidas', 'totalViagensConcluidas', viagensConcluidas);
+    setTexto('metricAlertas', 'totalAlertasSeguranca', incidentesAtivos);
 
     renderizarGraficos(faturamentoBruto, lucroLiquido, repasseMotoristas, m.distribuicao_categorias || {});
   } catch (err) {
@@ -83,7 +97,10 @@ async function carregarMetricasECards(token) {
 }
 
 function renderizarGraficos(bruto, lucro, repasse, categorias) {
-  const ctxFin = document.getElementById('chartFinanceiro')?.getContext('2d');
+  if (typeof Chart === 'undefined') return;
+
+  const canvasFin = document.getElementById('chartFinanceiro') || document.getElementById('graficoFaturamentoCanvas');
+  const ctxFin = canvasFin?.getContext('2d');
   if (ctxFin) {
     if (chartFinanceiroInstance) chartFinanceiroInstance.destroy();
     chartFinanceiroInstance = new Chart(ctxFin, {
@@ -104,7 +121,8 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
     });
   }
 
-  const ctxCat = document.getElementById('chartCategorias')?.getContext('2d');
+  const canvasCat = document.getElementById('chartCategorias');
+  const ctxCat = canvasCat?.getContext('2d');
   if (ctxCat) {
     if (chartCategoriasInstance) chartCategoriasInstance.destroy();
     chartCategoriasInstance = new Chart(ctxCat, {
@@ -167,7 +185,7 @@ async function carregarTabelaCupons(token) {
   }
 }
 
-// 3. Incidentes e SOS (Rota ajustada para /seguranca/incidentes)
+// 3. Incidentes e SOS
 async function carregarTabelaSeguranca(token) {
   const tbody = document.getElementById('tabelaSegurancaBody');
   if (!tbody) return;
@@ -299,7 +317,7 @@ async function carregarTabelaFrota(token) {
   } catch (e) {}
 }
 
-// 6. Monitor de Viagens em Tempo Real (Rota /pedidos)
+// 6. Monitor de Viagens em Tempo Real
 async function carregarTabelaViagens(token) {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
@@ -370,7 +388,7 @@ function configurarFormCupons(token) {
         e.target.reset();
         carregarTabelaCupons(token);
       } else {
-        const d = await res.json();
+        const d = await res.json().catch(() => ({}));
         alert(`Erro: ${d.erro || 'Falha ao salvar cupom'}`);
       }
     } catch (err) {
@@ -449,18 +467,36 @@ function configurarModalDocumentos() {
   });
 }
 
+// SWITCH DE NAVEGAÇÃO ENTRE ABAS BLINDADO
 function configurarNavegacaoAbas() {
-  const botoes = document.querySelectorAll('.tab-btn');
-  const paineis = document.querySelectorAll('.tab-pane');
+  const botoes = document.querySelectorAll('.tab-btn, [data-tab]');
+  const paineis = document.querySelectorAll('.tab-pane, section[id^="tab"]');
 
   botoes.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const tabAlvoId = btn.getAttribute('data-tab');
+      if (!tabAlvoId) return;
+
       botoes.forEach(b => b.classList.remove('active'));
-      paineis.forEach(p => p.classList.remove('active'));
+      paineis.forEach(p => {
+        p.classList.remove('active');
+        p.style.display = 'none';
+      });
 
       btn.classList.add('active');
-      const tabAlvo = document.getElementById(btn.getAttribute('data-tab'));
-      if (tabAlvo) tabAlvo.classList.add('active');
+      const tabAlvo = document.getElementById(tabAlvoId);
+      if (tabAlvo) {
+        tabAlvo.classList.add('active');
+        tabAlvo.style.display = 'block';
+
+        // Se clicou na aba do radar, recalcula o tamanho do mapa Leaflet
+        if (tabAlvoId.toLowerCase().includes('radar')) {
+          setTimeout(() => {
+            window.dispatchEvent(new Event('resize'));
+          }, 200);
+        }
+      }
     });
   });
 }
@@ -485,7 +521,7 @@ function conectarSocketAdmin() {
 // ============================================================================
 // AÇÕES INLINE GLOBAIS
 // ============================================================================
-window.alterarCupom = async (id) => {
+window.alternarCupom = async (id) => {
   const token = localStorage.getItem('huby_token');
   try {
     const res = await fetch(`${API_URL}/api/admin/cupons/${id}/toggle`, {
