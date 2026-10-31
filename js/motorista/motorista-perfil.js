@@ -84,15 +84,15 @@ export function configurarDrawerPerfil() {
     estado.novaFotoBase64Temp = null;
 
     if (previewFotoModal) {
-      previewFotoModal.src = estado.dadosMotorista.foto_perfil_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
+      previewFotoModal.src = estado.dadosMotorista?.foto_perfil_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
     }
 
-    document.getElementById('editNome').value = estado.dadosMotorista.nome || '';
-    document.getElementById('editTelefone').value = estado.dadosMotorista.telefone || '';
-    document.getElementById('editCarroModelo').value = estado.dadosMotorista.veiculo_modelo || '';
-    document.getElementById('editCarroPlaca').value = estado.dadosMotorista.veiculo_placa || '';
-    document.getElementById('editCarroCor').value = estado.dadosMotorista.veiculo_cor || '';
-    document.getElementById('editCarroAno').value = estado.dadosMotorista.veiculo_ano || '';
+    document.getElementById('editNome').value = estado.dadosMotorista?.nome || '';
+    document.getElementById('editTelefone').value = estado.dadosMotorista?.telefone || '';
+    document.getElementById('editCarroModelo').value = estado.dadosMotorista?.veiculo_modelo || '';
+    document.getElementById('editCarroPlaca').value = estado.dadosMotorista?.veiculo_placa || '';
+    document.getElementById('editCarroCor').value = estado.dadosMotorista?.veiculo_cor || '';
+    document.getElementById('editCarroAno').value = estado.dadosMotorista?.veiculo_ano || '';
 
     modalEdicao.style.display = 'flex';
   });
@@ -181,7 +181,7 @@ export function configurarDrawerPerfil() {
 
       if (resp.ok) {
         alert('Chave Pix padrão atualizada com sucesso!');
-        estado.dadosMotorista.chave_pix_padrao = chave_pix_padrao;
+        if (estado.dadosMotorista) estado.dadosMotorista.chave_pix_padrao = chave_pix_padrao;
       } else {
         alert('Erro ao atualizar chave Pix.');
       }
