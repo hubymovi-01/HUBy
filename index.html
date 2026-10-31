@@ -125,6 +125,45 @@
     .category-chip.active .cat-label {
       color: #10B981 !important;
     }
+
+    /* BOTÃO E CONTAINER DE MÚLTIPLAS PARADAS */
+    .btn-add-stop {
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px dashed rgba(56, 189, 248, 0.4);
+      color: #38BDF8;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    .btn-add-stop:active {
+      transform: scale(0.95);
+      background: rgba(56, 189, 248, 0.25);
+    }
+    .stop-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.04);
+      border-left: 2px solid #38BDF8;
+      padding: 6px 10px;
+      border-radius: 6px;
+      margin-top: 6px;
+      font-size: 12px;
+    }
+    .stop-remove-btn {
+      background: transparent;
+      border: none;
+      color: #EF4444;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 0 4px;
+    }
   </style>
 
   <script>
@@ -282,12 +321,17 @@
       </select>
     </div>
 
+    <!-- BLOCO RESUMO DA VIAGEM COM SUPORTE A PARADAS -->
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
         <div class="route-point-indicator"></div>
-        <div class="route-texts">
-          <span class="route-title">Destino</span>
+        <div class="route-texts" style="flex: 1;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="route-title">Destino</span>
+            <button type="button" id="btnAddParada" class="btn-add-stop">+ Parada</button>
+          </div>
           <span id="txtDestinoSelecionado" class="route-subtitle">Toque no mapa para indicar o destino</span>
+          <div id="containerParadasIntermediarias"></div>
         </div>
       </div>
       <div class="trip-price-block">
@@ -457,7 +501,7 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    // LÓGICA DO MODAL DE SEGURANÇA
+    // LÓGICA DO MODAL DE SEGURANÇA E RASTREIO PÚBLICO VIA WHATSAPP
     const modalSeg = document.getElementById('modalSeguranca');
     const btnMenuSeg = document.getElementById('menuItemSeguranca');
     const btnFecharSeg = document.getElementById('btnFecharSeguranca');
@@ -483,9 +527,16 @@
 
     btnFecharSeg?.addEventListener('click', () => { if (modalSeg) modalSeg.style.display = 'none'; });
 
+    // GERAÇÃO DO LINK DE RASTREIO AO VIVO PARA O WHATSAPP
     btnZap?.addEventListener('click', () => {
       const tel = (localStorage.getItem('huby_emergencia_tel') || '').replace(/\D/g, '');
-      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto ou entre em contato em caso de emergência.`);
+      const corridaAtivaId = localStorage.getItem('huby_corrida_ativa_id') || localStorage.getItem('huby_ultima_corrida_id') || '';
+
+      const linkRastreio = corridaAtivaId
+        ? `https://hubymovi-01.github.io/HUBy/viagem.html?id=${corridaAtivaId}`
+        : 'https://hubymovi-01.github.io/HUBy/';
+
+      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto em tempo real no mapa através deste link: ${linkRastreio}`);
       const link = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
       window.open(link, '_blank');
     });

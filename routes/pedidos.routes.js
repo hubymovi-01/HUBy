@@ -1,3 +1,4 @@
+// routes/pedidos.routes.js
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
@@ -21,13 +22,14 @@ export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO COM SUPORTE A CUPOM TRANSACIONAL E SEGURANÇA
+  // 1. CRIAR PEDIDO COM SUPORTE A CUPOM, MÚLTIPLAS PARADAS E SEGURANÇA
   // =========================================================================
   router.post('/', async (req, res) => {
     try {
       const {
         id, clienteId, tipo, subTipoId, subTipoLabel,
         origem, destino, coordsOrigem, coordsDestino,
+        paradas, // Array de paradas intermediárias [{ endereco, coords }]
         distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto,
         cupomCodigo
       } = req.body;
@@ -83,6 +85,9 @@ export default function pedidosRouter(io) {
         }
       }
 
+      // Garante suporte ao armazenamento de paradas em formato JSON
+      const paradasJson = paradas && Array.isArray(paradas) ? JSON.stringify(paradas) : null;
+
       await sql`
         INSERT INTO pedidos (
           id, cliente_id, tipo, sub_tipo_id, sub_tipo_label,
@@ -100,7 +105,7 @@ export default function pedidosRouter(io) {
       `;
 
       io.emit('nova_chamada', {
-        id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal
+        id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal, paradas
       });
 
       res.status(201).json({ sucesso: true, id, valorFinal: vTotal, desconto: descontoAplicado });
@@ -171,7 +176,41 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 5. STATUS DA VIAGEM (ENRIQUECIDO COM PERFIL E VEÍCULO DO MOTORISTA)
+  // 5. ROTA PÚBLICA PARA RASTREIO DE VIAGEM EM TEMPO REAL (SEM EXIGIR LOGIN)
+  // =========================================================================
+  router.get('/publico/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const pedidos = await sql`
+        SELECT 
+          p.id, p.status, p.origem_endereco, p.destino_endereco,
+          p.origem_lat, p.origem_lng, p.destino_lat, p.destino_lng,
+          p.distancia_km, p.duracao_min, p.sub_tipo_label,
+          COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
+          COALESCE(m.veiculo_modelo, p.motorista_veiculo) AS motorista_veiculo,
+          COALESCE(m.veiculo_placa, p.motorista_placa) AS motorista_placa,
+          m.foto_perfil_url AS motorista_foto,
+          m.avaliacao_media AS motorista_avaliacao
+        FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        WHERE p.id = ${id}
+        LIMIT 1;
+      `;
+
+      if (pedidos.length === 0) {
+        return res.status(404).json({ erro: 'Viagem não encontrada.' });
+      }
+
+      return res.json(pedidos[0]);
+    } catch (err) {
+      console.error('Erro ao consultar viagem pública:', err);
+      return res.status(500).json({ erro: 'Erro interno ao consultar dados da viagem.' });
+    }
+  });
+
+  // =========================================================================
+  // 6. STATUS DA VIAGEM (ENRIQUECIDO COM PERFIL E VEÍCULO DO MOTORISTA)
   // =========================================================================
   router.get('/:id/status', async (req, res) => {
     try {
@@ -205,7 +244,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 6. ACEITAR VIAGEM (COM SNAPSHOT COMPLETO DO CONDUTOR)
+  // 7. ACEITAR VIAGEM (COM SNAPSHOT COMPLETO DO CONDUTOR)
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
@@ -252,7 +291,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7. CONCLUIR VIAGEM (CÁLCULO DINÂMICO E REPASSE)
+  // 8. CONCLUIR VIAGEM (CÁLCULO DINÂMICO E REPASSE)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -304,7 +343,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE AUTOMÁTICA
+  // 9. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE AUTOMÁTICA
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
@@ -347,7 +386,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CENTRAL DE INCIDENTES / BOTÃO DE PÂNICO SOS
+  // 10. CENTRAL DE INCIDENTES / BOTÃO DE PÂNICO SOS
   // =========================================================================
   router.post('/:id/sos', autenticarToken, async (req, res) => {
     try {
@@ -376,7 +415,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 10. AVALIAÇÕES COM NOTA E COMENTÁRIOS
+  // 11. AVALIAÇÕES COM NOTA E COMENTÁRIOS
   // =========================================================================
   router.post('/:id/avaliar', autenticarToken, async (req, res) => {
     try {
@@ -423,7 +462,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 11. CHAT INTERNO DA CORRIDA
+  // 12. CHAT INTERNO DA CORRIDA
   // =========================================================================
   router.post('/:id/chat', autenticarToken, async (req, res) => {
     try {
