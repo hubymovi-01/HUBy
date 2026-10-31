@@ -7,7 +7,7 @@ import { configurarDrawerPerfil, carregarPerfilCompleto, configurarModalSaquePix
 import { configurarChatMotorista } from './motorista/motorista-chat.js';
 import { pararRadarChamadas } from './motorista/motorista-radar.js';
 import { configurarSuporteEIncidentes } from './motorista/motorista-suporte.js';
-import { inicializarHeatmapDemanda } from './motorista/motorista-heatmap.js';
+import { configurarRecursosInteligentes } from './motorista/motorista-heatmap.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
@@ -46,13 +46,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarChatMotorista();
   configurarAjusteMetaDiaria();
   configurarSuporteEIncidentes();
-  inicializarHeatmapDemanda();
 
-  // 3. Carrega os dados iniciais do parceiro e ganhos
+  // 3. Ativa as ferramentas inteligentes (Calor, Pausa e Casa) conectadas ao mapa Leaflet
+  const mapaInstancia = estado.hubyMapa?.map || estado.hubyMapa;
+  configurarRecursosInteligentes(mapaInstancia, token);
+
+  // 4. Carrega os dados iniciais do parceiro e ganhos
   await carregarPerfilCompleto();
   await carregarGanhosHoje();
 
-  // 4. Limpeza ao sair da janela
+  // 5. Limpeza ao sair da janela
   window.addEventListener('beforeunload', () => {
     pararRadarChamadas();
     pararTransmissaoTelemetria();

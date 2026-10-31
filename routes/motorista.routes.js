@@ -5,7 +5,90 @@ import { autenticarToken } from './pedidos.routes.js';
 
 const router = express.Router();
 
-// 1. Configurar ou Alternar Filtro "Direção de Casa"
+// Garante colunas de suporte para pausa e rota inteligente
+async function garantirColunasSuporte() {
+  try {
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lng NUMERIC;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_ativo BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS em_pausa BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS pausa_ate TIMESTAMP;`;
+  } catch (e) {
+    console.warn('Aviso ao sincronizar colunas de suporte do motorista:', e.message);
+  }
+}
+garantirColunasSuporte();
+
+// =========================================================================
+// 1. MAPA DE CALOR: PONTOS DE DEMANDA RECENTES (ÚLTIMAS 2 HORAS)
+// =========================================================================
+router.get('/calor', autenticarToken, async (req, res) => {
+  try {
+    // Busca origens de chamadas recentes com agrupamento para definir intensidade
+    const pontos = await sql`
+      SELECT 
+        origem_lat AS lat, 
+        origem_lng AS lng,
+        COUNT(id)::int AS intensidade
+      FROM pedidos
+      WHERE origem_lat IS NOT NULL 
+        AND origem_lng IS NOT NULL
+        AND criado_em >= NOW() - INTERVAL '2 hours'
+      GROUP BY origem_lat, origem_lng
+      ORDER BY intensidade DESC
+      LIMIT 150;
+    `;
+
+    // Formata os pontos no padrão [lat, lng, intensidade] compatível com Leaflet.heat
+    const heatmapData = pontos.map(p => [
+      Number(p.lat),
+      Number(p.lng),
+      Math.min(1.0, Math.max(0.2, Number(p.intensidade) * 0.3))
+    ]);
+
+    res.json({ sucesso: true, pontos: heatmapData });
+  } catch (err) {
+    console.error('Erro ao gerar dados do mapa de calor:', err);
+    res.status(500).json({ erro: 'Falha ao processar mapa de calor.' });
+  }
+});
+
+// =========================================================================
+// 2. MODO PAUSA RÁPIDA (ABASTECIMENTO / ALMOÇO)
+// =========================================================================
+router.put('/modo-pausa', autenticarToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuario.id;
+    const { emPausa, minutos } = req.body;
+
+    const duracaoMin = Number(minutos) || 15;
+    const pausaAte = emPausa ? new Date(Date.now() + duracaoMin * 60 * 1000) : null;
+
+    const mot = await sql`
+      UPDATE motoristas
+      SET em_pausa = ${!!emPausa},
+          pausa_ate = ${pausaAte}
+      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      RETURNING id, em_pausa, pausa_ate;
+    `;
+
+    if (mot.length === 0) return res.status(404).json({ erro: 'Motorista não encontrado.' });
+
+    res.json({
+      sucesso: true,
+      emPausa: !!emPausa,
+      pausaAte,
+      mensagem: emPausa ? `Pausa ativada por ${duracaoMin} minutos.` : 'Pausa finalizada. Pronto para receber chamadas!'
+    });
+  } catch (err) {
+    console.error('Erro ao alternar modo pausa:', err);
+    res.status(500).json({ erro: 'Falha ao alterar pausa.' });
+  }
+});
+
+// =========================================================================
+// 3. CONFIGURAR OU ALTERNAR FILTRO "DIREÇÃO DE CASA"
+// =========================================================================
 router.put('/filtro-destino', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -28,20 +111,21 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
   }
 });
 
-// 2. Obter Perfil Completo com Dados Reais do Formulário de Cadastro (Sem JOIN problemático)
+// =========================================================================
+// 4. PERFIL COMPLETO
+// =========================================================================
 router.get('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
     const emailUsuario = req.usuario.email || '';
 
-    // 1. Consulta direta na tabela de motoristas
     const mot = await sql`
       SELECT 
         id, usuario_id, nome, email, telefone, categoria,
         saldo_carteira, status_aprovacao, foto_perfil_url,
         avaliacao_media, total_corridas,
         veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-        chave_pix_padrao
+        chave_pix_padrao, em_pausa, pausa_ate, destino_casa_ativo
       FROM motoristas
       WHERE id::text = ${usuarioId}::text 
          OR usuario_id::text = ${usuarioId}::text 
@@ -66,11 +150,13 @@ router.get('/perfil', autenticarToken, async (req, res) => {
         veiculo_placa: m.veiculo_placa || '',
         veiculo_cor: m.veiculo_cor || '',
         veiculo_ano: m.veiculo_ano || '',
-        chave_pix_padrao: m.chave_pix_padrao || ''
+        chave_pix_padrao: m.chave_pix_padrao || '',
+        em_pausa: !!m.em_pausa,
+        pausa_ate: m.pausa_ate,
+        destino_casa_ativo: !!m.destino_casa_ativo
       });
     }
 
-    // 2. Fallback: Se não encontrou em motoristas, busca em usuarios
     const usr = await sql`
       SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, '') AS foto_perfil_url
       FROM usuarios 
@@ -84,7 +170,6 @@ router.get('/perfil', autenticarToken, async (req, res) => {
     const telefoneFinal = u.telefone || '';
     const fotoFinal = u.foto_perfil_url || '';
 
-    // 3. Cria automaticamente o registro do motorista
     try {
       const novo = await sql`
         INSERT INTO motoristas (
@@ -116,7 +201,10 @@ router.get('/perfil', autenticarToken, async (req, res) => {
           veiculo_placa: n.veiculo_placa || '',
           veiculo_cor: n.veiculo_cor || '',
           veiculo_ano: n.veiculo_ano || '',
-          chave_pix_padrao: n.chave_pix_padrao || ''
+          chave_pix_padrao: n.chave_pix_padrao || '',
+          em_pausa: false,
+          pausa_ate: null,
+          destino_casa_ativo: false
         });
       }
     } catch (insertErr) {
@@ -138,7 +226,10 @@ router.get('/perfil', autenticarToken, async (req, res) => {
       veiculo_placa: '',
       veiculo_cor: '',
       veiculo_ano: '',
-      chave_pix_padrao: ''
+      chave_pix_padrao: '',
+      em_pausa: false,
+      pausa_ate: null,
+      destino_casa_ativo: false
     });
   } catch (err) {
     console.error('Erro ao consultar perfil do motorista:', err);
@@ -146,7 +237,9 @@ router.get('/perfil', autenticarToken, async (req, res) => {
   }
 });
 
-// 3. Atualizar Dados do Perfil com Suporte a Foto e Auto-Criação Segura
+// =========================================================================
+// 5. ATUALIZAR DADOS DO PERFIL
+// =========================================================================
 router.put('/perfil', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -166,7 +259,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     const fAno = (veiculo_ano && veiculo_ano.trim()) ? veiculo_ano.trim() : null;
     const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
 
-    // Tenta atualizar registro existente
     let mot = await sql`
       UPDATE motoristas
       SET 
@@ -184,7 +276,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       RETURNING *;
     `;
 
-    // Se ainda não existia linha em motoristas, insere com chave primária id garantida
     if (mot.length === 0) {
       mot = await sql`
         INSERT INTO motoristas (
@@ -208,7 +299,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       `;
     }
 
-    // Sincroniza também na tabela de usuários
     await sql`
       UPDATE usuarios
       SET 
@@ -225,7 +315,9 @@ router.put('/perfil', autenticarToken, async (req, res) => {
   }
 });
 
-// 4. Extrato Financeiro
+// =========================================================================
+// 6. EXTRATO FINANCEIRO
+// =========================================================================
 router.get('/extrato', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -242,7 +334,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
       SELECT 
         id, valor_total, 
         (valor_total * 0.85) AS repasse_liquido,
-        valor_gorjeta, concluido_em, origem_endereco, destino_endereco
+        valor_adicionais, concluido_em, origem_endereco, destino_endereco
       FROM pedidos
       WHERE motorista_id::text = ${usuarioId}::text AND status = 'concluido'
       ORDER BY concluido_em DESC
@@ -256,12 +348,13 @@ router.get('/extrato', autenticarToken, async (req, res) => {
   }
 });
 
-// 5. Ganhos de Hoje e Estatísticas do Turno
+// =========================================================================
+// 7. GANHOS DE HOJE E TURNO
+// =========================================================================
 router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
 
-    // Busca corridas concluídas a partir da meia-noite de hoje (horário local/servidor)
     const corridasHoje = await sql`
       SELECT 
         COUNT(*)::int AS total_corridas,
@@ -284,7 +377,10 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
     res.status(500).json({ erro: 'Falha ao obter resumo diário.' });
   }
 });
-// 6. Atualizar Status Online / Offline do Motorista
+
+// =========================================================================
+// 8. ATUALIZAR STATUS ONLINE / OFFLINE
+// =========================================================================
 router.put('/status-online', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;

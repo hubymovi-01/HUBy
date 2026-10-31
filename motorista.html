@@ -99,6 +99,27 @@
       font-weight: 700;
     }
 
+    .btn-nav-action {
+      background: rgba(18, 24, 38, 0.94);
+      border: 1px solid var(--border-dark);
+      color: var(--text-sec);
+      border-radius: 12px;
+      padding: 7px 10px;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+
+    .btn-nav-action.active {
+      background: rgba(245, 158, 11, 0.18);
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
     .btn-floating-chat {
       position: absolute;
       bottom: 250px;
@@ -187,58 +208,6 @@
       font-size: 13px;
       padding: 24px 10px;
       font-weight: 600;
-    }
-
-    .order-card {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid var(--border-dark);
-      border-radius: 12px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .order-card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .order-badge {
-      background: rgba(255, 255, 255, 0.08);
-      padding: 4px 8px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 800;
-      color: #FFF;
-      text-transform: uppercase;
-    }
-
-    .order-price {
-      font-size: 17px;
-      font-weight: 900;
-      color: var(--emerald);
-    }
-
-    .order-route {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-      font-size: 12px;
-      color: #CBD5E1;
-    }
-
-    .btn-accept-order {
-      background: var(--emerald);
-      color: #032017;
-      border: none;
-      border-radius: 8px;
-      padding: 10px;
-      font-weight: 800;
-      font-size: 13px;
-      cursor: pointer;
-      width: 100%;
     }
 
     /* DRAWER LATERAL */
@@ -373,16 +342,7 @@
       padding: 2px 0;
     }
 
-    .item-extrato {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      font-size: 12px;
-    }
-
-    /* MODAL DE EDIÇÃO DO PERFIL */
+    /* MODAIS */
     .modal-backdrop-custom {
       position: fixed;
       inset: 0;
@@ -419,7 +379,8 @@
       text-transform: uppercase;
     }
 
-    .form-group-driver input {
+    .form-group-driver input,
+    .form-group-driver select {
       width: 100%;
       background: #080C14;
       border: 1px solid var(--border-dark);
@@ -430,16 +391,12 @@
       font-weight: 600;
       outline: none;
     }
-
-    .form-group-driver input:focus {
-      border-color: var(--emerald);
-    }
   </style>
 </head>
 
 <body>
 
-  <!-- NAVEGAÇÃO SUPERIOR REESTRUTURADA -->
+  <!-- NAVEGAÇÃO SUPERIOR -->
   <header class="top-driver-nav">
     <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil">
       <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
@@ -450,16 +407,22 @@
       </div>
     </div>
 
-    <!-- BOTAO TOGGLE ONLINE / OFFLINE PROFISSIONAL -->
+    <!-- BOTAO TOGGLE ONLINE / OFFLINE -->
     <button type="button" id="btnToggleStatusOnline"
-      style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 20px; padding: 8px 16px; font-size: 12px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); backdrop-filter: blur(10px); transition: all 0.3s ease;">
+      style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 20px; padding: 8px 14px; font-size: 12px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.4); backdrop-filter: blur(10px);">
       <span>⚪</span> <strong>Ficar Online</strong>
     </button>
 
+    <!-- FERRAMENTAS INTELIGENTES DO MOTORISTA -->
     <div style="display: flex; gap: 6px; pointer-events: auto;">
-      <button type="button" id="btnToggleHeatmap"
-        style="background: rgba(18, 24, 38, 0.94); border: 1px solid var(--border-dark); color: var(--text-sec); border-radius: 12px; padding: 7px 10px; font-size: 11px; font-weight: 800; cursor: pointer;">
+      <button type="button" id="btnToggleHeatmap" class="btn-nav-action" title="Mapa de Calor de Demanda">
         🔥 Calor
+      </button>
+      <button type="button" id="btnModoPausa" class="btn-nav-action" title="Pausa Rápida">
+        ☕ Pausa
+      </button>
+      <button type="button" id="btnModoDestino" class="btn-nav-action" title="Direção de Casa">
+        🏠 Casa
       </button>
       <a href="./index.html" class="btn-exit-partner">← Sair</a>
     </div>
@@ -503,8 +466,7 @@
             style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">
             ✏️ Definir Meta
           </button>
-          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0
-            viagens</small>
+          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0 viagens</small>
         </div>
       </div>
 
@@ -532,11 +494,10 @@
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carregando...</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY
-            CARRO</span>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
-            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> • <span
-              id="drawerTotalViagensTxt">0 viagens</span>
+            <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
+            <span id="drawerTotalViagensTxt">0 viagens</span>
           </div>
         </div>
       </div>
@@ -547,7 +508,6 @@
     </div>
 
     <div class="drawer-content">
-      <!-- VEÍCULO CADASTRADO -->
       <div class="drawer-section-card">
         <h4>🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -562,19 +522,16 @@
         </div>
       </div>
 
-      <!-- CARTEIRA E EXTRATO -->
       <div class="drawer-section-card">
         <h4>
           <span>💰 Extrato & Ganhos</span>
           <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
         <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando
-            histórico...</div>
+          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
         </div>
       </div>
 
-      <!-- CHAVE PIX PADRÃO -->
       <div class="drawer-section-card">
         <h4>⚡ Chave Pix Padrão</h4>
         <div style="display: flex; gap: 6px;">
@@ -597,7 +554,31 @@
     </div>
   </aside>
 
-  <!-- MODAL DE EDIÇÃO DE PERFIL PROFISSIONAL -->
+  <!-- MODAL DE CONFIGURAÇÃO DE PAUSA -->
+  <div id="modalConfigPausa" class="modal-backdrop-custom">
+    <div class="modal-box-edit" style="max-width: 340px;">
+      <h3 style="margin: 0 0 8px; font-size: 15px; color: #FFF;">☕ Parada Rápida / Pausa</h3>
+      <p style="margin: 0 0 14px; font-size: 12px; color: var(--text-sec);">
+        Pausa temporária para abastecimento ou refeição. Você não receberá chamadas durante o período.
+      </p>
+      <div class="form-group-driver">
+        <label>Tempo Estimado de Pausa</label>
+        <select id="selectTempoPausa">
+          <option value="15">15 Minutos (Abastecer/Café)</option>
+          <option value="30">30 Minutos (Lanche Rápido)</option>
+          <option value="45">45 Minutos (Almoço/Jantar)</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button type="button" onclick="document.getElementById('modalConfigPausa').style.display='none'"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Voltar</button>
+        <button type="button" id="btnConfirmarIniciarPausa"
+          style="flex: 1.4; background: var(--amber); border: none; color: #000; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Iniciar Pausa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE EDIÇÃO DE PERFIL -->
   <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
     <div class="modal-box-edit">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
@@ -606,7 +587,6 @@
           style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
       </div>
 
-      <!-- SELETOR DE FOTO (CÂMERA OU GALERIA) -->
       <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 16px;">
         <div style="position: relative; width: 84px; height: 84px;">
           <img id="previewFotoModal"
@@ -619,25 +599,21 @@
           </label>
         </div>
         <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
-        <small style="color: var(--text-sec); font-size: 10px; margin-top: 6px;">Toque na câmera para tirar foto ou
-          escolher da galeria</small>
+        <small style="color: var(--text-sec); font-size: 10px; margin-top: 6px;">Toque na câmera para foto de perfil</small>
       </div>
 
       <div class="form-group-driver">
-        <label>Nome Completo (Cadastro)</label>
+        <label>Nome Completo</label>
         <input type="text" id="editNome" placeholder="Seu nome completo">
       </div>
-
       <div class="form-group-driver">
-        <label>Telefone de Contato</label>
+        <label>Telefone</label>
         <input type="tel" id="editTelefone" placeholder="(00) 00000-0000">
       </div>
-
       <div class="form-group-driver">
         <label>Modelo do Veículo</label>
         <input type="text" id="editCarroModelo" placeholder="Ex: Chevrolet Onix 1.0">
       </div>
-
       <div style="display: flex; gap: 8px;">
         <div class="form-group-driver" style="flex: 1.2;">
           <label>Placa</label>
@@ -657,8 +633,7 @@
         <button type="button" id="btnCancelarEdicao"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
-          Alterações</button>
+          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar</button>
       </div>
     </div>
   </div>
@@ -671,31 +646,26 @@
 
       <div class="form-group-driver">
         <label>Tipo de Chave</label>
-        <select id="saqueTipoChave"
-          style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 9px; color: #FFF; font-weight: 600;">
+        <select id="saqueTipoChave">
           <option value="cpf">CPF</option>
           <option value="telefone">Telefone</option>
           <option value="email">E-mail</option>
           <option value="aleatoria">Chave Aleatória</option>
         </select>
       </div>
-
       <div class="form-group-driver">
         <label>Chave Pix</label>
         <input type="text" id="saqueChavePix" placeholder="Digite sua chave">
       </div>
-
       <div class="form-group-driver">
         <label>Valor (R$)</label>
         <input type="number" step="1" id="saqueValor" placeholder="50.00">
       </div>
-
       <div style="display: flex; gap: 8px; margin-top: 14px;">
         <button type="button" id="btnFecharModalSaque"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnConfirmarSaquePix"
-          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar
-          Saque</button>
+          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar</button>
       </div>
     </div>
   </div>
@@ -722,8 +692,7 @@
     </div>
   </div>
 
-
-  <!-- MODAL PROFISSIONAL DE REPORTAR INCIDENTE / SUPORTE -->
+  <!-- MODAL REPORTAR INCIDENTE -->
   <div id="modalReportarIncidente" class="modal-backdrop-custom">
     <div class="modal-box-edit" style="max-width: 380px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -733,7 +702,7 @@
 
       <div class="form-group-driver">
         <label>Tipo de Ocorrência</label>
-        <select id="selectTipoIncidente" style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 10px; color: #FFF; font-weight: 600;">
+        <select id="selectTipoIncidente">
           <option value="passageiro_ausente">Passageiro não apareceu no local</option>
           <option value="item_esquecido">Objeto/item esquecido no veículo</option>
           <option value="desentendimento">Problema de conduta com passageiro</option>
@@ -757,8 +726,10 @@
     </div>
   </div>
 
+  <!-- SCRIPTS GLOBAIS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Carregamento global robusto do Socket.IO -->
+  <!-- Plugin Leaflet.heat para mancha de calor -->
+  <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script type="module" src="./js/app-motorista.js?v=9.0.0"></script>
 </body>
