@@ -1,12 +1,11 @@
 // sw.js - Service Worker HUBy (Cache Bypass + Push Notifications)
-const CACHE_NAME = 'huby-v6-bypass-api';
+const CACHE_NAME = 'huby-v7-bypass-network';
 
-self.addEventListener('install', (e) => {
-  self.skipWaiting(); // Força a atualização imediata
+self.addEventListener('install', () => {
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
-  // Limpa qualquer cache antiga
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(keys.map((k) => caches.delete(k)));
@@ -18,16 +17,21 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
 
-  // 🛑 REGRA DE OURO: Ignora chamadas para o Render ou rotas de API para evitar erro de CORS
-  if (url.hostname.includes('onrender.com') || url.pathname.includes('/api/')) {
+  // 1. Ignora chamadas para APIs, Render ou conexões de WebSocket/Socket.IO
+  if (
+    url.hostname.includes('onrender.com') ||
+    url.pathname.includes('/api/') ||
+    url.pathname.includes('/socket.io/')
+  ) {
     return;
   }
 
-  // Busca sempre na rede para evitar HTML/CSS desatualizado
+  // 2. Encaminha nativamente para a rede sem propagar exceção corrompida
   e.respondWith(
     fetch(e.request).catch((err) => {
-      console.warn('Erro de rede no SW:', err);
-      throw err;
+      console.warn('Falha de rede ao buscar recurso:', e.request.url, err);
+      // Retorna uma resposta vazia de erro padrão em vez de corromper o pipeline
+      return new Response('Falha de conexão', { status: 503, statusText: 'Service Unavailable' });
     })
   );
 });
