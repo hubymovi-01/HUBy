@@ -1,7 +1,13 @@
 // js/cliente/cliente-paradas.js
-import { estadoCliente } from './cliente-estado.js';
-import { atualizarResumoValores } from './cliente-pedidos.js';
-
+// js/app-cliente.js
+import { sincronizarTarifasServidor } from './config.js';
+import { HubyMapa } from './mapa.js';
+import { configurarPesquisaLocal } from './pesquisa.js?v=6';
+import { estadoCliente } from './cliente/cliente-estado.js'; // <-- precisa ter /cliente/
+import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
+import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, acionarSosCliente } from './cliente/cliente-pedidos.js'; // <-- precisa ter /cliente/
+import { configurarMultiplasParadas } from './cliente/cliente-paradas.js';
 // Inicializa a lista de paradas no estado caso não exista
 if (!estadoCliente.paradas) {
   estadoCliente.paradas = [];
