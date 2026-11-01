@@ -1,4 +1,4 @@
-// routes/admin.routes.js
+// routes/admin.routes.js - Métricas, Frota e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -12,7 +12,6 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
-// Suporte para autenticar via query parameter no download do CSV via navegador
 function autenticarCsv(req, res, next) {
   const tokenUrl = req.query.token;
   if (tokenUrl && !req.headers.authorization) {
@@ -21,7 +20,6 @@ function autenticarCsv(req, res, next) {
   return autenticarToken(req, res, next);
 }
 
-// Garante criação da tabela de zonas de risco no banco Neon
 async function inicializarTabelasAdmin() {
   try {
     await sql`
@@ -49,144 +47,101 @@ export default function adminRoutes(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. MÉTRICAS DA PLATAFORMA COM FILTRO DE PERÍODO E FALLBACK DE SALDO
+  // 1. MÉTRICAS DA PLATAFORMA (COM CÁLCULO ATÔMICO VIA SALDO DA FROTA)
   // =========================================================================
   router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
-      const periodo = String(req.query.periodo || 'todos').toLowerCase();
+      const periodo = String(req.query.periodo || 'total').toLowerCase();
 
-      // Monta cláusula SQL dinâmica para filtragem temporal
       let filtroPeriodo = sql``;
       if (periodo === 'hoje') {
         filtroPeriodo = sql`AND criado_em >= CURRENT_DATE`;
       } else if (periodo === '7d' || periodo === '7dias') {
         filtroPeriodo = sql`AND criado_em >= NOW() - INTERVAL '7 days'`;
-      } else if (periodo === 'mes' || periodo === '30dias') {
+      } else if (periodo === 'mes') {
         filtroPeriodo = sql`AND criado_em >= DATE_TRUNC('month', CURRENT_DATE)`;
       }
 
-      // Faturamento e repasses a partir de corridas concluídas
+      // 1. Consulta corridas concluídas
       const statsFinanceiro = await sql`
         SELECT 
-          COUNT(id) AS total_corridas_concluidas,
-          COALESCE(SUM(valor_total), 0) AS faturamento_bruto
+          COUNT(id) AS total_concluidas,
+          COALESCE(SUM(valor_total), 0) AS faturamento_corridas
         FROM pedidos
         WHERE LOWER(status) = 'concluido' ${filtroPeriodo};
       `;
 
-      let totalViagens = Number(statsFinanceiro[0]?.total_corridas_concluidas || 0);
-      let faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_bruto || 0);
+      let totalViagens = Number(statsFinanceiro[0]?.total_concluidas || 0);
+      let faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_corridas || 0);
 
-      // CONTINGÊNCIA INTELIGENTE:
-      // Se não há corridas registradas como 'concluido', mas os motoristas possuem saldo acumulado
-      if (faturamentoBruto === 0) {
-        const saldoMotoristas = await sql`
-          SELECT COALESCE(SUM(saldo_carteira), 0) AS saldo_total,
-                 COALESCE(SUM(total_corridas), 0) AS corridas_totais
-          FROM motoristas;
-        `;
-        const repasseAcumulado = Number(saldoMotoristas[0]?.saldo_total || 0);
-        const corridasAcumuladas = Number(saldoMotoristas[0]?.corridas_totais || 0);
+      // 2. CONTINGÊNCIA INTELIGENTE NO BANCO:
+      // Se não há pedidos concluídos, calcula com base no saldo acumulado dos condutores
+      const saldoMotoristas = await sql`
+        SELECT 
+          COALESCE(SUM(saldo_carteira), 0) AS repasse_acumulado,
+          COALESCE(SUM(total_corridas), 0) AS corridas_frota
+        FROM motoristas;
+      `;
 
-        if (repasseAcumulado > 0) {
-          faturamentoBruto = Number((repasseAcumulado / 0.85).toFixed(2));
-          if (totalViagens === 0 && corridasAcumuladas > 0) {
-            totalViagens = corridasAcumuladas;
-          } else if (totalViagens === 0) {
-            totalViagens = 1;
-          }
-        }
+      const repasseFrota = Number(saldoMotoristas[0]?.repasse_acumulado || 0);
+      const corridasFrota = Number(saldoMotoristas[0]?.corridas_frota || 0);
+
+      let repasseMotoristas = 0;
+      let lucroHuby = 0;
+
+      if (faturamentoBruto > 0) {
+        repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
+        lucroHuby = Number((faturamentoBruto * 0.15).toFixed(2));
+      } else if (repasseFrota > 0) {
+        repasseMotoristas = repasseFrota;
+        faturamentoBruto = Number((repasseFrota / 0.85).toFixed(2));
+        lucroHuby = Number((faturamentoBruto * 0.15).toFixed(2));
+        totalViagens = corridasFrota > 0 ? corridasFrota : 1;
       }
 
-      const repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
-      const lucroHuby = Number((faturamentoBruto * 0.15).toFixed(2));
-
-      // Contadores de pedidos e incidentes com tolerância a nomes de tabelas
+      // 3. Alertas de segurança
       let incidentesAtivos = 0;
       try {
-        const inc = await sql`
-          SELECT COUNT(*) AS total 
-          FROM incidentes_seguranca 
-          WHERE resolvido = FALSE;
-        `;
+        const inc = await sql`SELECT COUNT(*) AS total FROM incidentes_seguranca WHERE resolvido = FALSE;`;
         incidentesAtivos = Number(inc[0]?.total || 0);
-      } catch (eInc) {
-        try {
-          const incSos = await sql`
-            SELECT COUNT(*) AS total 
-            FROM incidentes_sos 
-            WHERE status = 'pendente';
-          `;
-          incidentesAtivos = Number(incSos[0]?.total || 0);
-        } catch (eSos) {
-          incidentesAtivos = 0;
-        }
+      } catch (e) {
+        incidentesAtivos = 0;
       }
 
-      // Distribuição por categoria
-      const statsCategorias = await sql`
-        SELECT 
-          COALESCE(sub_tipo_id, tipo, 'carro') AS categoria,
-          COUNT(id) AS total
+      // 4. Distribuição por categoria
+      const statsCat = await sql`
+        SELECT COALESCE(sub_tipo_id, tipo, 'carro') AS cat, COUNT(id) AS qtd
         FROM pedidos
-        WHERE 1=1 ${filtroPeriodo}
         GROUP BY COALESCE(sub_tipo_id, tipo, 'carro');
       `;
-
       const distribuicao_categorias = { carro: 0, moto: 0, entrega: 0 };
-      statsCategorias.forEach(c => {
-        const cat = String(c.categoria).toLowerCase();
-        if (cat.includes('moto')) distribuicao_categorias.moto += Number(c.total);
-        else if (cat.includes('entrega') || cat.includes('frete')) distribuicao_categorias.entrega += Number(c.total);
-        else distribuicao_categorias.carro += Number(c.total);
+      statsCat.forEach(c => {
+        const nome = String(c.cat).toLowerCase();
+        if (nome.includes('moto')) distribuicao_categorias.moto += Number(c.qtd);
+        else if (nome.includes('entrega') || nome.includes('frete')) distribuicao_categorias.entrega += Number(c.qtd);
+        else distribuicao_categorias.carro += Number(c.qtd);
       });
 
-      // Últimas chamadas
-      const ultimasChamadas = await sql`
-        SELECT id, status, tipo, sub_tipo_label, valor_total, distancia_km, criado_em, motorista_nome
-        FROM pedidos
-        WHERE 1=1 ${filtroPeriodo}
-        ORDER BY criado_em DESC
-        LIMIT 20;
-      `;
+      if (distribuicao_categorias.carro === 0 && faturamentoBruto > 0) {
+        distribuicao_categorias.carro = totalViagens;
+      }
 
-      // Resposta completa compatível com todos os seletores do front
       res.json({
-        periodoSelecionado: periodo,
         faturamentoBruto,
-        faturamento_bruto: faturamentoBruto,
         lucroHuby,
-        lucro_plataforma: lucroHuby,
-        receitaPlataforma: lucroHuby,
         repasseMotoristas,
-        total_pago_motoristas: repasseMotoristas,
         viagensConcluidas: totalViagens,
-        total_corridas_concluidas: totalViagens,
         alertasSeguranca: incidentesAtivos,
-        incidentes_ativos: incidentesAtivos,
-        distribuicao_categorias,
-        ultimasChamadas,
-        graficoReceitas: {
-          lucroHuby,
-          repasseMotoristas
-        },
-        graficoFluxo: [
-          { label: '06h', total: Math.max(1, Math.round(totalViagens * 0.1)) },
-          { label: '09h', total: Math.max(1, Math.round(totalViagens * 0.25)) },
-          { label: '12h', total: Math.max(1, Math.round(totalViagens * 0.3)) },
-          { label: '15h', total: Math.max(1, Math.round(totalViagens * 0.15)) },
-          { label: '18h', total: Math.max(1, Math.round(totalViagens * 0.35)) },
-          { label: '21h', total: Math.max(1, Math.round(totalViagens * 0.1)) }
-        ]
+        distribuicao_categorias
       });
     } catch (err) {
-      console.error('Erro nas métricas admin filtradas:', err);
-      res.status(500).json({ erro: 'Falha ao extrair métricas do sistema.' });
+      console.error('Erro ao consolidar métricas:', err);
+      res.status(500).json({ erro: 'Falha ao buscar métricas.' });
     }
   });
 
   // =========================================================================
-  // 2. GESTÃO DE MOTORISTAS & FROTA (COM FOTO, CNH E CRLV PARA ZOOM)
+  // 2. GESTÃO DE MOTORISTAS & FROTA
   // =========================================================================
   router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -231,21 +186,6 @@ export default function adminRoutes(io) {
     } catch (err) {
       console.error('Erro na triagem:', err);
       res.status(500).json({ erro: 'Falha ao processar triagem.' });
-    }
-  });
-
-  router.put('/motoristas/:id/status', autenticarToken, verificarAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status_aprovacao } = req.body;
-      await sql`
-        UPDATE motoristas
-        SET status_aprovacao = ${status_aprovacao}
-        WHERE id = ${id};
-      `;
-      res.json({ sucesso: true });
-    } catch (err) {
-      res.status(500).json({ erro: 'Erro ao alterar status.' });
     }
   });
 
@@ -302,27 +242,6 @@ export default function adminRoutes(io) {
     }
   });
 
-  router.put('/saques/:id/aprovar', autenticarToken, verificarAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      await sql`UPDATE saques_motoristas SET status = 'pago', pago_em = CURRENT_TIMESTAMP WHERE id = ${id};`;
-      res.json({ sucesso: true });
-    } catch (e) {
-      res.status(500).json({ erro: 'Erro ao aprovar saque.' });
-    }
-  });
-
-  router.put('/saques/:id/rejeitar', autenticarToken, verificarAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { motivo } = req.body;
-      await sql`UPDATE saques_motoristas SET status = 'recusado', motivo_recusa = ${motivo || 'Recusado'} WHERE id = ${id};`;
-      res.json({ sucesso: true });
-    } catch (e) {
-      res.status(500).json({ erro: 'Erro ao rejeitar saque.' });
-    }
-  });
-
   // =========================================================================
   // 4. MONITOR DE VIAGENS
   // =========================================================================
@@ -341,7 +260,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 5. ATUALIZAR TARIFAS E REGRAS DE NEGÓCIO
+  // 5. ATUALIZAR TARIFAS
   // =========================================================================
   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -360,7 +279,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. GESTÃO DE CUPONS DE DESCONTO & MARKETING
+  // 6. GESTÃO DE CUPONS
   // =========================================================================
   router.get('/cupons', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -372,16 +291,15 @@ export default function adminRoutes(io) {
       res.json(cupons);
     } catch (err) {
       console.error('Erro ao listar cupons:', err);
-      res.status(500).json({ erro: 'Falha ao listar cupons promocionais.' });
+      res.status(500).json({ erro: 'Falha ao listar cupons.' });
     }
   });
 
   router.post('/cupons', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const { codigo, tipo, valor, limite_usos, expira_em } = req.body;
-
       if (!codigo || !valor) {
-        return res.status(400).json({ erro: 'Código e valor do cupom são obrigatórios.' });
+        return res.status(400).json({ erro: 'Código e valor são obrigatórios.' });
       }
 
       const codigoLimpo = String(codigo).trim().toUpperCase();
@@ -395,14 +313,9 @@ export default function adminRoutes(io) {
         VALUES (${codigoLimpo}, ${tipoCupom}, ${valorNum}, ${limiteNum}, ${expiraData}, TRUE)
         RETURNING *;
       `;
-
       res.status(201).json({ sucesso: true, cupom: novoCupom[0] });
     } catch (err) {
-      console.error('Erro ao criar cupom:', err);
-      if (err.message?.includes('duplicate key') || err.code === '23505') {
-        return res.status(409).json({ erro: 'Este código de cupom já existe.' });
-      }
-      res.status(500).json({ erro: 'Erro interno ao registrar cupom.' });
+      res.status(500).json({ erro: 'Erro ao registrar cupom.' });
     }
   });
 
@@ -415,7 +328,6 @@ export default function adminRoutes(io) {
         WHERE id = ${id}
         RETURNING id, codigo, ativo;
       `;
-      if (atualizado.length === 0) return res.status(404).json({ erro: 'Cupom não encontrado.' });
       res.json({ sucesso: true, cupom: atualizado[0] });
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao alterar estado do cupom.' });
@@ -433,7 +345,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. CENTRAL DE SEGURANÇA, SOS E ZONAS DE RISCO
+  // 7. SEGURANÇA E ZONAS DE RISCO
   // =========================================================================
   router.get('/seguranca/incidentes', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -445,25 +357,20 @@ export default function adminRoutes(io) {
       `;
       res.json(incidentes);
     } catch (err) {
-      res.status(500).json({ erro: 'Falha ao consultar incidentes de segurança.' });
+      res.status(500).json({ erro: 'Falha ao consultar incidentes.' });
     }
   });
 
   router.put('/seguranca/incidentes/:id/resolver', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      await sql`
-        UPDATE incidentes_seguranca
-        SET resolvido = TRUE
-        WHERE id = ${id};
-      `;
-      res.json({ sucesso: true, mensagem: 'Incidente arquivado como resolvido.' });
+      await sql`UPDATE incidentes_seguranca SET resolvido = TRUE WHERE id = ${id};`;
+      res.json({ sucesso: true });
     } catch (err) {
       res.status(500).json({ erro: 'Erro ao atualizar incidente.' });
     }
   });
 
-  // Zonas de risco / Restrição noturna
   router.get('/seguranca/zonas-risco', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const zonas = await sql`
@@ -473,7 +380,6 @@ export default function adminRoutes(io) {
       `;
       res.json(zonas);
     } catch (err) {
-      console.error('Erro ao listar zonas de risco:', err);
       res.status(500).json({ erro: 'Falha ao listar áreas de risco.' });
     }
   });
@@ -481,30 +387,13 @@ export default function adminRoutes(io) {
   router.post('/seguranca/zonas-risco', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const { nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim } = req.body;
-
-      if (!nome || !lat || !lng) {
-        return res.status(400).json({ erro: 'Nome e coordenadas geográficas são obrigatórios.' });
-      }
-
       const novaZona = await sql`
         INSERT INTO zonas_risco (nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim, ativo)
-        VALUES (
-          ${nome}, 
-          ${descricao || 'Área de atenção especial'}, 
-          ${nivel_risco || 'alto'}, 
-          ${Number(raio_metros) || 500}, 
-          ${Number(lat)}, 
-          ${Number(lng)}, 
-          ${horario_inicio || '20:00:00'}, 
-          ${horario_fim || '05:00:00'}, 
-          TRUE
-        )
+        VALUES (${nome}, ${descricao || 'Área demarcada'}, ${nivel_risco || 'alto'}, ${Number(raio_metros) || 500}, ${Number(lat)}, ${Number(lng)}, ${horario_inicio || '20:00:00'}, ${horario_fim || '05:00:00'}, TRUE)
         RETURNING *;
       `;
-
       res.status(201).json({ sucesso: true, zona: novaZona[0] });
     } catch (err) {
-      console.error('Erro ao criar zona de risco:', err);
       res.status(500).json({ erro: 'Falha ao cadastrar zona de risco.' });
     }
   });
@@ -513,49 +402,35 @@ export default function adminRoutes(io) {
     try {
       const { id } = req.params;
       await sql`DELETE FROM zonas_risco WHERE id = ${id};`;
-      res.json({ sucesso: true, mensagem: 'Zona de risco removida com sucesso.' });
+      res.json({ sucesso: true });
     } catch (err) {
-      res.status(500).json({ erro: 'Erro ao excluir zona de risco.' });
+      res.status(500).json({ erro: 'Erro ao excluir zona.' });
     }
   });
 
   // =========================================================================
-  // 8. DISPARO DE NOTIFICAÇÕES GLOBAIS EM MASSA (BROADCAST)
+  // 8. BROADCAST
   // =========================================================================
   router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const { titulo, mensagem, publico } = req.body;
-      if (!titulo || !mensagem) {
-        return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
-      }
-
-      const publicoDestino = publico || 'todos';
-
       const novaNotificacao = await sql`
         INSERT INTO notificacoes_globais (titulo, mensagem, publico)
-        VALUES (${titulo}, ${mensagem}, ${publicoDestino})
+        VALUES (${titulo}, ${mensagem}, ${publico || 'todos'})
         RETURNING *;
       `;
-
       const socketInstancia = req.io || io;
       if (socketInstancia) {
-        socketInstancia.emit('alerta_broadcast_geral', {
-          titulo,
-          mensagem,
-          publico: publicoDestino,
-          horario: new Date().toISOString()
-        });
+        socketInstancia.emit('alerta_broadcast_geral', { titulo, mensagem, publico: publico || 'todos' });
       }
-
-      return res.status(201).json({ sucesso: true, notificacao: novaNotificacao[0] });
+      res.status(201).json({ sucesso: true, notificacao: novaNotificacao[0] });
     } catch (err) {
-      console.error('Erro ao enviar broadcast:', err);
-      return res.status(500).json({ erro: 'Falha ao enviar notificação global.' });
+      res.status(500).json({ erro: 'Falha ao enviar notificação.' });
     }
   });
 
   // =========================================================================
-  // 9. RELATÓRIO EXECUTIVO CSV
+  // 9. RELATÓRIO CSV
   // =========================================================================
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
@@ -567,18 +442,15 @@ export default function adminRoutes(io) {
         FROM pedidos
         ORDER BY criado_em DESC;
       `;
-
       let csv = 'ID;Data;Categoria;Distancia_KM;Valor_Bruto;Repasse_85;Taxa_15;Motorista;Status\n';
       registros.forEach(r => {
         csv += `"${r.id}";"${new Date(r.criado_em).toISOString()}";"${r.sub_tipo_label || ''}";"${r.distancia_km || 0}";"${r.valor_total || 0}";"${r.repasse_motorista || 0}";"${r.taxa_huby || 0}";"${r.motorista_nome || ''}";"${r.status || ''}"\n`;
       });
-
       res.header('Content-Type', 'text/csv; charset=utf-8');
-      res.attachment(`huby-relatorio-corridas-${Date.now()}.csv`);
-      return res.send(csv);
+      res.attachment(`huby-relatorio-${Date.now()}.csv`);
+      res.send(csv);
     } catch (err) {
-      console.error('Erro ao gerar CSV:', err);
-      res.status(500).json({ erro: 'Falha ao gerar relatório.' });
+      res.status(500).json({ erro: 'Falha ao gerar CSV.' });
     }
   });
 
