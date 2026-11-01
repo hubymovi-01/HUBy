@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO REFINADO - Geometria de Ruas, Padding Dinâmico e Zoom Focado
+ * CÓDIGO BLINDADO - Tratamento de Contêiner Leaflet, GPS e Múltiplas Paradas
  * ============================================================================
  */
 
@@ -12,6 +12,7 @@ export class HubyMapa {
     this.markerOrigem = null;
     this.circlePrecisao = null;
     this.markerDestino = null;
+    this.markersParadas = [];
     this.rotaLayer = null;
     this.coordsOrigem = [-8.3580, -42.2460];
     this.coordsDestino = null;
@@ -25,17 +26,30 @@ export class HubyMapa {
     const container = document.getElementById(this.containerId);
     if (!container) return;
 
+    // 1. Limpeza segura e completa de instâncias anteriores no DOM
     if (this.map) {
       if (this.watchId !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(this.watchId);
+        this.watchId = null;
       }
-      this.map.remove();
+      try {
+        this.map.off();
+        this.map.remove();
+      } catch (e) {
+        console.warn('Aviso ao remover mapa anterior:', e);
+      }
       this.map = null;
+    }
+
+    // Blindagem direta no DOM: remove id do Leaflet para evitar o erro "already initialized"
+    if (container._leaflet_id) {
+      delete container._leaflet_id;
     }
 
     this.onClickDestinoCallback = onClickDestino;
     this.gpsFixo = false;
 
+    // 2. Inicialização do mapa Leaflet
     this.map = L.map(this.containerId, {
       zoomControl: false,
       attributionControl: false
@@ -58,6 +72,7 @@ export class HubyMapa {
     this.invalidarTamanho();
     setTimeout(() => this.invalidarTamanho(), 400);
 
+    // 3. Clique no mapa para selecionar destino
     if (onClickDestino) {
       this.map.on('click', async (e) => {
         const { lat, lng } = e.latlng;
@@ -136,6 +151,25 @@ export class HubyMapa {
     }
   }
 
+  // Suporte a marcadores visuais para paradas intermediárias
+  atualizarMarcadoresParadas(paradas = []) {
+    if (!this.map) return;
+    this.markersParadas.forEach(m => this.map.removeLayer(m));
+    this.markersParadas = [];
+
+    paradas.forEach((p, idx) => {
+      if (!p.coords) return;
+      const icon = L.divIcon({
+        className: 'huby-pin-parada',
+        html: `<div style="width:18px;height:18px;background:#38BDF8;color:#000;font-size:10px;font-weight:900;border:2px solid #FFF;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px rgba(56,189,248,0.9);">${idx + 1}</div>`,
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+      });
+      const marker = L.marker(p.coords, { icon }).addTo(this.map);
+      this.markersParadas.push(marker);
+    });
+  }
+
   obterGPSReal(callbackSucesso = null) {
     if (!('geolocation' in navigator)) return;
 
@@ -177,14 +211,13 @@ export class HubyMapa {
     this.obterGPSReal(callbackSucesso);
   }
 
-  async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true) {
-    const lon1 = origem[1], lat1 = origem[0];
-    const lon2 = destino[1], lat2 = destino[0];
+  async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true, pontosIntermediarios = []) {
+    const pontos = [origem, ...pontosIntermediarios, destino];
+    const coordenadasStr = pontos.map(p => `${p[1]},${p[0]}`).join(';');
 
-    // URLs dos serviços de rota com fallback
     const urls = [
-      `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`,
-      `https://routing.openstreetmap.de/routed-car/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=full&geometries=geojson`
+      `https://router.project-osrm.org/route/v1/driving/${coordenadasStr}?overview=full&geometries=geojson`,
+      `https://routing.openstreetmap.de/routed-car/route/v1/driving/${coordenadasStr}?overview=full&geometries=geojson`
     ];
 
     let data = null;
@@ -232,7 +265,6 @@ export class HubyMapa {
         setTimeout(() => {
           if (this.map && this.rotaLayer) {
             this.map.invalidateSize();
-            // Padding que deixa 270px na parte inferior para o card não tapar a rota
             this.map.fitBounds(this.rotaLayer.getBounds(), {
               paddingTopLeft: [40, 50],
               paddingBottomRight: [40, 270],
@@ -247,6 +279,8 @@ export class HubyMapa {
     }
 
     // Fallback de distância euclidiana caso nenhum serviço responda
+    const lat1 = origem[0], lon1 = origem[1];
+    const lat2 = destino[0], lon2 = destino[1];
     const rad = Math.PI / 180;
     const dLat = (lat2 - lat1) * rad;
     const dLon = (lon2 - lon1) * rad;

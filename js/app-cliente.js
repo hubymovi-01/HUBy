@@ -20,9 +20,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
 
-  // 1. Inicializa o Mapa
+  // 1. Inicializa o Mapa de forma única e segura
   try {
-    estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
+    if (!estadoCliente.hubyMapa) {
+      estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
+    }
+
     estadoCliente.hubyMapa.inicializar(async (rota, coords) => {
       if (estadoCliente.pedidoAtivoId) return;
       estadoCliente.coordsDestino = [coords.lat, coords.lng];
@@ -50,24 +53,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }, 250);
   } catch (err) {
-    console.error('Erro ao inicializar mapa:', err);
+    console.warn('Aviso na inicialização do mapa do cliente:', err);
   }
 
-  // 2. Pesquisa de locais
-  configurarPesquisaLocal(estadoCliente.hubyMapa, (rota, coords, nomeCurto) => {
-    estadoCliente.rotaAtual = rota;
-    estadoCliente.coordsDestino = coords;
+  // 2. Pesquisa de locais (reutiliza a instância única do mapa)
+  if (estadoCliente.hubyMapa) {
+    configurarPesquisaLocal(estadoCliente.hubyMapa, (rota, coords, nomeCurto) => {
+      estadoCliente.rotaAtual = rota;
+      estadoCliente.coordsDestino = coords;
 
-    const txtDestino = document.getElementById('txtDestinoSelecionado');
-    if (txtDestino) txtDestino.textContent = nomeCurto;
+      const txtDestino = document.getElementById('txtDestinoSelecionado');
+      if (txtDestino) txtDestino.textContent = nomeCurto;
 
-    atualizarResumoValores(); 
-  });
+      atualizarResumoValores(); 
+    });
+  }
 
   // 3. Ativa as Múltiplas Paradas
   configurarMultiplasParadas();
 
-  // 4. Botão GPS
+  // 4. Botão de Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
@@ -132,12 +137,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarBotoesGorjeta();
 
   document.getElementById('btnSosCliente')?.addEventListener('click', acionarSosCliente);
-
-  document.getElementById('menuItemPagamentos')?.addEventListener('click', () => {
-    fecharDrawer();
-    const modal = document.getElementById('modalPagamento');
-    if (modal) modal.style.display = 'flex';
-  });
 
   document.getElementById('btnFecharPagamento')?.addEventListener('click', () => {
     const modal = document.getElementById('modalPagamento');
