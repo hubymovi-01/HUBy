@@ -1,7 +1,8 @@
 // js/cliente/cliente-paradas.js
-import { estadoCliente } from '../cliente/cliente-estado.js';
-import { atualizarResumoValores } from '../cliente/cliente-pedidos.js';
+import { estadoCliente } from './cliente-estado.js';
+import { atualizarResumoValores } from './cliente-pedidos.js';
 
+// Inicializa a lista de paradas no estado caso não exista
 if (!estadoCliente.paradas) {
   estadoCliente.paradas = [];
 }
@@ -28,9 +29,10 @@ export function configurarMultiplasParadas() {
       return;
     }
 
-    const enderecoParada = prompt(`Endereço da Parada ${estadoCliente.paradas.length + 1} (ex: Farmácia, Banco):`);
+    const enderecoParada = prompt(`Endereço da Parada ${estadoCliente.paradas.length + 1} (ex: Farmácia, Banco, Padaria):`);
     if (!enderecoParada || !enderecoParada.trim()) return;
 
+    // Adiciona a parada com um acréscimo proporcional de trajeto
     const novaParada = {
       id: Date.now(),
       endereco: enderecoParada.trim(),

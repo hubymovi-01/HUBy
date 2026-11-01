@@ -1,98 +1,163 @@
-// js/cliente/cliente-paradas.js
-// js/app-cliente.js
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro
 import { sincronizarTarifasServidor } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
-import { estadoCliente } from './cliente/cliente-estado.js'; // <-- precisa ter /cliente/
+import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, acionarSosCliente } from './cliente/cliente-pedidos.js'; // <-- precisa ter /cliente/
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, acionarSosCliente } from './cliente/cliente-pedidos.js';
 import { configurarMultiplasParadas } from './cliente/cliente-paradas.js';
-// Inicializa a lista de paradas no estado caso não exista
-if (!estadoCliente.paradas) {
-  estadoCliente.paradas = [];
-}
 
-export function configurarMultiplasParadas() {
-  const btnAdd = document.getElementById('btnAddParada');
-  if (!btnAdd) return;
-
-  btnAdd.addEventListener('click', (e) => {
-    e.preventDefault();
-
-    if (estadoCliente.pedidoAtivoId) {
-      alert('Não é possível adicionar paradas com uma corrida em andamento.');
-      return;
-    }
-
-    if (!estadoCliente.coordsDestino) {
-      alert('Selecione primeiro o destino final no mapa.');
-      return;
-    }
-
-    if (estadoCliente.paradas.length >= 3) {
-      alert('Limite máximo de 3 paradas intermediárias atingido.');
-      return;
-    }
-
-    const enderecoParada = prompt(`Endereço da Parada ${estadoCliente.paradas.length + 1} (ex: Farmácia, Banco, Padaria):`);
-    if (!enderecoParada || !enderecoParada.trim()) return;
-
-    // Adiciona a parada com um acréscimo proporcional de trajeto
-    const novaParada = {
-      id: Date.now(),
-      endereco: enderecoParada.trim(),
-      // Caso não tenha GPS exato da parada pelo prompt, calcula pequeno delta de distância
-      deltaKm: 1.2
-    };
-
-    estadoCliente.paradas.push(novaParada);
-    renderizarParadas();
-    recalcularRotaComParadas();
-  });
-}
-
-export function renderizarParadas() {
-  const container = document.getElementById('containerParadasIntermediarias');
-  if (!container) return;
-
-  if (!estadoCliente.paradas || estadoCliente.paradas.length === 0) {
-    container.innerHTML = '';
-    return;
+document.addEventListener('DOMContentLoaded', async () => {
+  const splash = document.getElementById('hubySplash');
+  if (splash) {
+    splash.style.opacity = '0';
+    setTimeout(() => {
+      if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+    }, 400);
   }
 
-  container.innerHTML = estadoCliente.paradas.map((p, index) => `
-    <div class="stop-row" style="display: flex; align-items: center; justify-content: space-between; background: rgba(56, 189, 248, 0.08); border-left: 2px solid #38BDF8; padding: 6px 10px; border-radius: 6px; margin-top: 6px; font-size: 12px;">
-      <span style="color: #E2E8F0;">
-        <strong style="color: #38BDF8;">Parada ${index + 1}:</strong> ${p.endereco}
-      </span>
-      <button type="button" class="btn-remover-parada" data-id="${p.id}" style="background: transparent; border: none; color: #EF4444; font-size: 14px; cursor: pointer; padding: 0 4px;" title="Remover parada">✕</button>
-    </div>
-  `).join('');
+  await sincronizarTarifasServidor();
+  await carregarSaldoCarteiraCliente();
 
-  container.querySelectorAll('.btn-remover-parada').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const id = Number(btn.getAttribute('data-id'));
-      estadoCliente.paradas = estadoCliente.paradas.filter(item => item.id !== id);
-      renderizarParadas();
-      recalcularRotaComParadas();
+  // 1. Inicializa o Mapa
+  try {
+    estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
+    estadoCliente.hubyMapa.inicializar(async (rota, coords) => {
+      if (estadoCliente.pedidoAtivoId) return;
+      estadoCliente.coordsDestino = [coords.lat, coords.lng];
+      estadoCliente.rotaAtual = rota;
+
+      const txtDestino = document.getElementById('txtDestinoSelecionado');
+      const inputPesquisa = document.getElementById('inputPesquisaLocal');
+      
+      if (txtDestino) {
+        txtDestino.textContent = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+      }
+      
+      if (inputPesquisa) {
+        inputPesquisa.value = 'Destino selecionado no mapa';
+        const btnLimpar = document.getElementById('btnLimparPesquisa');
+        if (btnLimpar) btnLimpar.style.display = 'block';
+      }
+
+      atualizarResumoValores();
+    });
+
+    setTimeout(() => {
+      if (estadoCliente.hubyMapa?.map) {
+        estadoCliente.hubyMapa.map.invalidateSize();
+      }
+    }, 250);
+  } catch (err) {
+    console.error('Erro ao inicializar mapa:', err);
+  }
+
+  // 2. Pesquisa de locais
+  configurarPesquisaLocal(estadoCliente.hubyMapa, (rota, coords, nomeCurto) => {
+    estadoCliente.rotaAtual = rota;
+    estadoCliente.coordsDestino = coords;
+
+    const txtDestino = document.getElementById('txtDestinoSelecionado');
+    if (txtDestino) txtDestino.textContent = nomeCurto;
+
+    atualizarResumoValores(); 
+  });
+
+  // 3. Ativa as Múltiplas Paradas
+  configurarMultiplasParadas();
+
+  // 4. Botão GPS
+  const btnGPS = document.getElementById('btnLocalizarGPS');
+  if (btnGPS) {
+    btnGPS.addEventListener('click', (e) => {
+      e.preventDefault(); 
+      e.stopPropagation();
+      if (estadoCliente.hubyMapa) {
+        estadoCliente.hubyMapa.obterGPS((posicaoReal) => {
+          if (estadoCliente.coordsDestino) {
+            estadoCliente.hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], estadoCliente.coordsDestino, '#F59E0B', true).then(rota => {
+              estadoCliente.rotaAtual = rota;
+              atualizarResumoValores();
+            });
+          }
+        });
+      }
+    });
+  }
+
+  // 5. Drawer e Menus
+  configurarDrawerMenu();
+  verificarAcessoAdminMenu();
+
+  document.getElementById('btnNavViagens')?.addEventListener('click', carregarEExibirHistoricoModal);
+  document.getElementById('menuItemViagens')?.addEventListener('click', () => {
+    fecharDrawer();
+    carregarEExibirHistoricoModal();
+  });
+  document.getElementById('btnFecharHistorico')?.addEventListener('click', () => {
+    const modal = document.getElementById('modalHistorico');
+    if (modal) modal.style.display = 'none';
+  });
+
+  // 6. Seletor de Categorias
+  const chips = document.querySelectorAll('.category-chip');
+  chips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      chips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      estadoCliente.categoriaSelecionada = chip.getAttribute('data-id') || 'carro';
+      
+      const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
+      if (blocoEntrega) {
+        blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
+      }
+
+      atualizarBotaoChamar();
+      if (estadoCliente.rotaAtual) atualizarResumoValores();
     });
   });
-}
 
-export function recalcularRotaComParadas() {
-  if (!estadoCliente.rotaAtual) return;
+  // 7. Botão de Chamada
+  document.getElementById('btnPedirHuby')?.addEventListener('click', () => {
+    if (estadoCliente.pedidoAtivoId) {
+      cancelarBusca();
+    } else {
+      submeterPedido();
+    }
+  });
 
-  // Distância base da rota direta
-  const distBase = Number(estadoCliente.rotaAtual.distanciaKm || estadoCliente.rotaAtual.distancia || 2.5);
-  const durBase = Number(estadoCliente.rotaAtual.duracaoMin || estadoCliente.rotaAtual.duracao || 8);
+  // 8. Modais de Avaliação e Pagamentos
+  configurarModalAvaliacao();
+  configurarBotoesGorjeta();
 
-  // Adiciona a distância e tempo das paradas intermediárias
-  const distExtra = estadoCliente.paradas.reduce((acc, p) => acc + (p.deltaKm || 1.2), 0);
-  const durExtra = estadoCliente.paradas.length * 4; // 4 minutos estimados por parada
+  document.getElementById('btnSosCliente')?.addEventListener('click', acionarSosCliente);
 
-  estadoCliente.distanciaTotalComParadas = Number((distBase + distExtra).toFixed(1));
-  estadoCliente.duracaoTotalComParadas = Math.round(durBase + durExtra);
+  document.getElementById('menuItemPagamentos')?.addEventListener('click', () => {
+    fecharDrawer();
+    const modal = document.getElementById('modalPagamento');
+    if (modal) modal.style.display = 'flex';
+  });
 
-  atualizarResumoValores();
-}
+  document.getElementById('btnFecharPagamento')?.addEventListener('click', () => {
+    const modal = document.getElementById('modalPagamento');
+    if (modal) modal.style.display = 'none';
+  });
+
+  document.getElementById('btnCopiarPix')?.addEventListener('click', () => {
+    const input = document.getElementById('chavePixInput');
+    if (input) {
+      input.select();
+      navigator.clipboard.writeText(input.value);
+      alert('Chave Pix copiada com sucesso!');
+    }
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
+  }
+
+  window.addEventListener('beforeunload', () => {
+    if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
+  });
+});
