@@ -7,8 +7,7 @@ import { configurarDrawerPerfil, carregarPerfilCompleto, configurarModalSaquePix
 import { configurarChatMotorista } from './motorista/motorista-chat.js';
 import { pararRadarChamadas } from './motorista/motorista-radar.js';
 import { configurarSuporteEIncidentes } from './motorista/motorista-suporte.js';
-import { configurarRecursosInteligentes } from './motorista/motorista-heatmap.js';
-
+import { configurarRecursosInteligentes } from './motorista/motorista-heatmap.js?v=2';
 document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');
