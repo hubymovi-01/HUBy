@@ -1,76 +1,107 @@
 /**
- * HUBy 2.0 - Configurações Gerais, Tarifas e Gamificação Sonora (js/config.js)
+ * HUBy 2.0 - Configurações Gerais, Tarifas Dinâmicas e Gamificação Sonora (js/config.js)
  */
 
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
-// DESPERTADOR: Acorda o servidor em background assim que o app é aberto
+// DESPERTADOR: Acorda a instância do Render em background assim que o app é aberto
 fetch(`${API_URL}/`).catch(() => {
   console.log('A acordar o motor do servidor HUBy...');
 });
 
-// Opções rápidas de recarga da Carteira Digital Pré-Paga
+// Opções rápidas de recarga da Carteira Digital Pré-Paga Pix
 export const OPCOES_RECARGA_PIX = [10.00, 20.00, 50.00, 100.00];
 
-// Tarifas de contingência com tipos rigorosamente mapeados
+// Dicionário com todas as chaves mapeadas (incluindo 'entrega' e 'flash_moto')
 export let CATEGORIAS = {
-  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.5, km: 2.2, min: 10.0 },
-  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.5, min: 7.0 },
-  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 5.0, km: 1.8, min: 8.0 },
+  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 5.0, km: 2.5, min: 10.0 },
+  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 3.5, km: 1.8, min: 7.0 },
+  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 4.0, km: 2.0, min: 8.0 },
+  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 4.0, km: 2.0, min: 8.0 },
   cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 35.0, km: 4.5, min: 45.0 }
 };
 
 export let MULTIPLICADOR_PICO = 1.0;
 
-// Sincroniza em tempo real com as tarifas configuradas pelo dono no painel
+// Sincroniza em tempo real com as tarifas configuradas no Painel Master
 export async function sincronizarTarifasServidor() {
   try {
-    const resp = await fetch(`${API_URL}/api/config/tarifas`);
+    // 1. Tenta buscar da rota corporativa atualizada
+    let resp = await fetch(`${API_URL}/api/admin/tarifas`);
+    if (!resp.ok) {
+      resp = await fetch(`${API_URL}/api/config/tarifas`);
+    }
+
     if (!resp.ok) return;
     const dados = await resp.json();
 
-    const aplicarTarifa = (chave) => {
-      if (dados[chave] && CATEGORIAS[chave]) {
+    const aplicarTarifa = (chave, chaveOrigem) => {
+      const fonte = dados[chaveOrigem || chave];
+      if (fonte && CATEGORIAS[chave]) {
         CATEGORIAS[chave] = {
           ...CATEGORIAS[chave],
-          base: Number(dados[chave].base) || CATEGORIAS[chave].base,
-          km: Number(dados[chave].km) || CATEGORIAS[chave].km,
-          min: Number(dados[chave].min) || CATEGORIAS[chave].min
+          base: Number(fonte.base !== undefined ? fonte.base : CATEGORIAS[chave].base),
+          km: Number(fonte.km !== undefined ? fonte.km : (dados.km_carro || CATEGORIAS[chave].km)),
+          min: Number(fonte.min !== undefined ? fonte.min : CATEGORIAS[chave].min)
         };
       }
     };
 
     aplicarTarifa('carro');
     aplicarTarifa('moto');
-    aplicarTarifa('flash_moto');
-    aplicarTarifa('cargo_pickup');
+    aplicarTarifa('entrega');
+    aplicarTarifa('flash_moto', 'entrega');
 
     if (dados.multiplicador_pico) {
       MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
     }
   } catch (err) {
-    console.warn('Utilizando tabela de tarifas local de reserva:', err.message);
+    console.warn('Utilizando tabela de tarifas local em contingência:', err.message);
   }
 }
 
-// Algoritmo de Cálculo Dinâmico com Multiplicador de Pico/Chuva
+// Algoritmo de Cálculo Dinâmico com Respeito Rigoroso ao Mínimo Configurado
 export function calcularPreco(catId, distanciaKm) {
-  const cat = CATEGORIAS[catId] || CATEGORIAS.carro;
-  const dist = Math.max(0.5, Number(distanciaKm) || 1.5);
+  const chave = String(catId || 'carro').toLowerCase();
+  const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
+  const dist = Math.max(0.5, Number(distanciaKm) || 1.0);
+
+  // Fórmula tarifária: Base + (Distância * Km)
+  const custoBaseMaisKm = cat.base + (dist * cat.km);
   
-  // Fórmula base: Max(Mínimo, Base + Km) * Multiplicador
-  const valorBaseCalculado = Math.max(cat.min, cat.base + (dist * cat.km));
-  const valorFinal = Number((valorBaseCalculado * MULTIPLICADOR_PICO).toFixed(2));
+  // O valor só pode ser maior ou igual à corrida mínima cadastrada pelo admin
+  const valorComMinimo = Math.max(cat.min, custoBaseMaisKm);
+  const valorFinal = Number((valorComMinimo * MULTIPLICADOR_PICO).toFixed(2));
+
+  // Estimativa elegante de tempo de chegada do condutor com base na distância
+  const minutosChegadaEstimada = Math.max(2, Math.round(dist * 1.8));
 
   return {
     categoria: cat.nome,
     tipo: cat.tipo,
     valorTotal: valorFinal,
     multiplicador: MULTIPLICADOR_PICO,
+    minutosChegada: minutosChegadaEstimada,
+    tempoEstimadoTexto: `~${minutosChegadaEstimada} min de você`,
     formatado: `R$ ${valorFinal.toFixed(2).replace('.', ',')}`
   };
+}
+
+// Listener para escutar atualizações instantâneas via Socket.IO
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    if (typeof io !== 'undefined') {
+      try {
+        const socket = io(API_URL);
+        socket.on('tarifas_atualizadas', (novasTarifas) => {
+          console.log('⚡ Tarifas atualizadas em tempo real via Socket.IO:', novasTarifas);
+          sincronizarTarifasServidor();
+        });
+      } catch (e) {}
+    }
+  });
 }
 
 // ============================================================================
@@ -92,7 +123,6 @@ class AudioEfeitosHUBy {
     return this.ctx;
   }
 
-  // Toque sonoro de nova corrida chegando no radar do motorista
   tocarAlertaChamada() {
     try {
       const ctx = this.obterContexto();
@@ -102,8 +132,8 @@ class AudioEfeitosHUBy {
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, ctx.currentTime); // Nota Lá (A5)
-      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15); // Nota Mi (E6)
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
 
       gain.gain.setValueAtTime(0.3, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
@@ -114,17 +144,16 @@ class AudioEfeitosHUBy {
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.3);
     } catch (e) {
-      console.warn('Áudio de radar desativado pelo navegador:', e);
+      console.warn('Áudio de radar desativado:', e);
     }
   }
 
-  // Som agradável de confirmação ao aceitar viagem ou confirmar pagamento Pix
   tocarSucessoAceite() {
     try {
       const ctx = this.obterContexto();
       if (!ctx) return;
 
-      const notas = [523.25, 659.25, 783.99]; // Dó, Mi, Sol
+      const notas = [523.25, 659.25, 783.99];
       notas.forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -144,13 +173,12 @@ class AudioEfeitosHUBy {
     } catch (e) {}
   }
 
-  // Fanfarra triunfal de comemoração ao bater a meta financeira do dia
   tocarMetaBatida() {
     try {
       const ctx = this.obterContexto();
       if (!ctx) return;
 
-      const acordes = [523.25, 659.25, 783.99, 1046.50]; // Acorde Maior de vitória
+      const acordes = [523.25, 659.25, 783.99, 1046.50];
       acordes.forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
