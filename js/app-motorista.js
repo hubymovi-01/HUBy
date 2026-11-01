@@ -13,22 +13,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');
 
-  if (!token || role !== 'motorista') {
+  if (!token || (role !== 'motorista' && role !== 'admin' && role !== 'administrador')) {
     alert('Acesso restrito a condutores parceiros.');
     window.location.replace('./login.html');
     return;
   }
 
-  // 1. Inicializa o mapa Leaflet
+  // 1. Inicializa o mapa Leaflet de forma assíncrona e resiliente
+  let mapaInstancia = null;
   try {
     estado.hubyMapa = new HubyMapa('mapaMotorista');
     estado.hubyMapa.inicializar();
+
+    mapaInstancia = estado.hubyMapa?.map || estado.hubyMapa;
 
     setTimeout(() => {
       if (estado.hubyMapa?.map) {
         estado.hubyMapa.map.invalidateSize();
       }
-    }, 250);
+    }, 300);
 
     estado.hubyMapa.obterGPS((pos) => {
       if (estado.isOnline) {
@@ -36,10 +39,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   } catch (err) {
-    console.warn('Erro ao inicializar mapa:', err);
+    console.warn('Aviso na inicialização do mapa do motorista:', err);
   }
 
-  // 2. Configura os módulos da aplicação
+  // 2. Configura os módulos essenciais da interface e operações
   configurarToggleOnline();
   configurarDrawerPerfil();
   configurarModalSaquePix();
@@ -47,20 +50,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarAjusteMetaDiaria();
   configurarSuporteEIncidentes();
 
-  // 3. Ativa as ferramentas inteligentes (Calor, Pausa e Casa) conectadas ao mapa Leaflet
-  const mapaInstancia = estado.hubyMapa?.map || estado.hubyMapa;
-  configurarRecursosInteligentes(mapaInstancia, token);
+  // 3. Ativa ferramentas inteligentes conectadas ao mapa (Calor, Pausa e Casa)
+  try {
+    configurarRecursosInteligentes(mapaInstancia, token);
+  } catch (errRecursos) {
+    console.warn('Recursos inteligentes aguardando renderização do mapa:', errRecursos);
+  }
 
-  // 4. Carrega os dados iniciais do parceiro e ganhos
-  await carregarPerfilCompleto();
-  await carregarGanhosHoje();
+  // 4. Carrega os dados do condutor e o progresso da meta diária em paralelo
+  await Promise.allSettled([
+    carregarPerfilCompleto(),
+    carregarGanhosHoje()
+  ]);
 
-  // 5. Limpeza ao sair da janela
+  // 5. Limpeza de sockets, radares e telemetria ao fechar/trocar aba
   window.addEventListener('beforeunload', () => {
     pararRadarChamadas();
     pararTransmissaoTelemetria();
-    if (estado.socketRadar) estado.socketRadar.disconnect();
-    if (estado.hubyMapa?.watchId !== null && navigator.geolocation) {
+    if (estado.socketRadar) {
+      estado.socketRadar.disconnect();
+    }
+    if (estado.hubyMapa?.watchId !== null && estado.hubyMapa?.watchId !== undefined && navigator.geolocation) {
       navigator.geolocation.clearWatch(estado.hubyMapa.watchId);
     }
   });
