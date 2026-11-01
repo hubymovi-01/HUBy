@@ -1,7 +1,8 @@
-// js/cliente/cliente-pedidos.js
-import { API_URL, calcularPreco, MULTIPLICADOR_PICO } from '../config.js';
+// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Carteira Pré-Paga e Radar
+import { API_URL, calcularPreco, MULTIPLICADOR_PICO, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
+import { carregarSaldoCarteiraCliente } from './cliente-ui-menu.js';
 
 export function atualizarBotaoChamar() {
   const btn = document.getElementById('btnPedirHuby');
@@ -18,7 +19,10 @@ export function atualizarBotaoChamar() {
 export function atualizarResumoValores() {
   if (!estadoCliente.rotaAtual) return;
 
-  const km = estadoCliente.rotaAtual.distanciaKm;
+  // Considera a distância com paradas se estiver disponível
+  const km = estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm;
+  const duracao = estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin;
+
   const precoCalculado = calcularPreco(estadoCliente.categoriaSelecionada, km);
 
   const txtDist = document.getElementById('txtDistanciaEstimada');
@@ -26,7 +30,8 @@ export function atualizarResumoValores() {
 
   if (txtDist) {
     const dinamicaInfo = MULTIPLICADOR_PICO > 1.0 ? ` • ⚡ Dinâmica ${MULTIPLICADOR_PICO}x` : '';
-    txtDist.textContent = `${km} km • ⏱️ ${estadoCliente.rotaAtual.duracaoMin} min${dinamicaInfo}`;
+    const paradasInfo = estadoCliente.paradas?.length ? ` • 📍 ${estadoCliente.paradas.length} parada(s)` : '';
+    txtDist.textContent = `${km} km • ⏱️ ${duracao} min${dinamicaInfo}${paradasInfo}`;
   }
   if (txtPreco) {
     txtPreco.textContent = precoCalculado.formatado;
@@ -51,8 +56,26 @@ export async function submeterPedido() {
   const clienteId = localStorage.getItem('huby_user_id');
   const novoId = 'ped_' + Date.now().toString(36);
 
-  const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada, estadoCliente.rotaAtual.distanciaKm);
+  const kmTotal = estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm;
+  const duracaoTotal = estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin;
+  const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada, kmTotal);
   const cupomCodigo = document.getElementById('inputCupomDesconto')?.value.trim().toUpperCase() || null;
+
+  // ========================================================================
+  // VERIFICAÇÃO INTELIGENTE DE FORMA DE PAGAMENTO (CARTEIRA PRÉ-PAGA OU PIX)
+  // ========================================================================
+  let metodoPgto = 'pix_app';
+  const saldoDisponivel = Number(estadoCliente.saldoCarteiraCliente || 0);
+
+  if (saldoDisponivel >= precoInfo.valorTotal) {
+    const usarSaldo = confirm(
+      `Você possui R$ ${saldoDisponivel.toFixed(2).replace('.', ',')} de saldo na Carteira HUBy.\n` +
+      `Deseja pagar essa corrida de ${precoInfo.formatado} diretamente com seu saldo pré-pago?`
+    );
+    if (usarSaldo) {
+      metodoPgto = 'saldo_carteira';
+    }
+  }
 
   const latOrig = estadoCliente.hubyMapa?.coordsOrigem ? estadoCliente.hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
   const lngOrig = estadoCliente.hubyMapa?.coordsOrigem ? estadoCliente.hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
@@ -77,11 +100,12 @@ export async function submeterPedido() {
     destino: nomeDestino,
     coordsOrigem: estadoCliente.hubyMapa.coordsOrigem,
     coordsDestino: estadoCliente.coordsDestino,
-    distanciaKm: estadoCliente.rotaAtual.distanciaKm,
-    duracaoMin: estadoCliente.rotaAtual.duracaoMin,
+    distanciaKm: kmTotal,
+    duracaoMin: duracaoTotal,
     valorTotal: precoInfo.valorTotal,
-    metodoPgto: 'pix_app',
-    cupomCodigo
+    metodoPgto: metodoPgto,
+    cupomCodigo,
+    paradas: estadoCliente.paradas || []
   };
 
   const btn = document.getElementById('btnPedirHuby');
@@ -104,6 +128,23 @@ export async function submeterPedido() {
 
     if (dadosResposta.desconto > 0) {
       alert(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`);
+    }
+
+    // Se o pagamento for via saldo, processa o débito na carteira imediatamente
+    if (metodoPgto === 'saldo_carteira' && token) {
+      try {
+        await fetch(`${API_URL}/api/carteira/debito-corrida`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({ pedidoId: novoId, valor: precoInfo.valorTotal })
+        });
+        await carregarSaldoCarteiraCliente();
+      } catch (errDebito) {
+        console.warn('Falha no registro de débito da carteira:', errDebito);
+      }
     }
 
     estadoCliente.pedidoAtivoId = novoId;
@@ -181,6 +222,12 @@ export function iniciarPollingStatus() {
       const pedido = await resp.json();
 
       if (pedido.status === 'aceito' || pedido.status === 'em_viagem') {
+        // Toca o feedback sonoro agradável ao ser aceito
+        if (!estadoCliente.motoristaAceitouTocado) {
+          sonsHUBy.tocarSucessoAceite();
+          estadoCliente.motoristaAceitouTocado = true;
+        }
+
         atualizarInterfaceMotoristaAceitou(pedido);
 
         if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && typeof L !== 'undefined' && !estadoCliente.markerMotoristaAaminho) {
@@ -195,6 +242,8 @@ export function iniciarPollingStatus() {
 
       } else if (pedido.status === 'concluido') {
         clearInterval(estadoCliente.intervalPolling);
+        sonsHUBy.tocarSucessoAceite();
+        
         estadoCliente.corridaParaAvaliarId = estadoCliente.pedidoAtivoId;
         resetarPainelCliente();
 
@@ -253,7 +302,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
 
     <!-- CARD DO MOTORISTA -->
     <div class="driver-card-accepted">
-      <!-- Topo: Foto, Nome e Reputação -->
       <div class="driver-card-top">
         <div class="driver-avatar-container">
           <img src="${foto}" alt="${nome}" class="driver-avatar-img">
@@ -269,7 +317,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
         </div>
       </div>
 
-      <!-- Veículo e Placa Mercosul Estilizada -->
       <div class="driver-vehicle-box">
         <div class="vehicle-desc">
           <strong>${modelo}</strong>
@@ -281,7 +328,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
         </div>
       </div>
 
-      <!-- Ações Rápidas -->
       <div class="driver-card-actions">
         ${telefone ? `
           <a href="tel:${telefone}" class="btn-contact-call">
@@ -295,7 +341,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
     </div>
   `;
 
-  // Gerenciamento do cronômetro regressivo
   if (!estadoCliente.cronometroChegada) {
     estadoCliente.cronometroChegada = setInterval(() => {
       estadoCliente.tempoEstimado--;
@@ -341,6 +386,7 @@ export function resetarPainelCliente() {
   estadoCliente.pedidoAtivoId = null;
   estadoCliente.rotaAtual = null;
   estadoCliente.coordsDestino = null;
+  estadoCliente.motoristaAceitouTocado = false;
 
   if (estadoCliente.cronometroChegada) {
     clearInterval(estadoCliente.cronometroChegada);

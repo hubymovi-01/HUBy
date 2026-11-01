@@ -1,10 +1,28 @@
-// js/motorista/motorista-radar.js
-import { API_URL } from '../config.js';
+// js/motorista/motorista-radar.js - Radar de Chamadas e Gamificação Sonora HUBy
+import { API_URL, sonsHUBy } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
-import { iniciarAlertaSonoroChamada, pararAlertaSonoroChamada } from './motorista-utilidades.js';
+
+let intervalAlertaChamada = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
+
+// Inicia bipe sonoro de alta atenção em pulso até o motorista interagir
+export function iniciarAlertaSonoroChamada() {
+  if (intervalAlertaChamada) return;
+  sonsHUBy.tocarAlertaChamada();
+  intervalAlertaChamada = setInterval(() => {
+    sonsHUBy.tocarAlertaChamada();
+  }, 1400);
+}
+
+// Interrompe o som do radar
+export function pararAlertaSonoroChamada() {
+  if (intervalAlertaChamada) {
+    clearInterval(intervalAlertaChamada);
+    intervalAlertaChamada = null;
+  }
+}
 
 // Alternar status online/offline na base de dados
 export async function alternarStatusOnline() {
@@ -20,6 +38,11 @@ export async function alternarStatusOnline() {
     const dados = await resp.json();
     const online = Boolean(dados.online);
     estado.isOnline = online;
+
+    if (online) {
+      sonsHUBy.tocarSucessoAceite();
+    }
+
     return online;
   } catch (err) {
     console.warn('Erro ao alternar status do motorista:', err);
@@ -95,7 +118,6 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     const existeNovaChamada = idsAtuais.some((id) => !estado.chamadasAnterioresIds.has(id));
 
     if (existeNovaChamada || tocarSomForcado) {
-      // Dispara o bipe de alta atenção contínuo em loop
       iniciarAlertaSonoroChamada();
       dispararNotificacaoNovaChamada(pedidos.length);
     }
@@ -160,8 +182,8 @@ function renderizarRadar(pedidos) {
 
   feedEl.querySelectorAll('.btn-accept-order').forEach((btn) => {
     btn.addEventListener('click', () => {
-      // Interrompe imediatamente o alerta sonoro contínuo ao interagir
       pararAlertaSonoroChamada();
+      sonsHUBy.tocarSucessoAceite();
 
       const id = btn.getAttribute('data-id');
       const preco = btn.getAttribute('data-preco');

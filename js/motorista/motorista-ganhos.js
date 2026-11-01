@@ -1,6 +1,8 @@
-// js/motorista/motorista-ganhos.js
-import { API_URL } from '../config.js';
+// js/motorista/motorista-ganhos.js - Faturamento, Extrato e Fanfarra de Meta Diária
+import { API_URL, sonsHUBy } from '../config.js';
 import { estado } from './motorista-estado.js';
+
+let metaComemorada = false;
 
 export async function carregarGanhosHoje() {
   const token = localStorage.getItem('huby_token');
@@ -40,6 +42,7 @@ export function configurarAjusteMetaDiaria() {
       if (!isNaN(valorNum) && valorNum > 0) {
         estado.metaDiaria = valorNum;
         localStorage.setItem('huby_meta_diaria', valorNum);
+        metaComemorada = false; // Permite comemorar novamente caso a nova meta seja alcançada
         renderizarCardGanhosHoje();
       } else {
         alert('Por favor, informe um valor numérico válido.');
@@ -55,16 +58,35 @@ export function renderizarCardGanhosHoje() {
   const lblMetaTxt = document.getElementById('lblMetaDiariaTxt');
 
   const ganhos = estado.ganhosHoje || 0;
-  const meta = estado.metaDiaria || 200;
+  const meta = estado.metaDiaria || Number(localStorage.getItem('huby_meta_diaria')) || 200;
   const percentual = Math.min(Math.round((ganhos / meta) * 100), 100);
 
   if (lblValor) lblValor.textContent = `R$ ${ganhos.toFixed(2).replace('.', ',')}`;
   if (lblQtd) lblQtd.textContent = `${estado.corridasHoje || 0} ${estado.corridasHoje === 1 ? 'viagem' : 'viagens'}`;
-  if (lblMetaTxt) lblMetaTxt.textContent = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} (${percentual}%)`;
+  
+  if (lblMetaTxt) {
+    if (percentual >= 100) {
+      lblMetaTxt.innerHTML = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} <strong style="color: #10B981;">(100% Batida! 🎉)</strong>`;
+    } else {
+      lblMetaTxt.textContent = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} (${percentual}%)`;
+    }
+  }
 
   if (barraProgresso) {
     barraProgresso.style.width = `${percentual}%`;
-    barraProgresso.style.background = percentual >= 100 ? '#10B981' : '#38BDF8';
+    if (percentual >= 100) {
+      barraProgresso.style.background = '#10B981';
+      barraProgresso.style.boxShadow = '0 0 12px rgba(16, 185, 129, 0.7)';
+    } else {
+      barraProgresso.style.background = '#38BDF8';
+      barraProgresso.style.boxShadow = 'none';
+    }
+  }
+
+  // Aciona a fanfarra triunfal ao alcançar a meta pela primeira vez no turno
+  if (percentual >= 100 && !metaComemorada && ganhos > 0) {
+    metaComemorada = true;
+    sonsHUBy.tocarMetaBatida();
   }
 }
 
@@ -76,7 +98,6 @@ export async function carregarExtratoFinanceiro() {
   if (!token) return;
 
   try {
-    // 1. Tenta a rota dedicada de extrato
     let resp = await fetch(`${API_URL}/api/motoristas/extrato`, {
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -89,7 +110,6 @@ export async function carregarExtratoFinanceiro() {
       saques = Array.isArray(data.saques) ? data.saques : [];
       corridas = Array.isArray(data.corridas) ? data.corridas : [];
     } else {
-      // 2. Fallback caso a rota acima ainda não esteja no backend: busca histórico de pedidos
       const respHistorico = await fetch(`${API_URL}/api/pedidos/historico`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -106,7 +126,6 @@ export async function carregarExtratoFinanceiro() {
 
     let html = '';
 
-    // Renderiza saques recentes
     saques.slice(0, 5).forEach(s => {
       const corStatus = s.status === 'pago' ? '#10B981' : (s.status === 'recusado' ? '#EF4444' : '#F59E0B');
       html += `
@@ -120,7 +139,6 @@ export async function carregarExtratoFinanceiro() {
       `;
     });
 
-    // Renderiza corridas recentes
     corridas.slice(0, 8).forEach(c => {
       const repasse = Number(c.repasse_liquido || (Number(c.valor_total || 0) * 0.85));
       const local = c.destino_endereco ? c.destino_endereco.split(',')[0].trim() : 'Viagem Concluída';
