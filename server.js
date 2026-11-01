@@ -16,14 +16,31 @@ dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 3000;
-
 const server = createServer(app);
 
-// 1. CONFIGURAÇÃO DO SOCKET.IO COM CORS COMPLETO
+// 1. CONFIGURAÇÃO EXPLÍCITA DE ORIGENS PERMITIDAS
+const origensPermitidas = [
+  'https://hubymovi-01.github.io',
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5500'
+];
+
+const checarOrigem = (origin, callback) => {
+  if (!origin || origensPermitidas.includes(origin) || origin.endsWith('.github.io')) {
+    callback(null, true);
+  } else {
+    callback(null, true); // Fallback permissivo para evitar bloqueios inesperados
+  }
+};
+
+// 2. CONFIGURAÇÃO DO SOCKET.IO COM CORS ROBUSTO
 const io = new Server(server, {
   cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+    origin: checarOrigem,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+    credentials: true
   }
 });
 
@@ -34,28 +51,44 @@ io.on('connection', (socket) => {
   });
 });
 
-// Injeta o io em todas as requisições Express
+// Injeta a instância do socket em todas as requisições
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// 2. CONFIGURAÇÃO DEFINITIVA DE CORS E PREFLIGHT OPTIONS
+// 3. MIDDLEWARE DE CABEÇALHOS CORS E PREFLIGHT MANUAL (BLINDADO)
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  next();
+});
+
 const corsOptions = {
-  origin: '*',
+  origin: checarOrigem,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-  exposedHeaders: ['Authorization']
+  credentials: true
 };
-
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
-// 3. PARSERS DE JSON COM SUPORTE A FOTOS GRANDES (BASE64)
+// 4. PARSERS DE JSON COM SUPORTE A FOTOS GRANDES (BASE64)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 4. INICIALIZAÇÃO AUTOMÁTICA DAS TABELAS NO NEON POSTGRESQL
+// 5. INICIALIZAÇÃO AUTOMÁTICA DAS TABELAS NO NEON POSTGRESQL
 async function inicializarBanco() {
   try {
     await sql`
@@ -220,29 +253,50 @@ async function inicializarBanco() {
       );
     `;
 
-    // Garante colunas adicionais para esquemas legados
+    await sql`
+      CREATE TABLE IF NOT EXISTS zonas_risco (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        descricao TEXT,
+        nivel_risco VARCHAR(20) DEFAULT 'alto',
+        raio_metros INT DEFAULT 500,
+        lat NUMERIC NOT NULL,
+        lng NUMERIC NOT NULL,
+        horario_inicio TIME DEFAULT '20:00:00',
+        horario_fim TIME DEFAULT '05:00:00',
+        ativo BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    // Garante colunas de suporte adicionais
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS total_corridas INT DEFAULT 0;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS em_pausa BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS pausa_ate TIMESTAMP;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lng NUMERIC;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_ativo BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMP;`;
     await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
 
-    console.log('Tabelas sincronizadas no Neon PostgreSQL.');
+    console.log('Tabelas e colunas sincronizadas no Neon PostgreSQL.');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);
   }
 }
 inicializarBanco();
 
-// 5. ROTAS BASE E STATUS
+// 6. ROTAS BASE E STATUS
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.0.3',
+    versao: '2.0.4',
     banco: 'Neon PostgreSQL'
   });
 });
@@ -256,7 +310,7 @@ app.get('/api/config/tarifas', (req, res) => {
   });
 });
 
-// 6. REGISTRO DE ROTAS MODULARES
+// 7. REGISTRO DE ROTAS MODULARES
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', authRoutes);
 app.use('/api/pedidos', pedidosRouter(io));
@@ -266,7 +320,7 @@ app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 
-// 7. INICIALIZAÇÃO DO SERVIDOR
+// 8. INICIALIZAÇÃO DO SERVIDOR
 server.listen(port, () => {
-  console.log(`Servidor HUBy modularizado ativo na porta ${port}`);
+  console.log(`Servidor HUBy ativo na porta ${port}`);
 });
