@@ -19,7 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 1. Inicializa o mapa Leaflet de forma assíncrona e resiliente
+  // 1. Inicializa o mapa Leaflet
   let mapaInstancia = null;
   try {
     estado.hubyMapa = new HubyMapa('mapaMotorista');
@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     carregarGanhosHoje()
   ]);
 
-  // 5. Limpeza de sockets, radares e telemetria ao fechar/trocar aba
+  // 5. Limpeza de sockets, radares e telemetria ao sair
   window.addEventListener('beforeunload', () => {
     pararRadarChamadas();
     pararTransmissaoTelemetria();
