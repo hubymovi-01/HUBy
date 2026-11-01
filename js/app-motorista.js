@@ -1,5 +1,5 @@
 // js/motorista/motorista-heatmap.js
-import { API_URL } from '../config.js';
+import { API_URL } from './config.js';
 
 let camadaCalor = null;
 let calorAtivo = false;
@@ -12,6 +12,7 @@ export function configurarRecursosInteligentes(mapaInstancia, token) {
   configurarModoPausa(token);
   configurarModoDestino(token);
 }
+
 
 // 2. Exportação de compatibilidade retroativa
 export function inicializarHeatmapDemanda(mapaInstancia, token) {
