@@ -260,21 +260,54 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 5. ATUALIZAR TARIFAS
+  // 5. CONSULTA E ATUALIZAÇÃO DE TARIFAS (COM REGRAS DE VALOR MÍNIMO E PICO)
   // =========================================================================
+  router.get('/tarifas', async (req, res) => {
+    try {
+      const config = await sql`
+        SELECT valor FROM configuracoes_plataforma 
+        WHERE chave = 'tarifas' LIMIT 1;
+      `;
+
+      const tarifasPadrao = {
+        taxa_plataforma: 15,
+        carro: { base: 5.0, km: 2.5, min: 10.0 },
+        moto: { base: 3.5, km: 1.8, min: 7.0 },
+        entrega: { base: 4.0, km: 2.0, min: 8.0 }
+      };
+
+      if (config.length === 0 || !config[0].valor) {
+        return res.json(tarifasPadrao);
+      }
+
+      res.json(config[0].valor);
+    } catch (err) {
+      console.error('Erro ao ler tarifas:', err);
+      res.status(500).json({ erro: 'Falha ao buscar configurações tarifárias.' });
+    }
+  });
+
   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const novasTarifas = req.body;
+
       await sql`
         INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
         VALUES ('tarifas', ${JSON.stringify(novasTarifas)}::jsonb, CURRENT_TIMESTAMP)
         ON CONFLICT (chave) DO UPDATE
         SET valor = ${JSON.stringify(novasTarifas)}::jsonb, atualizado_em = CURRENT_TIMESTAMP;
       `;
-      res.json({ sucesso: true, mensagem: 'Tarifas atualizadas com sucesso!' });
+
+      // Notifica passageiros e motoristas conectados instantaneamente
+      const socket = req.io || io;
+      if (socket) {
+        socket.emit('tarifas_atualizadas', novasTarifas);
+      }
+
+      res.json({ sucesso: true, mensagem: 'Tarifas e valores mínimos atualizados com sucesso!' });
     } catch (err) {
       console.error('Erro ao atualizar tarifas:', err);
-      res.status(500).json({ erro: 'Falha ao atualizar tarifas.' });
+      res.status(500).json({ erro: 'Falha ao atualizar tarifas no banco.' });
     }
   });
 

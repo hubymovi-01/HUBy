@@ -1,15 +1,20 @@
 /* ==========================================================================
-   HUBy 2.0 - Estilos Globais e Variáveis de Sistema (css/base.css)
+   HUBy 2.0 - Estilos Globais, Variáveis de Sistema e Glassmorphism (css/base.css)
    ========================================================================== */
 
 :root {
   --bg-dark: #080C14;
-  --bg-card: rgba(13, 20, 36, 0.95);
+  --bg-card: rgba(13, 20, 36, 0.78);
+  --bg-card-glass: rgba(15, 23, 42, 0.72);
   --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glow: rgba(16, 185, 129, 0.35);
+  
+  /* Paleta Corporativa */
   --primary-green: #10B981;
   --primary-green-dark: #059669;
-  --emerald-glow: rgba(16, 185, 129, 0.25);
+  --emerald-glow: rgba(16, 185, 129, 0.35);
   --accent-blue: #38BDF8;
+  --blue-glow: rgba(56, 189, 248, 0.3);
   --accent-orange: #FF6B00;
   --accent-amber: #F59E0B;
   --accent-red: #EF4444;
@@ -46,26 +51,89 @@ input, button, select {
 }
 
 /* ==========================================================================
+   ELEMENTOS GLASSMORPHISM E TOQUE VISUAL REFINADO
+   ========================================================================== */
+
+.glass-panel {
+  background: var(--bg-card-glass);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 12px 36px 0 rgba(0, 0, 0, 0.5);
+}
+
+/* Badge de Tempo de Espera Estimado */
+.badge-tempo-espera {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: var(--primary-green);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 20px;
+  margin-top: 4px;
+}
+
+.badge-tempo-espera span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--primary-green);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--primary-green);
+  animation: pulseGreen 1.8s infinite;
+}
+
+@keyframes pulseGreen {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  50% { transform: scale(1.4); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.8; }
+}
+
+/* Seletor Flutuante de Categorias Elegante */
+.category-chip-huby {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.category-chip-huby.active {
+  border-color: var(--primary-green);
+  background: rgba(16, 185, 129, 0.12);
+  box-shadow: 0 0 16px var(--emerald-glow);
+  transform: translateY(-2px);
+}
+
+/* Brilho e Traçado Dinâmico para Leaflet Paths */
+.leaflet-interactive {
+  filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.5));
+}
+
+/* ==========================================================================
    CARD DO MOTORISTA ACEITO (VISÃO DO PASSAGEIRO)
    ========================================================================== */
 
 .driver-card-accepted {
-  background: var(--bg-card);
+  background: var(--bg-card-glass);
   border: 1px solid var(--border-subtle);
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(12px);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  animation: slideUpFade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: slideUpFade 0.35s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes slideUpFade {
   from {
     opacity: 0;
-    transform: translateY(14px);
+    transform: translateY(18px);
   }
   to {
     opacity: 1;
@@ -76,24 +144,24 @@ input, button, select {
 .driver-card-top {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .driver-avatar-container {
   position: relative;
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   flex-shrink: 0;
 }
 
 .driver-avatar-img {
-  width: 58px;
-  height: 58px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   object-fit: cover;
   border: 2px solid var(--primary-green);
   background: #1F2937;
-  box-shadow: 0 0 12px var(--emerald-glow);
+  box-shadow: 0 0 14px var(--emerald-glow);
 }
 
 .badge-verified-driver {
@@ -105,12 +173,12 @@ input, button, select {
   font-size: 11px;
   font-weight: 900;
   border-radius: 50%;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #111726;
+  border: 2px solid #080C14;
 }
 
 .driver-header-meta {
@@ -126,6 +194,7 @@ input, button, select {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.3px;
 }
 
 .driver-rating-row {
@@ -144,8 +213,8 @@ input, button, select {
   align-items: center;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 10px 14px;
+  border-radius: 14px;
+  padding: 12px 14px;
 }
 
 .vehicle-desc strong {
@@ -172,6 +241,7 @@ input, button, select {
   font-family: monospace;
   font-weight: 900;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 
 .mercosul-plate-header {
@@ -194,17 +264,17 @@ input, button, select {
 /* AÇÕES RÁPIDAS (LIGAÇÃO / CHAT) */
 .driver-card-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   margin-top: 4px;
 }
 
 .btn-contact-call {
   flex: 1;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-subtle);
   color: var(--text-main);
-  padding: 10px;
-  border-radius: 10px;
+  padding: 11px;
+  border-radius: 12px;
   font-weight: 700;
   font-size: 12px;
   display: flex;
@@ -217,7 +287,7 @@ input, button, select {
 
 .btn-contact-call:active {
   transform: scale(0.97);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .btn-contact-chat {
@@ -225,8 +295,8 @@ input, button, select {
   background: var(--accent-blue);
   border: none;
   color: #031B26;
-  padding: 10px;
-  border-radius: 10px;
+  padding: 11px;
+  border-radius: 12px;
   font-weight: 800;
   font-size: 12px;
   display: flex;
@@ -234,6 +304,7 @@ input, button, select {
   justify-content: center;
   gap: 6px;
   cursor: pointer;
+  box-shadow: 0 4px 12px var(--blue-glow);
   transition: all 0.2s ease;
 }
 
