@@ -4,7 +4,7 @@
 
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
-  : 'https://SUA_URL_REAL_DO_RENDER.onrender.com'; // Coloque aqui o link exato do seu serviço no Render
+  : 'https://huby.onrender.com';
 
 // DESPERTADOR: Acorda a instância do Render em background assim que o app é aberto
 fetch(`${API_URL}/`).catch(() => {
@@ -28,7 +28,6 @@ export let MULTIPLICADOR_PICO = 1.0;
 // Sincroniza em tempo real com as tarifas configuradas no Painel Master
 export async function sincronizarTarifasServidor() {
   try {
-    // 1. Tenta buscar da rota corporativa atualizada
     let resp = await fetch(`${API_URL}/api/admin/tarifas`);
     if (!resp.ok) {
       resp = await fetch(`${API_URL}/api/config/tarifas`);
