@@ -37,10 +37,10 @@ function inicializarMapa() {
     }).setView(estado.coords, 15);
 
     // Tiles CartoDB Voyager / OSM com alto contraste
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-      subdomains: 'abcd'
-    }).addTo(estado.mapa);
+    L.tileLayer('https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  subdomains: 'abcd'
+}).addTo(estado.mapa);
 
     const iconeCarro = L.divIcon({
       className: 'huby-driver-pin',
