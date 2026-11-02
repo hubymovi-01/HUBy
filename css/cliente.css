@@ -6,10 +6,13 @@
   --hub-green: #10B981;
   --hub-green-hover: #059669;
   --hub-green-glow: rgba(16, 185, 129, 0.25);
-  --bg-surface: rgba(17, 24, 39, 0.92);
+  --bg-surface: rgba(17, 24, 39, 0.94);
   --border-glass: rgba(255, 255, 255, 0.1);
   --text-primary: #FFFFFF;
   --text-secondary: #94A3B8;
+  --blue: #38BDF8;
+  --amber: #F59E0B;
+  --red: #EF4444;
 }
 
 * {
@@ -51,6 +54,7 @@ html, body.client-viewport {
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: opacity 0.4s ease;
 }
 
 .splash-content {
@@ -384,7 +388,125 @@ html, body.client-viewport {
   transform: scale(0.98);
 }
 
-/* 6. MENU LATERAL (DRAWER) */
+/* 6. CARD DO CONDUTOR E PLACA MERCOSUL */
+.driver-card-accepted {
+  background: rgba(18, 24, 38, 0.98);
+  border: 1.5px solid var(--border-glass);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.driver-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.driver-avatar-container {
+  position: relative;
+}
+
+.driver-avatar-img {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--hub-green);
+}
+
+.badge-verified-driver {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  background: var(--hub-green);
+  color: #02241C;
+  font-size: 10px;
+  font-weight: 900;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mercosul-plate-passenger {
+  display: inline-flex;
+  flex-direction: column;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #FFFFFF;
+  color: #000000;
+  font-family: monospace;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+
+.mercosul-plate-header {
+  background: #003399;
+  color: #FFFFFF;
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 4px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.mercosul-plate-body {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 1px 6px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.btn-contact-call {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border-glass);
+  color: #FFF;
+  font-weight: 800;
+  padding: 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.btn-contact-chat {
+  background: rgba(56,189,248,0.18);
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  font-weight: 800;
+  padding: 10px;
+  border-radius: 10px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+/* 7. PARADAS INTERMEDIÁRIAS */
+.stop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(56, 189, 248, 0.08);
+  border-left: 2.5px solid var(--blue);
+  padding: 6px 10px;
+  border-radius: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  border: 1px solid rgba(56,189,248,0.2);
+}
+
+/* 8. MENU LATERAL (DRAWER) */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -543,7 +665,7 @@ html, body.client-viewport {
   text-align: center;
 }
 
-/* 7. MODAIS DE HISTÓRICO E AVALIAÇÃO */
+/* 9. MODAIS DE HISTÓRICO, PAGAMENTOS E AVALIAÇÃO */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -681,72 +803,48 @@ html, body.client-viewport {
   font-size: 13px;
   cursor: pointer;
 }
-/* MODAL DE PAGAMENTOS */
-.payment-methods-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 16px;
-}
 
-.payment-method-card {
-  background: rgba(255, 255, 255, 0.03);
+/* GORJETAS E TAGS DE AVALIAÇÃO */
+.btn-gorjeta {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--border-glass);
-  border-radius: 12px;
-  padding: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.payment-method-card.active-method {
-  border-color: var(--hub-green);
-  background: rgba(16, 185, 129, 0.08);
-}
-
-.method-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-align: left;
-}
-
-.method-header .m-icon {
-  font-size: 22px;
-}
-
-.method-header strong {
-  display: block;
-  font-size: 14px;
   color: #FFF;
+  padding: 8px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
 }
 
-.method-header small {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.badge-active {
+.btn-gorjeta.active {
   background: var(--hub-green);
   color: #02241C;
-  font-size: 10px;
-  font-weight: 800;
-  padding: 4px 8px;
-  border-radius: 999px;
 }
 
+.tag-avaliacao-rapida {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tag-avaliacao-rapida.active {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: var(--hub-green);
+  color: var(--hub-green);
+}
+
+/* RECARGA PIX */
 .pix-charge-box {
   background: rgba(0, 0, 0, 0.25);
   border-radius: 12px;
   padding: 12px;
   text-align: left;
-}
-
-.charge-title {
-  display: block;
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
 }
 
 .pix-key-row {
