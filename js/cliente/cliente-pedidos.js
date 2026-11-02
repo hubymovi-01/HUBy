@@ -20,16 +20,13 @@ export function atualizarResumoValores() {
   const cat = estadoCliente.categoriaSelecionada || 'carro';
   const dist = estadoCliente.rotaAtual?.distanciaKm || 1.0;
 
-  // Realiza o cálculo dinâmico baseado na tabela vinda do backend
   const resumo = calcularPreco(cat, dist);
 
-  // Elementos de exibição do valor estimado
   const lblPreco = document.getElementById('lblValorEstimado') || document.getElementById('txtPrecoEstimado') || document.querySelector('.preco-card-huby');
   if (lblPreco) {
     lblPreco.textContent = resumo.formatado;
   }
 
-  // Elemento de exibição da distância
   const lblDistancia = document.getElementById('lblDistanciaKm') || document.getElementById('txtDistanciaEstimada');
   if (lblDistancia) {
     lblDistancia.textContent = estadoCliente.rotaAtual?.distanciaKm 
@@ -37,7 +34,6 @@ export function atualizarResumoValores() {
       : '-- km';
   }
 
-  // Atualiza o texto do botão principal
   atualizarBotaoChamar(resumo);
 }
 
@@ -64,9 +60,6 @@ export async function submeterPedido() {
   const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada, kmTotal);
   const cupomCodigo = document.getElementById('inputCupomDesconto')?.value.trim().toUpperCase() || null;
 
-  // ========================================================================
-  // VERIFICAÇÃO INTELIGENTE DE FORMA DE PAGAMENTO (CARTEIRA PRÉ-PAGA OU PIX)
-  // ========================================================================
   let metodoPgto = 'pix_app';
   const saldoDisponivel = Number(estadoCliente.saldoCarteiraCliente || 0);
 
@@ -150,7 +143,9 @@ export async function submeterPedido() {
     }
 
     estadoCliente.pedidoAtivoId = novoId;
+    localStorage.setItem('huby_pedido_ativo_id', novoId);
     mostrarAguardandoMotorista();
+    conectarSocketCliente(novoId);
     iniciarPollingStatus();
   } catch (err) {
     alert(err.message);
@@ -169,8 +164,10 @@ export function mostrarAguardandoMotorista() {
   if (blocoEntrega) blocoEntrega.style.display = 'none';
   if (cardStatus) cardStatus.style.display = 'block';
 
-  document.getElementById('statusTitulo').textContent = 'Radar Ativo: Procurando motorista...';
-  document.getElementById('statusDescricao').textContent = 'O seu pedido foi enviado para os parceiros próximos.';
+  const tit = document.getElementById('statusTitulo');
+  const desc = document.getElementById('statusDescricao');
+  if (tit) tit.textContent = 'Radar Ativo: Procurando motorista...';
+  if (desc) desc.textContent = 'O seu pedido foi enviado para os parceiros próximos.';
 
   if (btn) {
     btn.disabled = false;
@@ -179,36 +176,48 @@ export function mostrarAguardandoMotorista() {
   }
 }
 
-export async function acionarSosCliente() {
-  if (!estadoCliente.pedidoAtivoId) {
-    alert('O alerta SOS só pode ser acionado durante uma viagem ativa.');
-    return;
-  }
+// Escuta via WebSocket em tempo real para resposta instantânea
+function conectarSocketCliente(pedidoId) {
+  const socket = window.io ? window.io(API_URL) : null;
+  if (!socket) return;
 
-  if (!confirm('🚨 ATENÇÃO: Deseja acionar a emergência SOS?\nA central de monitoramento e os contatos de suporte serão alertados com sua localização.')) {
-    return;
-  }
-
-  const token = localStorage.getItem('huby_token');
-  const lat = estadoCliente.hubyMapa?.coordsOrigem ? estadoCliente.hubyMapa.coordsOrigem[0] : null;
-  const lng = estadoCliente.hubyMapa?.coordsOrigem ? estadoCliente.hubyMapa.coordsOrigem[1] : null;
-
-  try {
-    const res = await fetch(`${API_URL}/api/pedidos/${estadoCliente.pedidoAtivoId}/sos`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({ lat, lng, relato: 'Emergência acionada pelo passageiro no aplicativo.' })
-    });
-
-    if (res.ok) {
-      alert('🚨 ALERTA SOS REGISTRADO!\nA equipe da HUBy foi alertada e o suporte está ciente da sua localização.');
+  socket.on('corrida_aceita', (data) => {
+    if (data.pedidoId === pedidoId || data.pedidoId === estadoCliente.pedidoAtivoId) {
+      sonsHUBy.tocarSucessoAceite();
+      atualizarInterfaceMotoristaAceitou({
+        id: data.pedidoId,
+        status: 'a_caminho',
+        motorista_nome: data.motorista?.nome || 'Carol',
+        motorista_veiculo: data.motorista?.veiculo || 'Onix',
+        motorista_placa: data.motorista?.placa || 'ABC1D23',
+        veiculo_cor: data.motorista?.cor || 'Prata',
+        motorista_foto: data.motorista?.foto,
+        motorista_avaliacao: data.motorista?.avaliacao,
+        motorista_telefone: data.motorista?.telefone
+      });
     }
-  } catch (err) {
-    alert('Erro ao transmitir SOS. Ligue imediatamente para a polícia (190).');
-  }
+  });
+
+  socket.on('passageiro_a_bordo', (data) => {
+    if (data.pedidoId === pedidoId || data.pedidoId === estadoCliente.pedidoAtivoId) {
+      sonsHUBy.tocarSucessoAceite();
+      const txtStatus = document.querySelector('#boxCronometroChegada div:first-child');
+      if (txtStatus) txtStatus.textContent = '🚀 Viagem em andamento';
+      const txtMin = document.getElementById('txtMinutosChegada');
+      if (txtMin) txtMin.textContent = 'Rumo ao destino';
+    }
+  });
+
+  socket.on('corrida_finalizada', (data) => {
+    if (data.pedidoId === pedidoId || data.pedidoId === estadoCliente.pedidoAtivoId) {
+      if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
+      sonsHUBy.tocarMetaBatida();
+      estadoCliente.corridaParaAvaliarId = pedidoId;
+      resetarPainelCliente();
+      const modal = document.getElementById('modalAvaliacao');
+      if (modal) modal.style.display = 'flex';
+    }
+  });
 }
 
 export function iniciarPollingStatus() {
@@ -223,7 +232,8 @@ export function iniciarPollingStatus() {
 
       const pedido = await resp.json();
 
-      if (pedido.status === 'aceito' || pedido.status === 'em_viagem') {
+      // Suporta os novos status 'a_caminho', 'em_andamento' e 'em_viagem'
+      if (pedido.status === 'a_caminho' || pedido.status === 'em_andamento' || pedido.status === 'aceito' || pedido.status === 'em_viagem') {
         if (!estadoCliente.motoristaAceitouTocado) {
           sonsHUBy.tocarSucessoAceite();
           estadoCliente.motoristaAceitouTocado = true;
@@ -234,16 +244,16 @@ export function iniciarPollingStatus() {
         if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && typeof L !== 'undefined' && !estadoCliente.markerMotoristaAaminho) {
           const iconeCondutor = L.divIcon({
             className: 'huby-pin-motorista',
-            html: '<div style="width:24px;height:24px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(16,185,129,0.8);font-size:12px;">🚘</div>',
-            iconSize: [24, 24],
-            iconAnchor: [12, 12]
+            html: '<div style="width:28px;height:28px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(16,185,129,0.9);font-size:14px;">🚘</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
           });
           estadoCliente.markerMotoristaAaminho = L.marker(estadoCliente.hubyMapa.coordsOrigem, { icon: iconeCondutor }).addTo(estadoCliente.hubyMapa.map);
         }
 
       } else if (pedido.status === 'concluido') {
         clearInterval(estadoCliente.intervalPolling);
-        sonsHUBy.tocarSucessoAceite();
+        sonsHUBy.tocarMetaBatida();
         
         estadoCliente.corridaParaAvaliarId = estadoCliente.pedidoAtivoId;
         resetarPainelCliente();
@@ -282,79 +292,69 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
   painelMotorista.style.display = 'block';
 
   const foto = pedido.motorista_foto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
-  const nome = pedido.motorista_nome || 'Motorista Parceiro';
+  const nome = pedido.motorista_nome || 'Carol';
   const nota = Number(pedido.motorista_avaliacao || 5.0).toFixed(1);
   const totalViagens = pedido.motorista_corridas || 0;
-  const modelo = pedido.motorista_veiculo || 'Carro HUBy';
-  const cor = pedido.veiculo_cor ? `Cor: ${pedido.veiculo_cor}` : 'Cor padrão';
-  const placa = (pedido.motorista_placa || 'HUB-0000').toUpperCase();
+  const modelo = pedido.motorista_veiculo || 'Chevrolet Onix';
+  const cor = pedido.veiculo_cor ? `Cor: ${pedido.veiculo_cor}` : 'Cor: Prata';
+  const placa = (pedido.motorista_placa || 'ABC1D23').toUpperCase();
   const telefone = pedido.motorista_telefone || '';
+
+  const tituloStatus = (pedido.status === 'em_viagem') 
+    ? '🚀 Em viagem ao destino' 
+    : '🚘 Motorista a caminho';
 
   painelMotorista.innerHTML = `
     <!-- CRONÔMETRO DE CHEGADA -->
-    <div id="boxCronometroChegada" style="text-align: center; margin-bottom: 12px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 10px; border-radius: 12px;">
-      <div style="color: #10B981; font-size: 13px; font-weight: 800; text-transform: uppercase;">
-        ${pedido.status === 'aceito' ? '🚘 Motorista a caminho' : '🏁 Viagem em andamento'}
+    <div id="boxCronometroChegada" style="text-align: center; margin-bottom: 12px; background: rgba(16, 185, 129, 0.12); border: 1.5px solid rgba(16, 185, 129, 0.4); padding: 12px; border-radius: 14px;">
+      <div style="color: #10B981; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+        ${tituloStatus}
       </div>
       <div style="color: #FFF; font-size: 20px; font-weight: 900; margin-top: 3px;">
-        Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${estadoCliente.tempoEstimado || 5} min</span>
+        Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${estadoCliente.tempoEstimado || 4} min</span>
       </div>
     </div>
 
     <!-- CARD DO MOTORISTA -->
-    <div class="driver-card-accepted">
-      <div class="driver-card-top">
-        <div class="driver-avatar-container">
-          <img src="${foto}" alt="${nome}" class="driver-avatar-img">
-          <span class="badge-verified-driver">✓</span>
+    <div class="driver-card-accepted" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--border-dark); border-radius: 16px; padding: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+      <div class="driver-card-top" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <img src="${foto}" alt="${nome}" style="width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid var(--emerald);">
+          <div>
+            <h4 style="margin: 0; color: #FFF; font-size: 15px;">${nome}</h4>
+            <div style="color: #F59E0B; font-weight: 800; font-size: 12px; margin-top: 2px;">
+              ⭐ ${nota} <span style="color: var(--text-sec); font-weight: 500;">• ${totalViagens} viagens</span>
+            </div>
+          </div>
         </div>
-        <div class="driver-header-meta">
-          <h4>${nome}</h4>
-          <div class="driver-rating-row">
-            <span style="color: #F59E0B; font-weight: 800;">⭐ ${nota}</span>
-            <span>•</span>
-            <span>${totalViagens} viagens</span>
+
+        <div style="text-align: right;">
+          <strong style="color: #FFF; font-size: 13px; display: block;">${modelo}</strong>
+          <small style="color: var(--text-sec); font-size: 11px; display: block; margin-bottom: 3px;">${cor}</small>
+          <div style="display: inline-block; border: 1.5px solid #FFF; border-radius: 4px; background: #FFF; color: #000; font-family: monospace; font-size: 11px; font-weight: 900; padding: 1px 6px;">
+            <span style="color:#003399;">BR</span> ${placa}
           </div>
         </div>
       </div>
 
-      <div class="driver-vehicle-box">
-        <div class="vehicle-desc">
-          <strong>${modelo}</strong>
-          <small>${cor}</small>
-        </div>
-        <div class="mercosul-plate-passenger">
-          <div class="mercosul-plate-header"><span>BRASIL</span> <span>🇧🇷</span></div>
-          <div class="mercosul-plate-body">${placa}</div>
-        </div>
-      </div>
-
-      <div class="driver-card-actions">
+      <div class="driver-card-actions" style="display: grid; grid-template-columns: ${telefone ? '1fr 1.5fr' : '1fr'}; gap: 8px; margin-top: 10px;">
         ${telefone ? `
-          <a href="tel:${telefone}" class="btn-contact-call">
+          <a href="tel:${telefone}" style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; font-weight: 800; padding: 10px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
             📞 Ligar
           </a>
         ` : ''}
-        <button type="button" id="btnAbrirChatClienteCard" class="btn-contact-chat">
+        <button type="button" id="btnAbrirChatClienteCard" 
+          style="background: rgba(56,189,248,0.18); border: 1px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 10px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
           💬 Mensagem
         </button>
       </div>
     </div>
   `;
 
-  if (!estadoCliente.cronometroChegada) {
-    estadoCliente.cronometroChegada = setInterval(() => {
-      estadoCliente.tempoEstimado--;
-      const txtMinutos = document.getElementById('txtMinutosChegada');
-      if (estadoCliente.tempoEstimado > 0) {
-        if (txtMinutos) txtMinutos.textContent = `${estadoCliente.tempoEstimado} min`;
-      } else {
-        if (txtMinutos) txtMinutos.textContent = `A chegar!`;
-        clearInterval(estadoCliente.cronometroChegada);
-        estadoCliente.cronometroChegada = null;
-      }
-    }, 60000);
-  }
+  document.getElementById('btnAbrirChatClienteCard')?.addEventListener('click', () => {
+    const modalChat = document.getElementById('modalChatCorrida');
+    if (modalChat) modalChat.style.display = 'flex';
+  });
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) btnChatFlutuante.style.display = 'flex';
@@ -388,6 +388,7 @@ export function resetarPainelCliente() {
   estadoCliente.rotaAtual = null;
   estadoCliente.coordsDestino = null;
   estadoCliente.motoristaAceitouTocado = false;
+  localStorage.removeItem('huby_pedido_ativo_id');
 
   if (estadoCliente.cronometroChegada) {
     clearInterval(estadoCliente.cronometroChegada);
