@@ -2,6 +2,25 @@
    HUBy 2.0 - Layout do Parceiro / Condutor (css/motorista.css)
    ========================================================================== */
 
+:root {
+  --primary-green: #10B981;
+  --primary-green-glow: rgba(16, 185, 129, 0.25);
+  --accent-red: #EF4444;
+  --accent-blue: #38BDF8;
+  --accent-amber: #F59E0B;
+  --bg-dark: #090D16;
+  --bg-card: rgba(18, 24, 38, 0.96);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glass: rgba(255, 255, 255, 0.12);
+  --text-main: #FFFFFF;
+  --text-muted: #94A3B8;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .driver-viewport {
   position: relative;
   width: 100vw;
@@ -9,6 +28,8 @@
   height: 100dvh;
   overflow: hidden;
   background-color: var(--bg-dark);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 #mapaMotorista {
@@ -29,82 +50,137 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 10;
+  z-index: 50;
   pointer-events: none;
 }
 
-.driver-status-card {
+.driver-profile-card {
   pointer-events: auto;
   background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 8px 14px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-glass);
+  border-radius: 999px;
+  padding: 6px 14px 6px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.driver-status-card small {
+.driver-avatar-thumb {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-green);
+}
+
+.driver-meta-top strong {
   display: block;
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
+  font-size: 13px;
+  color: var(--text-main);
 }
 
-.driver-status-card strong {
-  font-size: 13px;
-  color: var(--primary-green);
+.driver-meta-top small {
+  font-size: 11px;
+  color: var(--accent-amber);
+  font-weight: 700;
+}
+
+.top-actions-cluster {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .btn-toggle-status {
-  pointer-events: auto;
   background: rgba(16, 185, 129, 0.2);
   border: 1px solid var(--primary-green);
   color: var(--primary-green);
-  border-radius: 14px;
-  padding: 10px 16px;
+  border-radius: 999px;
+  padding: 8px 14px;
   font-size: 12px;
   font-weight: 800;
   cursor: pointer;
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
   transition: all 0.2s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-.btn-toggle-status.offline {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: var(--accent-red);
-  color: var(--accent-red);
+.btn-top-quick {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  color: #FFF;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  cursor: pointer;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
-/* 2. PAINEL INFERIOR: RADAR DE CHAMADAS */
+/* 2. PAINEL INFERIOR: RADAR E VIAGEM */
 .driver-dock {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 20;
+  z-index: 60;
   background: var(--bg-card);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-glass);
   border-top-left-radius: 24px;
   border-top-right-radius: 24px;
-  padding: 16px 20px calc(env(safe-area-inset-bottom, 16px) + 16px);
-  max-height: 48vh;
+  padding: 14px 18px calc(env(safe-area-inset-bottom, 16px) + 16px);
+  max-height: 52vh;
   display: flex;
   flex-direction: column;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  gap: 12px;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.6);
 }
 
-.dock-header {
+.dock-header-finance {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
 }
 
-.dock-title {
-  font-size: 14px;
+.finance-box small {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
   font-weight: 800;
-  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.finance-box strong {
+  font-size: 20px;
+  color: var(--primary-green);
+  font-weight: 900;
+}
+
+.btn-saque-pix {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid var(--primary-green);
+  color: var(--primary-green);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .orders-feed {
@@ -119,65 +195,219 @@
   display: none;
 }
 
-/* 3. CARTÃO DE PEDIDO DISPONÍVEL */
-.order-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.dock-empty {
+  text-align: center;
+  padding: 20px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
-.order-card-header {
+/* METAS DIÁRIAS */
+.meta-diaria-box {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.meta-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.meta-header-row strong {
+  color: #FFF;
+  font-size: 13px;
+}
+
+.barra-progresso-fundo {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barra-progresso-preenchimento {
+  height: 100%;
+  background: var(--primary-green);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+/* 3. DRAWER DO MOTORISTA */
+.driver-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1500;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.driver-drawer-backdrop.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.driver-drawer-panel {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 85%;
+  max-width: 320px;
+  background: #0E1424;
+  border-right: 1px solid var(--border-glass);
+  z-index: 1600;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  display: flex;
+  flex-direction: column;
+  padding: calc(env(safe-area-inset-top, 20px) + 16px) 16px calc(env(safe-area-inset-bottom, 20px) + 16px);
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.driver-drawer-panel.active {
+  transform: translateX(0);
+}
+
+/* PLACA MERCOSUL NO DRAWER DO PARCEIRO */
+.mercosul-plate-driver {
+  display: inline-flex;
+  flex-direction: column;
+  border: 1.5px solid #FFFFFF;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #FFFFFF;
+  color: #000000;
+  font-family: monospace;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.mercosul-plate-driver .placa-topo {
+  background: #003399;
+  color: #FFFFFF;
+  font-size: 8px;
+  font-weight: 900;
+  padding: 1px 6px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.mercosul-plate-driver .placa-texto {
+  font-size: 13px;
+  font-weight: 900;
+  padding: 1px 8px;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+/* 4. BOTÃO FLUTUANTE DE CHAT */
+.btn-floating-chat {
+  position: absolute;
+  bottom: calc(240px + env(safe-area-inset-bottom, 16px));
+  right: 16px;
+  z-index: 70;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  color: #000;
+  border: none;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5);
+  animation: pulse 1.8s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* 5. MODAL DE CHAT */
+.modal-chat-container {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.chat-card {
+  width: 100%;
+  max-width: 360px;
+  height: 480px;
+  background: #111726;
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.8);
+}
+
+.chat-card-header {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.order-badge {
-  font-size: 11px;
-  font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--primary-green);
-}
-
-.order-price {
-  font-size: 15px;
-  font-weight: 900;
-  color: var(--text-main);
-}
-
-.order-route {
+.chat-card-body {
+  flex: 1;
+  padding: 14px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text-muted);
+  gap: 10px;
 }
 
-.btn-accept-order {
+.chat-card-footer {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  gap: 8px;
+}
+
+.chat-card-footer input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  color: #FFF;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.chat-card-footer button {
   background: var(--primary-green);
-  color: #03251E;
+  color: #02261C;
   border: none;
   border-radius: 10px;
-  padding: 10px;
-  font-size: 13px;
+  padding: 0 14px;
   font-weight: 900;
   cursor: pointer;
-  transition: opacity 0.2s ease;
-}
-
-.btn-accept-order:active {
-  opacity: 0.85;
-}
-
-.dock-empty {
-  text-align: center;
-  padding: 24px;
-  color: var(--text-muted);
-  font-size: 13px;
 }
