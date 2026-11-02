@@ -37,7 +37,7 @@ function obterHeaders() {
 }
 
 // ============================================================================
-// 1. INICIALIZAÇÃO DO MAPA E SOCKET
+// 1. INICIALIZAÇÃO DO MAPA, SOCKET E ROTEAMENTO OSRM
 // ============================================================================
 function inicializarSocket() {
   if (typeof io !== 'undefined') {
@@ -99,6 +99,52 @@ function inicializarMapa() {
   } catch (err) {
     console.error('Erro ao iniciar mapa:', err);
   }
+}
+
+// Roteamento real pelas ruas usando OSRM
+async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
+  if (!estado.mapa) return;
+
+  if (estado.linhaRota) {
+    estado.mapa.removeLayer(estado.linhaRota);
+    estado.linhaRota = null;
+  }
+
+  const [latOrig, lngOrig] = origem;
+  const [latDest, lngDest] = destino;
+
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${lngOrig},${latOrig};${lngDest},${latDest}?overview=full&geometries=geojson`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.code === 'Ok' && data.routes && data.routes[0]) {
+      const coordenadasCurvas = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+      estado.linhaRota = L.polyline(coordenadasCurvas, {
+        color: cor,
+        weight: 6,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(estado.mapa);
+
+      estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+      return;
+    }
+  } catch (err) {
+    console.warn('Falha no OSRM, aplicando rota direta:', err);
+  }
+
+  // Fallback caso o serviço OSRM não responda
+  estado.linhaRota = L.polyline([origem, destino], {
+    color: cor,
+    weight: 5,
+    dashArray: '8, 8',
+    opacity: 0.9
+  }).addTo(estado.mapa);
+
+  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
 }
 
 // ============================================================================
@@ -237,7 +283,7 @@ function renderizarChamadas(chamadas = []) {
 }
 
 // ============================================================================
-// 3. PRÉ-VISUALIZAÇÃO DE ROTA ANTES DE CONFIRMAR
+// 3. PRÉ-VISUALIZAÇÃO DE ROTA REAL PELAS RUAS
 // ============================================================================
 function extrairDadosDoBotao(btn) {
   return {
@@ -253,7 +299,7 @@ function extrairDadosDoBotao(btn) {
   };
 }
 
-function inspecionarRotaPrevia(btn) {
+async function inspecionarRotaPrevia(btn) {
   const dados = extrairDadosDoBotao(btn);
   estado.pedidoEmInspecao = dados;
   if (estado.intervalRadar) clearInterval(estado.intervalRadar);
@@ -263,13 +309,6 @@ function inspecionarRotaPrevia(btn) {
   const coordsOrigem = [dados.origLat, dados.origLng];
   const coordsDestino = [dados.destLat, dados.destLng];
 
-  estado.linhaRota = L.polyline([estado.coords, coordsOrigem, coordsDestino], {
-    color: '#F59E0B',
-    weight: 5,
-    dashArray: '10, 8',
-    opacity: 0.95
-  }).addTo(estado.mapa);
-
   estado.markerOrigem = L.marker(coordsOrigem, {
     icon: L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
   }).addTo(estado.mapa);
@@ -278,7 +317,7 @@ function inspecionarRotaPrevia(btn) {
     icon: L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
   }).addTo(estado.mapa);
 
-  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [70, 70] });
+  await tracarRotaRealRuas(estado.coords, coordsDestino, '#F59E0B');
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
@@ -325,7 +364,7 @@ function inspecionarRotaPrevia(btn) {
 }
 
 // ============================================================================
-// 4. ACEITAR CORRIDA E FLUXO EM 2 FASES (BUSCAR -> LEVAR AO DESTINO)
+// 4. ACEITAR CORRIDA E FLUXO EM 2 FASES (ROTA REAL CURVA A CURVA)
 // ============================================================================
 async function aceitarCorridaDefinitiva(btn, dadosCache) {
   const dados = dadosCache || extrairDadosDoBotao(btn);
@@ -356,7 +395,7 @@ async function aceitarCorridaDefinitiva(btn, dadosCache) {
   }
 }
 
-function iniciarFaseBuscarPassageiro(dados) {
+async function iniciarFaseBuscarPassageiro(dados) {
   estado.pedidoAtivo = dados;
   estado.pedidoEmInspecao = null;
   estado.faseViagem = 'buscar_passageiro';
@@ -368,18 +407,12 @@ function iniciarFaseBuscarPassageiro(dados) {
   limparRotasMapa();
   const coordsOrigem = [dados.origLat, dados.origLng];
 
-  estado.linhaRota = L.polyline([estado.coords, coordsOrigem], {
-    color: '#38BDF8',
-    weight: 5,
-    dashArray: '8, 8',
-    opacity: 0.95
-  }).addTo(estado.mapa);
-
   estado.markerOrigem = L.marker(coordsOrigem, {
     icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
   }).addTo(estado.mapa);
 
-  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+  // Rota real pelas ruas até a origem
+  await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
 
   const urlWaze = `https://waze.com/ul?ll=${dados.origLat},${dados.origLng}&navigate=yes`;
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.origLat},${dados.origLng}`;
@@ -435,18 +468,12 @@ async function confirmarEmbarqueEIrAoDestino(dados) {
   limparRotasMapa();
   const coordsDestino = [dados.destLat, dados.destLng];
 
-  estado.linhaRota = L.polyline([estado.coords, coordsDestino], {
-    color: '#10B981',
-    weight: 5,
-    dashArray: '8, 8',
-    opacity: 0.95
-  }).addTo(estado.mapa);
-
   estado.markerDestino = L.marker(coordsDestino, {
     icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
   }).addTo(estado.mapa);
 
-  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+  // Rota real pelas ruas até o destino final
+  await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
 
   const urlWaze = `https://waze.com/ul?ll=${dados.destLat},${dados.destLng}&navigate=yes`;
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.destLat},${dados.destLng}`;
