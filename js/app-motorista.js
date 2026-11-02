@@ -18,6 +18,15 @@ const estado = {
   intervalRadar: null
 };
 
+// Utilitário para cabeçalhos HTTP autenticados limpos
+function obterHeaders() {
+  const headers = { 'Content-Type': 'application/json' };
+  if (estado.token && estado.token !== 'null' && estado.token !== 'undefined') {
+    headers['Authorization'] = `Bearer ${estado.token}`;
+  }
+  return headers;
+}
+
 // ============================================================================
 // 1. INICIALIZAÇÃO DO MAPA LEAFLET
 // ============================================================================
@@ -59,7 +68,7 @@ function inicializarMapa() {
     // Conecta as ferramentas inteligentes (Calor, Pausa, Casa) passando a instância do mapa
     configurarRecursosInteligentes(estado.mapa, estado.token);
 
-    // Geolocalização com fallback
+    // Geolocalização contínua com fallback
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const { latitude, longitude } = pos.coords;
@@ -103,10 +112,7 @@ async function alternarStatusOnline() {
   try {
     await fetch(`${API_URL}/api/motoristas/status-online`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {})
-      },
+      headers: obterHeaders(),
       body: JSON.stringify({ online: estado.statusOnline, coords: estado.coords })
     });
   } catch (e) {
@@ -135,7 +141,7 @@ async function buscarChamadas() {
   if (!estado.statusOnline) return;
   try {
     const res = await fetch(`${API_URL}/api/pedidos/pendentes`, {
-      headers: { ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {}) }
+      headers: obterHeaders()
     });
     if (!res.ok) return;
     const chamadas = await res.json();
@@ -185,10 +191,7 @@ function renderizarChamadas(chamadas = []) {
       try {
         const r = await fetch(`${API_URL}/api/pedidos/${id}/aceitar`, {
           method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {})
-          },
+          headers: obterHeaders(),
           body: JSON.stringify({ motoristaId: estado.motoristaId })
         });
         if (r.ok) {
@@ -211,7 +214,7 @@ function renderizarChamadas(chamadas = []) {
 async function carregarPerfil() {
   try {
     const res = await fetch(`${API_URL}/api/motoristas/meu-perfil`, {
-      headers: { ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {}) }
+      headers: obterHeaders()
     });
     if (!res.ok) return;
     const m = await res.json();
