@@ -36,11 +36,11 @@ function inicializarMapa() {
       attributionControl: false
     }).setView(estado.coords, 15);
 
-    // Tiles CartoDB Voyager / OSM com alto contraste
-    L.tileLayer('https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  subdomains: 'abcd'
-}).addTo(estado.mapa);
+    // Servidor 100% público do OpenStreetMap (Livre de qualquer bloqueio ou API Key)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(estado.mapa);
 
     const iconeCarro = L.divIcon({
       className: 'huby-driver-pin',
@@ -54,12 +54,12 @@ function inicializarMapa() {
     // Força o Leaflet a renderizar as dimensões corretas e eliminar a tela cinza
     setTimeout(() => {
       if (estado.mapa) estado.mapa.invalidateSize();
-    }, 250);
+    }, 300);
 
     // Conecta as ferramentas inteligentes (Calor, Pausa, Casa) passando a instância do mapa
     configurarRecursosInteligentes(estado.mapa, estado.token);
 
-    // Geolocalização
+    // Geolocalização com fallback
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const { latitude, longitude } = pos.coords;
@@ -140,7 +140,7 @@ async function buscarChamadas() {
     if (!res.ok) return;
     const chamadas = await res.json();
     renderizarChamadas(chamadas);
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function renderizarChamadas(chamadas = []) {
@@ -240,7 +240,7 @@ async function carregarPerfil() {
     if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'HUB-0000').toUpperCase();
     if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Carro Padrão';
     if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function registrarEventosUI() {
