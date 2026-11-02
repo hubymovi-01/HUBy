@@ -21,8 +21,9 @@ const estado = {
 // Utilitário para cabeçalhos HTTP autenticados limpos
 function obterHeaders() {
   const headers = { 'Content-Type': 'application/json' };
-  if (estado.token && estado.token !== 'null' && estado.token !== 'undefined') {
-    headers['Authorization'] = `Bearer ${estado.token}`;
+  const token = estado.token || localStorage.getItem('huby_token');
+  if (token && token !== 'null' && token !== 'undefined') {
+    headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -174,7 +175,7 @@ function renderizarChamadas(chamadas = []) {
           </strong>
         </div>
         <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
-          <div>📍 <strong>Destino:</strong> ${ped.destino || 'Destino informado'}</div>
+          <div>📍 <strong>Destino:</strong> ${ped.destino_endereco || ped.destino || 'Destino informado'}</div>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">📏 Distância: ${km} km</div>
         </div>
         <button type="button" class="btn-aceitar" data-id="${ped.id}"
@@ -209,48 +210,138 @@ function renderizarChamadas(chamadas = []) {
 }
 
 // ============================================================================
-// 3. PERFIL, DRAWER E MODAIS
+// 3. PERFIL, DRAWER, EXTRATO E METAS
 // ============================================================================
 async function carregarPerfil() {
   try {
-    const res = await fetch(`${API_URL}/api/motoristas/meu-perfil`, {
+    const res = await fetch(`${API_URL}/api/motoristas/perfil`, {
       headers: obterHeaders()
     });
     if (!res.ok) return;
     const m = await res.json();
 
+    if (m.id) {
+      estado.motoristaId = m.id;
+      localStorage.setItem('huby_motorista_id', m.id);
+    }
+
+    // Top Bar
     const topNome = document.getElementById('topNomeMotorista');
     const topNota = document.getElementById('topNotaMotorista');
     const topAvatar = document.getElementById('topAvatarImg');
     const elSaldo = document.getElementById('saldoCarteiraValor');
     const elDrawerSaldo = document.getElementById('drawerSaldoValor');
 
-    if (topNome) topNome.textContent = (m.nome || 'Motorista').split(' ')[0];
+    const primeiroNome = (m.nome || 'Motorista').split(' ')[0];
+    if (topNome) topNome.textContent = primeiroNome;
     if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
     if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
 
+    // Saldo disponível
     estado.saldoCarteira = Number(m.saldo_carteira || 0);
     const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
     if (elSaldo) elSaldo.textContent = saldoTxt;
     if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
 
+    // Drawer lateral do motorista
     const drawerNome = document.getElementById('drawerNomeCondutor');
     const drawerPlaca = document.getElementById('drawerCarroPlaca');
     const drawerModelo = document.getElementById('drawerCarroModelo');
+    const drawerDetalhes = document.getElementById('drawerCarroDetalhes');
     const drawerFoto = document.getElementById('drawerFotoImg');
+    const drawerTotalViagens = document.getElementById('drawerTotalViagensTxt');
+    const drawerInputPix = document.getElementById('drawerInputChavePix');
+    const badgeCategoria = document.getElementById('drawerCategoriaBadge');
 
     if (drawerNome) drawerNome.textContent = m.nome || 'Motorista Parceiro';
     if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'HUB-0000').toUpperCase();
-    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Carro Padrão';
+    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Veículo Padrão';
+    if (drawerDetalhes) drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || '---'} • Ano: ${m.veiculo_ano || '---'}`;
     if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
-  } catch (e) { }
+    if (drawerTotalViagens) drawerTotalViagens.textContent = `${m.total_corridas || 0} viagens`;
+    if (drawerInputPix && m.chave_pix_padrao) drawerInputPix.value = m.chave_pix_padrao;
+    if (badgeCategoria) badgeCategoria.textContent = (m.categoria || 'HUBY CARRO').toUpperCase();
+
+    // Preenche os campos do modal de edição
+    const editNome = document.getElementById('editNome');
+    const editTel = document.getElementById('editTelefone');
+    const editMod = document.getElementById('editCarroModelo');
+    const editPlaca = document.getElementById('editCarroPlaca');
+    const editCor = document.getElementById('editCarroCor');
+    const editAno = document.getElementById('editCarroAno');
+    if (editNome) editNome.value = m.nome || '';
+    if (editTel) editTel.value = m.telefone || '';
+    if (editMod) editMod.value = m.veiculo_modelo || '';
+    if (editPlaca) editPlaca.value = m.veiculo_placa || '';
+    if (editCor) editCor.value = m.veiculo_cor || '';
+    if (editAno) editAno.value = m.veiculo_ano || '';
+
+    // Sincroniza o extrato e os ganhos diários
+    await sincronizarExtratoDiario();
+  } catch (e) {
+    console.warn('Erro ao carregar perfil do motorista:', e);
+  }
 }
 
+async function sincronizarExtratoDiario() {
+  const containerExtrato = document.getElementById('drawerListaExtrato');
+  const lblGanhosHoje = document.getElementById('lblGanhosHojeValor');
+  const lblViagensHoje = document.getElementById('lblCorridasHojeQtd');
+  const barraMeta = document.getElementById('barraProgressoMeta');
+  const lblMetaTxt = document.getElementById('lblMetaDiariaTxt');
+
+  try {
+    const res = await fetch(`${API_URL}/api/motoristas/extrato`, { headers: obterHeaders() });
+    if (!res.ok) return;
+    const data = await res.json();
+    const corridas = data.corridas || data.historico || [];
+
+    let totalGanhos = 0;
+    let qtdViagens = 0;
+
+    if (corridas.length && containerExtrato) {
+      containerExtrato.innerHTML = corridas.map(c => {
+        const repasse = Number(c.repasse_liquido || c.valor_total * 0.85);
+        totalGanhos += repasse;
+        qtdViagens++;
+        return `
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-dark); font-size: 12px;">
+            <div style="max-width: 65%;">
+              <div style="color: #FFF; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                ${c.destino_endereco || 'Viagem Concluída'}
+              </div>
+              <small style="color: var(--text-sec); font-size: 10px;">${new Date(c.criado_em || c.concluido_em).toLocaleDateString('pt-BR')}</small>
+            </div>
+            <strong style="color: var(--emerald);">+ R$ ${repasse.toFixed(2).replace('.', ',')}</strong>
+          </div>
+        `;
+      }).join('');
+    } else if (containerExtrato) {
+      containerExtrato.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Nenhuma corrida realizada ainda.</div>';
+    }
+
+    if (lblGanhosHoje) lblGanhosHoje.textContent = `R$ ${totalGanhos.toFixed(2).replace('.', ',')}`;
+    if (lblViagensHoje) lblViagensHoje.textContent = `${qtdViagens} viagens`;
+
+    const meta = 200.0;
+    const perc = Math.min(100, Math.round((totalGanhos / meta) * 100));
+    if (barraMeta) barraMeta.style.width = `${perc}%`;
+    if (lblMetaTxt) lblMetaTxt.textContent = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} (${perc}%)`;
+  } catch (e) {
+    if (containerExtrato) {
+      containerExtrato.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Sem movimentações registradas.</div>';
+    }
+  }
+}
+
+// ============================================================================
+// 4. REGISTRO DE EVENTOS DA INTERFACE (DRAWER, MODAIS E SAQUE)
+// ============================================================================
 function registrarEventosUI() {
   // Toggle Online
   document.getElementById('btnToggleStatusOnline')?.addEventListener('click', alternarStatusOnline);
 
-  // Drawer
+  // Drawer Lateral
   const drawer = document.getElementById('driverDrawer');
   const overlay = document.getElementById('drawerOverlay');
   document.getElementById('btnAbrirDrawerPerfil')?.addEventListener('click', () => {
@@ -264,13 +355,99 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
-  // Modal Saque
+  // Salvar Chave Pix no Drawer
+  document.getElementById('btnSalvarChavePix')?.addEventListener('click', async () => {
+    const chave = document.getElementById('drawerInputChavePix')?.value?.trim();
+    if (!chave) return alert('Digite uma chave Pix válida.');
+
+    try {
+      const res = await fetch(`${API_URL}/api/motoristas/chave-pix`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify({ chavePix: chave })
+      });
+      if (res.ok) alert('Chave Pix salva com sucesso!');
+      else alert('Erro ao registrar chave Pix.');
+    } catch (e) {
+      alert('Erro de conexão ao salvar chave.');
+    }
+  });
+
+  // Modal Edição de Perfil
+  const modalEdicao = document.getElementById('modalEdicaoPerfil');
+  document.getElementById('btnAbrirModalEdicaoPerfil')?.addEventListener('click', () => {
+    if (modalEdicao) modalEdicao.style.display = 'flex';
+  });
+  document.getElementById('btnFecharModalEdicao')?.addEventListener('click', () => {
+    if (modalEdicao) modalEdicao.style.display = 'none';
+  });
+  document.getElementById('btnCancelarEdicao')?.addEventListener('click', () => {
+    if (modalEdicao) modalEdicao.style.display = 'none';
+  });
+
+  // Salvar Edição de Perfil e Veículo
+  document.getElementById('btnSalvarEdicaoPerfil')?.addEventListener('click', async () => {
+    const payload = {
+      nome: document.getElementById('editNome')?.value,
+      telefone: document.getElementById('editTelefone')?.value,
+      veiculo_modelo: document.getElementById('editCarroModelo')?.value,
+      veiculo_placa: document.getElementById('editCarroPlaca')?.value,
+      veiculo_cor: document.getElementById('editCarroCor')?.value,
+      veiculo_ano: document.getElementById('editCarroAno')?.value
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/motoristas/perfil`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        alert('Dados salvos com sucesso!');
+        if (modalEdicao) modalEdicao.style.display = 'none';
+        carregarPerfil();
+      } else {
+        alert('Falha ao atualizar dados.');
+      }
+    } catch (e) {
+      alert('Erro de conexão ao salvar perfil.');
+    }
+  });
+
+  // Modal Saque Pix
   const modalSaque = document.getElementById('modalSaquePix');
   document.getElementById('btnAbrirModalSaque')?.addEventListener('click', () => {
     if (modalSaque) modalSaque.style.display = 'flex';
   });
   document.getElementById('btnFecharModalSaque')?.addEventListener('click', () => {
     if (modalSaque) modalSaque.style.display = 'none';
+  });
+
+  // Confirmar Solicitação de Saque
+  document.getElementById('btnConfirmarSaquePix')?.addEventListener('click', async () => {
+    const valor = document.getElementById('saqueValor')?.value;
+    const chavePix = document.getElementById('saqueChavePix')?.value;
+    const tipoChave = document.getElementById('saqueTipoChave')?.value;
+
+    if (!valor || !chavePix) return alert('Informe o valor e a chave Pix.');
+
+    try {
+      const res = await fetch(`${API_URL}/api/motoristas/saque`, {
+        method: 'POST',
+        headers: obterHeaders(),
+        body: JSON.stringify({ valor, chavePix, tipoChave })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.mensagem || 'Saque solicitado com sucesso!');
+        if (modalSaque) modalSaque.style.display = 'none';
+        carregarPerfil();
+      } else {
+        alert(data.erro || 'Falha ao solicitar saque.');
+      }
+    } catch (e) {
+      alert('Erro de conexão ao solicitar saque.');
+    }
   });
 
   // Modal Incidentes
@@ -287,6 +464,7 @@ function registrarEventosUI() {
     if (confirm('Deseja realmente encerrar a sessão de parceiro?')) {
       localStorage.removeItem('huby_token');
       localStorage.removeItem('huby_user_id');
+      localStorage.removeItem('huby_motorista_id');
       window.location.href = './index.html';
     }
   });

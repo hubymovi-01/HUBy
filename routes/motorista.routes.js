@@ -13,6 +13,9 @@ async function garantirColunasSuporte() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_ativo BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS em_pausa BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS pausa_ate TIMESTAMP;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;`;
   } catch (e) {
     console.warn('Aviso ao sincronizar colunas de suporte do motorista:', e.message);
   }
@@ -24,7 +27,6 @@ garantirColunasSuporte();
 // =========================================================================
 router.get('/calor', autenticarToken, async (req, res) => {
   try {
-    // Busca origens de chamadas recentes com agrupamento para definir intensidade
     const pontos = await sql`
       SELECT 
         origem_lat AS lat, 
@@ -39,7 +41,6 @@ router.get('/calor', autenticarToken, async (req, res) => {
       LIMIT 150;
     `;
 
-    // Formata os pontos no padrão [lat, lng, intensidade] compatível com Leaflet.heat
     const heatmapData = pontos.map(p => [
       Number(p.lat),
       Number(p.lng),
@@ -112,9 +113,9 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
 });
 
 // =========================================================================
-// 4. PERFIL COMPLETO
+// 4. CONSULTA DE PERFIL (SUPORTA TANTO /perfil QUANTO /meu-perfil)
 // =========================================================================
-router.get('/perfil', autenticarToken, async (req, res) => {
+const handlerObterPerfil = async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
     const emailUsuario = req.usuario.email || '';
@@ -137,6 +138,7 @@ router.get('/perfil', autenticarToken, async (req, res) => {
       const m = mot[0];
       return res.json({
         id: m.id,
+        usuario_id: m.usuario_id || usuarioId,
         nome: m.nome || '',
         email: m.email || '',
         telefone: m.telefone || '',
@@ -188,6 +190,7 @@ router.get('/perfil', autenticarToken, async (req, res) => {
         const n = novo[0];
         return res.json({
           id: n.id,
+          usuario_id: n.usuario_id,
           nome: n.nome || '',
           email: n.email || '',
           telefone: n.telefone || '',
@@ -213,6 +216,7 @@ router.get('/perfil', autenticarToken, async (req, res) => {
 
     return res.json({
       id: usuarioId,
+      usuario_id: usuarioId,
       nome: nomeFinal,
       email: emailFinal,
       telefone: telefoneFinal,
@@ -235,7 +239,10 @@ router.get('/perfil', autenticarToken, async (req, res) => {
     console.error('Erro ao consultar perfil do motorista:', err);
     res.status(500).json({ erro: 'Falha ao consultar perfil.' });
   }
-});
+};
+
+router.get('/perfil', autenticarToken, handlerObterPerfil);
+router.get('/meu-perfil', autenticarToken, handlerObterPerfil);
 
 // =========================================================================
 // 5. ATUALIZAR DADOS DO PERFIL
@@ -315,8 +322,26 @@ router.put('/perfil', autenticarToken, async (req, res) => {
   }
 });
 
+// Atalho para atualizar chave Pix direto do drawer
+router.put('/chave-pix', autenticarToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuario.id;
+    const { chavePix } = req.body;
+
+    await sql`
+      UPDATE motoristas 
+      SET chave_pix_padrao = ${chavePix}
+      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text;
+    `;
+
+    res.json({ sucesso: true, mensagem: 'Chave Pix atualizada!' });
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao salvar chave Pix' });
+  }
+});
+
 // =========================================================================
-// 6. EXTRATO FINANCEIRO
+// 6. EXTRATO FINANCEIRO COMPLETO
 // =========================================================================
 router.get('/extrato', autenticarToken, async (req, res) => {
   try {
@@ -334,14 +359,17 @@ router.get('/extrato', autenticarToken, async (req, res) => {
       SELECT 
         id, valor_total, 
         (valor_total * 0.85) AS repasse_liquido,
-        valor_adicionais, concluido_em, origem_endereco, destino_endereco
+        valor_adicionais, concluido_em, criado_em, origem_endereco, destino_endereco
       FROM pedidos
-      WHERE motorista_id::text = ${usuarioId}::text AND status = 'concluido'
-      ORDER BY concluido_em DESC
-      LIMIT 15;
+      WHERE (motorista_id::text = ${usuarioId}::text 
+         OR motorista_id IN (SELECT id::text FROM motoristas WHERE usuario_id::text = ${usuarioId}::text))
+        AND status = 'concluido'
+      ORDER BY criado_em DESC
+      LIMIT 20;
     `;
 
-    res.json({ saques, corridas });
+    // Retorna tanto o objeto detalhado quanto o array direto de corridas para retrocompatibilidade
+    res.json({ sucesso: true, saques, corridas, historico: corridas });
   } catch (err) {
     console.error('Erro ao obter extrato:', err);
     res.status(500).json({ erro: 'Falha ao obter extrato.' });
@@ -360,7 +388,8 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
         COUNT(*)::int AS total_corridas,
         COALESCE(SUM(valor_total * 0.85), 0) AS ganhos_liquidos
       FROM pedidos
-      WHERE motorista_id::text = ${usuarioId}::text
+      WHERE (motorista_id::text = ${usuarioId}::text 
+         OR motorista_id IN (SELECT id::text FROM motoristas WHERE usuario_id::text = ${usuarioId}::text))
         AND status = 'concluido'
         AND concluido_em >= CURRENT_DATE;
     `;
@@ -398,6 +427,52 @@ router.put('/status-online', autenticarToken, async (req, res) => {
   } catch (err) {
     console.error('Erro ao alternar status online:', err);
     res.status(500).json({ erro: 'Falha ao atualizar status online.' });
+  }
+});
+
+// =========================================================================
+// 9. SOLICITAR SAQUE PIX
+// =========================================================================
+router.post('/saque', autenticarToken, async (req, res) => {
+  try {
+    const usuarioId = req.usuario.id;
+    const { valor, chavePix, tipoChave } = req.body;
+
+    const valorNum = Number(valor);
+    if (!valorNum || valorNum <= 0) {
+      return res.status(400).json({ erro: 'Valor de saque inválido.' });
+    }
+
+    const mot = await sql`
+      SELECT id, nome, saldo_carteira FROM motoristas
+      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      LIMIT 1;
+    `;
+
+    if (!mot.length) return res.status(404).json({ erro: 'Motorista não encontrado.' });
+    if (Number(mot[0].saldo_carteira) < valorNum) {
+      return res.status(400).json({ erro: 'Saldo insuficiente para saque.' });
+    }
+
+    // Debita o saldo e registra o saque
+    await sql`
+      UPDATE motoristas 
+      SET saldo_carteira = saldo_carteira - ${valorNum}
+      WHERE id = ${mot[0].id};
+    `;
+
+    await sql`
+      INSERT INTO saques_motoristas (
+        motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status
+      ) VALUES (
+        ${mot[0].id}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'cpf'}, ${valorNum}, 'pendente'
+      );
+    `;
+
+    res.json({ sucesso: true, mensagem: 'Saque solicitado com sucesso!' });
+  } catch (err) {
+    console.error('Erro ao processar saque:', err);
+    res.status(500).json({ erro: 'Falha ao solicitar saque.' });
   }
 });
 
