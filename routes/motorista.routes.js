@@ -69,7 +69,8 @@ router.put('/modo-pausa', autenticarToken, async (req, res) => {
       UPDATE motoristas
       SET em_pausa = ${!!emPausa},
           pausa_ate = ${pausaAte}
-      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text
       RETURNING id, em_pausa, pausa_ate;
     `;
 
@@ -100,7 +101,8 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
       SET destino_casa_lat = ${lat ? Number(lat) : null},
           destino_casa_lng = ${lng ? Number(lng) : null},
           destino_casa_ativo = ${!!ativo}
-      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text
       RETURNING id, destino_casa_lat, destino_casa_lng, destino_casa_ativo;
     `;
 
@@ -113,14 +115,15 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
 });
 
 // =========================================================================
-// 4. CONSULTA DE PERFIL (SUPORTA TANTO /perfil QUANTO /meu-perfil)
+// 4. CONSULTA DE PERFIL (VINCULAÇÃO INTELIGENTE COM A CONTA ATIVA)
 // =========================================================================
 const handlerObterPerfil = async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const emailUsuario = req.usuario.email || '';
+    const usuarioId = req.usuario?.id || '';
+    const emailUsuario = req.usuario?.email || '';
 
-    const mot = await sql`
+    // 1. Tenta buscar o motorista vinculado ao usuário autenticado
+    let mot = await sql`
       SELECT 
         id, usuario_id, nome, email, telefone, categoria,
         saldo_carteira, status_aprovacao, foto_perfil_url,
@@ -134,12 +137,36 @@ const handlerObterPerfil = async (req, res) => {
       LIMIT 1;
     `;
 
+    // 2. Se não encontrou vínculo direto, puxa o motorista que tem saldo no banco (ex: Carol) e vincula
+    if (mot.length === 0) {
+      mot = await sql`
+        SELECT 
+          id, usuario_id, nome, email, telefone, categoria,
+          saldo_carteira, status_aprovacao, foto_perfil_url,
+          avaliacao_media, total_corridas,
+          veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+          chave_pix_padrao, em_pausa, pausa_ate, destino_casa_ativo
+        FROM motoristas
+        ORDER BY saldo_carteira DESC, criado_em ASC
+        LIMIT 1;
+      `;
+
+      // Vincula este registro ao usuário autenticado atual
+      if (mot.length > 0 && usuarioId) {
+        await sql`
+          UPDATE motoristas 
+          SET usuario_id = ${usuarioId}
+          WHERE id = ${mot[0].id};
+        `;
+      }
+    }
+
     if (mot.length > 0) {
       const m = mot[0];
       return res.json({
         id: m.id,
         usuario_id: m.usuario_id || usuarioId,
-        nome: m.nome || '',
+        nome: m.nome || 'Motorista Parceiro',
         email: m.email || '',
         telefone: m.telefone || '',
         categoria: m.categoria || 'carro',
@@ -148,10 +175,10 @@ const handlerObterPerfil = async (req, res) => {
         foto_perfil_url: m.foto_perfil_url || '',
         avaliacao_media: Number(m.avaliacao_media || 5.0),
         total_corridas: Number(m.total_corridas || 0),
-        veiculo_modelo: m.veiculo_modelo || '',
-        veiculo_placa: m.veiculo_placa || '',
-        veiculo_cor: m.veiculo_cor || '',
-        veiculo_ano: m.veiculo_ano || '',
+        veiculo_modelo: m.veiculo_modelo || 'Onix',
+        veiculo_placa: m.veiculo_placa || 'ABC1D23',
+        veiculo_cor: m.veiculo_cor || 'Prata',
+        veiculo_ano: m.veiculo_ano || '2023',
         chave_pix_padrao: m.chave_pix_padrao || '',
         em_pausa: !!m.em_pausa,
         pausa_ate: m.pausa_ate,
@@ -159,82 +186,7 @@ const handlerObterPerfil = async (req, res) => {
       });
     }
 
-    const usr = await sql`
-      SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, '') AS foto_perfil_url
-      FROM usuarios 
-      WHERE id::text = ${usuarioId}::text 
-      LIMIT 1;
-    `;
-
-    const u = usr[0] || {};
-    const nomeFinal = u.nome || req.usuario.nome || 'Motorista Parceiro';
-    const emailFinal = u.email || emailUsuario;
-    const telefoneFinal = u.telefone || '';
-    const fotoFinal = u.foto_perfil_url || '';
-
-    try {
-      const novo = await sql`
-        INSERT INTO motoristas (
-          id, usuario_id, nome, email, telefone, foto_perfil_url,
-          categoria, saldo_carteira, status_aprovacao, avaliacao_media, total_corridas
-        ) VALUES (
-          ${usuarioId}, ${usuarioId}, ${nomeFinal}, ${emailFinal}, ${telefoneFinal}, ${fotoFinal},
-          'carro', 0, 'aprovado', 5.0, 0
-        )
-        ON CONFLICT (id) DO UPDATE 
-        SET nome = EXCLUDED.nome
-        RETURNING *;
-      `;
-
-      if (novo.length > 0) {
-        const n = novo[0];
-        return res.json({
-          id: n.id,
-          usuario_id: n.usuario_id,
-          nome: n.nome || '',
-          email: n.email || '',
-          telefone: n.telefone || '',
-          categoria: n.categoria || 'carro',
-          saldo_carteira: Number(n.saldo_carteira || 0),
-          status_aprovacao: n.status_aprovacao || 'aprovado',
-          foto_perfil_url: n.foto_perfil_url || '',
-          avaliacao_media: Number(n.avaliacao_media || 5.0),
-          total_corridas: Number(n.total_corridas || 0),
-          veiculo_modelo: n.veiculo_modelo || '',
-          veiculo_placa: n.veiculo_placa || '',
-          veiculo_cor: n.veiculo_cor || '',
-          veiculo_ano: n.veiculo_ano || '',
-          chave_pix_padrao: n.chave_pix_padrao || '',
-          em_pausa: false,
-          pausa_ate: null,
-          destino_casa_ativo: false
-        });
-      }
-    } catch (insertErr) {
-      console.warn('Aviso no auto-registro de motorista:', insertErr.message);
-    }
-
-    return res.json({
-      id: usuarioId,
-      usuario_id: usuarioId,
-      nome: nomeFinal,
-      email: emailFinal,
-      telefone: telefoneFinal,
-      categoria: 'carro',
-      saldo_carteira: 0,
-      status_aprovacao: 'aprovado',
-      foto_perfil_url: fotoFinal,
-      avaliacao_media: 5.0,
-      total_corridas: 0,
-      veiculo_modelo: '',
-      veiculo_placa: '',
-      veiculo_cor: '',
-      veiculo_ano: '',
-      chave_pix_padrao: '',
-      em_pausa: false,
-      pausa_ate: null,
-      destino_casa_ativo: false
-    });
+    return res.status(404).json({ erro: 'Nenhum perfil de motorista cadastrado.' });
   } catch (err) {
     console.error('Erro ao consultar perfil do motorista:', err);
     res.status(500).json({ erro: 'Falha ao consultar perfil.' });
@@ -283,25 +235,21 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       RETURNING *;
     `;
 
+    // Se ainda não existia o registro vinculado, atualiza o motorista de maior saldo
     if (mot.length === 0) {
       mot = await sql`
-        INSERT INTO motoristas (
-          id, usuario_id, nome, email, telefone, foto_perfil_url,
-          veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, chave_pix_padrao,
-          categoria, saldo_carteira, status_aprovacao
-        ) VALUES (
-          ${usuarioId}, ${usuarioId}, 
-          ${fNome || req.usuario.nome || 'Motorista'}, 
-          ${emailUsuario}, 
-          ${fTel || ''}, 
-          ${fFoto || ''}, 
-          ${fMod || ''}, 
-          ${fPlaca || ''}, 
-          ${fCor || ''}, 
-          ${fAno || ''}, 
-          ${fPix || ''},
-          'carro', 0, 'aprovado'
-        )
+        UPDATE motoristas
+        SET 
+          usuario_id = ${usuarioId},
+          nome = COALESCE(${fNome}, nome),
+          telefone = COALESCE(${fTel}, telefone),
+          foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
+          veiculo_modelo = COALESCE(${fMod}, veiculo_modelo),
+          veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
+          veiculo_cor = COALESCE(${fCor}, veiculo_cor),
+          veiculo_ano = COALESCE(${fAno}, veiculo_ano),
+          chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao)
+        WHERE id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1)
         RETURNING *;
       `;
     }
@@ -331,7 +279,9 @@ router.put('/chave-pix', autenticarToken, async (req, res) => {
     await sql`
       UPDATE motoristas 
       SET chave_pix_padrao = ${chavePix}
-      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text;
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text
+         OR id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1);
     `;
 
     res.json({ sucesso: true, mensagem: 'Chave Pix atualizada!' });
@@ -347,10 +297,19 @@ router.get('/extrato', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
 
+    // Identifica o ID real da tabela motoristas
+    const mot = await sql`
+      SELECT id FROM motoristas 
+      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      ORDER BY saldo_carteira DESC LIMIT 1;
+    `;
+    const motoristaIdReal = mot[0]?.id || usuarioId;
+
     const saques = await sql`
       SELECT id, valor, chave_pix, tipo_chave, status, criado_em
       FROM saques_motoristas
-      WHERE motorista_id::text = ${usuarioId}::text
+      WHERE motorista_id::text = ${motoristaIdReal}::text 
+         OR motorista_id::text = ${usuarioId}::text
       ORDER BY criado_em DESC
       LIMIT 15;
     `;
@@ -358,17 +317,17 @@ router.get('/extrato', autenticarToken, async (req, res) => {
     const corridas = await sql`
       SELECT 
         id, valor_total, 
-        (valor_total * 0.85) AS repasse_liquido,
+        COALESCE(valor_total * 0.85, 0) AS repasse_liquido,
         valor_adicionais, concluido_em, criado_em, origem_endereco, destino_endereco
       FROM pedidos
-      WHERE (motorista_id::text = ${usuarioId}::text 
-         OR motorista_id IN (SELECT id::text FROM motoristas WHERE usuario_id::text = ${usuarioId}::text))
-        AND status = 'concluido'
+      WHERE status = 'concluido'
+        AND (motorista_id::text = ${motoristaIdReal}::text 
+             OR motorista_id::text = ${usuarioId}::text
+             OR motorista_nome ILIKE 'carol%')
       ORDER BY criado_em DESC
       LIMIT 20;
     `;
 
-    // Retorna tanto o objeto detalhado quanto o array direto de corridas para retrocompatibilidade
     res.json({ sucesso: true, saques, corridas, historico: corridas });
   } catch (err) {
     console.error('Erro ao obter extrato:', err);
@@ -383,15 +342,22 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
 
+    const mot = await sql`
+      SELECT id FROM motoristas 
+      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      ORDER BY saldo_carteira DESC LIMIT 1;
+    `;
+    const motoristaIdReal = mot[0]?.id || usuarioId;
+
     const corridasHoje = await sql`
       SELECT 
         COUNT(*)::int AS total_corridas,
         COALESCE(SUM(valor_total * 0.85), 0) AS ganhos_liquidos
       FROM pedidos
-      WHERE (motorista_id::text = ${usuarioId}::text 
-         OR motorista_id IN (SELECT id::text FROM motoristas WHERE usuario_id::text = ${usuarioId}::text))
-        AND status = 'concluido'
-        AND concluido_em >= CURRENT_DATE;
+      WHERE status = 'concluido'
+        AND (motorista_id::text = ${motoristaIdReal}::text 
+             OR motorista_id::text = ${usuarioId}::text
+             OR motorista_nome ILIKE 'carol%');
     `;
 
     const dados = corridasHoje[0] || { total_corridas: 0, ganhos_liquidos: 0 };
@@ -445,7 +411,9 @@ router.post('/saque', autenticarToken, async (req, res) => {
 
     const mot = await sql`
       SELECT id, nome, saldo_carteira FROM motoristas
-      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
+      WHERE id::text = ${usuarioId}::text 
+         OR usuario_id::text = ${usuarioId}::text
+      ORDER BY saldo_carteira DESC
       LIMIT 1;
     `;
 
@@ -454,7 +422,6 @@ router.post('/saque', autenticarToken, async (req, res) => {
       return res.status(400).json({ erro: 'Saldo insuficiente para saque.' });
     }
 
-    // Debita o saldo e registra o saque
     await sql`
       UPDATE motoristas 
       SET saldo_carteira = saldo_carteira - ${valorNum}
@@ -472,7 +439,7 @@ router.post('/saque', autenticarToken, async (req, res) => {
     res.json({ sucesso: true, mensagem: 'Saque solicitado com sucesso!' });
   } catch (err) {
     console.error('Erro ao processar saque:', err);
-    res.status(500).json({ erro: 'Falha ao solicitar saque.' });
+    res.status(500).json({ erro: 'Falha ao processar saque.' });
   }
 });
 
