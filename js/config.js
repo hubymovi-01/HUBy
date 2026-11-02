@@ -5,7 +5,7 @@
 // Se estiver a rodar localmente usa a porta 3000; caso contrário, aponta para a API no Render
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
-  : 'https://COLE_AQUI_A_URL_REAL_DO_RENDER.onrender.com';
+  : 'https://huby.onrender.com';
 
 // DESPERTADOR: Envia um ping para acordar a instância gratuita do Render em segundo plano
 fetch(`${API_URL}/`).catch(() => {
