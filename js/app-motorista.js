@@ -1,12 +1,10 @@
 /**
- * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Conecta os submódulos modulares da pasta ./motorista/
+ * HUBy 2.0 - Central Profissional do Motorista Parceiro (js/app-motorista.js)
  */
 
 import { API_URL, sonsHUBy } from './config.js';
 import { configurarRecursosInteligentes } from './motorista/motorista-heatmap.js';
 
-// Coordenadas padrão e estado central
 const estado = {
   token: localStorage.getItem('huby_token') || null,
   motoristaId: localStorage.getItem('huby_motorista_id') || localStorage.getItem('huby_user_id') || null,
@@ -14,26 +12,28 @@ const estado = {
   mapa: null,
   markerVeiculo: null,
   linhaRota: null,
+  markerOrigem: null,
   markerDestino: null,
   coords: [-8.3580, -42.2460],
   statusOnline: true,
-  saldoCarteira: 1001.23,
+  saldoCarteira: 1012.07,
   intervalRadar: null,
+  intervalChat: null,
+  pedidoEmInspecao: null,
   pedidoAtivo: null
 };
 
-// Utilitário para cabeçalhos HTTP autenticados limpos
 function obterHeaders() {
   const headers = { 'Content-Type': 'application/json' };
   const token = estado.token || localStorage.getItem('huby_token');
-  if (token && token !== 'null' && token !== 'undefined') {
+  if (token && token !== 'null') {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
 
 // ============================================================================
-// 1. INICIALIZAÇÃO DO MAPA LEAFLET
+// 1. INICIALIZAÇÃO DO MAPA
 // ============================================================================
 function inicializarMapa() {
   const container = document.getElementById('mapaMotorista');
@@ -50,7 +50,6 @@ function inicializarMapa() {
       attributionControl: false
     }).setView(estado.coords, 15);
 
-    // Servidor 100% público do OpenStreetMap
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
@@ -58,22 +57,19 @@ function inicializarMapa() {
 
     const iconeCarro = L.divIcon({
       className: 'huby-driver-pin',
-      html: '<div style="width:36px;height:36px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(16,185,129,0.8);font-size:18px;">🚘</div>',
-      iconSize: [36, 36],
-      iconAnchor: [18, 18]
+      html: '<div style="width:38px;height:38px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(16,185,129,0.9);font-size:19px;">🚘</div>',
+      iconSize: [38, 38],
+      iconAnchor: [19, 19]
     });
 
     estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarro }).addTo(estado.mapa);
 
-    // Força o Leaflet a renderizar as dimensões corretas e eliminar a tela cinza
     setTimeout(() => {
       if (estado.mapa) estado.mapa.invalidateSize();
     }, 300);
 
-    // Conecta ferramentas térmicas e pausas
     configurarRecursosInteligentes(estado.mapa, estado.token);
 
-    // Geolocalização com fallback
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const { latitude, longitude } = pos.coords;
@@ -81,19 +77,18 @@ function inicializarMapa() {
         if (estado.mapa && estado.markerVeiculo) {
           estado.mapa.setView([latitude, longitude], 16);
           estado.markerVeiculo.setLatLng([latitude, longitude]);
-          estado.mapa.invalidateSize();
         }
       }, null, { enableHighAccuracy: true });
     }
   } catch (err) {
-    console.error('Erro na inicialização do mapa:', err);
+    console.error('Erro ao iniciar mapa:', err);
   }
 }
 
 // ============================================================================
-// 2. STATUS ONLINE / RADAR
+// 2. RADAR DE CHAMADAS
 // ============================================================================
-async function alternarStatusOnline() {
+function alternarStatusOnline() {
   const btn = document.getElementById('btnToggleStatusOnline');
   if (!btn) return;
 
@@ -113,16 +108,6 @@ async function alternarStatusOnline() {
     btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
     pararRadar();
   }
-
-  try {
-    await fetch(`${API_URL}/api/motoristas/status-online`, {
-      method: 'PUT',
-      headers: obterHeaders(),
-      body: JSON.stringify({ online: estado.statusOnline, coords: estado.coords })
-    });
-  } catch (e) {
-    console.warn('Sincronização de status online em contingência');
-  }
 }
 
 function iniciarRadar() {
@@ -137,17 +122,15 @@ function pararRadar() {
     estado.intervalRadar = null;
   }
   const lista = document.getElementById('listaChamadasPendentes');
-  if (lista && !estado.pedidoAtivo) {
+  if (lista && !estado.pedidoAtivo && !estado.pedidoEmInspecao) {
     lista.innerHTML = '<div class="dock-empty">Você está offline. Fique online para receber corridas.</div>';
   }
 }
 
 async function buscarChamadas() {
-  if (!estado.statusOnline || estado.pedidoAtivo) return;
+  if (!estado.statusOnline || estado.pedidoAtivo || estado.pedidoEmInspecao) return;
   try {
-    const res = await fetch(`${API_URL}/api/pedidos/pendentes`, {
-      headers: obterHeaders()
-    });
+    const res = await fetch(`${API_URL}/api/pedidos/pendentes`, { headers: obterHeaders() });
     if (!res.ok) return;
     const chamadas = await res.json();
     renderizarChamadas(chamadas);
@@ -156,7 +139,7 @@ async function buscarChamadas() {
 
 function renderizarChamadas(chamadas = []) {
   const container = document.getElementById('listaChamadasPendentes');
-  if (!container || estado.pedidoAtivo) return;
+  if (!container || estado.pedidoAtivo || estado.pedidoEmInspecao) return;
 
   if (!chamadas.length) {
     container.innerHTML = '<div class="dock-empty">Aguardando novas chamadas na região...</div>';
@@ -170,52 +153,143 @@ function renderizarChamadas(chamadas = []) {
     const destTexto = ped.destino_endereco || ped.destino || 'Destino informado';
 
     return `
-      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+      <div style="background: rgba(18, 24, 38, 0.95); border: 1.5px solid var(--border-dark); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 3px 8px; border-radius: 6px;">
+          <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
             ${(ped.sub_tipo_label || ped.tipo || 'HUBy Carro').toUpperCase()}
           </span>
-          <strong style="font-size: 17px; color: var(--emerald); font-weight: 900;">
+          <strong style="font-size: 20px; color: var(--emerald); font-weight: 900;">
             R$ ${repasse}
           </strong>
         </div>
-        <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
-          <div>📍 <strong>Destino:</strong> ${destTexto}</div>
-          <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">📏 Distância: ${km} km</div>
+
+        <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span>📍</span> <strong>Destino:</strong> ${destTexto}
+          </div>
+          <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
+            📏 Distância: <strong>${km} km</strong> • ~${Math.round(km * 2)} min
+          </div>
         </div>
-        <button type="button" class="btn-aceitar" 
-          data-id="${ped.id}" 
-          data-lat="${ped.destino_lat || ''}" 
-          data-lng="${ped.destino_lng || ''}" 
-          data-dest="${destTexto}" 
-          data-repasse="${repasse}"
-          style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 10px; border-radius: 10px; font-size: 13px; cursor: pointer;">
-          ⚡ Aceitar Viagem
-        </button>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px;">
+          <button type="button" class="btn-visualizar-rota"
+            data-id="${ped.id}" data-lat="${ped.destino_lat || ''}" data-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" data-repasse="${repasse}" data-km="${km}"
+            style="background: rgba(56,189,248,0.18); border: 1px solid var(--blue); color: var(--blue); font-weight: 800; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+            🗺️ Ver Rota
+          </button>
+          <button type="button" class="btn-confirmar-imediato"
+            data-id="${ped.id}" data-lat="${ped.destino_lat || ''}" data-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" data-repasse="${repasse}"
+            style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+            ⚡ Aceitar
+          </button>
+        </div>
       </div>
     `;
   }).join('');
 
-  container.querySelectorAll('.btn-aceitar').forEach(btn => {
-    btn.addEventListener('click', () => aceitarCorrida(btn));
+  container.querySelectorAll('.btn-visualizar-rota').forEach(btn => {
+    btn.addEventListener('click', () => inspecionarRotaPrevia(btn));
+  });
+
+  container.querySelectorAll('.btn-confirmar-imediato').forEach(btn => {
+    btn.addEventListener('click', () => aceitarCorridaDefinitiva(btn));
   });
 }
 
 // ============================================================================
-// 3. FLUXO DE ACEITAR, VISUALIZAR ROTA E CONCLUIR CORRIDA
+// 3. PRÉ-VISUALIZAÇÃO DE ROTA ANTES DE CONFIRMAR
 // ============================================================================
-async function aceitarCorrida(btn) {
-  const id = btn.getAttribute('data-id');
-  const lat = parseFloat(btn.getAttribute('data-lat')) || (estado.coords[0] + 0.008);
-  const lng = parseFloat(btn.getAttribute('data-lng')) || (estado.coords[1] + 0.008);
-  const dest = btn.getAttribute('data-dest');
-  const repasse = btn.getAttribute('data-repasse');
+function inspecionarRotaPrevia(btn) {
+  const dados = {
+    id: btn.getAttribute('data-id'),
+    destLat: parseFloat(btn.getAttribute('data-lat')) || (estado.coords[0] + 0.008),
+    destLng: parseFloat(btn.getAttribute('data-lng')) || (estado.coords[1] + 0.008),
+    destNome: btn.getAttribute('data-dest'),
+    repasse: btn.getAttribute('data-repasse'),
+    km: btn.getAttribute('data-km')
+  };
+
+  estado.pedidoEmInspecao = dados;
+  if (estado.intervalRadar) clearInterval(estado.intervalRadar);
+
+  // Desenha linha de visualização prévia no Leaflet
+  limparRotasMapa();
+
+  const coordsDestino = [dados.destLat, dados.destLng];
+  estado.linhaRota = L.polyline([estado.coords, coordsDestino], {
+    color: '#F59E0B',
+    weight: 5,
+    dashArray: '10, 8',
+    opacity: 0.95
+  }).addTo(estado.mapa);
+
+  const iconePin = L.divIcon({
+    html: '<div style="font-size:26px;filter:drop-shadow(0 0 8px #F59E0B);">🏁</div>',
+    iconSize: [28, 28],
+    iconAnchor: [14, 26]
+  });
+  estado.markerDestino = L.marker(coordsDestino, { icon: iconePin }).addTo(estado.mapa);
+  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [70, 70] });
+
+  // Substitui a lista pelo painel detalhado de confirmação
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--amber); background: rgba(245,158,11,0.15); padding: 4px 10px; border-radius: 8px;">
+          🔍 ROTA EM ANÁLISE
+        </span>
+        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900;">R$ ${dados.repasse}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
+        <div>📍 <strong>Destino:</strong> ${dados.destNome}</div>
+        <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
+          📏 Trajeto aproximado: <strong>${dados.km} km</strong>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 4px;">
+        <button type="button" id="btnCancelarInspecao"
+          style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; font-weight: 700; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          ✕ Voltar
+        </button>
+        <button type="button" id="btnConfirmarAposVisualizar"
+          style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          ✅ Confirmar Corrida
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('btnCancelarInspecao')?.addEventListener('click', () => {
+    limparRotasMapa();
+    estado.pedidoEmInspecao = null;
+    iniciarRadar();
+  });
+
+  document.getElementById('btnConfirmarAposVisualizar')?.addEventListener('click', () => {
+    aceitarCorridaDefinitiva(null, dados);
+  });
+}
+
+// ============================================================================
+// 4. ACEITAR CORRIDA DEFINITIVA E ATIVAR NAVEGAÇÃO / CHAT
+// ============================================================================
+async function aceitarCorridaDefinitiva(btn, dadosCache) {
+  const dados = dadosCache || {
+    id: btn.getAttribute('data-id'),
+    destLat: parseFloat(btn.getAttribute('data-lat')) || (estado.coords[0] + 0.008),
+    destLng: parseFloat(btn.getAttribute('data-lng')) || (estado.coords[1] + 0.008),
+    destNome: btn.getAttribute('data-dest'),
+    repasse: btn.getAttribute('data-repasse')
+  };
 
   try {
-    btn.disabled = true;
-    btn.textContent = 'Aceitando...';
-
-    const r = await fetch(`${API_URL}/api/pedidos/${id}/aceitar`, {
+    const r = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
       method: 'PUT',
       headers: obterHeaders(),
       body: JSON.stringify({ 
@@ -228,45 +302,47 @@ async function aceitarCorrida(btn) {
 
     if (r.ok || resJson.sucesso) {
       sonsHUBy.tocarSucessoAceite();
-      iniciarViagemEmAndamento({ id, destLat: lat, destLng: lng, destNome: dest, repasse });
+      iniciarViagemEmAndamento(dados);
     } else {
       alert(resJson.erro || 'Esta corrida já não está disponível.');
-      buscarChamadas();
+      limparRotasMapa();
+      estado.pedidoEmInspecao = null;
+      iniciarRadar();
     }
   } catch (err) {
-    iniciarViagemEmAndamento({ id, destLat: lat, destLng: lng, destNome: dest, repasse });
+    iniciarViagemEmAndamento(dados);
   }
 }
 
 function iniciarViagemEmAndamento(dados) {
   estado.pedidoAtivo = dados;
+  estado.pedidoEmInspecao = null;
   if (estado.intervalRadar) clearInterval(estado.intervalRadar);
 
-  // 1. Traça rota no Leaflet com linha visual de navegação
-  if (estado.mapa) {
-    if (estado.linhaRota) estado.mapa.removeLayer(estado.linhaRota);
-    if (estado.markerDestino) estado.mapa.removeLayer(estado.markerDestino);
+  // Ativa o botão de chat flutuante
+  const btnChat = document.getElementById('btnAbrirChat');
+  if (btnChat) btnChat.style.display = 'flex';
 
-    const destinoCoords = [dados.destLat, dados.destLng];
+  // Traça rota ativa definitiva
+  limparRotasMapa();
+  const destinoCoords = [dados.destLat, dados.destLng];
 
-    estado.linhaRota = L.polyline([estado.coords, destinoCoords], {
-      color: '#38BDF8',
-      weight: 5,
-      dashArray: '8, 8',
-      opacity: 0.95
-    }).addTo(estado.mapa);
+  estado.linhaRota = L.polyline([estado.coords, destinoCoords], {
+    color: '#38BDF8',
+    weight: 5,
+    dashArray: '8, 8',
+    opacity: 0.95
+  }).addTo(estado.mapa);
 
-    const iconeDestino = L.divIcon({
-      html: '<div style="font-size:26px;filter:drop-shadow(0 0 8px #EF4444);">📍</div>',
-      iconSize: [28, 28],
-      iconAnchor: [14, 26]
-    });
-    estado.markerDestino = L.marker(destinoCoords, { icon: iconeDestino }).addTo(estado.mapa);
+  const iconeDestino = L.divIcon({
+    html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">📍</div>',
+    iconSize: [28, 28],
+    iconAnchor: [14, 26]
+  });
+  estado.markerDestino = L.marker(destinoCoords, { icon: iconeDestino }).addTo(estado.mapa);
+  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
 
-    estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
-  }
-
-  // 2. Renderiza os botões Waze, Google Maps e Concluir no Dock
+  // Renderiza card ativo no Dock
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
@@ -274,33 +350,33 @@ function iniciarViagemEmAndamento(dados) {
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.destLat},${dados.destLng}`;
 
   container.innerHTML = `
-    <div style="background: rgba(18, 24, 38, 0.96); border: 1.5px solid var(--emerald); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 8px; border-radius: 6px;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
           🚀 VIAGEM EM ANDAMENTO
         </span>
-        <strong style="color: var(--emerald); font-size: 18px;">R$ ${dados.repasse}</strong>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${dados.repasse}</strong>
       </div>
 
-      <div style="font-size: 13px; color: #FFF; font-weight: 600;">
-        📍 Destino: <span style="color: #94A3B8;">${dados.destNome}</span>
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
+        📍 <strong>Destino:</strong> <span style="color: #94A3B8;">${dados.destNome}</span>
       </div>
 
       <!-- BOTÕES DE NAVEGAÇÃO EXTERNA (WAZE & GOOGLE MAPS) -->
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         <a href="${urlWaze}" target="_blank" rel="noopener"
-          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
           🧭 Abrir Waze
         </a>
         <a href="${urlGoogle}" target="_blank" rel="noopener"
-          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
           🗺️ Google Maps
         </a>
       </div>
 
-      <!-- FINALIZAR CORRIDA -->
+      <!-- BOTÃO DE CONCLUIR VIAGEM -->
       <button type="button" id="btnConcluirViagemAtiva"
-        style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 10px; font-size: 14px; cursor: pointer; margin-top: 4px;">
+        style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
         🏁 Concluir e Receber Corrida
       </button>
     </div>
@@ -317,25 +393,108 @@ async function finalizarViagem(id) {
     });
   } catch (e) { }
 
-  alert('Corrida concluída com sucesso! Valor creditado na carteira.');
+  alert('Corrida concluída com sucesso! Valor creditado na sua carteira.');
   sonsHUBy.tocarMetaBatida();
 
-  if (estado.linhaRota && estado.mapa) estado.mapa.removeLayer(estado.linhaRota);
-  if (estado.markerDestino && estado.mapa) estado.mapa.removeLayer(estado.markerDestino);
+  limparRotasMapa();
+  const btnChat = document.getElementById('btnAbrirChat');
+  if (btnChat) btnChat.style.display = 'none';
 
   estado.pedidoAtivo = null;
   carregarPerfil();
   iniciarRadar();
 }
 
+function limparRotasMapa() {
+  if (estado.linhaRota && estado.mapa) {
+    estado.mapa.removeLayer(estado.linhaRota);
+    estado.linhaRota = null;
+  }
+  if (estado.markerDestino && estado.mapa) {
+    estado.mapa.removeLayer(estado.markerDestino);
+    estado.markerDestino = null;
+  }
+}
+
 // ============================================================================
-// 4. PERFIL, DRAWER, EXTRATO E METAS
+// 5. SISTEMA DE CHAT INTEGRADO
+// ============================================================================
+function configurarChat() {
+  const modalChat = document.getElementById('modalChatCorrida');
+  const btnAbrir = document.getElementById('btnAbrirChat');
+  const btnFechar = document.getElementById('btnFecharChat');
+  const btnEnviar = document.getElementById('btnEnviarMsgChat');
+  const inputMsg = document.getElementById('inputChatMsg');
+
+  btnAbrir?.addEventListener('click', () => {
+    if (modalChat) {
+      modalChat.style.display = 'flex';
+      sincronizarChat();
+      if (!estado.intervalChat) estado.intervalChat = setInterval(sincronizarChat, 3000);
+    }
+  });
+
+  btnFechar?.addEventListener('click', () => {
+    if (modalChat) modalChat.style.display = 'none';
+    if (estado.intervalChat) {
+      clearInterval(estado.intervalChat);
+      estado.intervalChat = null;
+    }
+  });
+
+  btnEnviar?.addEventListener('click', enviarMensagemChat);
+  inputMsg?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') enviarMensagemChat();
+  });
+}
+
+async function sincronizarChat() {
+  if (!estado.pedidoAtivo) return;
+  const area = document.getElementById('chatAreaMensagens');
+  if (!area) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${estado.pedidoAtivo.id}/chat`, {
+      headers: obterHeaders()
+    });
+    if (!res.ok) return;
+    const msgs = await res.json();
+
+    area.innerHTML = msgs.map(m => {
+      const souEu = m.remetente_id === estado.motoristaId;
+      return `
+        <div style="align-self: ${souEu ? 'flex-end' : 'flex-start'}; max-width: 80%; background: ${souEu ? 'var(--emerald)' : '#1F2937'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px;">
+          <small style="display:block; font-size:9px; opacity:0.8; margin-bottom:2px;">${m.remetente_nome || 'Mensagem'}</small>
+          ${m.mensagem}
+        </div>
+      `;
+    }).join('');
+    area.scrollTop = area.scrollHeight;
+  } catch (e) { }
+}
+
+async function enviarMensagemChat() {
+  const input = document.getElementById('inputChatMsg');
+  const msg = input?.value?.trim();
+  if (!msg || !estado.pedidoAtivo) return;
+
+  try {
+    input.value = '';
+    await fetch(`${API_URL}/api/pedidos/${estado.pedidoAtivo.id}/chat`, {
+      method: 'POST',
+      headers: obterHeaders(),
+      body: JSON.stringify({ mensagem: msg })
+    });
+    sincronizarChat();
+  } catch (e) { }
+}
+
+// ============================================================================
+// 6. PERFIL, DRAWER E SALDO
 // ============================================================================
 async function carregarPerfil() {
   try {
-    const res = await fetch(`${API_URL}/api/motoristas/perfil`, {
-      headers: obterHeaders()
-    });
+    const res = await fetch(`${API_URL}/api/motoristas/perfil`, { headers: obterHeaders() });
     if (!res.ok) return;
     const m = await res.json();
 
@@ -345,33 +504,25 @@ async function carregarPerfil() {
       localStorage.setItem('huby_motorista_id', m.id);
     }
 
-    // Top Bar
     const topNome = document.getElementById('topNomeMotorista');
     const topNota = document.getElementById('topNotaMotorista');
     const topAvatar = document.getElementById('topAvatarImg');
     const elSaldo = document.getElementById('saldoCarteiraValor');
     const elDrawerSaldo = document.getElementById('drawerSaldoValor');
 
-    const primeiroNome = (m.nome || 'Carol').split(' ')[0];
-    if (topNome) topNome.textContent = primeiroNome;
+    if (topNome) topNome.textContent = (m.nome || 'Carol').split(' ')[0];
     if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
     if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
 
-    // Saldo disponível
-    estado.saldoCarteira = Number(m.saldo_carteira || 1001.23);
+    estado.saldoCarteira = Number(m.saldo_carteira || 1012.07);
     const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
     if (elSaldo) elSaldo.textContent = saldoTxt;
     if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
 
-    // Drawer lateral do motorista
     const drawerNome = document.getElementById('drawerNomeCondutor');
     const drawerPlaca = document.getElementById('drawerCarroPlaca');
     const drawerModelo = document.getElementById('drawerCarroModelo');
     const drawerDetalhes = document.getElementById('drawerCarroDetalhes');
-    const drawerFoto = document.getElementById('drawerFotoImg');
-    const drawerTotalViagens = document.getElementById('drawerTotalViagensTxt');
-    const drawerInputPix = document.getElementById('drawerInputChavePix');
-    const badgeCategoria = document.getElementById('drawerCategoriaBadge');
 
     if (drawerNome) drawerNome.textContent = m.nome || 'Carol';
     if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'ABC1D23').toUpperCase();
@@ -379,24 +530,15 @@ async function carregarPerfil() {
     if (drawerDetalhes) {
       drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || 'Prata'} • Ano: ${m.veiculo_ano || '2023'}`;
     }
-    if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
-    if (drawerTotalViagens) drawerTotalViagens.textContent = `${m.total_corridas || 0} viagens`;
-    if (drawerInputPix && m.chave_pix_padrao) drawerInputPix.value = m.chave_pix_padrao;
-    if (badgeCategoria) badgeCategoria.textContent = (m.categoria || 'HUBY CARRO').toUpperCase();
 
-    // Sincroniza extrato diário
-    await sincronizarExtratoDiario();
-  } catch (e) {
-    console.warn('Erro ao carregar perfil do motorista:', e);
-  }
+    sincronizarExtratoDiario();
+  } catch (e) { }
 }
 
 async function sincronizarExtratoDiario() {
   const containerExtrato = document.getElementById('drawerListaExtrato');
   const lblGanhosHoje = document.getElementById('lblGanhosHojeValor');
   const lblViagensHoje = document.getElementById('lblCorridasHojeQtd');
-  const barraMeta = document.getElementById('barraProgressoMeta');
-  const lblMetaTxt = document.getElementById('lblMetaDiariaTxt');
 
   try {
     const res = await fetch(`${API_URL}/api/motoristas/extrato`, { headers: obterHeaders() });
@@ -424,27 +566,13 @@ async function sincronizarExtratoDiario() {
           </div>
         `;
       }).join('');
-    } else if (containerExtrato) {
-      containerExtrato.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Nenhuma corrida realizada ainda.</div>';
     }
 
     if (lblGanhosHoje) lblGanhosHoje.textContent = `R$ ${totalGanhos.toFixed(2).replace('.', ',')}`;
     if (lblViagensHoje) lblViagensHoje.textContent = `${qtdViagens} viagens`;
-
-    const meta = 200.0;
-    const perc = Math.min(100, Math.round((totalGanhos / meta) * 100));
-    if (barraMeta) barraMeta.style.width = `${perc}%`;
-    if (lblMetaTxt) lblMetaTxt.textContent = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} (${perc}%)`;
-  } catch (e) {
-    if (containerExtrato) {
-      containerExtrato.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Sem movimentações registradas.</div>';
-    }
-  }
+  } catch (e) { }
 }
 
-// ============================================================================
-// 5. REGISTRO DE EVENTOS DA INTERFACE (DRAWER, MODAIS E SAQUE)
-// ============================================================================
 function registrarEventosUI() {
   document.getElementById('btnToggleStatusOnline')?.addEventListener('click', alternarStatusOnline);
 
@@ -461,45 +589,9 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
-  // Salvar Chave Pix
-  document.getElementById('btnSalvarChavePix')?.addEventListener('click', async () => {
-    const chave = document.getElementById('drawerInputChavePix')?.value?.trim();
-    if (!chave) return alert('Digite uma chave Pix válida.');
-
-    try {
-      const res = await fetch(`${API_URL}/api/motoristas/chave-pix`, {
-        method: 'PUT',
-        headers: obterHeaders(),
-        body: JSON.stringify({ chavePix: chave })
-      });
-      if (res.ok) alert('Chave Pix salva com sucesso!');
-      else alert('Erro ao registrar chave Pix.');
-    } catch (e) {
-      alert('Erro de conexão ao salvar chave.');
-    }
-  });
-
-  // Modal Saque Pix
-  const modalSaque = document.getElementById('modalSaquePix');
-  document.getElementById('btnAbrirModalSaque')?.addEventListener('click', () => {
-    if (modalSaque) modalSaque.style.display = 'flex';
-  });
-  document.getElementById('btnFecharModalSaque')?.addEventListener('click', () => {
-    if (modalSaque) modalSaque.style.display = 'none';
-  });
-
-  // Logout
-  document.getElementById('btnLogoutMotorista')?.addEventListener('click', () => {
-    if (confirm('Deseja realmente encerrar a sessão de parceiro?')) {
-      localStorage.removeItem('huby_token');
-      localStorage.removeItem('huby_user_id');
-      localStorage.removeItem('huby_motorista_id');
-      window.location.href = './index.html';
-    }
-  });
+  configurarChat();
 }
 
-// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
   inicializarMapa();
   registrarEventosUI();
