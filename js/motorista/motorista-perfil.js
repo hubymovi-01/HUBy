@@ -23,7 +23,9 @@ export function configurarDrawerPerfil() {
   const abrir = () => {
     drawer?.classList.add('active');
     overlay?.classList.add('active');
-    carregarExtratoFinanceiro();
+    if (typeof carregarExtratoFinanceiro === 'function') {
+      carregarExtratoFinanceiro();
+    }
   };
 
   const fechar = () => {
@@ -87,12 +89,19 @@ export function configurarDrawerPerfil() {
       previewFotoModal.src = estado.dadosMotorista?.foto_perfil_url || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
     }
 
-    document.getElementById('editNome').value = estado.dadosMotorista?.nome || '';
-    document.getElementById('editTelefone').value = estado.dadosMotorista?.telefone || '';
-    document.getElementById('editCarroModelo').value = estado.dadosMotorista?.veiculo_modelo || '';
-    document.getElementById('editCarroPlaca').value = estado.dadosMotorista?.veiculo_placa || '';
-    document.getElementById('editCarroCor').value = estado.dadosMotorista?.veiculo_cor || '';
-    document.getElementById('editCarroAno').value = estado.dadosMotorista?.veiculo_ano || '';
+    const editNome = document.getElementById('editNome');
+    const editTel = document.getElementById('editTelefone');
+    const editMod = document.getElementById('editCarroModelo');
+    const editPlaca = document.getElementById('editCarroPlaca');
+    const editCor = document.getElementById('editCarroCor');
+    const editAno = document.getElementById('editCarroAno');
+
+    if (editNome) editNome.value = estado.dadosMotorista?.nome || '';
+    if (editTel) editTel.value = estado.dadosMotorista?.telefone || '';
+    if (editMod) editMod.value = estado.dadosMotorista?.veiculo_modelo || '';
+    if (editPlaca) editPlaca.value = estado.dadosMotorista?.veiculo_placa || '';
+    if (editCor) editCor.value = estado.dadosMotorista?.veiculo_cor || '';
+    if (editAno) editAno.value = estado.dadosMotorista?.veiculo_ano || '';
 
     modalEdicao.style.display = 'flex';
   });
@@ -205,7 +214,10 @@ export async function carregarPerfilCompleto() {
   const token = localStorage.getItem('huby_token');
   try {
     const resp = await fetch(`${API_URL}/api/motoristas/perfil`, {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { 
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}` 
+      }
     });
 
     if (!resp.ok) {
@@ -257,7 +269,7 @@ export async function carregarPerfilCompleto() {
     if (drawerDetalhes) {
       const corTxt = m.veiculo_cor || 'Cor não informada';
       const anoTxt = m.veiculo_ano || 'Ano não informado';
-      drawerDetalhes.textContent = `${corTxt} • ${anoTxt}`;
+      drawerDetalhes.textContent = `Cor: ${corTxt} • Ano: ${anoTxt}`;
     }
     if (drawerPlaca) drawerPlaca.textContent = m.veiculo_placa ? m.veiculo_placa.toUpperCase() : 'SEM PLACA';
     if (drawerSaldo) drawerSaldo.textContent = saldoFormatado;
@@ -301,7 +313,7 @@ export function configurarModalSaquePix() {
       btnConfirmarSaque.disabled = true;
       btnConfirmarSaque.textContent = 'Enviando...';
 
-      const resp = await fetch(`${API_URL}/api/motoristas/saques`, {
+      const resp = await fetch(`${API_URL}/api/motoristas/saque`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -320,7 +332,9 @@ export function configurarModalSaquePix() {
       if (inValor) inValor.value = '';
 
       await carregarPerfilCompleto();
-      carregarExtratoFinanceiro();
+      if (typeof carregarExtratoFinanceiro === 'function') {
+        carregarExtratoFinanceiro();
+      }
     } catch (err) {
       alert(err.message);
     } finally {
