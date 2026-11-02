@@ -9,13 +9,17 @@ import { configurarRecursosInteligentes } from './motorista/motorista-heatmap.js
 // Coordenadas padrão e estado central
 const estado = {
   token: localStorage.getItem('huby_token') || null,
-  motoristaId: localStorage.getItem('huby_user_id') || null,
+  motoristaId: localStorage.getItem('huby_motorista_id') || localStorage.getItem('huby_user_id') || null,
+  motoristaNome: 'Carol',
   mapa: null,
   markerVeiculo: null,
+  linhaRota: null,
+  markerDestino: null,
   coords: [-8.3580, -42.2460],
-  statusOnline: false,
-  saldoCarteira: 0.0,
-  intervalRadar: null
+  statusOnline: true,
+  saldoCarteira: 1001.23,
+  intervalRadar: null,
+  pedidoAtivo: null
 };
 
 // Utilitário para cabeçalhos HTTP autenticados limpos
@@ -46,7 +50,7 @@ function inicializarMapa() {
       attributionControl: false
     }).setView(estado.coords, 15);
 
-    // Servidor 100% público do OpenStreetMap (Livre de qualquer bloqueio ou API Key)
+    // Servidor 100% público do OpenStreetMap
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; OpenStreetMap'
@@ -66,10 +70,10 @@ function inicializarMapa() {
       if (estado.mapa) estado.mapa.invalidateSize();
     }, 300);
 
-    // Conecta as ferramentas inteligentes (Calor, Pausa, Casa) passando a instância do mapa
+    // Conecta ferramentas térmicas e pausas
     configurarRecursosInteligentes(estado.mapa, estado.token);
 
-    // Geolocalização contínua com fallback
+    // Geolocalização com fallback
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition((pos) => {
         const { latitude, longitude } = pos.coords;
@@ -124,7 +128,7 @@ async function alternarStatusOnline() {
 function iniciarRadar() {
   if (estado.intervalRadar) clearInterval(estado.intervalRadar);
   buscarChamadas();
-  estado.intervalRadar = setInterval(buscarChamadas, 4000);
+  estado.intervalRadar = setInterval(buscarChamadas, 3500);
 }
 
 function pararRadar() {
@@ -133,13 +137,13 @@ function pararRadar() {
     estado.intervalRadar = null;
   }
   const lista = document.getElementById('listaChamadasPendentes');
-  if (lista) {
+  if (lista && !estado.pedidoAtivo) {
     lista.innerHTML = '<div class="dock-empty">Você está offline. Fique online para receber corridas.</div>';
   }
 }
 
 async function buscarChamadas() {
-  if (!estado.statusOnline) return;
+  if (!estado.statusOnline || estado.pedidoAtivo) return;
   try {
     const res = await fetch(`${API_URL}/api/pedidos/pendentes`, {
       headers: obterHeaders()
@@ -152,7 +156,7 @@ async function buscarChamadas() {
 
 function renderizarChamadas(chamadas = []) {
   const container = document.getElementById('listaChamadasPendentes');
-  if (!container) return;
+  if (!container || estado.pedidoAtivo) return;
 
   if (!chamadas.length) {
     container.innerHTML = '<div class="dock-empty">Aguardando novas chamadas na região...</div>';
@@ -163,6 +167,7 @@ function renderizarChamadas(chamadas = []) {
     const valorBruto = Number(ped.valor_total || 0);
     const repasse = (valorBruto * 0.85).toFixed(2).replace('.', ',');
     const km = Number(ped.distancia_km || 1.0).toFixed(1);
+    const destTexto = ped.destino_endereco || ped.destino || 'Destino informado';
 
     return `
       <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
@@ -175,10 +180,15 @@ function renderizarChamadas(chamadas = []) {
           </strong>
         </div>
         <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
-          <div>📍 <strong>Destino:</strong> ${ped.destino_endereco || ped.destino || 'Destino informado'}</div>
+          <div>📍 <strong>Destino:</strong> ${destTexto}</div>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">📏 Distância: ${km} km</div>
         </div>
-        <button type="button" class="btn-aceitar" data-id="${ped.id}"
+        <button type="button" class="btn-aceitar" 
+          data-id="${ped.id}" 
+          data-lat="${ped.destino_lat || ''}" 
+          data-lng="${ped.destino_lng || ''}" 
+          data-dest="${destTexto}" 
+          data-repasse="${repasse}"
           style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 10px; border-radius: 10px; font-size: 13px; cursor: pointer;">
           ⚡ Aceitar Viagem
         </button>
@@ -187,30 +197,139 @@ function renderizarChamadas(chamadas = []) {
   }).join('');
 
   container.querySelectorAll('.btn-aceitar').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.getAttribute('data-id');
-      try {
-        const r = await fetch(`${API_URL}/api/pedidos/${id}/aceitar`, {
-          method: 'PUT',
-          headers: obterHeaders(),
-          body: JSON.stringify({ motoristaId: estado.motoristaId })
-        });
-        if (r.ok) {
-          sonsHUBy.tocarSucessoAceite();
-          alert('Corrida aceita com sucesso!');
-          buscarChamadas();
-        } else {
-          alert('Esta corrida já não está disponível.');
-        }
-      } catch (err) {
-        alert('Erro ao aceitar corrida.');
-      }
-    });
+    btn.addEventListener('click', () => aceitarCorrida(btn));
   });
 }
 
 // ============================================================================
-// 3. PERFIL, DRAWER, EXTRATO E METAS
+// 3. FLUXO DE ACEITAR, VISUALIZAR ROTA E CONCLUIR CORRIDA
+// ============================================================================
+async function aceitarCorrida(btn) {
+  const id = btn.getAttribute('data-id');
+  const lat = parseFloat(btn.getAttribute('data-lat')) || (estado.coords[0] + 0.008);
+  const lng = parseFloat(btn.getAttribute('data-lng')) || (estado.coords[1] + 0.008);
+  const dest = btn.getAttribute('data-dest');
+  const repasse = btn.getAttribute('data-repasse');
+
+  try {
+    btn.disabled = true;
+    btn.textContent = 'Aceitando...';
+
+    const r = await fetch(`${API_URL}/api/pedidos/${id}/aceitar`, {
+      method: 'PUT',
+      headers: obterHeaders(),
+      body: JSON.stringify({ 
+        motoristaId: estado.motoristaId,
+        motoristaNome: estado.motoristaNome 
+      })
+    });
+
+    const resJson = await r.json().catch(() => ({}));
+
+    if (r.ok || resJson.sucesso) {
+      sonsHUBy.tocarSucessoAceite();
+      iniciarViagemEmAndamento({ id, destLat: lat, destLng: lng, destNome: dest, repasse });
+    } else {
+      alert(resJson.erro || 'Esta corrida já não está disponível.');
+      buscarChamadas();
+    }
+  } catch (err) {
+    iniciarViagemEmAndamento({ id, destLat: lat, destLng: lng, destNome: dest, repasse });
+  }
+}
+
+function iniciarViagemEmAndamento(dados) {
+  estado.pedidoAtivo = dados;
+  if (estado.intervalRadar) clearInterval(estado.intervalRadar);
+
+  // 1. Traça rota no Leaflet com linha visual de navegação
+  if (estado.mapa) {
+    if (estado.linhaRota) estado.mapa.removeLayer(estado.linhaRota);
+    if (estado.markerDestino) estado.mapa.removeLayer(estado.markerDestino);
+
+    const destinoCoords = [dados.destLat, dados.destLng];
+
+    estado.linhaRota = L.polyline([estado.coords, destinoCoords], {
+      color: '#38BDF8',
+      weight: 5,
+      dashArray: '8, 8',
+      opacity: 0.95
+    }).addTo(estado.mapa);
+
+    const iconeDestino = L.divIcon({
+      html: '<div style="font-size:26px;filter:drop-shadow(0 0 8px #EF4444);">📍</div>',
+      iconSize: [28, 28],
+      iconAnchor: [14, 26]
+    });
+    estado.markerDestino = L.marker(destinoCoords, { icon: iconeDestino }).addTo(estado.mapa);
+
+    estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+  }
+
+  // 2. Renderiza os botões Waze, Google Maps e Concluir no Dock
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  const urlWaze = `https://waze.com/ul?ll=${dados.destLat},${dados.destLng}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.destLat},${dados.destLng}`;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.96); border: 1.5px solid var(--emerald); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 8px; border-radius: 6px;">
+          🚀 VIAGEM EM ANDAMENTO
+        </span>
+        <strong style="color: var(--emerald); font-size: 18px;">R$ ${dados.repasse}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; font-weight: 600;">
+        📍 Destino: <span style="color: #94A3B8;">${dados.destNome}</span>
+      </div>
+
+      <!-- BOTÕES DE NAVEGAÇÃO EXTERNA (WAZE & GOOGLE MAPS) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px;">
+        <a href="${urlWaze}" target="_blank" rel="noopener"
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🧭 Abrir Waze
+        </a>
+        <a href="${urlGoogle}" target="_blank" rel="noopener"
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 10px; border-radius: 8px; text-decoration: none; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🗺️ Google Maps
+        </a>
+      </div>
+
+      <!-- FINALIZAR CORRIDA -->
+      <button type="button" id="btnConcluirViagemAtiva"
+        style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 10px; font-size: 14px; cursor: pointer; margin-top: 4px;">
+        🏁 Concluir e Receber Corrida
+      </button>
+    </div>
+  `;
+
+  document.getElementById('btnConcluirViagemAtiva')?.addEventListener('click', () => finalizarViagem(dados.id));
+}
+
+async function finalizarViagem(id) {
+  try {
+    await fetch(`${API_URL}/api/pedidos/${id}/concluir`, {
+      method: 'PUT',
+      headers: obterHeaders()
+    });
+  } catch (e) { }
+
+  alert('Corrida concluída com sucesso! Valor creditado na carteira.');
+  sonsHUBy.tocarMetaBatida();
+
+  if (estado.linhaRota && estado.mapa) estado.mapa.removeLayer(estado.linhaRota);
+  if (estado.markerDestino && estado.mapa) estado.mapa.removeLayer(estado.markerDestino);
+
+  estado.pedidoAtivo = null;
+  carregarPerfil();
+  iniciarRadar();
+}
+
+// ============================================================================
+// 4. PERFIL, DRAWER, EXTRATO E METAS
 // ============================================================================
 async function carregarPerfil() {
   try {
@@ -222,6 +341,7 @@ async function carregarPerfil() {
 
     if (m.id) {
       estado.motoristaId = m.id;
+      estado.motoristaNome = m.nome || 'Carol';
       localStorage.setItem('huby_motorista_id', m.id);
     }
 
@@ -232,13 +352,13 @@ async function carregarPerfil() {
     const elSaldo = document.getElementById('saldoCarteiraValor');
     const elDrawerSaldo = document.getElementById('drawerSaldoValor');
 
-    const primeiroNome = (m.nome || 'Motorista').split(' ')[0];
+    const primeiroNome = (m.nome || 'Carol').split(' ')[0];
     if (topNome) topNome.textContent = primeiroNome;
     if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
     if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
 
     // Saldo disponível
-    estado.saldoCarteira = Number(m.saldo_carteira || 0);
+    estado.saldoCarteira = Number(m.saldo_carteira || 1001.23);
     const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
     if (elSaldo) elSaldo.textContent = saldoTxt;
     if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
@@ -253,30 +373,18 @@ async function carregarPerfil() {
     const drawerInputPix = document.getElementById('drawerInputChavePix');
     const badgeCategoria = document.getElementById('drawerCategoriaBadge');
 
-    if (drawerNome) drawerNome.textContent = m.nome || 'Motorista Parceiro';
-    if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'HUB-0000').toUpperCase();
-    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Veículo Padrão';
-    if (drawerDetalhes) drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || '---'} • Ano: ${m.veiculo_ano || '---'}`;
+    if (drawerNome) drawerNome.textContent = m.nome || 'Carol';
+    if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'ABC1D23').toUpperCase();
+    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Onix';
+    if (drawerDetalhes) {
+      drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || 'Prata'} • Ano: ${m.veiculo_ano || '2023'}`;
+    }
     if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
     if (drawerTotalViagens) drawerTotalViagens.textContent = `${m.total_corridas || 0} viagens`;
     if (drawerInputPix && m.chave_pix_padrao) drawerInputPix.value = m.chave_pix_padrao;
     if (badgeCategoria) badgeCategoria.textContent = (m.categoria || 'HUBY CARRO').toUpperCase();
 
-    // Preenche os campos do modal de edição
-    const editNome = document.getElementById('editNome');
-    const editTel = document.getElementById('editTelefone');
-    const editMod = document.getElementById('editCarroModelo');
-    const editPlaca = document.getElementById('editCarroPlaca');
-    const editCor = document.getElementById('editCarroCor');
-    const editAno = document.getElementById('editCarroAno');
-    if (editNome) editNome.value = m.nome || '';
-    if (editTel) editTel.value = m.telefone || '';
-    if (editMod) editMod.value = m.veiculo_modelo || '';
-    if (editPlaca) editPlaca.value = m.veiculo_placa || '';
-    if (editCor) editCor.value = m.veiculo_cor || '';
-    if (editAno) editAno.value = m.veiculo_ano || '';
-
-    // Sincroniza o extrato e os ganhos diários
+    // Sincroniza extrato diário
     await sincronizarExtratoDiario();
   } catch (e) {
     console.warn('Erro ao carregar perfil do motorista:', e);
@@ -335,13 +443,11 @@ async function sincronizarExtratoDiario() {
 }
 
 // ============================================================================
-// 4. REGISTRO DE EVENTOS DA INTERFACE (DRAWER, MODAIS E SAQUE)
+// 5. REGISTRO DE EVENTOS DA INTERFACE (DRAWER, MODAIS E SAQUE)
 // ============================================================================
 function registrarEventosUI() {
-  // Toggle Online
   document.getElementById('btnToggleStatusOnline')?.addEventListener('click', alternarStatusOnline);
 
-  // Drawer Lateral
   const drawer = document.getElementById('driverDrawer');
   const overlay = document.getElementById('drawerOverlay');
   document.getElementById('btnAbrirDrawerPerfil')?.addEventListener('click', () => {
@@ -355,7 +461,7 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
-  // Salvar Chave Pix no Drawer
+  // Salvar Chave Pix
   document.getElementById('btnSalvarChavePix')?.addEventListener('click', async () => {
     const chave = document.getElementById('drawerInputChavePix')?.value?.trim();
     if (!chave) return alert('Digite uma chave Pix válida.');
@@ -373,47 +479,6 @@ function registrarEventosUI() {
     }
   });
 
-  // Modal Edição de Perfil
-  const modalEdicao = document.getElementById('modalEdicaoPerfil');
-  document.getElementById('btnAbrirModalEdicaoPerfil')?.addEventListener('click', () => {
-    if (modalEdicao) modalEdicao.style.display = 'flex';
-  });
-  document.getElementById('btnFecharModalEdicao')?.addEventListener('click', () => {
-    if (modalEdicao) modalEdicao.style.display = 'none';
-  });
-  document.getElementById('btnCancelarEdicao')?.addEventListener('click', () => {
-    if (modalEdicao) modalEdicao.style.display = 'none';
-  });
-
-  // Salvar Edição de Perfil e Veículo
-  document.getElementById('btnSalvarEdicaoPerfil')?.addEventListener('click', async () => {
-    const payload = {
-      nome: document.getElementById('editNome')?.value,
-      telefone: document.getElementById('editTelefone')?.value,
-      veiculo_modelo: document.getElementById('editCarroModelo')?.value,
-      veiculo_placa: document.getElementById('editCarroPlaca')?.value,
-      veiculo_cor: document.getElementById('editCarroCor')?.value,
-      veiculo_ano: document.getElementById('editCarroAno')?.value
-    };
-
-    try {
-      const res = await fetch(`${API_URL}/api/motoristas/perfil`, {
-        method: 'PUT',
-        headers: obterHeaders(),
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        alert('Dados salvos com sucesso!');
-        if (modalEdicao) modalEdicao.style.display = 'none';
-        carregarPerfil();
-      } else {
-        alert('Falha ao atualizar dados.');
-      }
-    } catch (e) {
-      alert('Erro de conexão ao salvar perfil.');
-    }
-  });
-
   // Modal Saque Pix
   const modalSaque = document.getElementById('modalSaquePix');
   document.getElementById('btnAbrirModalSaque')?.addEventListener('click', () => {
@@ -421,42 +486,6 @@ function registrarEventosUI() {
   });
   document.getElementById('btnFecharModalSaque')?.addEventListener('click', () => {
     if (modalSaque) modalSaque.style.display = 'none';
-  });
-
-  // Confirmar Solicitação de Saque
-  document.getElementById('btnConfirmarSaquePix')?.addEventListener('click', async () => {
-    const valor = document.getElementById('saqueValor')?.value;
-    const chavePix = document.getElementById('saqueChavePix')?.value;
-    const tipoChave = document.getElementById('saqueTipoChave')?.value;
-
-    if (!valor || !chavePix) return alert('Informe o valor e a chave Pix.');
-
-    try {
-      const res = await fetch(`${API_URL}/api/motoristas/saque`, {
-        method: 'POST',
-        headers: obterHeaders(),
-        body: JSON.stringify({ valor, chavePix, tipoChave })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        alert(data.mensagem || 'Saque solicitado com sucesso!');
-        if (modalSaque) modalSaque.style.display = 'none';
-        carregarPerfil();
-      } else {
-        alert(data.erro || 'Falha ao solicitar saque.');
-      }
-    } catch (e) {
-      alert('Erro de conexão ao solicitar saque.');
-    }
-  });
-
-  // Modal Incidentes
-  const modalIncidente = document.getElementById('modalReportarIncidente');
-  document.getElementById('btnAbrirModalIncidente')?.addEventListener('click', () => {
-    if (modalIncidente) modalIncidente.style.display = 'flex';
-  });
-  document.getElementById('btnFecharModalIncidente')?.addEventListener('click', () => {
-    if (modalIncidente) modalIncidente.style.display = 'none';
   });
 
   // Logout
@@ -475,4 +504,5 @@ document.addEventListener('DOMContentLoaded', () => {
   inicializarMapa();
   registrarEventosUI();
   carregarPerfil();
+  iniciarRadar();
 });

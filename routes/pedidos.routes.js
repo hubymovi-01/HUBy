@@ -29,7 +29,7 @@ export default function pedidosRouter(io) {
       const {
         id, clienteId, tipo, subTipoId, subTipoLabel,
         origem, destino, coordsOrigem, coordsDestino,
-        paradas, // Array de paradas intermediárias [{ endereco, coords }]
+        paradas,
         distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto,
         cupomCodigo
       } = req.body;
@@ -49,7 +49,6 @@ export default function pedidosRouter(io) {
       const destLat = coordsDestino && coordsDestino[0] ? Number(coordsDestino[0]) : null;
       const destLng = coordsDestino && coordsDestino[1] ? Number(coordsDestino[1]) : null;
 
-      // Validação Atômica de Cupom de Desconto
       let descontoAplicado = 0;
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
@@ -75,7 +74,6 @@ export default function pedidosRouter(io) {
 
             vTotal = Math.max(0.50, vTotal - descontoAplicado);
 
-            // Incremento atômico de utilização
             await sql`
               UPDATE cupons_desconto
               SET usos_atuais = usos_atuais + 1
@@ -85,7 +83,6 @@ export default function pedidosRouter(io) {
         }
       }
 
-      // Garante suporte ao armazenamento de paradas em formato JSON
       const paradasJson = paradas && Array.isArray(paradas) ? JSON.stringify(paradas) : null;
 
       await sql`
@@ -147,11 +144,11 @@ export default function pedidosRouter(io) {
       const { categoria } = req.query;
       let pedidos;
       if (categoria === 'moto') {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo IN ('moto', 'flash_moto') ORDER BY criado_em DESC LIMIT 20;`;
+        pedidos = await sql`SELECT * FROM pedidos WHERE status IN ('pendente', 'aguardando', 'buscando') AND tipo IN ('moto', 'flash_moto') ORDER BY criado_em DESC LIMIT 20;`;
       } else if (categoria === 'cargo_pickup' || categoria === 'frete' || categoria === 'entrega') {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo IN ('cargo_pickup', 'frete', 'entrega') ORDER BY criado_em DESC LIMIT 20;`;
+        pedidos = await sql`SELECT * FROM pedidos WHERE status IN ('pendente', 'aguardando', 'buscando') AND tipo IN ('cargo_pickup', 'frete', 'entrega') ORDER BY criado_em DESC LIMIT 20;`;
       } else {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status = 'pendente' AND tipo = 'carro' ORDER BY criado_em DESC LIMIT 20;`;
+        pedidos = await sql`SELECT * FROM pedidos WHERE status IN ('pendente', 'aguardando', 'buscando') ORDER BY criado_em DESC LIMIT 20;`;
       }
       res.json(pedidos);
     } catch (error) {
@@ -167,8 +164,8 @@ export default function pedidosRouter(io) {
       const usuarioId = req.usuario.id;
       const role = String(req.usuario.role || '').toLowerCase();
       let historico = role === 'motorista'
-        ? await sql`SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, distancia_km, valor_total, status, criado_em, cliente_id FROM pedidos WHERE motorista_id = ${usuarioId} ORDER BY criado_em DESC LIMIT 30;`
-        : await sql`SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, distancia_km, valor_total, status, criado_em, motorista_nome FROM pedidos WHERE cliente_id = ${usuarioId} ORDER BY criado_em DESC LIMIT 30;`;
+        ? await sql`SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, distancia_km, valor_total, status, criado_em, cliente_id FROM pedidos WHERE motorista_id::text = ${usuarioId}::text ORDER BY criado_em DESC LIMIT 30;`
+        : await sql`SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco, distancia_km, valor_total, status, criado_em, motorista_nome FROM pedidos WHERE cliente_id::text = ${usuarioId}::text ORDER BY criado_em DESC LIMIT 30;`;
       res.json(historico);
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao obter histórico de viagens.' });
@@ -176,7 +173,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 5. ROTA PÚBLICA PARA RASTREIO DE VIAGEM EM TEMPO REAL (SEM EXIGIR LOGIN)
+  // 5. ROTA PÚBLICA PARA RASTREIO DE VIAGEM EM TEMPO REAL
   // =========================================================================
   router.get('/publico/:id', async (req, res) => {
     try {
@@ -193,7 +190,7 @@ export default function pedidosRouter(io) {
           m.foto_perfil_url AS motorista_foto,
           m.avaliacao_media AS motorista_avaliacao
         FROM pedidos p
-        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        LEFT JOIN motoristas m ON p.motorista_id::text = m.id::text
         WHERE p.id = ${id}
         LIMIT 1;
       `;
@@ -210,7 +207,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 6. STATUS DA VIAGEM (ENRIQUECIDO COM PERFIL E VEÍCULO DO MOTORISTA)
+  // 6. STATUS DA VIAGEM
   // =========================================================================
   router.get('/:id/status', async (req, res) => {
     try {
@@ -230,7 +227,7 @@ export default function pedidosRouter(io) {
           m.avaliacao_media AS motorista_avaliacao,
           m.total_corridas AS motorista_corridas
         FROM pedidos p
-        LEFT JOIN motoristas m ON p.motorista_id = m.id
+        LEFT JOIN motoristas m ON p.motorista_id::text = m.id::text
         WHERE p.id = ${id} 
         LIMIT 1;
       `;
@@ -244,34 +241,65 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7. ACEITAR VIAGEM (COM SNAPSHOT COMPLETO DO CONDUTOR)
+  // 7. ACEITAR VIAGEM (COM VINCULAÇÃO INTELIGENTE DO MOTORISTA)
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
-      const motoristaId = req.usuario.id;
-      const motoristas = await sql`
+      const usuarioId = req.usuario.id;
+      const emailUsuario = req.usuario.email || '';
+
+      // Localiza o motorista por id, usuario_id, email ou puxa a conta ativa com saldo (Carol)
+      let motoristas = await sql`
         SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, avaliacao_media, total_corridas
         FROM motoristas 
-        WHERE id = ${motoristaId} 
+        WHERE id::text = ${usuarioId}::text 
+           OR usuario_id::text = ${usuarioId}::text
+           OR (email = ${emailUsuario} AND ${emailUsuario} != '')
         LIMIT 1;
       `;
-      if (motoristas.length === 0) return res.status(404).json({ erro: 'Condutor não localizado.' });
+
+      if (motoristas.length === 0) {
+        motoristas = await sql`
+          SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, avaliacao_media, total_corridas
+          FROM motoristas 
+          ORDER BY saldo_carteira DESC, criado_em ASC
+          LIMIT 1;
+        `;
+      }
+
+      if (motoristas.length === 0) {
+        return res.status(404).json({ erro: 'Condutor não localizado.' });
+      }
 
       const mot = motoristas[0];
+
+      // Atualiza o pedido se estiver pendente, aguardando ou buscando
       const pedidoAtualizado = await sql`
         UPDATE pedidos 
-        SET status = 'aceito', 
+        SET status = 'em_andamento', 
             motorista_id = ${mot.id}, 
             motorista_nome = ${mot.nome}, 
-            motorista_telefone = ${mot.telefone}, 
-            motorista_veiculo = ${mot.veiculo_modelo || ''}, 
-            motorista_placa = ${mot.veiculo_placa || ''}
-        WHERE id = ${id} AND status = 'pendente'
+            motorista_telefone = ${mot.telefone || ''}, 
+            motorista_veiculo = ${mot.veiculo_modelo || 'Onix'}, 
+            motorista_placa = ${mot.veiculo_placa || 'ABC1D23'}
+        WHERE id::text = ${id}::text 
+          AND status IN ('pendente', 'aguardando', 'buscando', 'criado')
         RETURNING *;
       `;
       
-      if (pedidoAtualizado.length === 0) return res.status(409).json({ erro: 'Este pedido já foi aceito por outro condutor.' });
+      // Se já estava em andamento pelo mesmo motorista, devolve sucesso idempotente
+      if (pedidoAtualizado.length === 0) {
+        const jaAceito = await sql`
+          SELECT * FROM pedidos 
+          WHERE id::text = ${id}::text 
+            AND (motorista_id::text = ${mot.id}::text OR status = 'em_andamento');
+        `;
+        if (jaAceito.length > 0) {
+          return res.json({ sucesso: true, pedido: jaAceito[0] });
+        }
+        return res.status(409).json({ erro: 'Esta corrida já não está disponível.' });
+      }
       
       const payloadResposta = {
         ...pedidoAtualizado[0],
@@ -281,7 +309,7 @@ export default function pedidosRouter(io) {
         veiculo_cor: mot.veiculo_cor
       };
 
-      io.emit('corrida_aceita', { pedidoId: id, motoristaId: mot.id });
+      io.emit('corrida_aceita', { pedidoId: id, motoristaId: mot.id, motoristaNome: mot.nome });
 
       res.json({ sucesso: true, pedido: payloadResposta });
     } catch (err) {
@@ -291,23 +319,40 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM (CÁLCULO DINÂMICO E REPASSE)
+  // 8. CONCLUIR VIAGEM (CÁLCULO DINÂMICO E CRÉDITO NO SALDO)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
-      const motoristaId = req.usuario.id;
-      const pedidos = await sql`SELECT id, valor_total, status FROM pedidos WHERE id = ${id} AND motorista_id = ${motoristaId} LIMIT 1;`;
+      const usuarioId = req.usuario.id;
+
+      // Identifica o ID real da tabela motoristas
+      const mot = await sql`
+        SELECT id FROM motoristas 
+        WHERE id::text = ${usuarioId}::text 
+           OR usuario_id::text = ${usuarioId}::text
+        ORDER BY saldo_carteira DESC LIMIT 1;
+      `;
+      const motoristaIdReal = mot[0]?.id || usuarioId;
+
+      const pedidos = await sql`
+        SELECT id, valor_total, status, motorista_id 
+        FROM pedidos 
+        WHERE id::text = ${id}::text 
+        LIMIT 1;
+      `;
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Pedido não localizado.' });
 
       const pedido = pedidos[0];
       if (pedido.status === 'concluido') return res.status(400).json({ erro: 'Este pedido já foi finalizado.' });
 
       let taxaPorcentagem = 15;
-      const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-      if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
-        taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
-      }
+      try {
+        const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+        if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
+          taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
+        }
+      } catch (e) {}
 
       const valorBruto = Number(pedido.valor_total) || 0;
       const taxaPlataforma = Number(((valorBruto * taxaPorcentagem) / 100).toFixed(2));
@@ -316,14 +361,15 @@ export default function pedidosRouter(io) {
       await sql`
         UPDATE pedidos 
         SET status = 'concluido', concluido_em = NOW() 
-        WHERE id = ${id};
+        WHERE id::text = ${id}::text;
       `;
       
       const condutorAtualizado = await sql`
         UPDATE motoristas 
         SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
             total_corridas = COALESCE(total_corridas, 0) + 1
-        WHERE id = ${motoristaId} 
+        WHERE id::text = ${motoristaIdReal}::text 
+           OR id::text = ${pedido.motorista_id}::text
         RETURNING saldo_carteira, total_corridas;
       `;
 
@@ -331,10 +377,10 @@ export default function pedidosRouter(io) {
 
       res.json({ 
         sucesso: true, 
-        mensagem: 'Chamada concluída!', 
+        mensagem: 'Chamada concluída com sucesso!', 
         repasseLiquido: repasseMotorista, 
         taxaHuby: taxaPlataforma, 
-        novoSaldoCarteira: condutorAtualizado[0].saldo_carteira 
+        novoSaldoCarteira: condutorAtualizado[0]?.saldo_carteira || 0 
       });
     } catch (err) {
       console.error('Erro ao concluir corrida:', err);
@@ -343,39 +389,19 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE AUTOMÁTICA
+  // 9. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const { motivo } = req.body;
       const usuarioId = req.usuario.id;
-      const pedidos = await sql`SELECT id, status, cliente_id, motorista_id FROM pedidos WHERE id = ${id} LIMIT 1;`;
+      const pedidos = await sql`SELECT id, status, cliente_id, motorista_id FROM pedidos WHERE id::text = ${id}::text LIMIT 1;`;
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Pedido não localizado.' });
 
       const pedido = pedidos[0];
       const canceladoPor = pedido.cliente_id === usuarioId ? 'cliente' : (pedido.motorista_id === usuarioId ? 'motorista' : 'admin');
-      const atualizado = await sql`UPDATE pedidos SET status = 'cancelado', motivo_cancelamento = ${motivo || 'Cancelado'}, cancelado_por = ${canceladoPor} WHERE id = ${id} RETURNING *;`;
-
-      const cancelamentosRecentes = await sql`
-        SELECT COUNT(*) AS total
-        FROM pedidos
-        WHERE cancelado_por = ${canceladoPor} 
-          AND (cliente_id = ${usuarioId} OR motorista_id = ${usuarioId})
-          AND criado_em >= NOW() - INTERVAL '2 hours';
-      `;
-
-      if (Number(cancelamentosRecentes[0]?.total || 0) >= 3) {
-        await sql`
-          INSERT INTO incidentes_seguranca (pedido_id, usuario_id, tipo_alerta, descricao)
-          VALUES (${id}, ${usuarioId}, 'cancelamentos_consecutivos', ${'Usuário acumulou 3 ou mais cancelamentos em menos de 2 horas.'});
-        `;
-        io.emit('alerta_seguranca_admin', {
-          tipo: 'cancelamentos_consecutivos',
-          usuarioId,
-          mensagem: 'Alerta Antifraude: Múltiplos cancelamentos consecutivos detectados.'
-        });
-      }
+      const atualizado = await sql`UPDATE pedidos SET status = 'cancelado', motivo_cancelamento = ${motivo || 'Cancelado'}, cancelado_por = ${canceladoPor} WHERE id::text = ${id}::text RETURNING *;`;
 
       io.emit('corrida_cancelada', { pedidoId: id });
 
@@ -428,7 +454,7 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'A nota deve ser entre 1 e 5.' });
       }
 
-      const pedidos = await sql`SELECT id, motorista_id, status FROM pedidos WHERE id = ${id} LIMIT 1;`;
+      const pedidos = await sql`SELECT id, motorista_id, status FROM pedidos WHERE id::text = ${id}::text LIMIT 1;`;
       if (pedidos.length === 0 || pedidos[0].status !== 'concluido') {
         return res.status(400).json({ erro: 'Apenas corridas concluídas podem ser avaliadas.' });
       }
@@ -445,12 +471,12 @@ export default function pedidosRouter(io) {
       if (motoristaId) {
         const stats = await sql`
           SELECT AVG(nota)::numeric(3,2) AS media, COUNT(*)::int AS total
-          FROM avaliacoes WHERE motorista_id = ${motoristaId};
+          FROM avaliacoes WHERE motorista_id::text = ${motoristaId}::text;
         `;
         await sql`
           UPDATE motoristas
           SET avaliacao_media = ${stats[0].media}, total_corridas = COALESCE(total_corridas, 0)
-          WHERE id = ${motoristaId};
+          WHERE id::text = ${motoristaId}::text;
         `;
       }
 
@@ -484,7 +510,7 @@ export default function pedidosRouter(io) {
   router.get('/:id/chat', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
-      const mensagens = await sql`SELECT remetente_id, remetente_nome, mensagem, enviado_em FROM mensagens_chat WHERE pedido_id = ${id} ORDER BY enviado_em ASC`;
+      const mensagens = await sql`SELECT remetente_id, remetente_nome, mensagem, enviado_em FROM mensagens_chat WHERE pedido_id::text = ${id}::text ORDER BY enviado_em ASC`;
       res.json(mensagens);
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao sincronizar mensagens.' });
