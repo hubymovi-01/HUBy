@@ -4,7 +4,7 @@
 
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
-  : 'https://huby.onrender.com';
+  : 'https://SUA_URL_REAL_DO_RENDER.onrender.com'; // Coloque aqui o link exato do seu serviço no Render
 
 // DESPERTADOR: Acorda a instância do Render em background assim que o app é aberto
 fetch(`${API_URL}/`).catch(() => {
