@@ -5,7 +5,7 @@ import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, acionarSosCliente } from './cliente/cliente-pedidos.js';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js';
 import { configurarMultiplasParadas } from './cliente/cliente-paradas.js';
 
 let intervalChatCliente = null;
@@ -137,11 +137,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 8. Modais de Avaliação e Pagamentos
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
-
-  // SOS seguro
-  if (typeof acionarSosCliente === 'function') {
-    document.getElementById('btnSosCliente')?.addEventListener('click', acionarSosCliente);
-  }
 
   document.getElementById('btnFecharPagamento')?.addEventListener('click', () => {
     const modal = document.getElementById('modalPagamento');
