@@ -16,26 +16,33 @@ export function atualizarBotaoChamar() {
   btn.textContent = labels[estadoCliente.categoriaSelecionada] || 'Chamar HUBy';
 }
 
+// js/cliente/cliente-pedidos.js (exemplo de implementação correta)
+import { calcularPreco } from '../config.js';
+import { estadoCliente } from './cliente-estado.js';
+
 export function atualizarResumoValores() {
-  if (!estadoCliente.rotaAtual) return;
+  const cat = estadoCliente.categoriaSelecionada || 'carro';
+  const dist = estadoCliente.rotaAtual?.distanciaKm || 1.0;
 
-  // Considera a distância com paradas se estiver disponível
-  const km = estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm;
-  const duracao = estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin;
+  // Realiza o cálculo dinâmico baseado na tabela vinda da base de dados
+  const resumo = calcularPreco(cat, dist);
 
-  const precoCalculado = calcularPreco(estadoCliente.categoriaSelecionada, km);
-
-  const txtDist = document.getElementById('txtDistanciaEstimada');
-  const txtPreco = document.getElementById('txtPrecoEstimado');
-
-  if (txtDist) {
-    const dinamicaInfo = MULTIPLICADOR_PICO > 1.0 ? ` • ⚡ Dinâmica ${MULTIPLICADOR_PICO}x` : '';
-    const paradasInfo = estadoCliente.paradas?.length ? ` • 📍 ${estadoCliente.paradas.length} parada(s)` : '';
-    txtDist.textContent = `${km} km • ⏱️ ${duracao} min${dinamicaInfo}${paradasInfo}`;
+  // Elemento do valor no ecrã (ex: R$ 10,00)
+  const lblPreco = document.getElementById('lblValorEstimado') || document.querySelector('.preco-card-huby');
+  if (lblPreco) {
+    lblPreco.textContent = resumo.formatado;
   }
-  if (txtPreco) {
-    txtPreco.textContent = precoCalculado.formatado;
+
+  // Elemento da distância (ex: -- km ou 3.4 km)
+  const lblDistancia = document.getElementById('lblDistanciaKm');
+  if (lblDistancia) {
+    lblDistancia.textContent = estadoCliente.rotaAtual?.distanciaKm 
+      ? `${estadoCliente.rotaAtual.distanciaKm} km` 
+      : '-- km';
   }
+
+  // Atualiza o texto do botão principal
+  atualizarBotaoChamar(resumo);
 }
 
 export async function submeterPedido() {
