@@ -1,200 +1,297 @@
-// js/motorista/motorista-heatmap.js
-import { API_URL } from './config.js';
+/**
+ * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
+ * Conecta os submódulos modulares da pasta ./motorista/
+ */
 
-let camadaCalor = null;
-let calorAtivo = false;
-let emPausa = false;
-let destinoAtivo = false;
+import { API_URL, sonsHUBy } from './config.js';
+import { configurarRecursosInteligentes } from './motorista/motorista-heatmap.js';
 
-// 1. Exportação nomeada principal exigida pelo app-motorista.js
-export function configurarRecursosInteligentes(mapaInstancia, token) {
-  configurarHeatmap(mapaInstancia, token);
-  configurarModoPausa(token);
-  configurarModoDestino(token);
-}
-
-
-// 2. Exportação de compatibilidade retroativa
-export function inicializarHeatmapDemanda(mapaInstancia, token) {
-  configurarRecursosInteligentes(mapaInstancia, token);
-}
-
-// ============================================================================
-// 1. MAPA DE CALOR LEAFLET.HEAT
-// ============================================================================
-function configurarHeatmap(mapaInstancia, token) {
-  const btnCalor = document.getElementById('btnToggleHeatmap');
-  if (!btnCalor) return;
-
-  btnCalor.addEventListener('click', async () => {
-    if (calorAtivo) {
-      if (camadaCalor && mapaInstancia) {
-        mapaInstancia.removeLayer(camadaCalor);
-        camadaCalor = null;
-      }
-      calorAtivo = false;
-      btnCalor.classList.remove('active');
-      btnCalor.style.color = 'var(--text-sec)';
-      btnCalor.style.borderColor = 'var(--border-dark)';
-      return;
-    }
-
-    try {
-      btnCalor.textContent = '⏳ Carregando...';
-      const authToken = token || localStorage.getItem('huby_token');
-      const res = await fetch(`${API_URL}/api/motoristas/calor`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
-
-      if (!res.ok) throw new Error('Falha ao obter dados térmicos');
-      const data = await res.json();
-      const pontos = data.pontos || [];
-
-      if (!pontos.length) {
-        alert('Sem corridas recentes suficientes para desenhar a mancha de calor.');
-        btnCalor.textContent = '🔥 Calor';
-        return;
-      }
-
-      if (typeof L !== 'undefined' && L.heatLayer && mapaInstancia) {
-        camadaCalor = L.heatLayer(pontos, {
-          radius: 25,
-          blur: 18,
-          maxZoom: 17,
-          gradient: { 0.2: '#38BDF8', 0.5: '#10B981', 0.8: '#F59E0B', 1.0: '#EF4444' }
-        }).addTo(mapaInstancia);
-
-        calorAtivo = true;
-        btnCalor.classList.add('active');
-        btnCalor.style.color = '#F59E0B';
-        btnCalor.style.borderColor = '#F59E0B';
-      }
-    } catch (e) {
-      console.warn('Erro ao carregar mapa térmico:', e);
-      alert('Não foi possível gerar a mancha de calor no momento.');
-    } finally {
-      btnCalor.textContent = '🔥 Calor';
-    }
-  });
-}
+// Coordenadas padrão e estado central
+const estado = {
+  token: localStorage.getItem('huby_token') || null,
+  motoristaId: localStorage.getItem('huby_user_id') || null,
+  mapa: null,
+  markerVeiculo: null,
+  coords: [-8.3580, -42.2460],
+  statusOnline: false,
+  saldoCarteira: 0.0,
+  intervalRadar: null
+};
 
 // ============================================================================
-// 2. MODO PAUSA RÁPIDA (LANCHE / ABASTECIMENTO)
+// 1. INICIALIZAÇÃO DO MAPA LEAFLET
 // ============================================================================
-function configurarModoPausa(token) {
-  const btnPausa = document.getElementById('btnModoPausa');
-  const modalPausa = document.getElementById('modalConfigPausa');
-  const btnConfirmar = document.getElementById('btnConfirmarIniciarPausa');
+function inicializarMapa() {
+  const container = document.getElementById('mapaMotorista');
+  if (!container) return;
 
-  btnPausa?.addEventListener('click', async () => {
-    const authToken = token || localStorage.getItem('huby_token');
-    if (emPausa) {
-      if (confirm('Deseja encerrar o intervalo e voltar a receber chamadas?')) {
-        await alternarPausaServidor(authToken, false, 0);
-      }
-    } else {
-      if (modalPausa) modalPausa.style.display = 'flex';
-    }
-  });
+  if (estado.mapa) {
+    estado.mapa.remove();
+    estado.mapa = null;
+  }
 
-  btnConfirmar?.addEventListener('click', async () => {
-    const authToken = token || localStorage.getItem('huby_token');
-    const minutos = Number(document.getElementById('selectTempoPausa')?.value || 15);
-    await alternarPausaServidor(authToken, true, minutos);
-    if (modalPausa) modalPausa.style.display = 'none';
-  });
-}
-
-async function alternarPausaServidor(token, ativar, minutos) {
-  const btnPausa = document.getElementById('btnModoPausa');
   try {
-    const res = await fetch(`${API_URL}/api/motoristas/modo-pausa`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ emPausa: ativar, minutos })
+    estado.mapa = L.map('mapaMotorista', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView(estado.coords, 15);
+
+    // Tiles CartoDB Voyager / OSM com alto contraste
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      subdomains: 'abcd'
+    }).addTo(estado.mapa);
+
+    const iconeCarro = L.divIcon({
+      className: 'huby-driver-pin',
+      html: '<div style="width:36px;height:36px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 14px rgba(16,185,129,0.8);font-size:18px;">🚘</div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
     });
 
-    if (res.ok) {
-      emPausa = ativar;
-      if (btnPausa) {
-        if (emPausa) {
-          btnPausa.classList.add('active');
-          btnPausa.style.color = 'var(--amber)';
-          btnPausa.style.borderColor = 'var(--amber)';
-          btnPausa.textContent = '☕ Pausado';
-        } else {
-          btnPausa.classList.remove('active');
-          btnPausa.style.color = 'var(--text-sec)';
-          btnPausa.style.borderColor = 'var(--border-dark)';
-          btnPausa.textContent = '☕ Pausa';
+    estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarro }).addTo(estado.mapa);
+
+    // Força o Leaflet a renderizar as dimensões corretas e eliminar a tela cinza
+    setTimeout(() => {
+      if (estado.mapa) estado.mapa.invalidateSize();
+    }, 250);
+
+    // Conecta as ferramentas inteligentes (Calor, Pausa, Casa) passando a instância do mapa
+    configurarRecursosInteligentes(estado.mapa, estado.token);
+
+    // Geolocalização
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
+        estado.coords = [latitude, longitude];
+        if (estado.mapa && estado.markerVeiculo) {
+          estado.mapa.setView([latitude, longitude], 16);
+          estado.markerVeiculo.setLatLng([latitude, longitude]);
+          estado.mapa.invalidateSize();
         }
-      }
+      }, null, { enableHighAccuracy: true });
     }
   } catch (err) {
-    alert('Erro ao sincronizar status de pausa.');
+    console.error('Erro na inicialização do mapa:', err);
   }
 }
 
 // ============================================================================
-// 3. MODO DIREÇÃO DE CASA
+// 2. STATUS ONLINE / RADAR
 // ============================================================================
-function configurarModoDestino(token) {
-  const btnCasa = document.getElementById('btnModoDestino');
-  btnCasa?.addEventListener('click', async () => {
-    const authToken = token || localStorage.getItem('huby_token');
+async function alternarStatusOnline() {
+  const btn = document.getElementById('btnToggleStatusOnline');
+  if (!btn) return;
 
-    if (destinoAtivo) {
-      if (confirm('Deseja desativar o filtro "Direção de Casa"?')) {
-        await atualizarDestinoServidor(authToken, null, null, false);
-      }
-      return;
-    }
+  estado.statusOnline = !estado.statusOnline;
 
-    const endereco = prompt('Digite o endereço ou bairro de retorno para casa:');
-    if (!endereco || !endereco.trim()) return;
+  if (estado.statusOnline) {
+    btn.style.background = 'rgba(16, 185, 129, 0.2)';
+    btn.style.borderColor = 'var(--emerald)';
+    btn.style.color = 'var(--emerald)';
+    btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
+    sonsHUBy.tocarSucessoAceite();
+    iniciarRadar();
+  } else {
+    btn.style.background = '#1F2937';
+    btn.style.borderColor = 'rgba(255,255,255,0.12)';
+    btn.style.color = '#94A3B8';
+    btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
+    pararRadar();
+  }
 
-    await atualizarDestinoServidor(authToken, -8.358, -42.246, true);
-  });
-}
-
-async function atualizarDestinoServidor(token, lat, lng, ativo) {
-  const btnCasa = document.getElementById('btnModoDestino');
   try {
-    const res = await fetch(`${API_URL}/api/motoristas/filtro-destino`, {
+    await fetch(`${API_URL}/api/motoristas/status-online`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
+        ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {})
       },
-      body: JSON.stringify({ lat, lng, ativo })
+      body: JSON.stringify({ online: estado.statusOnline, coords: estado.coords })
     });
-
-    if (res.ok) {
-      destinoAtivo = ativo;
-      if (btnCasa) {
-        if (destinoAtivo) {
-          btnCasa.classList.add('active');
-          btnCasa.style.color = 'var(--blue)';
-          btnCasa.style.borderColor = 'var(--blue)';
-          btnCasa.textContent = '🏠 Casa (Ativo)';
-        } else {
-          btnCasa.classList.remove('active');
-          btnCasa.style.color = 'var(--text-sec)';
-          btnCasa.style.borderColor = 'var(--border-dark)';
-          btnCasa.textContent = '🏠 Casa';
-        }
-      }
-    }
   } catch (e) {
-    alert('Erro ao salvar filtro de rota para casa.');
+    console.warn('Sincronização de status online em contingência');
   }
 }
 
-// Exportação padrão de salvaguarda
-export default {
-  configurarRecursosInteligentes,
-  inicializarHeatmapDemanda
-};
+function iniciarRadar() {
+  if (estado.intervalRadar) clearInterval(estado.intervalRadar);
+  buscarChamadas();
+  estado.intervalRadar = setInterval(buscarChamadas, 4000);
+}
+
+function pararRadar() {
+  if (estado.intervalRadar) {
+    clearInterval(estado.intervalRadar);
+    estado.intervalRadar = null;
+  }
+  const lista = document.getElementById('listaChamadasPendentes');
+  if (lista) {
+    lista.innerHTML = '<div class="dock-empty">Você está offline. Fique online para receber corridas.</div>';
+  }
+}
+
+async function buscarChamadas() {
+  if (!estado.statusOnline) return;
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/pendentes`, {
+      headers: { ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {}) }
+    });
+    if (!res.ok) return;
+    const chamadas = await res.json();
+    renderizarChamadas(chamadas);
+  } catch (e) {}
+}
+
+function renderizarChamadas(chamadas = []) {
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  if (!chamadas.length) {
+    container.innerHTML = '<div class="dock-empty">Aguardando novas chamadas na região...</div>';
+    return;
+  }
+
+  container.innerHTML = chamadas.map(ped => {
+    const valorBruto = Number(ped.valor_total || 0);
+    const repasse = (valorBruto * 0.85).toFixed(2).replace('.', ',');
+    const km = Number(ped.distancia_km || 1.0).toFixed(1);
+
+    return `
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 3px 8px; border-radius: 6px;">
+            ${(ped.sub_tipo_label || ped.tipo || 'HUBy Carro').toUpperCase()}
+          </span>
+          <strong style="font-size: 17px; color: var(--emerald); font-weight: 900;">
+            R$ ${repasse}
+          </strong>
+        </div>
+        <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
+          <div>📍 <strong>Destino:</strong> ${ped.destino || 'Destino informado'}</div>
+          <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;">📏 Distância: ${km} km</div>
+        </div>
+        <button type="button" class="btn-aceitar" data-id="${ped.id}"
+          style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 10px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          ⚡ Aceitar Viagem
+        </button>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.btn-aceitar').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.getAttribute('data-id');
+      try {
+        const r = await fetch(`${API_URL}/api/pedidos/${id}/aceitar`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {})
+          },
+          body: JSON.stringify({ motoristaId: estado.motoristaId })
+        });
+        if (r.ok) {
+          sonsHUBy.tocarSucessoAceite();
+          alert('Corrida aceita com sucesso!');
+          buscarChamadas();
+        } else {
+          alert('Esta corrida já não está disponível.');
+        }
+      } catch (err) {
+        alert('Erro ao aceitar corrida.');
+      }
+    });
+  });
+}
+
+// ============================================================================
+// 3. PERFIL, DRAWER E MODAIS
+// ============================================================================
+async function carregarPerfil() {
+  try {
+    const res = await fetch(`${API_URL}/api/motoristas/meu-perfil`, {
+      headers: { ...(estado.token ? { Authorization: `Bearer ${estado.token}` } : {}) }
+    });
+    if (!res.ok) return;
+    const m = await res.json();
+
+    const topNome = document.getElementById('topNomeMotorista');
+    const topNota = document.getElementById('topNotaMotorista');
+    const topAvatar = document.getElementById('topAvatarImg');
+    const elSaldo = document.getElementById('saldoCarteiraValor');
+    const elDrawerSaldo = document.getElementById('drawerSaldoValor');
+
+    if (topNome) topNome.textContent = (m.nome || 'Motorista').split(' ')[0];
+    if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
+    if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
+
+    estado.saldoCarteira = Number(m.saldo_carteira || 0);
+    const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
+    if (elSaldo) elSaldo.textContent = saldoTxt;
+    if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
+
+    const drawerNome = document.getElementById('drawerNomeCondutor');
+    const drawerPlaca = document.getElementById('drawerCarroPlaca');
+    const drawerModelo = document.getElementById('drawerCarroModelo');
+    const drawerFoto = document.getElementById('drawerFotoImg');
+
+    if (drawerNome) drawerNome.textContent = m.nome || 'Motorista Parceiro';
+    if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'HUB-0000').toUpperCase();
+    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Carro Padrão';
+    if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
+  } catch (e) {}
+}
+
+function registrarEventosUI() {
+  // Toggle Online
+  document.getElementById('btnToggleStatusOnline')?.addEventListener('click', alternarStatusOnline);
+
+  // Drawer
+  const drawer = document.getElementById('driverDrawer');
+  const overlay = document.getElementById('drawerOverlay');
+  document.getElementById('btnAbrirDrawerPerfil')?.addEventListener('click', () => {
+    drawer?.classList.add('active');
+    overlay?.classList.add('active');
+  });
+  const fecharDrawer = () => {
+    drawer?.classList.remove('active');
+    overlay?.classList.remove('active');
+  };
+  document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
+  overlay?.addEventListener('click', fecharDrawer);
+
+  // Modal Saque
+  const modalSaque = document.getElementById('modalSaquePix');
+  document.getElementById('btnAbrirModalSaque')?.addEventListener('click', () => {
+    if (modalSaque) modalSaque.style.display = 'flex';
+  });
+  document.getElementById('btnFecharModalSaque')?.addEventListener('click', () => {
+    if (modalSaque) modalSaque.style.display = 'none';
+  });
+
+  // Modal Incidentes
+  const modalIncidente = document.getElementById('modalReportarIncidente');
+  document.getElementById('btnAbrirModalIncidente')?.addEventListener('click', () => {
+    if (modalIncidente) modalIncidente.style.display = 'flex';
+  });
+  document.getElementById('btnFecharModalIncidente')?.addEventListener('click', () => {
+    if (modalIncidente) modalIncidente.style.display = 'none';
+  });
+
+  // Logout
+  document.getElementById('btnLogoutMotorista')?.addEventListener('click', () => {
+    if (confirm('Deseja realmente encerrar a sessão de parceiro?')) {
+      localStorage.removeItem('huby_token');
+      localStorage.removeItem('huby_user_id');
+      window.location.href = './index.html';
+    }
+  });
+}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', () => {
+  inicializarMapa();
+  registrarEventosUI();
+  carregarPerfil();
+});
