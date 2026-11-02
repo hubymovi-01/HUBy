@@ -8,6 +8,8 @@ import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cli
 import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, acionarSosCliente } from './cliente/cliente-pedidos.js';
 import { configurarMultiplasParadas } from './cliente/cliente-paradas.js';
 
+let intervalChatCliente = null;
+
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -136,7 +138,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
 
-  document.getElementById('btnSosCliente')?.addEventListener('click', acionarSosCliente);
+  // SOS seguro
+  if (typeof acionarSosCliente === 'function') {
+    document.getElementById('btnSosCliente')?.addEventListener('click', acionarSosCliente);
+  }
 
   document.getElementById('btnFecharPagamento')?.addEventListener('click', () => {
     const modal = document.getElementById('modalPagamento');
@@ -152,6 +157,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Configuração do Chat da Viagem no Passageiro
+  configurarChatPassageiro();
+
   // =========================================================================
   // 9. MONITORAMENTO EM TEMPO REAL: MOTORISTA A CAMINHO / EMBARQUE
   // =========================================================================
@@ -163,6 +171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.addEventListener('beforeunload', () => {
     if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
+    if (intervalChatCliente) clearInterval(intervalChatCliente);
   });
 });
 
@@ -173,7 +182,6 @@ function conectarSocketEPollingCliente() {
   const socket = window.io ? window.io(API_URL) : null;
 
   if (socket) {
-    // 1. Motorista Aceitou e está a caminho
     socket.on('corrida_aceita', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || data.pedidoId === pedidoAtivo) {
@@ -184,7 +192,6 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // 2. Passageiro a bordo (indo para o destino)
     socket.on('passageiro_a_bordo', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || data.pedidoId === pedidoAtivo) {
@@ -192,7 +199,6 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // 3. Corrida concluída pelo condutor
     socket.on('corrida_finalizada', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || data.pedidoId === pedidoAtivo) {
@@ -201,7 +207,6 @@ function conectarSocketEPollingCliente() {
     });
   }
 
-  // Polling de redundância a cada 3.5 segundos
   if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
   estadoCliente.intervalPolling = setInterval(async () => {
     const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
@@ -232,7 +237,6 @@ function conectarSocketEPollingCliente() {
 }
 
 function renderizarMotoristaChegando(mot = {}) {
-  // Oculta os blocos de seleção e busca do formulário
   const sliderCategorias = document.getElementById('sliderCategorias');
   const blocoResumo = document.getElementById('blocoResumo');
   const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
@@ -245,7 +249,6 @@ function renderizarMotoristaChegando(mot = {}) {
   if (cardStatusViagem) cardStatusViagem.style.display = 'none';
   if (btnPedirHuby) btnPedirHuby.style.display = 'none';
 
-  // Utiliza o contêiner oficial do index.html
   let painel = document.getElementById('painelMotoristaAceitou');
   if (!painel) {
     painel = document.getElementById('cardStatusViagemPassageiro');
@@ -263,7 +266,6 @@ function renderizarMotoristaChegando(mot = {}) {
 
   painel.style.display = 'block';
   painel.innerHTML = `
-    <!-- STATUS E CONTADOR DE CHEGADA -->
     <div id="boxCronometroChegada" style="text-align: center; margin-bottom: 12px; background: rgba(56, 189, 248, 0.12); border: 1.5px solid rgba(56, 189, 248, 0.35); padding: 12px; border-radius: 14px;">
       <div style="color: #38BDF8; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;" id="lblStatusTextoPassageiro">
         🚘 Motorista a caminho!
@@ -273,7 +275,6 @@ function renderizarMotoristaChegando(mot = {}) {
       </div>
     </div>
 
-    <!-- CARD DETALHADO DO CONDUTOR E VEÍCULO -->
     <div class="driver-card-accepted" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
       <div class="driver-card-top" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -309,14 +310,15 @@ function renderizarMotoristaChegando(mot = {}) {
     </div>
   `;
 
-  // Listener do botão de chat
   document.getElementById('btnAbrirChatClienteCard')?.addEventListener('click', () => {
-    const modalChat = document.getElementById('modalChatCorrida');
-    if (modalChat) modalChat.style.display = 'flex';
+    abrirModalChat();
   });
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
-  if (btnChatFlutuante) btnChatFlutuante.style.display = 'flex';
+  if (btnChatFlutuante) {
+    btnChatFlutuante.style.display = 'flex';
+    btnChatFlutuante.onclick = abrirModalChat;
+  }
 }
 
 function atualizarParaViagemEmAndamento() {
@@ -370,4 +372,88 @@ function finalizarViagemCliente(data) {
     alert('Viagem concluída com sucesso! Obrigado por viajar com a HUBy.');
     location.reload();
   }
+}
+
+// ============================================================================
+// CHAT DO PASSAGEIRO
+// ============================================================================
+function configurarChatPassageiro() {
+  const btnFechar = document.getElementById('btnFecharChat');
+  const btnEnviar = document.getElementById('btnEnviarMsgChat');
+  const inputMsg = document.getElementById('inputChatMsg');
+
+  btnFechar?.addEventListener('click', () => {
+    const modalChat = document.getElementById('modalChatCorrida');
+    if (modalChat) modalChat.style.display = 'none';
+    if (intervalChatCliente) {
+      clearInterval(intervalChatCliente);
+      intervalChatCliente = null;
+    }
+  });
+
+  btnEnviar?.addEventListener('click', enviarMensagemPassageiro);
+  inputMsg?.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') enviarMensagemPassageiro();
+  });
+}
+
+function abrirModalChat() {
+  const modalChat = document.getElementById('modalChatCorrida');
+  if (modalChat) {
+    modalChat.style.display = 'flex';
+    sincronizarChatPassageiro();
+    if (!intervalChatCliente) {
+      intervalChatCliente = setInterval(sincronizarChatPassageiro, 3000);
+    }
+  }
+}
+
+async function sincronizarChatPassageiro() {
+  const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  const token = localStorage.getItem('huby_token');
+  const area = document.getElementById('chatAreaMensagens');
+  if (!pedidoId || !area) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+    });
+    if (!res.ok) return;
+    const msgs = await res.json();
+
+    const meuId = localStorage.getItem('huby_user_id');
+    area.innerHTML = msgs.map(m => {
+      const souEu = m.remetente_id === meuId;
+      return `
+        <div style="align-self: ${souEu ? 'flex-end' : 'flex-start'}; max-width: 80%; background: ${souEu ? '#10B981' : '#1E293B'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px;">
+          <small style="display:block; font-size:9px; opacity:0.8; margin-bottom:2px;">${m.remetente_nome || 'Mensagem'}</small>
+          ${m.mensagem}
+        </div>
+      `;
+    }).join('');
+    area.scrollTop = area.scrollHeight;
+  } catch (e) { }
+}
+
+async function enviarMensagemPassageiro() {
+  const input = document.getElementById('inputChatMsg');
+  const msg = input?.value?.trim();
+  const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  const token = localStorage.getItem('huby_token');
+  const meuNome = localStorage.getItem('huby_user_name') || 'Passageiro';
+
+  if (!msg || !pedidoId) return;
+
+  try {
+    input.value = '';
+    await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ mensagem: msg, remetenteNome: meuNome })
+    });
+    sincronizarChatPassageiro();
+  } catch (e) { }
 }
