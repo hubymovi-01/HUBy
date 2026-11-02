@@ -96,8 +96,10 @@ export function configurarDrawerMenu() {
       btnAuth.textContent = 'Sair da Conta';
       btnAuth.classList.add('btn-sair');
       btnAuth.onclick = () => {
-        localStorage.clear();
-        window.location.reload();
+        if (confirm('Deseja realmente sair da sua conta?')) {
+          localStorage.clear();
+          window.location.reload();
+        }
       };
     } else {
       perfilBox.innerHTML = `
@@ -121,7 +123,6 @@ export function configurarDrawerMenu() {
   });
   backdrop?.addEventListener('click', fecharDrawer);
 
-  // Configura a modal de recarga Pix
   configurarModalCarteiraPix();
 }
 
@@ -187,7 +188,7 @@ function renderizarPainelRecargaPix() {
       `).join('')}
     </div>
 
-    <!-- ÁREA DE DETALHES DO PIX GERADO (INICIALMENTE OCULTA) -->
+    <!-- ÁREA DE DETALHES DO PIX GERADO -->
     <div id="areaPixGerado" style="display: none; background: rgba(0,0,0,0.3); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px; text-align: center; margin-top: 10px;">
       <span style="font-size: 12px; color: #38BDF8; font-weight: 800;">Aponte o app do seu banco ou copie o código:</span>
       <div style="display: flex; justify-content: center; margin: 12px 0;">
@@ -210,7 +211,6 @@ function renderizarPainelRecargaPix() {
     if (intervalPollingPix) clearInterval(intervalPollingPix);
   });
 
-  // Listener para os botões de recarga rápida
   modalCard.querySelectorAll('.btn-recarga-rapida').forEach(btn => {
     btn.addEventListener('click', async () => {
       const valor = Number(btn.getAttribute('data-valor'));
@@ -262,7 +262,6 @@ async function gerarCobrancaPixCliente(valor) {
       await liquidarPixSimulado(dados.txid);
     };
 
-    // Inicia polling de conferência a cada 4 segundos
     if (intervalPollingPix) clearInterval(intervalPollingPix);
     intervalPollingPix = setInterval(async () => {
       try {
@@ -313,7 +312,6 @@ function concluirSucessoPix() {
     intervalPollingPix = null;
   }
 
-  // Toca o efeito sonoro nativo de sucesso
   sonsHUBy.tocarSucessoAceite();
 
   alert('🎉 Pagamento Pix confirmado! Seu saldo foi atualizado.');
@@ -335,7 +333,7 @@ export async function carregarEExibirHistoricoModal() {
   }
 
   if (modal) modal.style.display = 'flex';
-  if (container) container.innerHTML = '<p class="loading-txt">Carregando viagens...</p>';
+  if (container) container.innerHTML = '<p class="loading-txt" style="text-align:center;color:#94A3B8;padding:16px;">Carregando viagens...</p>';
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/historico`, {
@@ -346,20 +344,50 @@ export async function carregarEExibirHistoricoModal() {
 
     const viagens = await resp.json();
     if (!viagens || viagens.length === 0) {
-      container.innerHTML = '<p class="loading-txt">Você ainda não realizou nenhuma corrida.</p>';
+      container.innerHTML = '<p class="loading-txt" style="text-align:center;color:#94A3B8;padding:16px;">Você ainda não realizou nenhuma corrida.</p>';
       return;
     }
 
-    container.innerHTML = viagens.map(v => `
-      <div class="card-historico-item" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
-        <div class="h-row" style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-          <span class="h-title" style="font-weight: 800; color: #FFF;">${v.sub_tipo_label || 'Viagem HUBy'}</span>
-          <span class="h-val" style="color: #10B981; font-weight: 900;">R$ ${Number(v.valor_total).toFixed(2).replace('.', ',')}</span>
+    container.innerHTML = viagens.map(v => {
+      // Rótulos e cores amigáveis para os status
+      let statusFormatado = 'Pendente';
+      let statusCor = '#F59E0B';
+
+      if (v.status === 'concluido') {
+        statusFormatado = 'Concluída';
+        statusCor = '#10B981';
+      } else if (v.status === 'a_caminho' || v.status === 'em_andamento' || v.status === 'aceito') {
+        statusFormatado = 'Motorista a caminho';
+        statusCor = '#38BDF8';
+      } else if (v.status === 'em_viagem') {
+        statusFormatado = 'Em viagem';
+        statusCor = '#10B981';
+      } else if (v.status === 'cancelado') {
+        statusFormatado = 'Cancelada';
+        statusCor = '#EF4444';
+      }
+
+      const motoristaInfo = v.motorista_nome ? `• Motorista: <strong>${v.motorista_nome}</strong>` : '';
+
+      return `
+        <div class="card-historico-item" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 12px;">
+          <div class="h-row" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span class="h-title" style="font-weight: 800; color: #FFF; font-size: 14px;">${v.sub_tipo_label || 'Viagem HUBy'}</span>
+            <span class="h-val" style="color: #10B981; font-weight: 900; font-size: 15px;">R$ ${Number(v.valor_total).toFixed(2).replace('.', ',')}</span>
+          </div>
+
+          <div style="font-size: 12px; color: #E2E8F0; margin-bottom: 4px; line-height: 1.4;">
+            📍 <strong>Destino:</strong> ${v.destino_endereco || 'Destino informado'}
+          </div>
+
+          <div class="h-route" style="font-size: 11px; color: #94A3B8; display: flex; justify-content: space-between; align-items: center; margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.04); padding-top: 6px;">
+            <span>${v.distancia_km || '--'} km ${motoristaInfo}</span>
+            <span style="color: ${statusCor}; font-weight: 800; text-transform: uppercase;">● ${statusFormatado}</span>
+          </div>
         </div>
-        <div class="h-route" style="font-size: 12px; color: #94A3B8;">${v.distancia_km || '--'} km • Status: <strong style="color: #38BDF8;">${v.status}</strong></div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
   } catch (err) {
-    if (container) container.innerHTML = `<p class="loading-txt" style="color: #EF4444;">${err.message}</p>`;
+    if (container) container.innerHTML = `<p class="loading-txt" style="color: #EF4444; text-align:center; padding:16px;">${err.message}</p>`;
   }
 }
