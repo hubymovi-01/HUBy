@@ -3,7 +3,7 @@ import { API_URL, calcularPreco, MULTIPLICADOR_PICO, sonsHUBy } from '../config.
 import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
 import { carregarSaldoCarteiraCliente } from './cliente-ui-menu.js';
-
+import { resetarParadasIntermediarias } from './cliente-paradas.js';
 export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn || estadoCliente.pedidoAtivoId) return;

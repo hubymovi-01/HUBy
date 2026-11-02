@@ -32,7 +32,7 @@ export function configurarMultiplasParadas() {
     const enderecoParada = prompt(`Endereço da Parada ${estadoCliente.paradas.length + 1} (ex: Farmácia, Banco, Padaria):`);
     if (!enderecoParada || !enderecoParada.trim()) return;
 
-    // Adiciona a parada com um acréscimo proporcional de trajeto
+    // Adiciona a parada com estimativa de acréscimo proporcional
     const novaParada = {
       id: Date.now(),
       endereco: enderecoParada.trim(),
@@ -55,11 +55,11 @@ export function renderizarParadas() {
   }
 
   container.innerHTML = estadoCliente.paradas.map((p, index) => `
-    <div class="stop-row" style="display: flex; align-items: center; justify-content: space-between; background: rgba(56, 189, 248, 0.08); border-left: 2px solid #38BDF8; padding: 6px 10px; border-radius: 6px; margin-top: 6px; font-size: 12px;">
-      <span style="color: #E2E8F0;">
+    <div class="stop-row" style="display: flex; align-items: center; justify-content: space-between; background: rgba(56, 189, 248, 0.08); border-left: 2.5px solid #38BDF8; padding: 6px 10px; border-radius: 8px; margin-top: 6px; font-size: 12px; border: 1px solid rgba(56,189,248,0.2);">
+      <span style="color: #E2E8F0; max-width: 85%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
         <strong style="color: #38BDF8;">Parada ${index + 1}:</strong> ${p.endereco}
       </span>
-      <button type="button" class="btn-remover-parada" data-id="${p.id}" style="background: transparent; border: none; color: #EF4444; font-size: 14px; cursor: pointer; padding: 0 4px;" title="Remover parada">✕</button>
+      <button type="button" class="btn-remover-parada" data-id="${p.id}" style="background: transparent; border: none; color: #EF4444; font-size: 14px; font-weight: bold; cursor: pointer; padding: 0 4px;" title="Remover parada">✕</button>
     </div>
   `).join('');
 
@@ -86,4 +86,12 @@ export function recalcularRotaComParadas() {
   estadoCliente.duracaoTotalComParadas = Math.round(durBase + durExtra);
 
   atualizarResumoValores();
+}
+
+// Limpa as paradas ao resetar o painel
+export function resetarParadasIntermediarias() {
+  estadoCliente.paradas = [];
+  estadoCliente.distanciaTotalComParadas = null;
+  estadoCliente.duracaoTotalComParadas = null;
+  renderizarParadas();
 }
