@@ -4,7 +4,7 @@ import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
 import { carregarSaldoCarteiraCliente } from './cliente-ui-menu.js';
 
-export function atualizarBotaoChamar() {
+export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn || estadoCliente.pedidoAtivoId) return;
 
@@ -16,25 +16,21 @@ export function atualizarBotaoChamar() {
   btn.textContent = labels[estadoCliente.categoriaSelecionada] || 'Chamar HUBy';
 }
 
-// js/cliente/cliente-pedidos.js (exemplo de implementação correta)
-import { calcularPreco } from '../config.js';
-import { estadoCliente } from './cliente-estado.js';
-
 export function atualizarResumoValores() {
   const cat = estadoCliente.categoriaSelecionada || 'carro';
   const dist = estadoCliente.rotaAtual?.distanciaKm || 1.0;
 
-  // Realiza o cálculo dinâmico baseado na tabela vinda da base de dados
+  // Realiza o cálculo dinâmico baseado na tabela vinda do backend
   const resumo = calcularPreco(cat, dist);
 
-  // Elemento do valor no ecrã (ex: R$ 10,00)
-  const lblPreco = document.getElementById('lblValorEstimado') || document.querySelector('.preco-card-huby');
+  // Elementos de exibição do valor estimado
+  const lblPreco = document.getElementById('lblValorEstimado') || document.getElementById('txtPrecoEstimado') || document.querySelector('.preco-card-huby');
   if (lblPreco) {
     lblPreco.textContent = resumo.formatado;
   }
 
-  // Elemento da distância (ex: -- km ou 3.4 km)
-  const lblDistancia = document.getElementById('lblDistanciaKm');
+  // Elemento de exibição da distância
+  const lblDistancia = document.getElementById('lblDistanciaKm') || document.getElementById('txtDistanciaEstimada');
   if (lblDistancia) {
     lblDistancia.textContent = estadoCliente.rotaAtual?.distanciaKm 
       ? `${estadoCliente.rotaAtual.distanciaKm} km` 
@@ -137,7 +133,6 @@ export async function submeterPedido() {
       alert(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`);
     }
 
-    // Se o pagamento for via saldo, processa o débito na carteira imediatamente
     if (metodoPgto === 'saldo_carteira' && token) {
       try {
         await fetch(`${API_URL}/api/carteira/debito-corrida`, {
@@ -229,7 +224,6 @@ export function iniciarPollingStatus() {
       const pedido = await resp.json();
 
       if (pedido.status === 'aceito' || pedido.status === 'em_viagem') {
-        // Toca o feedback sonoro agradável ao ser aceito
         if (!estadoCliente.motoristaAceitouTocado) {
           sonsHUBy.tocarSucessoAceite();
           estadoCliente.motoristaAceitouTocado = true;
@@ -303,7 +297,7 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
         ${pedido.status === 'aceito' ? '🚘 Motorista a caminho' : '🏁 Viagem em andamento'}
       </div>
       <div style="color: #FFF; font-size: 20px; font-weight: 900; margin-top: 3px;">
-        Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${estadoCliente.tempoEstimado} min</span>
+        Chega em <span id="txtMinutosChegada" style="color: #38BDF8;">${estadoCliente.tempoEstimado || 5} min</span>
       </div>
     </div>
 
