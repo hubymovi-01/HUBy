@@ -22,7 +22,9 @@
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=2.2.1">
 
+  <!-- BIBLIOTECAS: LEAFLET & SOCKET.IO -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <style>
     #hubySplash {
@@ -87,7 +89,6 @@
       z-index: 10;
     }
 
-    /* REFINAMENTO PREMIUM DA BARRA DE PESQUISA */
     .search-glass-box {
       padding: 4px 12px !important;
       border-radius: 24px !important;
@@ -99,7 +100,6 @@
       font-weight: 500 !important;
     }
 
-    /* DESIGN SOFISTICADO PARA AS CATEGORIAS */
     .category-slider {
       gap: 10px !important;
       padding-bottom: 12px !important;
@@ -126,7 +126,6 @@
       color: #10B981 !important;
     }
 
-    /* BOTÃO E CONTAINER DE MÚLTIPLAS PARADAS */
     .btn-add-stop {
       background: rgba(56, 189, 248, 0.12);
       border: 1px dashed rgba(56, 189, 248, 0.4);
@@ -206,7 +205,7 @@
 
   <div id="mapaCliente"></div>
 
-  <!-- BARRA DE PESQUISA FLUTUANTE (PREMIUM) -->
+  <!-- BARRA DE PESQUISA FLUTUANTE -->
   <div class="search-floating-wrapper" style="top: 80px;">
     <div class="search-glass-box">
       <button type="button" id="btnAcionarPesquisa" class="search-icon"
@@ -306,7 +305,7 @@
           class="cat-label">Entrega</span></button>
     </div>
 
-    <!-- FORMULÁRIO INTELIGENTE DE ENTREGA -->
+    <!-- FORMULÁRIO DE ENTREGA -->
     <div id="blocoDetalhesEntrega" style="display: none; margin-bottom: 16px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 14px;">
       <div style="font-size: 11px; color: #10B981; font-weight: 800; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.5px;">📋 Detalhes da Encomenda</div>
       
@@ -321,7 +320,7 @@
       </select>
     </div>
 
-    <!-- BLOCO RESUMO DA VIAGEM COM SUPORTE A PARADAS -->
+    <!-- BLOCO RESUMO DA VIAGEM COM PARADAS -->
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
         <div class="route-point-indicator"></div>
@@ -349,48 +348,7 @@
     </div>
 
     <!-- PAINEL PREMIUM: MOTORISTA ACEITOU -->
-    <div id="painelMotoristaAceitou" style="display: none; width: 100%;">
-      <div style="text-align: center; margin-bottom: 16px;">
-        <span
-          style="background: rgba(16, 185, 129, 0.15); color: #10B981; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
-          ✓ Motorista a Caminho
-        </span>
-      </div>
-
-      <div
-        style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 16px; margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; gap: 14px;">
-          <div
-            style="width: 54px; height: 54px; background: #1F2937; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px;">
-            🚘
-          </div>
-          <div>
-            <h3 id="lblMotoristaNome" style="margin: 0 0 4px 0; font-size: 18px; color: #FFF; font-weight: 800;">A
-              carregar...</h3>
-            <span style="font-size: 13px; color: #F59E0B; font-weight: 700;">★ 5.0</span>
-          </div>
-        </div>
-        <div style="text-align: right;">
-          <div id="lblMotoristaPlaca"
-            style="background: #E2E8F0; padding: 6px 10px; border-radius: 8px; font-size: 15px; color: #0F172A; font-weight: 900; letter-spacing: 1.5px; border: 1px solid #CBD5E1;">
-            ---
-          </div>
-          <div id="lblMotoristaVeiculo" style="font-size: 12px; color: #94A3B8; margin-top: 6px; font-weight: 600;">---
-          </div>
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 12px;">
-        <button type="button" id="btnAbrirChatClienteCard"
-          style="flex: 1; background: #38BDF8; color: #032017; padding: 14px; border-radius: 12px; border: none; font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;">
-          💬 Mensagem
-        </button>
-        <a href="#" id="btnLigarMotorista"
-          style="flex: 1; background: rgba(255, 255, 255, 0.05); color: #FFF; border: 1px solid rgba(255, 255, 255, 0.1); padding: 14px; border-radius: 12px; text-decoration: none; text-align: center; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-          📞 Ligar
-        </a>
-      </div>
-    </div>
+    <div id="painelMotoristaAceitou" style="display: none; width: 100%;"></div>
 
     <button type="button" id="btnPedirHuby" class="btn-main-action">Chamar HUBy Carro</button>
   </section>
@@ -497,12 +455,13 @@
     </div>
   </div>
 
-  <!-- ATUALIZADO: v=6.0.0 PARA FORÇAR ATUALIZAÇÃO DO CACHE -->
-  <script type="module" src="./js/app-cliente.js?v=6.0.0"></script>
+  <!-- IMPORTAÇÃO ÚNICA DO MÓDULO PRINCIPAL DO CLIENTE -->
+  <script type="module" src="./js/app-cliente.js?v=7.1.0"></script>
+
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    // LÓGICA DO MODAL DE SEGURANÇA E RASTREIO PÚBLICO VIA WHATSAPP
+    // RASTREIO PÚBLICO VIA WHATSAPP
     const modalSeg = document.getElementById('modalSeguranca');
     const btnMenuSeg = document.getElementById('menuItemSeguranca');
     const btnFecharSeg = document.getElementById('btnFecharSeguranca');
@@ -528,10 +487,9 @@
 
     btnFecharSeg?.addEventListener('click', () => { if (modalSeg) modalSeg.style.display = 'none'; });
 
-    // GERAÇÃO DO LINK DE RASTREIO AO VIVO PARA O WHATSAPP
     btnZap?.addEventListener('click', () => {
       const tel = (localStorage.getItem('huby_emergencia_tel') || '').replace(/\D/g, '');
-      const corridaAtivaId = localStorage.getItem('huby_corrida_ativa_id') || localStorage.getItem('huby_ultima_corrida_id') || '';
+      const corridaAtivaId = localStorage.getItem('huby_pedido_ativo_id') || localStorage.getItem('huby_ultima_corrida_id') || '';
 
       const linkRastreio = corridaAtivaId
         ? `https://hubymovi-01.github.io/HUBy/viagem.html?id=${corridaAtivaId}`
@@ -554,135 +512,7 @@
     checarAdminInstantaneo();
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
 
-    // =======================================================================
-    // HISTÓRICO DE VIAGENS
-    // =======================================================================
-    document.getElementById('menuItemViagens')?.addEventListener('click', async (e) => {
-      e.preventDefault();
-      document.getElementById('menuBackdrop')?.click();
-
-      const modalHist = document.getElementById('modalHistorico');
-      const listaHist = document.getElementById('listaHistoricoCorridas');
-      if (modalHist) modalHist.style.display = 'flex';
-
-      if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">A procurar viagens...</p>';
-
-      try {
-        const token = localStorage.getItem('huby_token');
-        const resp = await fetch(`${API_URL}/api/pedidos/historico`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!resp.ok) {
-          if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">Nenhuma viagem encontrada.</p>';
-          return;
-        }
-
-        const data = await resp.json();
-        const viagens = Array.isArray(data) ? data : (data.viagens || data.pedidos || []);
-
-        if (viagens.length === 0) {
-          if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#94A3B8; padding: 20px;">Nenhuma viagem encontrada.</p>';
-          return;
-        }
-
-        if (listaHist) {
-          listaHist.innerHTML = viagens.map(v => `
-            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span style="font-size: 12px; color: #94A3B8; font-weight: 700;">${new Date(v.criado_em || Date.now()).toLocaleDateString('pt-BR')}</span>
-                <span style="font-size: 14px; color: #10B981; font-weight: 900;">R$ ${Number(v.valor_total || 0).toFixed(2).replace('.', ',')}</span>
-              </div>
-              <div style="font-size: 13px; color: #FFF; margin-bottom: 6px;"><strong>📍 De:</strong> ${v.origem_endereco || 'Local não registado'}</div>
-              <div style="font-size: 13px; color: #FFF; margin-bottom: 10px;"><strong>🏁 Para:</strong> ${v.destino_endereco || 'Local não registado'}</div>
-              <div style="font-size: 11px; color: #38BDF8; font-weight: 800; text-transform: uppercase;">Status: ${v.status}</div>
-            </div>
-          `).join('');
-        }
-
-      } catch (err) {
-        if (listaHist) listaHist.innerHTML = '<p style="text-align:center; color:#EF4444; padding: 20px;">Erro de conexão ao carregar histórico.</p>';
-      }
-    });
-
-    document.getElementById('btnFecharHistorico')?.addEventListener('click', () => {
-      const modalHist = document.getElementById('modalHistorico');
-      if (modalHist) modalHist.style.display = 'none';
-    });
-
-    // =======================================================================
-    // AVALIAÇÃO DE VIAGEM
-    // =======================================================================
-    let notaSelecionada = 5;
-    const estrelas = document.querySelectorAll('#estrelasRating span');
-    estrelas.forEach(estrela => {
-      estrela.style.color = '#F59E0B';
-      estrela.style.cursor = 'pointer';
-
-      estrela.addEventListener('click', (e) => {
-        notaSelecionada = parseInt(e.target.getAttribute('data-val'), 10);
-        estrelas.forEach(s => {
-          const val = parseInt(s.getAttribute('data-val'), 10);
-          s.style.color = val <= notaSelecionada ? '#F59E0B' : '#475569';
-        });
-      });
-    });
-
-    document.getElementById('btnEnviarAvaliacao')?.addEventListener('click', async () => {
-      const pedidoFinalizadoId = localStorage.getItem('huby_ultima_corrida_id');
-      if (!pedidoFinalizadoId) {
-        alert('Nenhuma corrida recente para avaliar.');
-        const modalAv = document.getElementById('modalAvaliacao');
-        if (modalAv) modalAv.style.display = 'none';
-        return;
-      }
-
-      const comentario = document.getElementById('txtComentarioAvaliacao')?.value || '';
-      const btn = document.getElementById('btnEnviarAvaliacao');
-      if (btn) {
-        btn.textContent = 'A enviar...';
-        btn.disabled = true;
-      }
-
-      try {
-        const token = localStorage.getItem('huby_token');
-        const resp = await fetch(`${API_URL}/api/pedidos/${pedidoFinalizadoId}/avaliar`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ nota: notaSelecionada, comentario })
-        });
-
-        if (resp.ok) {
-          alert('Obrigado! A sua avaliação ajuda a manter a qualidade HUBy.');
-          const modalAv = document.getElementById('modalAvaliacao');
-          if (modalAv) modalAv.style.display = 'none';
-          localStorage.removeItem('huby_ultima_corrida_id');
-        } else {
-          const erro = await resp.json().catch(() => ({}));
-          alert('Aviso: ' + (erro.erro || 'Falha ao registrar avaliação'));
-        }
-      } catch (err) {
-        console.error('Erro ao avaliar:', err);
-      } finally {
-        if (btn) {
-          btn.textContent = 'Enviar';
-          btn.disabled = false;
-        }
-      }
-    });
-
-    document.getElementById('btnPularAvaliacao')?.addEventListener('click', () => {
-      const modalAv = document.getElementById('modalAvaliacao');
-      if (modalAv) modalAv.style.display = 'none';
-      localStorage.removeItem('huby_ultima_corrida_id');
-    });
-
-    // =======================================================================
     // ATUALIZAR DADOS DO PERFIL NO MENU
-    // =======================================================================
     function atualizarMenuLateral() {
       const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
       const fotoLocal = localStorage.getItem('huby_user_foto');
@@ -711,7 +541,6 @@
     document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
-  <script type="module" src="./js/app-cliente.js?v=7.0.0"></script>
 </body>
 
 </html>
