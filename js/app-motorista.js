@@ -19,8 +19,10 @@ const estado = {
   saldoCarteira: 1012.07,
   intervalRadar: null,
   intervalChat: null,
+  pedidosIgnorados: new Set(),
   pedidoEmInspecao: null,
-  pedidoAtivo: null
+  pedidoAtivo: null,
+  faseViagem: 'buscar_passageiro'
 };
 
 function obterHeaders() {
@@ -86,7 +88,7 @@ function inicializarMapa() {
 }
 
 // ============================================================================
-// 2. RADAR DE CHAMADAS
+// 2. RADAR DE CHAMADAS COM DISPENSAR (✕)
 // ============================================================================
 function alternarStatusOnline() {
   const btn = document.getElementById('btnToggleStatusOnline');
@@ -141,20 +143,29 @@ function renderizarChamadas(chamadas = []) {
   const container = document.getElementById('listaChamadasPendentes');
   if (!container || estado.pedidoAtivo || estado.pedidoEmInspecao) return;
 
-  if (!chamadas.length) {
+  const chamadasVisiveis = chamadas.filter(p => !estado.pedidosIgnorados.has(String(p.id)));
+
+  if (!chamadasVisiveis.length) {
     container.innerHTML = '<div class="dock-empty">Aguardando novas chamadas na região...</div>';
     return;
   }
 
-  container.innerHTML = chamadas.map(ped => {
+  container.innerHTML = chamadasVisiveis.map(ped => {
     const valorBruto = Number(ped.valor_total || 0);
     const repasse = (valorBruto * 0.85).toFixed(2).replace('.', ',');
     const km = Number(ped.distancia_km || 1.0).toFixed(1);
     const destTexto = ped.destino_endereco || ped.destino || 'Destino informado';
+    const origTexto = ped.origem_endereco || ped.origem || 'Local do passageiro';
 
     return `
-      <div style="background: rgba(18, 24, 38, 0.95); border: 1.5px solid var(--border-dark); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div style="position: relative; background: rgba(18, 24, 38, 0.96); border: 1.5px solid var(--border-dark); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 9px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
+        
+        <button type="button" class="btn-dispensar-pedido" data-id="${ped.id}" title="Dispensar corrida"
+          style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-dark); color: var(--text-sec); width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; cursor: pointer;">
+          ✕
+        </button>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding-right: 32px;">
           <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
             ${(ped.sub_tipo_label || ped.tipo || 'HUBy Carro').toUpperCase()}
           </span>
@@ -163,10 +174,9 @@ function renderizarChamadas(chamadas = []) {
           </strong>
         </div>
 
-        <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <span>📍</span> <strong>Destino:</strong> ${destTexto}
-          </div>
+        <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
+          <div style="color: #94A3B8; margin-bottom: 2px;">🟢 <strong>Origem:</strong> ${origTexto}</div>
+          <div>📍 <strong>Destino:</strong> ${destTexto}</div>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
             📏 Distância: <strong>${km} km</strong> • ~${Math.round(km * 2)} min
           </div>
@@ -174,12 +184,18 @@ function renderizarChamadas(chamadas = []) {
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 2px;">
           <button type="button" class="btn-visualizar-rota"
-            data-id="${ped.id}" data-lat="${ped.destino_lat || ''}" data-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" data-repasse="${repasse}" data-km="${km}"
+            data-id="${ped.id}" 
+            data-orig-lat="${ped.origem_lat || ''}" data-orig-lng="${ped.origem_lng || ''}" data-orig="${origTexto}"
+            data-dest-lat="${ped.destino_lat || ''}" data-dest-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" 
+            data-repasse="${repasse}" data-km="${km}"
             style="background: rgba(56,189,248,0.18); border: 1px solid var(--blue); color: var(--blue); font-weight: 800; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer;">
             🗺️ Ver Rota
           </button>
           <button type="button" class="btn-confirmar-imediato"
-            data-id="${ped.id}" data-lat="${ped.destino_lat || ''}" data-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" data-repasse="${repasse}"
+            data-id="${ped.id}" 
+            data-orig-lat="${ped.origem_lat || ''}" data-orig-lng="${ped.origem_lng || ''}" data-orig="${origTexto}"
+            data-dest-lat="${ped.destino_lat || ''}" data-dest-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" 
+            data-repasse="${repasse}" data-km="${km}"
             style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer;">
             ⚡ Aceitar
           </button>
@@ -187,6 +203,14 @@ function renderizarChamadas(chamadas = []) {
       </div>
     `;
   }).join('');
+
+  container.querySelectorAll('.btn-dispensar-pedido').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.getAttribute('data-id');
+      estado.pedidosIgnorados.add(String(id));
+      renderizarChamadas(chamadas);
+    });
+  });
 
   container.querySelectorAll('.btn-visualizar-rota').forEach(btn => {
     btn.addEventListener('click', () => inspecionarRotaPrevia(btn));
@@ -200,39 +224,47 @@ function renderizarChamadas(chamadas = []) {
 // ============================================================================
 // 3. PRÉ-VISUALIZAÇÃO DE ROTA ANTES DE CONFIRMAR
 // ============================================================================
-function inspecionarRotaPrevia(btn) {
-  const dados = {
+function extrairDadosDoBotao(btn) {
+  return {
     id: btn.getAttribute('data-id'),
-    destLat: parseFloat(btn.getAttribute('data-lat')) || (estado.coords[0] + 0.008),
-    destLng: parseFloat(btn.getAttribute('data-lng')) || (estado.coords[1] + 0.008),
+    origLat: parseFloat(btn.getAttribute('data-orig-lat')) || (estado.coords[0] + 0.003),
+    origLng: parseFloat(btn.getAttribute('data-orig-lng')) || (estado.coords[1] + 0.003),
+    origNome: btn.getAttribute('data-orig'),
+    destLat: parseFloat(btn.getAttribute('data-dest-lat')) || (estado.coords[0] + 0.009),
+    destLng: parseFloat(btn.getAttribute('data-dest-lng')) || (estado.coords[1] + 0.009),
     destNome: btn.getAttribute('data-dest'),
     repasse: btn.getAttribute('data-repasse'),
     km: btn.getAttribute('data-km')
   };
+}
 
+function inspecionarRotaPrevia(btn) {
+  const dados = extrairDadosDoBotao(btn);
   estado.pedidoEmInspecao = dados;
   if (estado.intervalRadar) clearInterval(estado.intervalRadar);
 
-  // Desenha linha de visualização prévia no Leaflet
   limparRotasMapa();
 
+  const coordsOrigem = [dados.origLat, dados.origLng];
   const coordsDestino = [dados.destLat, dados.destLng];
-  estado.linhaRota = L.polyline([estado.coords, coordsDestino], {
+
+  estado.linhaRota = L.polyline([estado.coords, coordsOrigem, coordsDestino], {
     color: '#F59E0B',
     weight: 5,
     dashArray: '10, 8',
     opacity: 0.95
   }).addTo(estado.mapa);
 
-  const iconePin = L.divIcon({
-    html: '<div style="font-size:26px;filter:drop-shadow(0 0 8px #F59E0B);">🏁</div>',
-    iconSize: [28, 28],
-    iconAnchor: [14, 26]
-  });
-  estado.markerDestino = L.marker(coordsDestino, { icon: iconePin }).addTo(estado.mapa);
+  estado.markerOrigem = L.marker(coordsOrigem, {
+    icon: L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+  }).addTo(estado.mapa);
+
+  estado.markerDestino = L.marker(coordsDestino, {
+    icon: L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+  }).addTo(estado.mapa);
+
   estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [70, 70] });
 
-  // Substitui a lista pelo painel detalhado de confirmação
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
@@ -245,10 +277,11 @@ function inspecionarRotaPrevia(btn) {
         <strong style="color: var(--emerald); font-size: 21px; font-weight: 900;">R$ ${dados.repasse}</strong>
       </div>
 
-      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-        <div>📍 <strong>Destino:</strong> ${dados.destNome}</div>
-        <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
-          📏 Trajeto aproximado: <strong>${dados.km} km</strong>
+      <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
+        <div style="color: #94A3B8;">🟢 <strong>Buscar em:</strong> ${dados.origNome}</div>
+        <div style="margin-top: 3px;">📍 <strong>Destino:</strong> ${dados.destNome}</div>
+        <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
+          📏 Trajeto total: <strong>${dados.km} km</strong>
         </div>
       </div>
 
@@ -277,16 +310,10 @@ function inspecionarRotaPrevia(btn) {
 }
 
 // ============================================================================
-// 4. ACEITAR CORRIDA DEFINITIVA E ATIVAR NAVEGAÇÃO / CHAT
+// 4. ACEITAR CORRIDA E FLUXO EM 2 FASES (BUSCAR -> LEVAR AO DESTINO)
 // ============================================================================
 async function aceitarCorridaDefinitiva(btn, dadosCache) {
-  const dados = dadosCache || {
-    id: btn.getAttribute('data-id'),
-    destLat: parseFloat(btn.getAttribute('data-lat')) || (estado.coords[0] + 0.008),
-    destLng: parseFloat(btn.getAttribute('data-lng')) || (estado.coords[1] + 0.008),
-    destNome: btn.getAttribute('data-dest'),
-    repasse: btn.getAttribute('data-repasse')
-  };
+  const dados = dadosCache || extrairDadosDoBotao(btn);
 
   try {
     const r = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
@@ -302,7 +329,7 @@ async function aceitarCorridaDefinitiva(btn, dadosCache) {
 
     if (r.ok || resJson.sucesso) {
       sonsHUBy.tocarSucessoAceite();
-      iniciarViagemEmAndamento(dados);
+      iniciarFaseBuscarPassageiro(dados);
     } else {
       alert(resJson.erro || 'Esta corrida já não está disponível.');
       limparRotasMapa();
@@ -310,71 +337,132 @@ async function aceitarCorridaDefinitiva(btn, dadosCache) {
       iniciarRadar();
     }
   } catch (err) {
-    iniciarViagemEmAndamento(dados);
+    iniciarFaseBuscarPassageiro(dados);
   }
 }
 
-function iniciarViagemEmAndamento(dados) {
+function iniciarFaseBuscarPassageiro(dados) {
   estado.pedidoAtivo = dados;
   estado.pedidoEmInspecao = null;
+  estado.faseViagem = 'buscar_passageiro';
   if (estado.intervalRadar) clearInterval(estado.intervalRadar);
 
-  // Ativa o botão de chat flutuante
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'flex';
 
-  // Traça rota ativa definitiva
   limparRotasMapa();
-  const destinoCoords = [dados.destLat, dados.destLng];
+  const coordsOrigem = [dados.origLat, dados.origLng];
 
-  estado.linhaRota = L.polyline([estado.coords, destinoCoords], {
+  estado.linhaRota = L.polyline([estado.coords, coordsOrigem], {
     color: '#38BDF8',
     weight: 5,
     dashArray: '8, 8',
     opacity: 0.95
   }).addTo(estado.mapa);
 
-  const iconeDestino = L.divIcon({
-    html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">📍</div>',
-    iconSize: [28, 28],
-    iconAnchor: [14, 26]
-  });
-  estado.markerDestino = L.marker(destinoCoords, { icon: iconeDestino }).addTo(estado.mapa);
+  estado.markerOrigem = L.marker(coordsOrigem, {
+    icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+  }).addTo(estado.mapa);
+
   estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
 
-  // Renderiza card ativo no Dock
+  const urlWaze = `https://waze.com/ul?ll=${dados.origLat},${dados.origLng}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.origLat},${dados.origLng}`;
+
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
-  const urlWaze = `https://waze.com/ul?ll=${dados.destLat},${dados.destLng}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.destLat},${dados.destLng}`;
-
   container.innerHTML = `
-    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--blue); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
-          🚀 VIAGEM EM ANDAMENTO
+        <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
+          🚗 A CAMINHO DO PASSAGEIRO
         </span>
         <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${dados.repasse}</strong>
       </div>
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-        📍 <strong>Destino:</strong> <span style="color: #94A3B8;">${dados.destNome}</span>
+        🟢 <strong>Embarque:</strong> <span style="color: #94A3B8;">${dados.origNome}</span>
       </div>
 
-      <!-- BOTÕES DE NAVEGAÇÃO EXTERNA (WAZE & GOOGLE MAPS) -->
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         <a href="${urlWaze}" target="_blank" rel="noopener"
           style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🧭 Abrir Waze
+          🧭 Waze (Embarque)
         </a>
         <a href="${urlGoogle}" target="_blank" rel="noopener"
           style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🗺️ Google Maps
+          🗺️ Maps (Embarque)
         </a>
       </div>
 
-      <!-- BOTÃO DE CONCLUIR VIAGEM -->
+      <button type="button" id="btnPassageiroEmbarcou"
+        style="width: 100%; background: #38BDF8; border: none; color: #000; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
+        📍 Cheguei / Passageiro a Bordo
+      </button>
+    </div>
+  `;
+
+  document.getElementById('btnPassageiroEmbarcou')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
+}
+
+async function confirmarEmbarqueEIrAoDestino(dados) {
+  try {
+    await fetch(`${API_URL}/api/pedidos/${dados.id}/embarque`, {
+      method: 'PUT',
+      headers: obterHeaders()
+    });
+  } catch (e) { }
+
+  estado.faseViagem = 'a_caminho_destino';
+  sonsHUBy.tocarSucessoAceite();
+
+  limparRotasMapa();
+  const coordsDestino = [dados.destLat, dados.destLng];
+
+  estado.linhaRota = L.polyline([estado.coords, coordsDestino], {
+    color: '#10B981',
+    weight: 5,
+    dashArray: '8, 8',
+    opacity: 0.95
+  }).addTo(estado.mapa);
+
+  estado.markerDestino = L.marker(coordsDestino, {
+    icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+  }).addTo(estado.mapa);
+
+  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+
+  const urlWaze = `https://waze.com/ul?ll=${dados.destLat},${dados.destLng}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.destLat},${dados.destLng}`;
+
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
+          🚀 EM VIAGEM COM PASSAGEIRO
+        </span>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${dados.repasse}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
+        🏁 <strong>Destino Final:</strong> <span style="color: #94A3B8;">${dados.destNome}</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <a href="${urlWaze}" target="_blank" rel="noopener"
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🧭 Waze (Destino)
+        </a>
+        <a href="${urlGoogle}" target="_blank" rel="noopener"
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🗺️ Maps (Destino)
+        </a>
+      </div>
+
       <button type="button" id="btnConcluirViagemAtiva"
         style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
         🏁 Concluir e Receber Corrida
@@ -409,6 +497,10 @@ function limparRotasMapa() {
   if (estado.linhaRota && estado.mapa) {
     estado.mapa.removeLayer(estado.linhaRota);
     estado.linhaRota = null;
+  }
+  if (estado.markerOrigem && estado.mapa) {
+    estado.mapa.removeLayer(estado.markerOrigem);
+    estado.markerOrigem = null;
   }
   if (estado.markerDestino && estado.mapa) {
     estado.mapa.removeLayer(estado.markerDestino);

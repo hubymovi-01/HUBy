@@ -216,6 +216,7 @@ export default function pedidosRouter(io) {
         SELECT 
           p.id, p.status, p.valor_total, p.distancia_km, p.duracao_min,
           p.origem_endereco, p.destino_endereco,
+          p.origem_lat, p.origem_lng, p.destino_lat, p.destino_lng,
           p.motorista_id, 
           COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
           COALESCE(m.telefone, p.motorista_telefone) AS motorista_telefone,
@@ -241,7 +242,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7. ACEITAR VIAGEM (COM VINCULAÇÃO INTELIGENTE DO MOTORISTA)
+  // 7. ACEITAR VIAGEM (AVISA O CLIENTE QUE MOTORISTA ESTÁ A CAMINHO)
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
@@ -249,7 +250,6 @@ export default function pedidosRouter(io) {
       const usuarioId = req.usuario.id;
       const emailUsuario = req.usuario.email || '';
 
-      // Localiza o motorista por id, usuario_id, email ou puxa a conta ativa com saldo (Carol)
       let motoristas = await sql`
         SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, avaliacao_media, total_corridas
         FROM motoristas 
@@ -274,10 +274,9 @@ export default function pedidosRouter(io) {
 
       const mot = motoristas[0];
 
-      // Atualiza o pedido se estiver pendente, aguardando ou buscando
       const pedidoAtualizado = await sql`
         UPDATE pedidos 
-        SET status = 'em_andamento', 
+        SET status = 'a_caminho', 
             motorista_id = ${mot.id}, 
             motorista_nome = ${mot.nome}, 
             motorista_telefone = ${mot.telefone || ''}, 
@@ -288,12 +287,11 @@ export default function pedidosRouter(io) {
         RETURNING *;
       `;
       
-      // Se já estava em andamento pelo mesmo motorista, devolve sucesso idempotente
       if (pedidoAtualizado.length === 0) {
         const jaAceito = await sql`
           SELECT * FROM pedidos 
           WHERE id::text = ${id}::text 
-            AND (motorista_id::text = ${mot.id}::text OR status = 'em_andamento');
+            AND (motorista_id::text = ${mot.id}::text OR status IN ('a_caminho', 'em_andamento', 'em_viagem'));
         `;
         if (jaAceito.length > 0) {
           return res.json({ sucesso: true, pedido: jaAceito[0] });
@@ -309,7 +307,21 @@ export default function pedidosRouter(io) {
         veiculo_cor: mot.veiculo_cor
       };
 
-      io.emit('corrida_aceita', { pedidoId: id, motoristaId: mot.id, motoristaNome: mot.nome });
+      // Notifica o app do passageiro com dados e veículo do condutor
+      io.emit('corrida_aceita', {
+        pedidoId: id,
+        status: 'a_caminho',
+        motorista: {
+          id: mot.id,
+          nome: mot.nome,
+          telefone: mot.telefone,
+          veiculo: mot.veiculo_modelo || 'Onix',
+          placa: mot.veiculo_placa || 'ABC1D23',
+          cor: mot.veiculo_cor || 'Prata',
+          foto: mot.foto_perfil_url,
+          avaliacao: mot.avaliacao_media
+        }
+      });
 
       res.json({ sucesso: true, pedido: payloadResposta });
     } catch (err) {
@@ -319,14 +331,45 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM (CÁLCULO DINÂMICO E CRÉDITO NO SALDO)
+  // 7.1 CONFIRMAR EMBARQUE (PASSAGEIRO A BORDO -> EM VIAGEM AO DESTINO)
+  // =========================================================================
+  router.put('/:id/embarque', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const atualizado = await sql`
+        UPDATE pedidos
+        SET status = 'em_viagem'
+        WHERE id::text = ${id}::text
+        RETURNING *;
+      `;
+
+      if (atualizado.length === 0) {
+        return res.status(404).json({ erro: 'Pedido não localizado.' });
+      }
+
+      // Notifica o cliente em tempo real que a viagem rumo ao destino começou
+      io.emit('passageiro_a_bordo', { 
+        pedidoId: id, 
+        status: 'em_viagem',
+        mensagem: 'Passageiro a bordo! Em viagem rumo ao destino.' 
+      });
+
+      res.json({ sucesso: true, mensagem: 'Embarque confirmado!', pedido: atualizado[0] });
+    } catch (err) {
+      console.error('Erro ao confirmar embarque:', err);
+      res.status(500).json({ erro: 'Falha ao registrar embarque do passageiro.' });
+    }
+  });
+
+  // =========================================================================
+  // 8. CONCLUIR VIAGEM (REPASSE E FINALIZAÇÃO DO CLIENTE)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const usuarioId = req.usuario.id;
 
-      // Identifica o ID real da tabela motoristas
       const mot = await sql`
         SELECT id FROM motoristas 
         WHERE id::text = ${usuarioId}::text 
@@ -373,7 +416,12 @@ export default function pedidosRouter(io) {
         RETURNING saldo_carteira, total_corridas;
       `;
 
-      io.emit('corrida_finalizada', { pedidoId: id });
+      // Notifica o app do passageiro para ir à tela de avaliação
+      io.emit('corrida_finalizada', { 
+        pedidoId: id,
+        status: 'concluido',
+        valorFinal: valorBruto 
+      });
 
       res.json({ 
         sucesso: true, 
