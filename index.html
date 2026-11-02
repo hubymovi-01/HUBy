@@ -22,7 +22,6 @@
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
-  <link rel="icon" type="image/svg+xml" href="./img/icon.svg">
 
   <!-- ESTILOS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -33,6 +32,7 @@
   <!-- BIBLIOTECAS CDN (LEAFLET & SOCKET.IO) -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  
   <style>
     #hubySplash {
       animation: encerrarSplashHUBy 0.4s ease 1.2s forwards !important;
@@ -462,8 +462,8 @@
     </div>
   </div>
 
-  <!-- IMPORTAÇÃO ÚNICA DO MÓDULO PRINCIPAL DO CLIENTE -->
-  <script type="module" src="./js/app-cliente.js?v=7.1.0"></script>
+  <!-- IMPORTAÇÃO ÚNICA DO MÓDULO PRINCIPAL DO CLIENTE COM FORCE CACHE-BUSTING v=8.0.0 -->
+  <script type="module" src="./js/app-cliente.js?v=8.0.0"></script>
 
   <script type="module">
     import { API_URL } from './js/config.js';
@@ -549,5 +549,4 @@
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
 </body>
-
 </html>
