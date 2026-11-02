@@ -2,19 +2,20 @@
  * HUBy 2.0 - Configurações Gerais, Tarifas Dinâmicas e Gamificação Sonora (js/config.js)
  */
 
+// Se estiver a rodar localmente usa a porta 3000; caso contrário, aponta para a API no Render
 export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
-// DESPERTADOR: Acorda a instância do Render em background assim que o app é aberto
+// DESPERTADOR: Envia um ping para acordar a instância gratuita do Render em segundo plano
 fetch(`${API_URL}/`).catch(() => {
-  console.log('A acordar o motor do servidor HUBy...');
+  console.log('A acordar a instância do servidor HUBy...');
 });
 
-// Opções rápidas de recarga da Carteira Digital Pré-Paga Pix
+// Opções pré-definidas para recarga de saldo na Carteira Digital Pix
 export const OPCOES_RECARGA_PIX = [10.00, 20.00, 50.00, 100.00];
 
-// Dicionário com todas as chaves mapeadas (incluindo 'entrega' e 'flash_moto')
+// Tabela de categorias com valores base, custo por km e limite mínimo de corrida
 export let CATEGORIAS = {
   carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 5.0, km: 2.5, min: 10.0 },
   moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 3.5, km: 1.8, min: 7.0 },
@@ -25,7 +26,7 @@ export let CATEGORIAS = {
 
 export let MULTIPLICADOR_PICO = 1.0;
 
-// Sincroniza em tempo real com as tarifas configuradas no Painel Master
+// Sincronização em tempo real das tarifas configuradas no Painel de Administração
 export async function sincronizarTarifasServidor() {
   try {
     let resp = await fetch(`${API_URL}/api/admin/tarifas`);
@@ -61,20 +62,19 @@ export async function sincronizarTarifasServidor() {
   }
 }
 
-// Algoritmo de Cálculo Dinâmico com Respeito Rigoroso ao Mínimo Configurado
+// Cálculo dinâmico respeitando o valor mínimo cadastrado
 export function calcularPreco(catId, distanciaKm) {
   const chave = String(catId || 'carro').toLowerCase();
   const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
   const dist = Math.max(0.5, Number(distanciaKm) || 1.0);
 
-  // Fórmula tarifária: Base + (Distância * Km)
+  // Fórmula base: Taxa Base + (Distância * Valor por Km)
   const custoBaseMaisKm = cat.base + (dist * cat.km);
   
-  // O valor só pode ser maior ou igual à corrida mínima cadastrada pelo admin
+  // Garante que o valor final nunca fique abaixo da tarifa mínima
   const valorComMinimo = Math.max(cat.min, custoBaseMaisKm);
   const valorFinal = Number((valorComMinimo * MULTIPLICADOR_PICO).toFixed(2));
 
-  // Estimativa elegante de tempo de chegada do condutor com base na distância
   const minutosChegadaEstimada = Math.max(2, Math.round(dist * 1.8));
 
   return {
@@ -83,12 +83,15 @@ export function calcularPreco(catId, distanciaKm) {
     valorTotal: valorFinal,
     multiplicador: MULTIPLICADOR_PICO,
     minutosChegada: minutosChegadaEstimada,
-    tempoEstimadoTexto: `~${minutosChegadaEstimada} min de você`,
+    tempoEstimadoTexto: `~${minutosChegadaEstimada} min de si`,
     formatado: `R$ ${valorFinal.toFixed(2).replace('.', ',')}`
   };
 }
 
-// Listener para escutar atualizações instantâneas via Socket.IO
+// Inicialização imediata da sincronização de tarifas
+sincronizarTarifasServidor();
+
+// Ouvinte de Socket.IO para receção de atualizações de tarifa em tempo real
 if (typeof window !== 'undefined') {
   window.addEventListener('DOMContentLoaded', () => {
     if (typeof io !== 'undefined') {
@@ -104,7 +107,7 @@ if (typeof window !== 'undefined') {
 }
 
 // ============================================================================
-// SISTEMA DE EFEITOS SONOROS E GAMIFICAÇÃO VIA WEB AUDIO API (OFFLINE FIRST)
+// EFEITOS SONOROS COM WEB AUDIO API
 // ============================================================================
 class AudioEfeitosHUBy {
   constructor() {

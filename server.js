@@ -18,23 +18,26 @@ const app = express();
 const port = process.env.PORT || 3000;
 const server = createServer(app);
 
-// 1. CONFIGURAÇÃO EXPLÍCITA DE ORIGENS PERMITIDAS
+// ============================================================================
+// 1. CONFIGURAÇÃO UNIFICADA E ROBUSTA DE CORS (HTTP + SOCKET.IO)
+// ============================================================================
 const origensPermitidas = [
   'https://hubymovi-01.github.io',
   'http://localhost:3000',
   'http://localhost:5173',
-  'http://127.0.0.1:5500'
+  'http://127.0.0.1:5500',
+  'http://localhost:8080'
 ];
 
 const checarOrigem = (origin, callback) => {
+  // Permite requisições sem origin (mobile apps/Postman) ou domínios liberados
   if (!origin || origensPermitidas.includes(origin) || origin.endsWith('.github.io')) {
     callback(null, true);
   } else {
-    callback(null, true); // Fallback permissivo para evitar bloqueios inesperados
+    callback(null, true); // Fallback permissivo total para evitar bloqueios no frontend
   }
 };
 
-// 2. CONFIGURAÇÃO DO SOCKET.IO COM CORS ROBUSTO
 const io = new Server(server, {
   cors: {
     origin: checarOrigem,
@@ -51,44 +54,32 @@ io.on('connection', (socket) => {
   });
 });
 
-// Injeta a instância do socket em todas as requisições
+// Injeta Socket.IO nas requisições
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// 3. MIDDLEWARE DE CABEÇALHOS CORS E PREFLIGHT MANUAL (BLINDADO)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (origin) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(204).end();
-  }
-  next();
-});
-
-const corsOptions = {
+// Middleware oficial do pacote CORS (sem duplicação manual de cabeçalhos)
+app.use(cors({
   origin: checarOrigem,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
   credentials: true
-};
-app.use(cors(corsOptions));
+}));
 
-// 4. PARSERS DE JSON COM SUPORTE A FOTOS GRANDES (BASE64)
+// Garante que requisições OPTIONS (preflight) encerrem com status 200/204 imediatamente
+app.options('*', cors());
+
+// ============================================================================
+// 2. PARSERS DE DADOS (BASE64 E JSON GRANDES)
+// ============================================================================
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// 5. INICIALIZAÇÃO AUTOMÁTICA DAS TABELAS NO NEON POSTGRESQL
+// ============================================================================
+// 3. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
+// ============================================================================
 async function inicializarBanco() {
   try {
     await sql`
@@ -269,7 +260,7 @@ async function inicializarBanco() {
       );
     `;
 
-    // Garante colunas de suporte adicionais
+    // Garante colunas adicionais de apoio
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -285,14 +276,16 @@ async function inicializarBanco() {
     await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
 
-    console.log('Tabelas e colunas sincronizadas no Neon PostgreSQL.');
+    console.log('✅ Banco de dados Neon PostgreSQL sincronizado com sucesso.');
   } catch (e) {
     console.error('Erro na sincronização de tabelas:', e.message);
   }
 }
 inicializarBanco();
 
-// 6. ROTAS BASE E STATUS
+// ============================================================================
+// 4. ROTAS BASE E STATUS
+// ============================================================================
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
@@ -310,7 +303,9 @@ app.get('/api/config/tarifas', (req, res) => {
   });
 });
 
-// 7. REGISTRO DE ROTAS MODULARES
+// ============================================================================
+// 5. REGISTRO DE ROTAS MODULARES
+// ============================================================================
 app.use('/api/auth', authRoutes);
 app.use('/api/usuarios', authRoutes);
 app.use('/api/pedidos', pedidosRouter(io));
@@ -320,7 +315,20 @@ app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 
-// 8. INICIALIZAÇÃO DO SERVIDOR
+// ============================================================================
+// 6. TRATAMENTO GLOBAL DE ERROS (PREVINE QUEBRA DE CORS EM RESPOSTAS 500)
+// ============================================================================
+app.use((err, req, res, next) => {
+  console.error('Erro interno do servidor:', err);
+  res.status(err.status || 500).json({
+    erro: true,
+    mensagem: err.message || 'Erro interno no servidor'
+  });
+});
+
+// ============================================================================
+// 7. INICIALIZAÇÃO DO SERVIDOR
+// ============================================================================
 server.listen(port, () => {
   console.log(`Servidor HUBy ativo na porta ${port}`);
 });
