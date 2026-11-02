@@ -11,7 +11,6 @@
   <title>HUBy Motorista • Modo Parceiro</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/base.css?v=6.0.0">
   <style>
     :root {
@@ -49,6 +48,11 @@
       width: 100%;
       height: 100%;
       z-index: 1;
+    }
+
+    /* Estilo Dark Mode nativo para o OpenStreetMap livre */
+    .leaflet-tile-pane {
+      filter: brightness(0.65) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.3) brightness(0.7);
     }
 
     .top-driver-nav {
@@ -731,7 +735,7 @@
   <!-- Plugin Leaflet.heat para mancha de calor -->
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-<script type="module" src="./js/app-motorista.js?v=7.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=8.0.0"></script>
 </body>
 
 </html>
