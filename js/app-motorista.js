@@ -19,6 +19,8 @@ const estado = {
   saldoCarteira: 1012.07,
   intervalRadar: null,
   intervalChat: null,
+  intervalGpsSocket: null,
+  socket: null,
   pedidosIgnorados: new Set(),
   pedidoEmInspecao: null,
   pedidoAtivo: null,
@@ -35,8 +37,14 @@ function obterHeaders() {
 }
 
 // ============================================================================
-// 1. INICIALIZAÇÃO DO MAPA
+// 1. INICIALIZAÇÃO DO MAPA E SOCKET
 // ============================================================================
+function inicializarSocket() {
+  if (typeof io !== 'undefined') {
+    estado.socket = io(API_URL);
+  }
+}
+
 function inicializarMapa() {
   const container = document.getElementById('mapaMotorista');
   if (!container) return;
@@ -73,12 +81,18 @@ function inicializarMapa() {
     configurarRecursosInteligentes(estado.mapa, estado.token);
 
     if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition((pos) => {
+      navigator.geolocation.watchPosition((pos) => {
         const { latitude, longitude } = pos.coords;
         estado.coords = [latitude, longitude];
         if (estado.mapa && estado.markerVeiculo) {
-          estado.mapa.setView([latitude, longitude], 16);
           estado.markerVeiculo.setLatLng([latitude, longitude]);
+        }
+        if (estado.socket && estado.pedidoAtivo) {
+          estado.socket.emit('posicao_motorista', {
+            pedidoId: estado.pedidoAtivo.id,
+            lat: latitude,
+            lng: longitude
+          });
         }
       }, null, { enableHighAccuracy: true });
     }
@@ -156,6 +170,7 @@ function renderizarChamadas(chamadas = []) {
     const km = Number(ped.distancia_km || 1.0).toFixed(1);
     const destTexto = ped.destino_endereco || ped.destino || 'Destino informado';
     const origTexto = ped.origem_endereco || ped.origem || 'Local do passageiro';
+    const tempoEstimadoMin = Math.round(km * 2.2);
 
     return `
       <div style="position: relative; background: rgba(18, 24, 38, 0.96); border: 1.5px solid var(--border-dark); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 9px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
@@ -178,7 +193,7 @@ function renderizarChamadas(chamadas = []) {
           <div style="color: #94A3B8; margin-bottom: 2px;">🟢 <strong>Origem:</strong> ${origTexto}</div>
           <div>📍 <strong>Destino:</strong> ${destTexto}</div>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
-            📏 Distância: <strong>${km} km</strong> • ~${Math.round(km * 2)} min
+            📏 Distância: <strong>${km} km</strong> • ~${tempoEstimadoMin} min
           </div>
         </div>
 
@@ -685,6 +700,7 @@ function registrarEventosUI() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  inicializarSocket();
   inicializarMapa();
   registrarEventosUI();
   carregarPerfil();
