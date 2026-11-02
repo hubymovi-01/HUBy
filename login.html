@@ -3,9 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Iniciar Sessão • HUBy</title>
-  <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/auth.css">
+
+  <!-- PWA & CORES DO SISTEMA -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0B0F19">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HUBy">
+
+  <!-- ÍCONES -->
+  <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
+
+  <link rel="stylesheet" href="./css/base.css?v=2.2.1">
+  <link rel="stylesheet" href="./css/auth.css?v=2.2.1">
 </head>
 <body class="auth-body">
 
@@ -21,7 +38,7 @@
 
       <div id="alertaLoginBox" class="auth-alert" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 14px; font-size: 13px;"></div>
 
-      <!-- FORMULÁRIO 1: LOGIN DE PASSAGEIRO (Padrão) -->
+      <!-- FORMULÁRIO 1: LOGIN DE PASSAGEIRO -->
       <form id="formLoginCliente" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail ou Telemóvel</label>
@@ -40,7 +57,6 @@
 
       <!-- FORMULÁRIO 2: LOGIN DE MOTORISTA (Sem senha, usa CNH e Placa) -->
       <form id="formLoginMotorista" class="auth-form" style="display: none;" novalidate>
-        
         <div class="input-group">
           <label>E-mail de Registo</label>
           <input type="email" id="loginEmailMot" placeholder="seu@email.com" required>
@@ -71,9 +87,9 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    // Capturar parâmetros da URL vindos do funil (welcome.html)
+    // Capturar perfil da URL ou do storage
     const urlParams = new URLSearchParams(window.location.search);
-    const perfil = urlParams.get('perfil') || 'cliente'; // Por padrão é cliente
+    const perfil = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
 
     const formCliente = document.getElementById('formLoginCliente');
     const formMotorista = document.getElementById('formLoginMotorista');
@@ -82,7 +98,6 @@
     const linkCriarConta = document.getElementById('linkCriarConta');
     const alertaBox = document.getElementById('alertaLoginBox');
 
-    // Configurar a tela baseada no perfil escolhido no funil
     if (perfil === 'motorista') {
       formMotorista.style.display = 'block';
       txtSubtitulo.textContent = 'Acesso exclusivo para Motoristas Parceiros';
@@ -97,7 +112,7 @@
       linkCriarConta.href = './cadastro.html?perfil=cliente';
     }
 
-    // Lógica de Login para PASSAGEIRO
+    // Login Passageiro
     formCliente.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
@@ -127,7 +142,7 @@
       }
     });
 
-    // Lógica de Login EXCLUSIVA para MOTORISTA (Sem Senha)
+    // Login Motorista (Sem Senha: Email + CNH + Placa)
     formMotorista.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
@@ -140,10 +155,9 @@
 
       const btnSub = document.getElementById('btnSubmeterMotorista');
       btnSub.disabled = true;
-      btnSub.querySelector('span').textContent = 'A verificar veículo...';
+      btnSub.querySelector('span').textContent = 'A verificar dados...';
 
       try {
-        // Envia os dados para a API (Atenção: O backend precisará de uma rota ajustada para isto)
         const resp = await fetch(`${API_URL}/api/usuarios/login-motorista`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -161,15 +175,21 @@
       }
     });
 
-    // Formatações Visuais e Funções Auxiliares
+    // Formatação de CNH
     document.getElementById('loginCNH').addEventListener('input', (e) => {
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11);
     });
 
     function guardarSessaoERedirecionar(data, urlDestino) {
       localStorage.setItem('huby_token', data.token);
-      localStorage.setItem('huby_user_role', data.usuario.role);
+      localStorage.setItem('huby_user_role', data.usuario.role || 'cliente');
       localStorage.setItem('huby_user_name', data.usuario.nome);
+      localStorage.setItem('huby_user_id', data.usuario.id);
+
+      if (data.usuario.motoristaId) {
+        localStorage.setItem('huby_motorista_id', data.usuario.motoristaId);
+      }
+
       exibirAlerta('Login efetuado com sucesso!', 'success');
       setTimeout(() => window.location.replace(urlDestino), 600);
     }

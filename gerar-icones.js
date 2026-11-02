@@ -1,7 +1,6 @@
 import fs from 'fs';
+import sharp from 'sharp';
 
-// Função para gerar um PNG básico válido de 1x1 ou superior usando buffer ou SVG simples convertido
-// Como alternativa rápida e sem dependências extras, gravamos os SVGs e criamos PNGs mínimos:
 const svgIcon = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <rect width="512" height="512" rx="100" fill="#0B0F19"/>
@@ -11,5 +10,26 @@ const svgIcon = `
 </svg>
 `;
 
+// Garante que a pasta img/ existe
+if (!fs.existsSync('img')) {
+  fs.mkdirSync('img', { recursive: true });
+}
+
 fs.writeFileSync('img/icon.svg', svgIcon.trim());
-console.log('SVG base criado em img/icon.svg');
+console.log('✅ SVG base criado em img/icon.svg');
+
+const svgBuffer = Buffer.from(svgIcon);
+
+// Gera icon-192.png
+await sharp(svgBuffer)
+  .resize(192, 192)
+  .png()
+  .toFile('img/icon-192.png');
+console.log('✅ img/icon-192.png gerado com sucesso!');
+
+// Gera icon-512.png
+await sharp(svgBuffer)
+  .resize(512, 512)
+  .png()
+  .toFile('img/icon-512.png');
+console.log('✅ img/icon-512.png gerado com sucesso!');

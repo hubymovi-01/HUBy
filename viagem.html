@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>HUBy - Rastreio de Viagem ao Vivo</title>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -11,11 +14,15 @@
   <style>
     :root {
       --bg: #0B0F19;
-      --card-bg: rgba(15, 23, 42, 0.95);
+      --card-bg: rgba(15, 23, 42, 0.96);
       --border: rgba(255, 255, 255, 0.08);
       --primary: #10B981;
       --blue: #38BDF8;
       --amber: #F59E0B;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
     }
     body {
       margin: 0;
@@ -24,29 +31,34 @@
       color: #FFF;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
-    }
-    #mapaPublico {
       width: 100vw;
       height: 100vh;
+      height: 100dvh;
+    }
+    #mapaPublico {
+      width: 100%;
+      height: 100%;
       position: absolute;
       top: 0;
       left: 0;
       z-index: 1;
+      background: #0B0F19;
     }
     .floating-card-tracking {
       position: absolute;
-      bottom: 20px;
-      left: 16px;
-      right: 16px;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 16px);
+      left: 14px;
+      right: 14px;
       max-width: 480px;
       margin: 0 auto;
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 18px;
-      padding: 16px 20px;
+      border-radius: 20px;
+      padding: 16px;
       z-index: 1000;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
-      backdrop-filter: blur(12px);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.7);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
     }
     .top-badge-live {
       display: inline-flex;
@@ -82,6 +94,41 @@
       padding-bottom: 12px;
       margin-bottom: 12px;
     }
+    .driver-avatar-public {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--primary);
+      background: #1F2937;
+    }
+    .mercosul-plate-public {
+      display: inline-flex;
+      flex-direction: column;
+      border: 1.5px solid #FFFFFF;
+      border-radius: 4px;
+      overflow: hidden;
+      background: #FFFFFF;
+      color: #000000;
+      font-family: monospace;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .mercosul-plate-header {
+      background: #003399;
+      color: #FFFFFF;
+      font-size: 8px;
+      font-weight: 900;
+      padding: 1px 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .mercosul-plate-body {
+      font-size: 12px;
+      font-weight: 900;
+      padding: 1px 6px;
+      text-align: center;
+      letter-spacing: 1px;
+    }
     .route-text {
       font-size: 12px;
       color: #94A3B8;
@@ -99,56 +146,66 @@
   <div class="floating-card-tracking" id="boxRastreio">
     <div class="top-badge-live">
       <div class="pulse-dot"></div>
-      <span id="txtStatusViagem">Acompanhamento em Tempo Real</span>
+      <span id="txtStatusViagem">Acompanhamento ao Vivo</span>
     </div>
 
     <div class="driver-row">
       <div style="display: flex; align-items: center; gap: 12px;">
-        <div style="width: 44px; height: 44px; background: #1F2937; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 2px solid var(--primary);">
-          🚖
-        </div>
+        <img id="fotoCondutor" class="driver-avatar-public" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Motorista">
         <div>
-          <h4 id="nomeCondutor" style="margin: 0; font-size: 15px;">Motorista Parceiro</h4>
-          <small id="veiculoCondutor" style="color: #94A3B8; font-size: 12px;">Veículo a caminho</small>
+          <h4 id="nomeCondutor" style="margin: 0; font-size: 15px; color: #FFF;">Carol</h4>
+          <small id="veiculoCondutor" style="color: #94A3B8; font-size: 12px;">Chevrolet Onix</small>
         </div>
       </div>
-      <div id="placaCondutor" style="background: #E2E8F0; color: #0F172A; font-weight: 900; font-size: 13px; padding: 4px 8px; border-radius: 6px;">
-        ---
+
+      <!-- PLACA MERCOSUL -->
+      <div class="mercosul-plate-public">
+        <div class="mercosul-plate-header">
+          <span>BRASIL</span> <span>🇧🇷</span>
+        </div>
+        <div class="mercosul-plate-body" id="placaCondutor">
+          ABC1D23
+        </div>
       </div>
     </div>
 
     <div class="route-text">
-      <div><strong>Origem:</strong> <span id="txtOrigem">Local de partida</span></div>
-      <div style="margin-top: 4px;"><strong>Destino:</strong> <span id="txtDestino">Destino da rota</span></div>
+      <div>🟢 <strong>Origem:</strong> <span id="txtOrigem">Local de partida</span></div>
+      <div style="margin-top: 4px;">🏁 <strong>Destino:</strong> <span id="txtDestino">Destino da rota</span></div>
     </div>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script type="module">
     import { API_URL } from './js/config.js';
 
     let mapa = null;
     let marcadorCondutor = null;
     let marcadorDestino = null;
+    let linhaTrajeto = null;
+    let intervalPolling = null;
 
     const params = new URLSearchParams(window.location.search);
     const pedidoId = params.get('id');
 
     async function iniciar() {
       if (!pedidoId) {
-        alert('Código de viagem inválido ou ausente.');
+        document.getElementById('txtStatusViagem').textContent = 'Link Inválido';
+        alert('Código de viagem inválido ou ausente na URL.');
         return;
       }
 
-      mapa = L.map('mapaPublico', { zoomControl: false }).setView([-8.3580, -42.2460], 14);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors | HUBy Live'
+      mapa = L.map('mapaPublico', { zoomControl: false, attributionControl: false }).setView([-8.3580, -42.2460], 15);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19
       }).addTo(mapa);
 
       await carregarDadosViagem();
       conectarSocket();
+
+      // Polling de redundância a cada 4 segundos
+      intervalPolling = setInterval(carregarDadosViagem, 4000);
     }
 
     async function carregarDadosViagem() {
@@ -156,29 +213,66 @@
         const resp = await fetch(`${API_URL}/api/pedidos/publico/${pedidoId}`);
         if (!resp.ok) {
           document.getElementById('txtStatusViagem').textContent = 'Viagem Concluída ou Encerrada';
+          if (intervalPolling) clearInterval(intervalPolling);
           return;
         }
 
         const p = await resp.json();
 
-        document.getElementById('nomeCondutor').textContent = p.motorista_nome || 'Condutor HUBy';
-        document.getElementById('veiculoCondutor').textContent = p.motorista_veiculo || 'Veículo';
-        document.getElementById('placaCondutor').textContent = (p.motorista_placa || 'HUBy').toUpperCase();
+        // Atualização dos textos da interface
+        document.getElementById('nomeCondutor').textContent = p.motorista_nome || 'Carol';
+        document.getElementById('veiculoCondutor').textContent = p.motorista_veiculo || 'Chevrolet Onix';
+        document.getElementById('placaCondutor').textContent = (p.motorista_placa || 'ABC1D23').toUpperCase();
+        
+        if (p.motorista_foto) {
+          document.getElementById('fotoCondutor').src = p.motorista_foto;
+        }
+
         document.getElementById('txtOrigem').textContent = p.origem_endereco ? p.origem_endereco.split(',')[0] : 'Origem';
         document.getElementById('txtDestino').textContent = p.destino_endereco ? p.destino_endereco.split(',')[0] : 'Destino';
-        document.getElementById('txtStatusViagem').textContent = `Viagem #${String(p.id).slice(-4)} • ${p.status.toUpperCase()}`;
 
-        if (p.destino_lat && p.destino_lng) {
-          marcadorDestino = L.marker([Number(p.destino_lat), Number(p.destino_lng)]).addTo(mapa)
-            .bindPopup('<b>Destino da Viagem</b>');
-          mapa.setView([Number(p.destino_lat), Number(p.destino_lng)], 14);
+        const statusFormatado = formatarStatus(p.status);
+        document.getElementById('txtStatusViagem').textContent = statusFormatado;
+
+        // Renderização dos marcadores no mapa
+        if (p.destino_lat && p.destino_lng && !marcadorDestino) {
+          const destCoords = [Number(p.destino_lat), Number(p.destino_lng)];
+          const iconDestino = L.divIcon({
+            html: '<div style="font-size:24px;">🏁</div>',
+            iconSize: [26, 26],
+            iconAnchor: [13, 24]
+          });
+          marcadorDestino = L.marker(destCoords, { icon: iconDestino }).addTo(mapa);
         }
 
-        if (p.origem_lat && p.origem_lng) {
+        if (p.origem_lat && p.origem_lng && !marcadorCondutor) {
           atualizarPosicao([Number(p.origem_lat), Number(p.origem_lng)]);
         }
+
+        // Se o status for concluído, para a checagem
+        if (p.status === 'concluido' || p.status === 'cancelado') {
+          if (intervalPolling) clearInterval(intervalPolling);
+        }
+
       } catch (err) {
         console.warn('Falha ao obter viagem pública:', err);
+      }
+    }
+
+    function formatarStatus(status = '') {
+      switch (status.toLowerCase()) {
+        case 'a_caminho':
+        case 'aceito':
+          return 'Motorista a caminho do passageiro';
+        case 'em_viagem':
+        case 'em_andamento':
+          return 'Em viagem ao destino';
+        case 'concluido':
+          return 'Viagem finalizada';
+        case 'cancelado':
+          return 'Viagem cancelada';
+        default:
+          return 'Localizando condutor...';
       }
     }
 
@@ -188,16 +282,30 @@
       if (!marcadorCondutor) {
         const iconDiv = L.divIcon({
           className: 'driver-live-marker',
-          html: '<div style="width:28px;height:28px;background:#0B0F19;border:3px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 4px 12px rgba(0,0,0,0.6);">🚖</div>',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14]
+          html: '<div style="width:36px;height:36px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 14px rgba(16,185,129,0.9);">🚘</div>',
+          iconSize: [36, 36],
+          iconAnchor: [18, 18]
         });
         marcadorCondutor = L.marker(coords, { icon: iconDiv }).addTo(mapa);
+        mapa.setView(coords, 15);
       } else {
         marcadorCondutor.setLatLng(coords);
       }
 
-      mapa.panTo(coords);
+      // Conecta linha entre o condutor e o destino
+      if (marcadorDestino) {
+        const destCoords = marcadorDestino.getLatLng();
+        if (linhaTrajeto) {
+          linhaTrajeto.setLatLngs([coords, destCoords]);
+        } else {
+          linhaTrajeto = L.polyline([coords, destCoords], {
+            color: '#10B981',
+            weight: 4,
+            dashArray: '6, 8',
+            opacity: 0.85
+          }).addTo(mapa);
+        }
+      }
     }
 
     function conectarSocket() {
@@ -210,9 +318,16 @@
         }
       });
 
-      socket.on(`status_pedido_${pedidoId}`, (dados) => {
-        if (dados && dados.status) {
-          document.getElementById('txtStatusViagem').textContent = `Status: ${dados.status.toUpperCase()}`;
+      socket.on('passageiro_a_bordo', (dados) => {
+        if (!dados || dados.pedidoId === pedidoId) {
+          document.getElementById('txtStatusViagem').textContent = 'Em viagem ao destino';
+        }
+      });
+
+      socket.on('corrida_finalizada', (dados) => {
+        if (!dados || dados.pedidoId === pedidoId) {
+          document.getElementById('txtStatusViagem').textContent = 'Viagem Concluída';
+          if (intervalPolling) clearInterval(intervalPolling);
         }
       });
     }

@@ -3,9 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Bem-vindo ao HUBy</title>
-  <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/auth.css">
+
+  <!-- PWA & CORES DO SISTEMA -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0B0F19">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HUBy">
+
+  <!-- ÍCONES -->
+  <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
+
+  <link rel="stylesheet" href="./css/base.css?v=2.2.1">
+  <link rel="stylesheet" href="./css/auth.css?v=2.2.1">
+
   <style>
     .onboarding-slider {
       position: relative;
@@ -249,13 +267,20 @@
     const opcaoLogin = document.getElementById('opcaoLogin');
     const opcaoCadastro = document.getElementById('opcaoCadastro');
 
-    let perfilEscolhido = 'cliente';
+    let perfilEscolhido = localStorage.getItem('huby_tipo_acesso') || 'cliente';
 
-    // Verificação de sessão existente
+    // Verificação inteligente de sessão existente
     const token = localStorage.getItem('huby_token');
-    const role = localStorage.getItem('huby_user_role');
+    const role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
+    
     if (token) {
-      window.location.replace(role === 'motorista' ? './motorista.html' : './index.html');
+      if (role === 'admin' || role === 'administrador') {
+        window.location.replace('./admin.html');
+      } else if (role === 'motorista') {
+        window.location.replace('./motorista.html');
+      } else {
+        window.location.replace('./index.html');
+      }
     }
 
     btnAvancar.onclick = () => {

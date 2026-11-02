@@ -6,6 +6,7 @@ import { Server } from 'socket.io';
 import { sql } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
+import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter from './routes/pedidos.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
@@ -30,11 +31,10 @@ const origensPermitidas = [
 ];
 
 const checarOrigem = (origin, callback) => {
-  // Permite requisições sem origin (mobile apps/Postman) ou domínios liberados
   if (!origin || origensPermitidas.includes(origin) || origin.endsWith('.github.io')) {
     callback(null, true);
   } else {
-    callback(null, true); // Fallback permissivo total para evitar bloqueios no frontend
+    callback(null, true);
   }
 };
 
@@ -60,7 +60,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Middleware oficial do pacote CORS (sem duplicação manual de cabeçalhos)
+// Middleware oficial do pacote CORS
 app.use(cors({
   origin: checarOrigem,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -68,7 +68,6 @@ app.use(cors({
   credentials: true
 }));
 
-// Garante que requisições OPTIONS (preflight) encerrem com status 200/204 imediatamente
 app.options('*', cors());
 
 // ============================================================================
@@ -155,6 +154,7 @@ async function inicializarBanco() {
         status TEXT DEFAULT 'pendente',
         motivo_cancelamento TEXT,
         cancelado_por TEXT,
+        embarque_em TIMESTAMP,
         concluido_em TIMESTAMP,
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -272,6 +272,7 @@ async function inicializarBanco() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lng NUMERIC;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_ativo BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embarque_em TIMESTAMP;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMP;`;
     await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
@@ -307,7 +308,7 @@ app.get('/api/config/tarifas', (req, res) => {
 // 5. REGISTRO DE ROTAS MODULARES
 // ============================================================================
 app.use('/api/auth', authRoutes);
-app.use('/api/usuarios', authRoutes);
+app.use('/api/usuarios', usuariosRouter || authRoutes);
 app.use('/api/pedidos', pedidosRouter(io));
 app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
 app.use('/api/carteira', carteiraRoutes);
@@ -316,7 +317,7 @@ app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 
 // ============================================================================
-// 6. TRATAMENTO GLOBAL DE ERROS (PREVINE QUEBRA DE CORS EM RESPOSTAS 500)
+// 6. TRATAMENTO GLOBAL DE ERROS
 // ============================================================================
 app.use((err, req, res, next) => {
   console.error('Erro interno do servidor:', err);
