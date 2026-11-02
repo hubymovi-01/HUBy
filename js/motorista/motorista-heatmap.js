@@ -18,6 +18,16 @@ export function inicializarHeatmapDemanda(mapaInstancia, token) {
   configurarRecursosInteligentes(mapaInstancia, token);
 }
 
+// Helper para montar cabeçalhos com token válido
+function obterHeadersAutenticados(token) {
+  const authToken = token || localStorage.getItem('huby_token');
+  const headers = { 'Content-Type': 'application/json' };
+  if (authToken && authToken !== 'null' && authToken !== 'undefined') {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  return headers;
+}
+
 // ============================================================================
 // 1. MAPA DE CALOR LEAFLET.HEAT
 // ============================================================================
@@ -40,22 +50,19 @@ function configurarHeatmap(mapaInstancia, token) {
 
     try {
       btnCalor.textContent = '⏳ Carregando...';
-      const authToken = token || localStorage.getItem('huby_token');
-      const res = await fetch(`${API_URL}/api/motoristas/calor`, {
-        headers: { Authorization: `Bearer ${authToken}` }
-      });
+      const headers = obterHeadersAutenticados(token);
+      const res = await fetch(`${API_URL}/api/motoristas/calor`, { headers });
 
-      if (!res.ok) throw new Error('Falha ao obter dados térmicos');
+      if (!res.ok) throw new Error(`Falha HTTP ${res.status}`);
       const data = await res.json();
       const pontos = data.pontos || [];
 
       if (!pontos.length) {
         alert('Sem corridas recentes suficientes para desenhar a mancha de calor.');
-        btnCalor.textContent = '🔥 Calor';
         return;
       }
 
-      if (typeof L !== 'undefined' && L.heatLayer && mapaInstancia) {
+      if (typeof L !== 'undefined' && typeof L.heatLayer === 'function' && mapaInstancia) {
         camadaCalor = L.heatLayer(pontos, {
           radius: 25,
           blur: 18,
@@ -67,6 +74,9 @@ function configurarHeatmap(mapaInstancia, token) {
         btnCalor.classList.add('active');
         btnCalor.style.color = '#F59E0B';
         btnCalor.style.borderColor = '#F59E0B';
+      } else {
+        console.warn('Plugin Leaflet.heat não detectado na página motorista.html');
+        alert('Recurso térmico indisponível: biblioteca gráfica não carregada.');
       }
     } catch (e) {
       console.warn('Erro ao carregar mapa térmico:', e);
@@ -86,10 +96,9 @@ function configurarModoPausa(token) {
   const btnConfirmar = document.getElementById('btnConfirmarIniciarPausa');
 
   btnPausa?.addEventListener('click', async () => {
-    const authToken = token || localStorage.getItem('huby_token');
     if (emPausa) {
       if (confirm('Deseja encerrar o intervalo e voltar a receber chamadas?')) {
-        await alternarPausaServidor(authToken, false, 0);
+        await alternarPausaServidor(token, false, 0);
       }
     } else {
       if (modalPausa) modalPausa.style.display = 'flex';
@@ -97,9 +106,8 @@ function configurarModoPausa(token) {
   });
 
   btnConfirmar?.addEventListener('click', async () => {
-    const authToken = token || localStorage.getItem('huby_token');
     const minutos = Number(document.getElementById('selectTempoPausa')?.value || 15);
-    await alternarPausaServidor(authToken, true, minutos);
+    await alternarPausaServidor(token, true, minutos);
     if (modalPausa) modalPausa.style.display = 'none';
   });
 }
@@ -107,12 +115,10 @@ function configurarModoPausa(token) {
 async function alternarPausaServidor(token, ativar, minutos) {
   const btnPausa = document.getElementById('btnModoPausa');
   try {
+    const headers = obterHeadersAutenticados(token);
     const res = await fetch(`${API_URL}/api/motoristas/modo-pausa`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
+      headers,
       body: JSON.stringify({ emPausa: ativar, minutos })
     });
 
@@ -143,11 +149,9 @@ async function alternarPausaServidor(token, ativar, minutos) {
 function configurarModoDestino(token) {
   const btnCasa = document.getElementById('btnModoDestino');
   btnCasa?.addEventListener('click', async () => {
-    const authToken = token || localStorage.getItem('huby_token');
-
     if (destinoAtivo) {
       if (confirm('Deseja desativar o filtro "Direção de Casa"?')) {
-        await atualizarDestinoServidor(authToken, null, null, false);
+        await atualizarDestinoServidor(token, null, null, false);
       }
       return;
     }
@@ -155,19 +159,18 @@ function configurarModoDestino(token) {
     const endereco = prompt('Digite o endereço ou bairro de retorno para casa:');
     if (!endereco || !endereco.trim()) return;
 
-    await atualizarDestinoServidor(authToken, -8.358, -42.246, true);
+    // Ponto padrão central configurável
+    await atualizarDestinoServidor(token, -8.358, -42.246, true);
   });
 }
 
 async function atualizarDestinoServidor(token, lat, lng, ativo) {
   const btnCasa = document.getElementById('btnModoDestino');
   try {
+    const headers = obterHeadersAutenticados(token);
     const res = await fetch(`${API_URL}/api/motoristas/filtro-destino`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
+      headers,
       body: JSON.stringify({ lat, lng, ativo })
     });
 
