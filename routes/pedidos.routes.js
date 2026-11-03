@@ -44,7 +44,7 @@ export default function pedidosRouter(io) {
       const vAdic = formatarNum(valorAdicionais);
       const dKm = formatarNum(distanciaKm);
       const dMin = formatarNum(duracaoMin);
-      
+
       const origLat = coordsOrigem && coordsOrigem[0] ? Number(coordsOrigem[0]) : null;
       const origLng = coordsOrigem && coordsOrigem[1] ? Number(coordsOrigem[1]) : null;
       const destLat = coordsDestino && coordsDestino[0] ? Number(coordsDestino[0]) : null;
@@ -285,7 +285,7 @@ export default function pedidosRouter(io) {
           AND status IN ('pendente', 'aguardando', 'buscando', 'criado')
         RETURNING *;
       `;
-      
+
       if (pedidoAtualizado.length === 0) {
         const jaAceito = await sql`
           SELECT * FROM pedidos 
@@ -297,7 +297,7 @@ export default function pedidosRouter(io) {
         }
         return res.status(409).json({ erro: 'Esta corrida já não está disponível.' });
       }
-      
+
       const payloadResposta = {
         ...pedidoAtualizado[0],
         motorista_foto: mot.foto_perfil_url,
@@ -346,10 +346,10 @@ export default function pedidosRouter(io) {
         return res.status(404).json({ erro: 'Pedido não localizado.' });
       }
 
-      io.emit('passageiro_a_bordo', { 
-        pedidoId: id, 
+      io.emit('passageiro_a_bordo', {
+        pedidoId: id,
         status: 'em_viagem',
-        mensagem: 'Passageiro a bordo! Em viagem rumo ao destino.' 
+        mensagem: 'Passageiro a bordo! Em viagem rumo ao destino.'
       });
 
       res.json({ sucesso: true, mensagem: 'Embarque confirmado!', pedido: atualizado[0] });
@@ -392,7 +392,7 @@ export default function pedidosRouter(io) {
         if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
           taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       const valorBruto = Number(pedido.valor_total) || 0;
       const taxaPlataforma = Number(((valorBruto * taxaPorcentagem) / 100).toFixed(2));
@@ -403,7 +403,7 @@ export default function pedidosRouter(io) {
         SET status = 'concluido', concluido_em = NOW() 
         WHERE id::text = ${id}::text;
       `;
-      
+
       const condutorAtualizado = await sql`
         UPDATE motoristas 
         SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
@@ -413,18 +413,18 @@ export default function pedidosRouter(io) {
         RETURNING saldo_carteira, total_corridas;
       `;
 
-      io.emit('corrida_finalizada', { 
+      io.emit('corrida_finalizada', {
         pedidoId: id,
         status: 'concluido',
-        valorFinal: valorBruto 
+        valorFinal: valorBruto
       });
 
-      res.json({ 
-        sucesso: true, 
-        mensagem: 'Chamada concluída com sucesso!', 
-        repasseLiquido: repasseMotorista, 
-        taxaHuby: taxaPlataforma, 
-        novoSaldoCarteira: condutorAtualizado[0]?.saldo_carteira || 0 
+      res.json({
+        sucesso: true,
+        mensagem: 'Chamada concluída com sucesso!',
+        repasseLiquido: repasseMotorista,
+        taxaHuby: taxaPlataforma,
+        novoSaldoCarteira: condutorAtualizado[0]?.saldo_carteira || 0
       });
     } catch (err) {
       console.error('Erro ao concluir corrida:', err);
@@ -440,19 +440,18 @@ export default function pedidosRouter(io) {
     const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
 
     try {
-      const pedidoResult = await sql`
-        SELECT p.*, m.saldo_carteira, m.nome AS nome_motorista
-        FROM pedidos p
-        JOIN motoristas m ON m.id = p.motorista_id
-        WHERE p.id = ${id}
+      // 1. Busca pedido sem forçar JOIN estrito que pode quebrar
+      const pedidos = await sql`
+        SELECT * FROM pedidos 
+        WHERE id::text = ${String(id)}::text 
         LIMIT 1;
       `;
 
-      if (pedidoResult.length === 0) {
+      if (pedidos.length === 0) {
         return res.status(404).json({ erro: 'Corrida não encontrada.' });
       }
 
-      const pedido = pedidoResult[0];
+      const pedido = pedidos[0];
       const valorTotal = Number(pedido.valor_total || 0);
 
       let taxaPorcentagem = 15;
@@ -461,12 +460,13 @@ export default function pedidosRouter(io) {
         if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
           taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
+      const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
 
       // -----------------------------------------------------------------------
-      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA DO MOTORISTA
+      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA
       // -----------------------------------------------------------------------
       if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
         await sql.begin(async (sqlTx) => {
@@ -475,31 +475,38 @@ export default function pedidosRouter(io) {
             SET status = 'concluido', 
                 forma_pagamento = ${forma_pagamento}, 
                 concluido_em = CURRENT_TIMESTAMP
-            WHERE id = ${id};
+            WHERE id::text = ${String(id)}::text;
           `;
 
-          // Desconta a comissão dos 15% retidos pela plataforma na carteira do motorista
-          await sqlTx`
-            UPDATE motoristas
-            SET saldo_carteira = saldo_carteira - ${taxaPlataforma},
-                total_corridas = total_corridas + 1
-            WHERE id = ${pedido.motorista_id};
-          `;
+          if (motoristaIdAlvo) {
+            await sqlTx`
+              UPDATE motoristas
+              SET saldo_carteira = COALESCE(saldo_carteira, 0) - ${taxaPlataforma},
+                  total_corridas = COALESCE(total_corridas, 0) + 1
+              WHERE id::text = ${String(motoristaIdAlvo)}::text 
+                 OR usuario_id::text = ${String(motoristaIdAlvo)}::text;
+            `;
 
-          await sqlTx`
-            INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-            VALUES (${pedido.motorista_id}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${id});
-          `;
+            try {
+              await sqlTx`
+                INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+                VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
+              `;
+            } catch (eTrans) {
+              // Se a tabela transacoes_carteira não existir, não trava a finalização
+            }
+          }
         });
 
-        // Notifica ambos via Socket que a corrida foi quitada e concluída
-        io.emit(`corrida_finalizada_${id}`, {
-          sucesso: true,
-          forma_pagamento,
-          valorTotal,
-          mensagem: 'Viagem finalizada e acertada com o motorista!'
-        });
-        io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
+        if (io) {
+          io.emit(`corrida_finalizada_${id}`, {
+            sucesso: true,
+            forma_pagamento,
+            valorTotal,
+            mensagem: 'Viagem finalizada e acertada com o motorista!'
+          });
+          io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
+        }
 
         return res.json({ sucesso: true, status: 'concluido', forma_pagamento });
       }
@@ -540,11 +547,15 @@ export default function pedidosRouter(io) {
           return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
         }
 
-        await sql`
-          INSERT INTO cobrancas_pix (transacao_id, pedido_id, valor, status, qr_code, qr_code_base64)
-          VALUES (${String(respostaMP.id)}, ${id}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code_base64})
-          ON CONFLICT (transacao_id) DO NOTHING;
-        `;
+        try {
+          await sql`
+            INSERT INTO cobrancas_pix (transacao_id, pedido_id, valor, status, qr_code, qr_code_base64)
+            VALUES (${String(respostaMP.id)}, ${String(id)}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code_base64})
+            ON CONFLICT (transacao_id) DO NOTHING;
+          `;
+        } catch (ePix) {
+          console.warn('Aviso ao registrar cobrancas_pix:', ePix.message);
+        }
 
         const payloadPix = {
           pedido_id: id,
@@ -554,19 +565,19 @@ export default function pedidosRouter(io) {
           qr_code_base64: pixData.qr_code_base64
         };
 
-        // Emite o QR Code para o motorista e para o passageiro em tempo real
-        io.emit(`exibir_pix_corrida_${id}`, payloadPix);
+        if (io) {
+          io.emit(`exibir_pix_corrida_${id}`, payloadPix);
+        }
 
         return res.json({ sucesso: true, status: 'aguardando_pix', pix: payloadPix });
       }
 
       return res.status(400).json({ erro: 'Forma de pagamento não suportada.' });
     } catch (err) {
-      console.error('Erro ao liquidar corrida:', err);
-      res.status(500).json({ erro: 'Erro interno ao processar encerramento da corrida.' });
+      console.error('Erro detalhado ao liquidar corrida:', err);
+      res.status(500).json({ erro: err.message || 'Erro interno ao processar encerramento da corrida.' });
     }
   });
-
   // =========================================================================
   // 9. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE
   // =========================================================================
