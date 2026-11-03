@@ -403,7 +403,55 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. GESTÃO DE CUPONS
+  // 7. GATEWAY DE PAGAMENTO (MERCADO PAGO)
+  // =========================================================================
+  router.get('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const config = await sql`
+        SELECT valor FROM configuracoes_plataforma 
+        WHERE chave = 'gateway_mercadopago' 
+        LIMIT 1;
+      `;
+      if (!config.length || !config[0].valor) {
+        return res.json({ access_token: '', public_key: '', taxa_percentual: 0.99 });
+      }
+      res.json(config[0].valor);
+    } catch (err) {
+      console.error('Erro ao buscar chaves do gateway:', err);
+      res.status(500).json({ erro: 'Falha ao consultar configurações do gateway.' });
+    }
+  });
+
+  router.put('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
+    const { access_token, public_key, taxa_percentual } = req.body;
+
+    if (!access_token || !access_token.trim()) {
+      return res.status(400).json({ erro: 'O Access Token é obrigatório.' });
+    }
+
+    try {
+      const dados = {
+        access_token: access_token.trim(),
+        public_key: (public_key || '').trim(),
+        taxa_percentual: Number(taxa_percentual) || 0.99
+      };
+
+      await sql`
+        INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
+        VALUES ('gateway_mercadopago', ${JSON.stringify(dados)}::jsonb, CURRENT_TIMESTAMP)
+        ON CONFLICT (chave) 
+        DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = CURRENT_TIMESTAMP;
+      `;
+
+      res.json({ sucesso: true, mensagem: 'Credenciais do Mercado Pago salvas com sucesso!' });
+    } catch (err) {
+      console.error('Erro ao salvar chaves do Mercado Pago:', err);
+      res.status(500).json({ erro: 'Falha ao salvar credenciais do gateway no banco.' });
+    }
+  });
+
+  // =========================================================================
+  // 8. GESTÃO DE CUPONS
   // =========================================================================
   router.get('/cupons', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -469,7 +517,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 8. SEGURANÇA E ZONAS DE RISCO
+  // 9. SEGURANÇA E ZONAS DE RISCO
   // =========================================================================
   router.get('/seguranca/incidentes', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -533,7 +581,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 9. BROADCAST E COMUNICADOS GLOBAIS
+  // 10. BROADCAST E COMUNICADOS GLOBAIS
   // =========================================================================
   router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -554,7 +602,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 10. RELATÓRIO EXECUTIVO CSV
+  // 11. RELATÓRIO EXECUTIVO CSV
   // =========================================================================
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
