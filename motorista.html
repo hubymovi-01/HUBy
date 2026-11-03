@@ -10,6 +10,9 @@
   <meta http-equiv="Expires" content="0">
   <title>HUBy Motorista • Modo Parceiro</title>
 
+  <!-- Previne o erro 404 de favicon no console -->
+  <link rel="icon" href="data:,">
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=6.0.0">
   <style>
@@ -575,7 +578,7 @@
     </div>
 
     <div class="drawer-content">
-      <!-- NOVO BLOCO: FORMAS DE RECEBIMENTO DO MOTORISTA -->
+      <!-- FORMAS DE RECEBIMENTO DO MOTORISTA -->
       <div class="drawer-section-card">
         <h4>💳 Formas Aceitas de Pagamento</h4>
         <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 10px;">
@@ -646,6 +649,67 @@
       </button>
     </div>
   </aside>
+
+  <!-- MODAL DE EDIÇÃO DE PERFIL E FOTO -->
+  <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
+    <div class="modal-box-edit">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 16px; color: #FFF; font-weight: 800;">✏️ Editar Perfil</h3>
+        <button type="button" id="btnFecharModalEdicao"
+          style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+      </div>
+
+      <div style="text-align: center; margin-bottom: 14px;">
+        <img id="previewFotoModal" src="" alt="Prévia"
+          style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--blue); object-fit: cover; margin-bottom: 8px;">
+        <div>
+          <label for="inputUploadFotoPerfil"
+            style="background: rgba(56, 189, 248, 0.15); color: var(--blue); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-block;">
+            📷 Trocar Foto
+          </label>
+          <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
+        </div>
+      </div>
+
+      <div class="form-group-driver">
+        <label>Nome Completo</label>
+        <input type="text" id="editNome" placeholder="Seu nome">
+      </div>
+
+      <div class="form-group-driver">
+        <label>Telefone / WhatsApp</label>
+        <input type="tel" id="editTelefone" placeholder="(00) 00000-0000">
+      </div>
+
+      <div class="form-group-driver">
+        <label>Modelo do Veículo</label>
+        <input type="text" id="editCarroModelo" placeholder="Ex: Onix 1.0">
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div class="form-group-driver">
+          <label>Placa</label>
+          <input type="text" id="editCarroPlaca" placeholder="ABC1D23" style="text-transform: uppercase;">
+        </div>
+        <div class="form-group-driver">
+          <label>Cor</label>
+          <input type="text" id="editCarroCor" placeholder="Prata">
+        </div>
+      </div>
+
+      <div class="form-group-driver">
+        <label>Ano de Fabricação</label>
+        <input type="text" id="editCarroAno" placeholder="2023">
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button type="button" id="btnCancelarEdicao"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnSalvarEdicaoPerfil"
+          style="flex: 1.5; background: var(--blue); border: none; color: #000; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL DE ESCOLHA DE FORMA DE PAGAMENTO AO CHEGAR AO DESTINO -->
   <div id="modalEscolhaPagamentoMotorista" class="modal-backdrop-custom" style="z-index: 10008;">

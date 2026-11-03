@@ -31,16 +31,29 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
+  // Ações da Barra Superior (Modos Inteligentes)
+  document.getElementById('btnToggleHeatmap')?.addEventListener('click', (e) => {
+    e.currentTarget.classList.toggle('active');
+  });
+
+  document.getElementById('btnModoPausa')?.addEventListener('click', (e) => {
+    e.currentTarget.classList.toggle('active');
+  });
+
+  document.getElementById('btnModoDestino')?.addEventListener('click', (e) => {
+    e.currentTarget.classList.toggle('active');
+  });
+
   // Módulos especializados
-  configurarChatMotorista();
-  configurarEventosSaque();
-  configurarSalvarPreferenciasPagto();
+  if (typeof configurarChatMotorista === 'function') configurarChatMotorista();
+  if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
+  if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   inicializarSocket();
   inicializarMapa();
   registrarEventosUI();
-  carregarPerfil();
+  await carregarPerfil();
   iniciarRadarChamadas();
 });

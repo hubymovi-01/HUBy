@@ -230,8 +230,15 @@ export async function carregarPerfilCompleto() {
 
     const m = await resp.json();
     estado.dadosMotorista = m;
+    estado.motoristaId = m.id || estado.motoristaId;
+    estado.motoristaNome = m.nome || estado.motoristaNome;
     estado.statusAprovacaoAtual = m.status_aprovacao || 'aprovado';
     estado.categoriaMotorista = m.categoria || 'carro';
+
+    // Preferências de pagamento para o modal de liquidação do corrida
+    estado.aceitaDinheiro = m.aceita_dinheiro ?? true;
+    estado.aceitaCartao = m.aceita_cartao ?? true;
+    estado.aceitaPix = m.aceita_pix ?? true;
 
     const saldoFormatado = `R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
 
@@ -283,6 +290,9 @@ export async function carregarPerfilCompleto() {
     console.warn('Erro ao carregar perfil completo:', err);
   }
 }
+
+// Alias de compatibilidade com o motorista-corrida.js
+export const carregarPerfil = carregarPerfilCompleto;
 
 export function configurarModalSaquePix() {
   const modalSaque = document.getElementById('modalSaquePix');
