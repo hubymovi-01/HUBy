@@ -101,7 +101,6 @@ function inicializarMapa() {
   }
 }
 
-// Roteamento real pelas ruas usando OSRM
 async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
   if (!estado.mapa) return;
 
@@ -136,7 +135,6 @@ async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
     console.warn('Falha no OSRM, aplicando rota direta:', err);
   }
 
-  // Fallback caso o serviço OSRM não responda
   estado.linhaRota = L.polyline([origem, destino], {
     color: cor,
     weight: 5,
@@ -364,7 +362,7 @@ async function inspecionarRotaPrevia(btn) {
 }
 
 // ============================================================================
-// 4. ACEITAR CORRIDA E FLUXO EM 2 FASES (ROTA REAL CURVA A CURVA)
+// 4. ACEITAR CORRIDA E FLUXO EM 2 FASES
 // ============================================================================
 async function aceitarCorridaDefinitiva(btn, dadosCache) {
   const dados = dadosCache || extrairDadosDoBotao(btn);
@@ -411,7 +409,6 @@ async function iniciarFaseBuscarPassageiro(dados) {
     icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
   }).addTo(estado.mapa);
 
-  // Rota real pelas ruas até a origem
   await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
 
   const urlWaze = `https://waze.com/ul?ll=${dados.origLat},${dados.origLng}&navigate=yes`;
@@ -472,7 +469,6 @@ async function confirmarEmbarqueEIrAoDestino(dados) {
     icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
   }).addTo(estado.mapa);
 
-  // Rota real pelas ruas até o destino final
   await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
 
   const urlWaze = `https://waze.com/ul?ll=${dados.destLat},${dados.destLng}&navigate=yes`;
@@ -624,7 +620,106 @@ async function enviarMensagemChat() {
 }
 
 // ============================================================================
-// 6. PERFIL, DRAWER E SALDO
+// 6. GESTÃO COMPLETA DE SAQUES PIX BANCÁRIOS
+// ============================================================================
+function configurarEventosSaque() {
+  const modalSaque = document.getElementById('modalSaquePix');
+  const btnAbrir = document.getElementById('btnAbrirModalSaque');
+  const btnFechar = document.getElementById('btnFecharModalSaque');
+  const btnCancelar = document.getElementById('btnCancelarSaqueModal');
+  const btnConfirmar = document.getElementById('btnConfirmarSaquePix');
+  const inputValor = document.getElementById('saqueValor');
+  const inputChave = document.getElementById('saqueChavePix');
+  const selectTipo = document.getElementById('saqueTipoChave');
+  const modalSaldoTexto = document.getElementById('modalSaldoTexto');
+
+  function abrirModal() {
+    if (!modalSaque) return;
+    if (modalSaldoTexto) {
+      modalSaldoTexto.textContent = `R$ ${Number(estado.saldoCarteira || 0).toFixed(2).replace('.', ',')}`;
+    }
+    const chaveSalva = localStorage.getItem('huby_motorista_pix') || '';
+    if (chaveSalva && inputChave && !inputChave.value) {
+      inputChave.value = chaveSalva;
+    }
+    modalSaque.style.display = 'flex';
+  }
+
+  function fecharModal() {
+    if (modalSaque) modalSaque.style.display = 'none';
+  }
+
+  btnAbrir?.addEventListener('click', abrirModal);
+  btnFechar?.addEventListener('click', fecharModal);
+  btnCancelar?.addEventListener('click', fecharModal);
+
+  modalSaque?.addEventListener('click', (e) => {
+    if (e.target === modalSaque) fecharModal();
+  });
+
+  btnConfirmar?.addEventListener('click', async () => {
+    const chave = inputChave?.value?.trim();
+    const valor = parseFloat(inputValor?.value);
+    const tipo = selectTipo?.value || 'pix';
+
+    if (!chave) {
+      alert('Por favor, informe a chave Pix para recebimento.');
+      return;
+    }
+
+    if (!valor || valor <= 0) {
+      alert('Informe um valor de saque válido.');
+      return;
+    }
+
+    if (valor > estado.saldoCarteira) {
+      alert(`Saldo insuficiente. O seu saldo disponível é de R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}.`);
+      return;
+    }
+
+    btnConfirmar.disabled = true;
+    btnConfirmar.textContent = 'Enviando...';
+
+    try {
+      const motId = estado.motoristaId || localStorage.getItem('huby_motorista_id') || 'carol_01';
+      const res = await fetch(`${API_URL}/api/carteira/motorista/${motId}/saque`, {
+        method: 'POST',
+        headers: obterHeaders(),
+        body: JSON.stringify({ valor, chave_pix: chave, tipo_chave: tipo })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
+
+      alert(`✅ ${data.mensagem || 'Solicitação de saque enviada para a administração!'}`);
+      localStorage.setItem('huby_motorista_pix', chave);
+      fecharModal();
+      if (inputValor) inputValor.value = '';
+
+      if (data.novoSaldo !== undefined) {
+        estado.saldoCarteira = Number(data.novoSaldo);
+      } else {
+        estado.saldoCarteira -= valor;
+      }
+
+      const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
+      const elSaldo = document.getElementById('saldoCarteiraValor');
+      const elDrawerSaldo = document.getElementById('drawerSaldoValor');
+      if (elSaldo) elSaldo.textContent = saldoTxt;
+      if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
+
+      carregarPerfil();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btnConfirmar.disabled = false;
+      btnConfirmar.textContent = 'Confirmar Saque';
+    }
+  });
+}
+
+// ============================================================================
+// 7. PERFIL, DRAWER E SALDO
 // ============================================================================
 async function carregarPerfil() {
   try {
@@ -724,6 +819,7 @@ function registrarEventosUI() {
   overlay?.addEventListener('click', fecharDrawer);
 
   configurarChat();
+  configurarEventosSaque();
 }
 
 document.addEventListener('DOMContentLoaded', () => {

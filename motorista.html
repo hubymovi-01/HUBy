@@ -29,6 +29,7 @@
 
     * {
       box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
     }
 
     body {
@@ -50,7 +51,7 @@
       z-index: 1;
     }
 
-    /* Estilo Dark Mode nativo para o OpenStreetMap livre */
+    /* Estilo Dark Mode nativo para o OpenStreetMap */
     .leaflet-tile-pane {
       filter: brightness(0.65) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.3) brightness(0.7);
     }
@@ -126,21 +127,20 @@
 
     .btn-floating-chat {
       position: absolute;
-      bottom: 250px;
-      right: 18px;
-      width: 44px;
-      height: 44px;
-      background: rgba(17, 24, 39, 0.9);
-      border: 1px solid rgba(56, 189, 248, 0.4);
+      bottom: calc(54vh + 10px);
+      right: 16px;
+      width: 46px;
+      height: 46px;
+      background: #38BDF8;
+      border: 2px solid #FFF;
       border-radius: 50%;
-      color: #38BDF8;
+      color: #032017;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
       z-index: 9998;
       cursor: pointer;
-      backdrop-filter: blur(8px);
       font-size: 20px;
     }
 
@@ -191,11 +191,16 @@
       background: rgba(16, 185, 129, 0.15);
       border: 1px solid rgba(16, 185, 129, 0.35);
       color: var(--emerald);
-      padding: 8px 12px;
+      padding: 8px 14px;
       border-radius: 8px;
       font-size: 12px;
       font-weight: 800;
       cursor: pointer;
+    }
+
+    .btn-action-pix:active {
+      transform: scale(0.96);
+      background: rgba(16, 185, 129, 0.25);
     }
 
     .orders-feed {
@@ -406,7 +411,7 @@
       <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
         alt="Motorista" class="avatar-mini" id="topAvatarImg">
       <div style="display: flex; flex-direction: column;">
-        <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Motorista</strong>
+        <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
         <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
       </div>
     </div>
@@ -474,7 +479,6 @@
         </div>
       </div>
 
-      <!-- Barra de Progresso da Meta -->
       <div
         style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 6px;">
         <div id="barraProgressoMeta" style="background: #38BDF8; width: 0%; height: 100%; transition: width 0.4s ease;">
@@ -497,7 +501,7 @@
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
-          <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carregando...</strong>
+          <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
           <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
             <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
@@ -516,12 +520,12 @@
         <h4>🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <strong style="font-size: 13px; color: #FFF;" id="drawerCarroModelo">Carro Padrão</strong>
-            <div style="font-size: 11px; color: var(--text-sec);" id="drawerCarroDetalhes">Cor: --- • Ano: ---</div>
+            <strong style="font-size: 13px; color: #FFF;" id="drawerCarroModelo">Onix</strong>
+            <div style="font-size: 11px; color: var(--text-sec);" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div>
           </div>
           <div class="placa-mercosul">
             <div class="placa-mercosul-header"><span>BRASIL</span> <span>🇧🇷</span></div>
-            <div class="placa-mercosul-body" id="drawerCarroPlaca">HUB-0000</div>
+            <div class="placa-mercosul-body" id="drawerCarroPlaca">ABC1D23</div>
           </div>
         </div>
       </div>
@@ -558,118 +562,45 @@
     </div>
   </aside>
 
-  <!-- MODAL DE CONFIGURAÇÃO DE PAUSA -->
-  <div id="modalConfigPausa" class="modal-backdrop-custom">
-    <div class="modal-box-edit" style="max-width: 340px;">
-      <h3 style="margin: 0 0 8px; font-size: 15px; color: #FFF;">☕ Parada Rápida / Pausa</h3>
-      <p style="margin: 0 0 14px; font-size: 12px; color: var(--text-sec);">
-        Pausa temporária para abastecimento ou refeição. Você não receberá chamadas durante o período.
-      </p>
-      <div class="form-group-driver">
-        <label>Tempo Estimado de Pausa</label>
-        <select id="selectTempoPausa">
-          <option value="15">15 Minutos (Abastecer/Café)</option>
-          <option value="30">30 Minutos (Lanche Rápido)</option>
-          <option value="45">45 Minutos (Almoço/Jantar)</option>
-        </select>
-      </div>
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button type="button" onclick="document.getElementById('modalConfigPausa').style.display='none'"
-          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Voltar</button>
-        <button type="button" id="btnConfirmarIniciarPausa"
-          style="flex: 1.4; background: var(--amber); border: none; color: #000; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Iniciar Pausa</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE EDIÇÃO DE PERFIL -->
-  <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
-    <div class="modal-box-edit">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-        <h3 style="margin: 0; font-size: 15px; color: #FFF;">Editar Informações do Parceiro</h3>
-        <button type="button" id="btnFecharModalEdicao"
-          style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
-      </div>
-
-      <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 16px;">
-        <div style="position: relative; width: 84px; height: 84px;">
-          <img id="previewFotoModal"
-            src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80"
-            alt="Preview Foto"
-            style="width: 84px; height: 84px; border-radius: 50%; object-fit: cover; border: 2px solid var(--emerald); box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);">
-          <label for="inputUploadFotoPerfil"
-            style="position: absolute; bottom: 0; right: 0; background: var(--emerald); color: #02261C; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);">
-            📷
-          </label>
-        </div>
-        <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
-        <small style="color: var(--text-sec); font-size: 10px; margin-top: 6px;">Toque na câmera para foto de perfil</small>
-      </div>
-
-      <div class="form-group-driver">
-        <label>Nome Completo</label>
-        <input type="text" id="editNome" placeholder="Seu nome completo">
-      </div>
-      <div class="form-group-driver">
-        <label>Telefone</label>
-        <input type="tel" id="editTelefone" placeholder="(00) 00000-0000">
-      </div>
-      <div class="form-group-driver">
-        <label>Modelo do Veículo</label>
-        <input type="text" id="editCarroModelo" placeholder="Ex: Chevrolet Onix 1.0">
-      </div>
-      <div style="display: flex; gap: 8px;">
-        <div class="form-group-driver" style="flex: 1.2;">
-          <label>Placa</label>
-          <input type="text" id="editCarroPlaca" placeholder="ABC1D23" style="text-transform: uppercase;">
-        </div>
-        <div class="form-group-driver" style="flex: 1;">
-          <label>Cor</label>
-          <input type="text" id="editCarroCor" placeholder="Ex: Prata">
-        </div>
-        <div class="form-group-driver" style="flex: 0.8;">
-          <label>Ano</label>
-          <input type="text" id="editCarroAno" placeholder="2023">
-        </div>
-      </div>
-
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button type="button" id="btnCancelarEdicao"
-          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
-        <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE SAQUE PIX -->
+  <!-- MODAL DE SAQUE PIX (COM IDs 100% SINCRONIZADOS COM JS) -->
   <div id="modalSaquePix" class="modal-backdrop-custom">
-    <div class="modal-box-edit" style="max-width: 360px;">
-      <h3 style="margin: 0 0 6px; font-size: 15px; color: #FFF;">Solicitar Saque Pix</h3>
-      <p style="margin: 0 0 12px; font-size: 11px; color: var(--text-sec);">O valor cai na sua chave após aprovação.</p>
+    <div class="modal-box-edit" style="max-width: 380px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 16px; color: #FFF; font-weight: 800;">💸 Solicitar Saque Pix</h3>
+        <button type="button" id="btnFecharModalSaque"
+          style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+      </div>
+
+      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;">
+        <small style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo Disponível (85% Líquido)</small>
+        <div id="modalSaldoTexto" style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ 0,00</div>
+      </div>
 
       <div class="form-group-driver">
         <label>Tipo de Chave</label>
         <select id="saqueTipoChave">
           <option value="cpf">CPF</option>
-          <option value="telefone">Telefone</option>
+          <option value="telefone">Telefone (Celular)</option>
           <option value="email">E-mail</option>
-          <option value="aleatoria">Chave Aleatória</option>
+          <option value="aleatoria">Chave Aleatória (EVP)</option>
         </select>
       </div>
+
       <div class="form-group-driver">
-        <label>Chave Pix</label>
-        <input type="text" id="saqueChavePix" placeholder="Digite sua chave">
+        <label>Chave Pix de Destino</label>
+        <input type="text" id="saqueChavePix" placeholder="Digite sua chave Pix">
       </div>
+
       <div class="form-group-driver">
-        <label>Valor (R$)</label>
-        <input type="number" step="1" id="saqueValor" placeholder="50.00">
+        <label>Valor do Saque (R$)</label>
+        <input type="number" step="0.50" id="saqueValor" placeholder="50.00" style="color: var(--emerald); font-weight: 900; font-size: 16px;">
       </div>
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button type="button" id="btnFecharModalSaque"
-          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
+        <button type="button" id="btnCancelarSaqueModal"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnConfirmarSaquePix"
-          style="flex: 1.4; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
       </div>
     </div>
   </div>
@@ -696,46 +627,11 @@
     </div>
   </div>
 
-  <!-- MODAL REPORTAR INCIDENTE -->
-  <div id="modalReportarIncidente" class="modal-backdrop-custom">
-    <div class="modal-box-edit" style="max-width: 380px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="margin: 0; font-size: 15px; color: #EF4444;">🛡️ Central de Ajuda & Incidentes</h3>
-        <button type="button" id="btnFecharModalIncidente" style="background: none; border: none; color: var(--text-sec); font-size: 16px; cursor: pointer;">✕</button>
-      </div>
-
-      <div class="form-group-driver">
-        <label>Tipo de Ocorrência</label>
-        <select id="selectTipoIncidente">
-          <option value="passageiro_ausente">Passageiro não apareceu no local</option>
-          <option value="item_esquecido">Objeto/item esquecido no veículo</option>
-          <option value="desentendimento">Problema de conduta com passageiro</option>
-          <option value="valor_divergente">Divergência no valor da corrida</option>
-          <option value="outro">Outro problema operacional</option>
-        </select>
-      </div>
-
-      <div class="form-group-driver">
-        <label>Descrição do Ocorrido</label>
-        <textarea id="txtDescricaoIncidente" rows="4" placeholder="Descreva detalhadamente o que aconteceu..." 
-          style="width: 100%; background: #080C14; border: 1px solid var(--border-dark); border-radius: 8px; padding: 10px; color: #FFF; font-size: 13px; font-family: inherit; resize: vertical; outline: none;"></textarea>
-      </div>
-
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button type="button" onclick="document.getElementById('modalReportarIncidente').style.display='none'" 
-          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
-        <button type="button" id="btnEnviarIncidente" 
-          style="flex: 1.4; background: #EF4444; border: none; color: #FFF; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Enviar Relato</button>
-      </div>
-    </div>
-  </div>
-
   <!-- SCRIPTS GLOBAIS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Plugin Leaflet.heat para mancha de calor -->
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=8.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=9.0.0"></script>
 </body>
 
 </html>
