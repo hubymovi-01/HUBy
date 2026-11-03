@@ -439,6 +439,26 @@
     .btn-metodo-pagto:active {
       transform: scale(0.98);
     }
+
+    /* OPÇÕES DE FORMAS ACEITAS NO PERFIL */
+    .item-preferencia-pagto {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-dark);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #FFF;
+      cursor: pointer;
+    }
+
+    .item-preferencia-pagto input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
   </style>
 </head>
 
@@ -555,6 +575,32 @@
     </div>
 
     <div class="drawer-content">
+      <!-- NOVO BLOCO: FORMAS DE RECEBIMENTO DO MOTORISTA -->
+      <div class="drawer-section-card">
+        <h4>💳 Formas Aceitas de Pagamento</h4>
+        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 10px;">
+          Selecione os métodos que você aceita nas viagens:
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label class="item-preferencia-pagto">
+            <span>💵 Dinheiro (Espécie)</span>
+            <input type="checkbox" id="chkAceitaDinheiro" checked style="accent-color: var(--emerald);">
+          </label>
+          <label class="item-preferencia-pagto">
+            <span>💳 Maquininha Própria</span>
+            <input type="checkbox" id="chkAceitaCartao" checked style="accent-color: var(--blue);">
+          </label>
+          <label class="item-preferencia-pagto">
+            <span>📱 Pix Oficial (Mercado Pago)</span>
+            <input type="checkbox" id="chkAceitaPix" checked style="accent-color: var(--purple);">
+          </label>
+        </div>
+        <button type="button" id="btnSalvarPreferenciasPagto"
+          style="margin-top: 12px; width: 100%; background: var(--emerald); border: none; color: #02261C; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
+          Salvar Preferências
+        </button>
+      </div>
+
       <div class="drawer-section-card">
         <h4>🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -748,7 +794,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=9.2.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=9.3.0"></script>
 </body>
 
 </html>

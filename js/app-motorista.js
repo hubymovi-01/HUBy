@@ -17,6 +17,9 @@ const estado = {
   coords: [-8.3580, -42.2460],
   statusOnline: true,
   saldoCarteira: 1012.07,
+  aceitaDinheiro: true,
+  aceitaCartao: true,
+  aceitaPix: true,
   intervalRadar: null,
   intervalChat: null,
   intervalGpsSocket: null,
@@ -47,7 +50,7 @@ function inicializarSocket() {
     estado.socket.on('corrida_finalizada', (dados) => {
       if (estado.pedidoAtivo && String(dados.pedidoId) === String(estado.pedidoAtivo.id)) {
         fecharModaisPagamento();
-        alert('🎉 Pagamento confirmado pelo Mercado Pago! Corrida concluída.');
+        alert('🎉 Pagamento confirmado! Corrida concluída.');
         sonsHUBy.tocarMetaBatida();
         concluirLimpezaPosCorrida();
       }
@@ -535,13 +538,25 @@ function abrirModalOpcoesPagamento(dados) {
     lblValor.textContent = `R$ ${valorBruto.toFixed(2).replace('.', ',')}`;
   }
 
-  if (modal) modal.style.display = 'flex';
-
-  // Configura listeners dos botões de liquidação
+  // Elementos dos métodos de pagamento
   const btnDinheiro = document.getElementById('btnPagarDinheiro');
   const btnMaquininha = document.getElementById('btnPagarMaquininha');
   const btnPixMP = document.getElementById('btnPagarPixMP');
   const btnCancelar = document.getElementById('btnCancelarModalPagamento');
+
+  // Filtra a exibição conforme as preferências ativas do motorista
+  if (btnDinheiro) btnDinheiro.style.display = estado.aceitaDinheiro ? 'flex' : 'none';
+  if (btnMaquininha) btnMaquininha.style.display = estado.aceitaCartao ? 'flex' : 'none';
+  if (btnPixMP) btnPixMP.style.display = estado.aceitaPix ? 'flex' : 'none';
+
+  // Fallback de segurança: se nenhuma foi marcada, reexibe todas
+  if (!estado.aceitaDinheiro && !estado.aceitaCartao && !estado.aceitaPix) {
+    if (btnDinheiro) btnDinheiro.style.display = 'flex';
+    if (btnMaquininha) btnMaquininha.style.display = 'flex';
+    if (btnPixMP) btnPixMP.style.display = 'flex';
+  }
+
+  if (modal) modal.style.display = 'flex';
 
   btnDinheiro.onclick = () => processarLiquidacao(dados.id, 'dinheiro');
   btnMaquininha.onclick = () => processarLiquidacao(dados.id, 'cartao_maquininha');
@@ -815,7 +830,7 @@ function configurarEventosSaque() {
 }
 
 // ============================================================================
-// 7. PERFIL, DRAWER E SALDO
+// 7. PERFIL, DRAWER, PREFERÊNCIAS DE PAGAMENTO E SALDO
 // ============================================================================
 async function carregarPerfil() {
   try {
@@ -828,6 +843,19 @@ async function carregarPerfil() {
       estado.motoristaNome = m.nome || 'Carol';
       localStorage.setItem('huby_motorista_id', m.id);
     }
+
+    // Preferências de pagamento do condutor
+    estado.aceitaDinheiro = m.aceita_dinheiro !== false;
+    estado.aceitaCartao = m.aceita_cartao !== false;
+    estado.aceitaPix = m.aceita_pix !== false;
+
+    const chkDinheiro = document.getElementById('chkAceitaDinheiro');
+    const chkCartao = document.getElementById('chkAceitaCartao');
+    const chkPix = document.getElementById('chkAceitaPix');
+
+    if (chkDinheiro) chkDinheiro.checked = estado.aceitaDinheiro;
+    if (chkCartao) chkCartao.checked = estado.aceitaCartao;
+    if (chkPix) chkPix.checked = estado.aceitaPix;
 
     const topNome = document.getElementById('topNomeMotorista');
     const topNota = document.getElementById('topNotaMotorista');
@@ -898,6 +926,51 @@ async function sincronizarExtratoDiario() {
   } catch (e) { }
 }
 
+function configurarSalvarPreferenciasPagto() {
+  const btn = document.getElementById('btnSalvarPreferenciasPagto');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    const chkDinheiro = document.getElementById('chkAceitaDinheiro');
+    const chkCartao = document.getElementById('chkAceitaCartao');
+    const chkPix = document.getElementById('chkAceitaPix');
+
+    const aceita_dinheiro = !!chkDinheiro?.checked;
+    const aceita_cartao = !!chkCartao?.checked;
+    const aceita_pix = !!chkPix?.checked;
+
+    if (!aceita_dinheiro && !aceita_cartao && !aceita_pix) {
+      alert('Selecione pelo menos uma forma de pagamento para trabalhar.');
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    try {
+      const res = await fetch(`${API_URL}/api/motoristas/preferencias-pagamento`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify({ aceita_dinheiro, aceita_cartao, aceita_pix })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'Falha ao salvar preferências.');
+
+      estado.aceitaDinheiro = aceita_dinheiro;
+      estado.aceitaCartao = aceita_cartao;
+      estado.aceitaPix = aceita_pix;
+
+      alert('✅ Preferências de pagamento salvas com sucesso!');
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Salvar Preferências';
+    }
+  });
+}
+
 function registrarEventosUI() {
   document.getElementById('btnToggleStatusOnline')?.addEventListener('click', alternarStatusOnline);
 
@@ -916,6 +989,7 @@ function registrarEventosUI() {
 
   configurarChat();
   configurarEventosSaque();
+  configurarSalvarPreferenciasPagto();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
