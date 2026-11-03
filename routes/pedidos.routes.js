@@ -440,7 +440,7 @@ export default function pedidosRouter(io) {
     const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
 
     try {
-      // 1. Busca pedido sem forçar JOIN estrito que pode quebrar
+      // 1. Busca pedido garantindo compatibilidade de tipos
       const pedidos = await sql`
         SELECT * FROM pedidos 
         WHERE id::text = ${String(id)}::text 
@@ -466,38 +466,39 @@ export default function pedidosRouter(io) {
       const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
 
       // -----------------------------------------------------------------------
-      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA
+      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA (SEM sql.begin)
       // -----------------------------------------------------------------------
       if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
-        await sql.begin(async (sqlTx) => {
-          await sqlTx`
-            UPDATE pedidos
-            SET status = 'concluido', 
-                forma_pagamento = ${forma_pagamento}, 
-                concluido_em = CURRENT_TIMESTAMP
-            WHERE id::text = ${String(id)}::text;
+        // 1. Marca pedido como concluído
+        await sql`
+          UPDATE pedidos
+          SET status = 'concluido', 
+              forma_pagamento = ${forma_pagamento}, 
+              concluido_em = CURRENT_TIMESTAMP
+          WHERE id::text = ${String(id)}::text;
+        `;
+
+        // 2. Desconta a taxa da plataforma (15%) da carteira do condutor
+        if (motoristaIdAlvo) {
+          await sql`
+            UPDATE motoristas
+            SET saldo_carteira = COALESCE(saldo_carteira, 0) - ${taxaPlataforma},
+                total_corridas = COALESCE(total_corridas, 0) + 1
+            WHERE id::text = ${String(motoristaIdAlvo)}::text 
+               OR usuario_id::text = ${String(motoristaIdAlvo)}::text;
           `;
 
-          if (motoristaIdAlvo) {
-            await sqlTx`
-              UPDATE motoristas
-              SET saldo_carteira = COALESCE(saldo_carteira, 0) - ${taxaPlataforma},
-                  total_corridas = COALESCE(total_corridas, 0) + 1
-              WHERE id::text = ${String(motoristaIdAlvo)}::text 
-                 OR usuario_id::text = ${String(motoristaIdAlvo)}::text;
+          try {
+            await sql`
+              INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+              VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
             `;
-
-            try {
-              await sqlTx`
-                INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-                VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
-              `;
-            } catch (eTrans) {
-              // Se a tabela transacoes_carteira não existir, não trava a finalização
-            }
+          } catch (eTrans) {
+            // Não bloqueia se a tabela de extrato não existir
           }
-        });
+        }
 
+        // 3. Emite avisos Socket em tempo real
         if (io) {
           io.emit(`corrida_finalizada_${id}`, {
             sucesso: true,
@@ -554,7 +555,7 @@ export default function pedidosRouter(io) {
             ON CONFLICT (transacao_id) DO NOTHING;
           `;
         } catch (ePix) {
-          console.warn('Aviso ao registrar cobrancas_pix:', ePix.message);
+          console.warn('Aviso cobrancas_pix:', ePix.message);
         }
 
         const payloadPix = {
@@ -578,6 +579,7 @@ export default function pedidosRouter(io) {
       res.status(500).json({ erro: err.message || 'Erro interno ao processar encerramento da corrida.' });
     }
   });
+
   // =========================================================================
   // 9. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE
   // =========================================================================
