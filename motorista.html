@@ -23,6 +23,7 @@
       --amber: #F59E0B;
       --blue: #38BDF8;
       --rose: #EF4444;
+      --purple: #8B5CF6;
       --text-pri: #F8FAFC;
       --text-sec: #94A3B8;
     }
@@ -416,6 +417,28 @@
     .btn-fast-val:active {
       background: rgba(255, 255, 255, 0.18);
     }
+
+    /* BOTÕES SELEÇÃO DE PAGAMENTO */
+    .btn-metodo-pagto {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--border-dark);
+      color: #FFF;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 9px;
+      text-align: left;
+      transition: all 0.2s ease;
+    }
+
+    .btn-metodo-pagto:active {
+      transform: scale(0.98);
+    }
   </style>
 </head>
 
@@ -578,6 +601,74 @@
     </div>
   </aside>
 
+  <!-- MODAL DE ESCOLHA DE FORMA DE PAGAMENTO AO CHEGAR AO DESTINO -->
+  <div id="modalEscolhaPagamentoMotorista" class="modal-backdrop-custom" style="z-index: 10008;">
+    <div class="modal-box-edit" style="max-width: 370px; text-align: center;">
+      <h3 style="margin: 0 0 4px; font-size: 17px; color: #FFF; font-weight: 900;">🏁 Chegou ao Destino</h3>
+      <p style="color: var(--text-sec); font-size: 12px; margin: 0 0 14px;">Selecione como o passageiro efetuou o pagamento:</p>
+
+      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
+        <small style="color: var(--text-sec); font-size: 10px; font-weight: 800; text-transform: uppercase;">Valor Total da Corrida</small>
+        <div id="lblValorTotalPagamentoMotorista" style="color: var(--emerald); font-size: 24px; font-weight: 900;">R$ 0,00</div>
+        <small style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos pela plataforma</small>
+      </div>
+
+      <!-- BOTÃO DINHEIRO / ESPÉCIE -->
+      <button type="button" id="btnPagarDinheiro" class="btn-metodo-pagto" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4);">
+        <span style="font-size: 20px;">💵</span>
+        <div>
+          <div style="color: var(--emerald);">Dinheiro (Espécie)</div>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de 15% é descontada da carteira.</small>
+        </div>
+      </button>
+
+      <!-- BOTÃO MAQUININHA PRÓPRIA -->
+      <button type="button" id="btnPagarMaquininha" class="btn-metodo-pagto" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4);">
+        <span style="font-size: 20px;">💳</span>
+        <div>
+          <div style="color: var(--blue);">Maquininha Própria</div>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15% é descontada da sua carteira.</small>
+        </div>
+      </button>
+
+      <!-- BOTÃO PIX MERCADO PAGO NA TELA -->
+      <button type="button" id="btnPagarPixMP" class="btn-metodo-pagto" style="background: rgba(139, 92, 246, 0.18); border-color: rgba(139, 92, 246, 0.45);">
+        <span style="font-size: 20px;">📱</span>
+        <div>
+          <div style="color: #A78BFA;">Pix na Tela (Mercado Pago)</div>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Gera QR Code na sua tela e na do cliente. Repasse líquido automático.</small>
+        </div>
+      </button>
+
+      <button type="button" id="btnCancelarModalPagamento"
+        style="margin-top: 10px; width: 100%; background: transparent; border: none; color: var(--text-sec); font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px;">
+        Voltar à corrida
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL EXIBIÇÃO DO QR CODE PIX NO MOTORISTA -->
+  <div id="modalExibicaoPixMotorista" class="modal-backdrop-custom" style="z-index: 10009;">
+    <div class="modal-box-edit" style="max-width: 350px; text-align: center;">
+      <h3 style="margin: 0 0 6px; font-size: 16px; color: #FFF; font-weight: 800;">📱 Apresente o QR Code ao Passageiro</h3>
+      <div id="lblValorPixMotorista" style="color: var(--emerald); font-size: 22px; font-weight: 900; margin-bottom: 12px;">R$ 0,00</div>
+
+      <div style="background: #FFF; padding: 12px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 16px rgba(0,0,0,0.5);">
+        <img id="imgQrCodePixMotorista" src="" alt="QR Code Pix" style="width: 200px; height: 200px; display: block; object-fit: contain;">
+      </div>
+
+      <div style="margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); animation: pulse 1.5s infinite;"></span>
+        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando pagamento no banco...</small>
+      </div>
+
+      <button type="button" id="btnFecharPixMotorista"
+        style="margin-top: 16px; width: 100%; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">
+        Voltar
+      </button>
+    </div>
+  </div>
+
   <!-- MODAL DE SAQUE PIX COM ATALHOS RÁPIDOS -->
   <div id="modalSaquePix" class="modal-backdrop-custom">
     <div class="modal-box-edit" style="max-width: 380px;">
@@ -657,7 +748,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=9.1.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=9.2.0"></script>
 </body>
 
 </html>

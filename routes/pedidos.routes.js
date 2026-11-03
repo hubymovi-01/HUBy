@@ -2,6 +2,7 @@
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
+import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -82,8 +83,6 @@ export default function pedidosRouter(io) {
           }
         }
       }
-
-      const paradasJson = paradas && Array.isArray(paradas) ? JSON.stringify(paradas) : null;
 
       await sql`
         INSERT INTO pedidos (
@@ -307,7 +306,6 @@ export default function pedidosRouter(io) {
         veiculo_cor: mot.veiculo_cor
       };
 
-      // Notifica o app do passageiro com dados e veículo do condutor
       io.emit('corrida_aceita', {
         pedidoId: id,
         status: 'a_caminho',
@@ -348,7 +346,6 @@ export default function pedidosRouter(io) {
         return res.status(404).json({ erro: 'Pedido não localizado.' });
       }
 
-      // Notifica o cliente em tempo real que a viagem rumo ao destino começou
       io.emit('passageiro_a_bordo', { 
         pedidoId: id, 
         status: 'em_viagem',
@@ -363,7 +360,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM (REPASSE E FINALIZAÇÃO DO CLIENTE)
+  // 8. CONCLUIR VIAGEM (REPASSE E FINALIZAÇÃO PADRÃO)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -416,7 +413,6 @@ export default function pedidosRouter(io) {
         RETURNING saldo_carteira, total_corridas;
       `;
 
-      // Notifica o app do passageiro para ir à tela de avaliação
       io.emit('corrida_finalizada', { 
         pedidoId: id,
         status: 'concluido',
@@ -433,6 +429,141 @@ export default function pedidosRouter(io) {
     } catch (err) {
       console.error('Erro ao concluir corrida:', err);
       res.status(500).json({ erro: 'Falha interna ao processar valores.' });
+    }
+  });
+
+  // =========================================================================
+  // 8.1 FINALIZAÇÃO COM ESCOLHA DO MÉTODO (DINHEIRO, CARTÃO OU PIX MERCADO PAGO)
+  // =========================================================================
+  router.post('/:id/finalizar-liquidacao', autenticarToken, async (req, res) => {
+    const { id } = req.params;
+    const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
+
+    try {
+      const pedidoResult = await sql`
+        SELECT p.*, m.saldo_carteira, m.nome AS nome_motorista
+        FROM pedidos p
+        JOIN motoristas m ON m.id = p.motorista_id
+        WHERE p.id = ${id}
+        LIMIT 1;
+      `;
+
+      if (pedidoResult.length === 0) {
+        return res.status(404).json({ erro: 'Corrida não encontrada.' });
+      }
+
+      const pedido = pedidoResult[0];
+      const valorTotal = Number(pedido.valor_total || 0);
+
+      let taxaPorcentagem = 15;
+      try {
+        const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+        if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
+          taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
+        }
+      } catch (e) {}
+
+      const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
+
+      // -----------------------------------------------------------------------
+      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA DO MOTORISTA
+      // -----------------------------------------------------------------------
+      if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
+        await sql.begin(async (sqlTx) => {
+          await sqlTx`
+            UPDATE pedidos
+            SET status = 'concluido', 
+                forma_pagamento = ${forma_pagamento}, 
+                concluido_em = CURRENT_TIMESTAMP
+            WHERE id = ${id};
+          `;
+
+          // Desconta a comissão dos 15% retidos pela plataforma na carteira do motorista
+          await sqlTx`
+            UPDATE motoristas
+            SET saldo_carteira = saldo_carteira - ${taxaPlataforma},
+                total_corridas = total_corridas + 1
+            WHERE id = ${pedido.motorista_id};
+          `;
+
+          await sqlTx`
+            INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+            VALUES (${pedido.motorista_id}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${id});
+          `;
+        });
+
+        // Notifica ambos via Socket que a corrida foi quitada e concluída
+        io.emit(`corrida_finalizada_${id}`, {
+          sucesso: true,
+          forma_pagamento,
+          valorTotal,
+          mensagem: 'Viagem finalizada e acertada com o motorista!'
+        });
+        io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
+
+        return res.json({ sucesso: true, status: 'concluido', forma_pagamento });
+      }
+
+      // -----------------------------------------------------------------------
+      // CENÁRIO B: PIX OFICIAL DO MERCADO PAGO NA TELA
+      // -----------------------------------------------------------------------
+      if (forma_pagamento === 'pix_mp') {
+        const configGateway = await sql`
+          SELECT valor FROM configuracoes_plataforma 
+          WHERE chave = 'gateway_mercadopago' 
+          LIMIT 1;
+        `;
+
+        const accessToken = configGateway[0]?.valor?.access_token;
+        if (!accessToken) {
+          return res.status(400).json({ erro: 'Credenciais do Mercado Pago não configuradas no painel master.' });
+        }
+
+        const client = new MercadoPagoConfig({ accessToken });
+        const payment = new Payment(client);
+
+        const dadosCobranca = {
+          transaction_amount: valorTotal,
+          description: `HUBy - Corrida #${id}`,
+          payment_method_id: 'pix',
+          payer: {
+            email: 'passageiro@huby.app',
+            first_name: pedido.passageiro_nome || 'Passageiro',
+            last_name: 'HUBy'
+          }
+        };
+
+        const respostaMP = await payment.create({ body: dadosCobranca });
+        const pixData = respostaMP.point_of_interaction?.transaction_data;
+
+        if (!pixData) {
+          return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
+        }
+
+        await sql`
+          INSERT INTO cobrancas_pix (transacao_id, pedido_id, valor, status, qr_code, qr_code_base64)
+          VALUES (${String(respostaMP.id)}, ${id}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code_base64})
+          ON CONFLICT (transacao_id) DO NOTHING;
+        `;
+
+        const payloadPix = {
+          pedido_id: id,
+          transacao_id: respostaMP.id,
+          valor: valorTotal,
+          qr_code: pixData.qr_code,
+          qr_code_base64: pixData.qr_code_base64
+        };
+
+        // Emite o QR Code para o motorista e para o passageiro em tempo real
+        io.emit(`exibir_pix_corrida_${id}`, payloadPix);
+
+        return res.json({ sucesso: true, status: 'aguardando_pix', pix: payloadPix });
+      }
+
+      return res.status(400).json({ erro: 'Forma de pagamento não suportada.' });
+    } catch (err) {
+      console.error('Erro ao liquidar corrida:', err);
+      res.status(500).json({ erro: 'Erro interno ao processar encerramento da corrida.' });
     }
   });
 

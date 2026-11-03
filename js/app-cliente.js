@@ -265,7 +265,6 @@ async function requisitarPixMercadoPago(valor) {
       txtStatus.style.color = '#F59E0B';
     }
 
-    // Inicia monitoramento automático (Webhook / Polling)
     iniciarMonitoramentoPix(data.txid, valor);
 
   } catch (err) {
@@ -314,6 +313,68 @@ function iniciarMonitoramentoPix(txid, valor) {
 }
 
 // ============================================================================
+// MODAL PIX AUTOMÁTICO NA TELA DO PASSAGEIRO (AO FINALIZAR VIAGEM)
+// ============================================================================
+function exibirModalPixCorridaCliente(pix) {
+  // Remove modal anterior caso exista
+  document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+
+  const modalHTML = `
+    <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
+      <div style="background:#111726;border:1.5px solid rgba(139,92,246,0.5);border-radius:20px;max-width:370px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 35px rgba(0,0,0,0.8);color:#FFF;">
+        
+        <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:rgba(139,92,246,0.2);color:#A78BFA;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
+          📱 Pagamento da Corrida
+        </div>
+
+        <h3 style="margin:4px 0 2px;font-size:17px;font-weight:900;color:#FFF;">Pague via Pix</h3>
+        <p style="color:#94A3B8;font-size:12px;margin:0 0 12px;">Escaneie o QR Code ou use a chave Copia e Cola no app do seu banco</p>
+
+        <div style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:10px;margin-bottom:14px;">
+          <small style="color:#94A3B8;font-size:10px;font-weight:800;text-transform:uppercase;display:block;">Valor Total</small>
+          <div style="color:#10B981;font-size:24px;font-weight:900;">R$ ${Number(pix.valor).toFixed(2).replace('.', ',')}</div>
+        </div>
+
+        <div style="background:#FFF;padding:12px;border-radius:14px;display:inline-block;box-shadow:0 6px 20px rgba(0,0,0,0.5);">
+          <img src="data:image/png;base64,${pix.qr_code_base64}" alt="QR Code Pix" style="width:190px;height:190px;display:block;object-fit:contain;">
+        </div>
+
+        <div style="margin-top:14px;">
+          <input type="text" id="inputPixCopiaColaCliente" readonly value="${pix.qr_code || ''}" 
+            style="width:100%;background:#080C14;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 10px;color:#94A3B8;font-size:11px;font-family:monospace;outline:none;text-align:center;margin-bottom:8px;">
+          
+          <button type="button" id="btnCopiarPixCorridaCliente"
+            style="width:100%;background:#8B5CF6;border:none;color:#FFF;padding:12px;border-radius:10px;font-weight:900;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background 0.2s;">
+            📋 Copiar Código Pix
+          </button>
+        </div>
+
+        <div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:6px;">
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#F59E0B;animation:pulse 1.5s infinite;"></span>
+          <small style="color:#94A3B8;font-size:11px;font-weight:700;">Aguardando liquidação no banco...</small>
+        </div>
+
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  const btnCopiar = document.getElementById('btnCopiarPixCorridaCliente');
+  btnCopiar?.addEventListener('click', () => {
+    if (pix.qr_code) {
+      navigator.clipboard.writeText(pix.qr_code);
+      btnCopiar.textContent = '✅ Código Pix Copiado!';
+      btnCopiar.style.background = '#10B981';
+      setTimeout(() => {
+        btnCopiar.textContent = '📋 Copiar Código Pix';
+        btnCopiar.style.background = '#8B5CF6';
+      }, 2500);
+    }
+  });
+}
+
+// ============================================================================
 // FUNÇÕES DE COMUNICAÇÃO EM TEMPO REAL COM O MOTORISTA
 // ============================================================================
 function conectarSocketEPollingCliente() {
@@ -322,7 +383,7 @@ function conectarSocketEPollingCliente() {
   if (socket) {
     socket.on('corrida_aceita', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || data.pedidoId === pedidoAtivo) {
+      if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
         if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarSucessoAceite) {
           sonsHUBy.tocarSucessoAceite();
         }
@@ -332,14 +393,28 @@ function conectarSocketEPollingCliente() {
 
     socket.on('passageiro_a_bordo', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || data.pedidoId === pedidoAtivo) {
+      if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
         atualizarParaViagemEmAndamento();
       }
     });
 
+    // 1. Escuta a exibição do Pix gerado pelo motorista no encerramento da corrida
+    socket.onAny((evento, dados) => {
+      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+      if (pedidoAtivo && evento === `exibir_pix_corrida_${pedidoAtivo}`) {
+        exibirModalPixCorridaCliente(dados);
+      }
+      if (pedidoAtivo && evento === `corrida_finalizada_${pedidoAtivo}`) {
+        document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+        finalizarViagemCliente({ pedidoId: pedidoAtivo, ...dados });
+      }
+    });
+
+    // 2. Escuta finalização padrão do pedido
     socket.on('corrida_finalizada', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || data.pedidoId === pedidoAtivo) {
+      if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
+        document.getElementById('modalPixCorridaAtivaCliente')?.remove();
         finalizarViagemCliente(data);
       }
     });
@@ -368,6 +443,7 @@ function conectarSocketEPollingCliente() {
       } else if (p.status === 'em_viagem') {
         atualizarParaViagemEmAndamento();
       } else if (p.status === 'concluido') {
+        document.getElementById('modalPixCorridaAtivaCliente')?.remove();
         finalizarViagemCliente({ pedidoId });
       }
     } catch (e) { }

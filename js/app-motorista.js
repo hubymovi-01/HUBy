@@ -42,6 +42,16 @@ function obterHeaders() {
 function inicializarSocket() {
   if (typeof io !== 'undefined') {
     estado.socket = io(API_URL);
+
+    // Ouve confirmação global de encerramento da corrida via Socket
+    estado.socket.on('corrida_finalizada', (dados) => {
+      if (estado.pedidoAtivo && String(dados.pedidoId) === String(estado.pedidoAtivo.id)) {
+        fecharModaisPagamento();
+        alert('🎉 Pagamento confirmado pelo Mercado Pago! Corrida concluída.');
+        sonsHUBy.tocarMetaBatida();
+        concluirLimpezaPosCorrida();
+      }
+    });
   }
 }
 
@@ -246,7 +256,7 @@ function renderizarChamadas(chamadas = []) {
             data-id="${ped.id}" 
             data-orig-lat="${ped.origem_lat || ''}" data-orig-lng="${ped.origem_lng || ''}" data-orig="${origTexto}"
             data-dest-lat="${ped.destino_lat || ''}" data-dest-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" 
-            data-repasse="${repasse}" data-km="${km}"
+            data-repasse="${repasse}" data-km="${km}" data-total="${valorBruto}"
             style="background: rgba(56,189,248,0.18); border: 1px solid var(--blue); color: var(--blue); font-weight: 800; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer;">
             🗺️ Ver Rota
           </button>
@@ -254,7 +264,7 @@ function renderizarChamadas(chamadas = []) {
             data-id="${ped.id}" 
             data-orig-lat="${ped.origem_lat || ''}" data-orig-lng="${ped.origem_lng || ''}" data-orig="${origTexto}"
             data-dest-lat="${ped.destino_lat || ''}" data-dest-lng="${ped.destino_lng || ''}" data-dest="${destTexto}" 
-            data-repasse="${repasse}" data-km="${km}"
+            data-repasse="${repasse}" data-km="${km}" data-total="${valorBruto}"
             style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer;">
             ⚡ Aceitar
           </button>
@@ -293,7 +303,8 @@ function extrairDadosDoBotao(btn) {
     destLng: parseFloat(btn.getAttribute('data-dest-lng')) || (estado.coords[1] + 0.009),
     destNome: btn.getAttribute('data-dest'),
     repasse: btn.getAttribute('data-repasse'),
-    km: btn.getAttribute('data-km')
+    km: btn.getAttribute('data-km'),
+    valorTotal: parseFloat(btn.getAttribute('data-total')) || 0
   };
 }
 
@@ -503,25 +514,94 @@ async function confirmarEmbarqueEIrAoDestino(dados) {
 
       <button type="button" id="btnConcluirViagemAtiva"
         style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
-        🏁 Concluir e Receber Corrida
+        🏁 Cheguei ao Destino / Finalizar
       </button>
     </div>
   `;
 
-  document.getElementById('btnConcluirViagemAtiva')?.addEventListener('click', () => finalizarViagem(dados.id));
+  document.getElementById('btnConcluirViagemAtiva')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
 }
 
-async function finalizarViagem(id) {
+// ============================================================================
+// 4.1 LIQUIDAÇÃO INTELIGENTE (DINHEIRO, MAQUININHA OU PIX MERCADO PAGO)
+// ============================================================================
+function abrirModalOpcoesPagamento(dados) {
+  const modal = document.getElementById('modalEscolhaPagamentoMotorista');
+  const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
+
+  const valorBruto = dados.valorTotal > 0 ? dados.valorTotal : (parseFloat(String(dados.repasse).replace(',', '.')) / 0.85);
+
+  if (lblValor) {
+    lblValor.textContent = `R$ ${valorBruto.toFixed(2).replace('.', ',')}`;
+  }
+
+  if (modal) modal.style.display = 'flex';
+
+  // Configura listeners dos botões de liquidação
+  const btnDinheiro = document.getElementById('btnPagarDinheiro');
+  const btnMaquininha = document.getElementById('btnPagarMaquininha');
+  const btnPixMP = document.getElementById('btnPagarPixMP');
+  const btnCancelar = document.getElementById('btnCancelarModalPagamento');
+
+  btnDinheiro.onclick = () => processarLiquidacao(dados.id, 'dinheiro');
+  btnMaquininha.onclick = () => processarLiquidacao(dados.id, 'cartao_maquininha');
+  btnPixMP.onclick = () => processarLiquidacao(dados.id, 'pix_mp');
+  btnCancelar.onclick = () => {
+    if (modal) modal.style.display = 'none';
+  };
+}
+
+async function processarLiquidacao(pedidoId, formaPagamento) {
+  const modal = document.getElementById('modalEscolhaPagamentoMotorista');
+
   try {
-    await fetch(`${API_URL}/api/pedidos/${id}/concluir`, {
-      method: 'PUT',
-      headers: obterHeaders()
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`, {
+      method: 'POST',
+      headers: obterHeaders(),
+      body: JSON.stringify({ forma_pagamento: formaPagamento })
     });
-  } catch (e) { }
 
-  alert('Corrida concluída com sucesso! Valor creditado na sua carteira.');
-  sonsHUBy.tocarMetaBatida();
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Falha ao processar pagamento.');
 
+    if (modal) modal.style.display = 'none';
+
+    if (formaPagamento === 'pix_mp') {
+      exibirQrCodePixMotorista(data.pix);
+    } else {
+      alert('✅ Corrida encerrada com sucesso! A taxa da plataforma (15%) foi descontada da carteira.');
+      sonsHUBy.tocarMetaBatida();
+      concluirLimpezaPosCorrida();
+    }
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function exibirQrCodePixMotorista(pix) {
+  const modalPix = document.getElementById('modalExibicaoPixMotorista');
+  const imgQr = document.getElementById('imgQrCodePixMotorista');
+  const lblValor = document.getElementById('lblValorPixMotorista');
+  const btnFechar = document.getElementById('btnFecharPixMotorista');
+
+  if (lblValor) lblValor.textContent = `R$ ${Number(pix.valor).toFixed(2).replace('.', ',')}`;
+  if (imgQr) imgQr.src = `data:image/png;base64,${pix.qr_code_base64}`;
+
+  if (modalPix) modalPix.style.display = 'flex';
+
+  btnFechar.onclick = () => {
+    if (modalPix) modalPix.style.display = 'none';
+  };
+}
+
+function fecharModaisPagamento() {
+  const modal1 = document.getElementById('modalEscolhaPagamentoMotorista');
+  const modal2 = document.getElementById('modalExibicaoPixMotorista');
+  if (modal1) modal1.style.display = 'none';
+  if (modal2) modal2.style.display = 'none';
+}
+
+function concluirLimpezaPosCorrida() {
   limparRotasMapa();
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'none';
@@ -634,7 +714,6 @@ function configurarEventosSaque() {
   const modalSaldoTexto = document.getElementById('modalSaldoTexto');
   const btnSacarTudo = document.getElementById('btnSacarTudo');
 
-  // Atalhos rápidos: R$ 20, R$ 50, R$ 100
   document.querySelectorAll('.btn-fast-val').forEach(btn => {
     btn.addEventListener('click', () => {
       const val = btn.getAttribute('data-val');
@@ -644,7 +723,6 @@ function configurarEventosSaque() {
     });
   });
 
-  // Atalho TUDO
   btnSacarTudo?.addEventListener('click', () => {
     if (inputValor) {
       inputValor.value = Math.max(0, estado.saldoCarteira).toFixed(2);
@@ -737,7 +815,7 @@ function configurarEventosSaque() {
 }
 
 // ============================================================================
-// 7. PERFIL, DRAWER E SALDO (CORRIGIDO)
+// 7. PERFIL, DRAWER E SALDO
 // ============================================================================
 async function carregarPerfil() {
   try {
