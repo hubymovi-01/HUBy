@@ -1,479 +1,334 @@
-// js/motorista/motorista-corrida.js
-import { API_URL } from '../config.js';
-import { estado } from './motorista-estado.js';
+// js/motorista/motorista-corrida.js - Gestão Completa de Corridas e Liquidação HUBy
+import { API_URL, sonsHUBy } from '../config.js';
+import { estado, obterHeaders } from './motorista-estado.js';
+import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
 import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
-import { carregarGanhosHoje } from './motorista-ganhos.js';
-import { carregarPerfilCompleto } from './motorista-perfil.js';
-import { fecharChat } from './motorista-chat.js';
-import { abrirWidgetFlutuantePiP, fecharWidgetFlutuantePiP } from './motorista-utilidades.js';
-import { iniciarContadorEspera, pararContadorEspera, formatarTempo } from './motorista-espera.js';
+import { carregarPerfil } from './motorista-perfil.js';
 
-let chegouAoPontoEmbarque = false;
-let taxaEsperaAcumulada = 0;
-
-function formatarTextoLocal(texto, fallbackPadrao = 'Local Marcado') {
-  if (!texto) return fallbackPadrao;
-  if (texto.includes('(') && texto.includes(')')) {
-    const parteAntes = texto.split('(')[0].trim();
-    if (parteAntes.length > 2) return parteAntes;
-    return fallbackPadrao;
-  }
-  return texto;
-}
-
-function exibirToastConclusao(valorRepasse) {
-  const toastExistente = document.getElementById('hubyToastConclusao');
-  if (toastExistente) toastExistente.remove();
-
-  const toast = document.createElement('div');
-  toast.id = 'hubyToastConclusao';
-  toast.style.cssText = `
-    position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-30px);
-    background: #0E131F;
-    border: 1.5px solid #10B981;
-    color: #FFF;
-    padding: 14px 22px;
-    border-radius: 14px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.3);
-    z-index: 99999;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    opacity: 0;
-    transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  `;
-
-  toast.innerHTML = `
-    <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(16, 185, 129, 0.2); display: flex; align-items: center; justify-content: center; font-size: 16px;">
-      ✓
-    </div>
-    <div>
-      <div style="font-size: 13px; font-weight: 800; color: #10B981;">Viagem Concluída!</div>
-      <div style="font-size: 12px; color: #94A3B8;">Repasse Líquido: <strong style="color: #FFF; font-size: 13px;">R$ ${Number(valorRepasse).toFixed(2).replace('.', ',')}</strong></div>
-    </div>
-  `;
-
-  document.body.appendChild(toast);
-  setTimeout(() => {
-    toast.style.opacity = '1';
-    toast.style.transform = 'translateX(-50%) translateY(0)';
-  }, 50);
-
-  if (navigator.vibrate) navigator.vibrate([120, 80, 120]);
-
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateX(-50%) translateY(-20px)';
-    setTimeout(() => toast.remove(), 400);
-  }, 3500);
-}
-
+// ============================================================================
+// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR
+// ============================================================================
 export async function preVisualizarRotaPedido(dados) {
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
+  limparRotasMapa();
 
-  if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
-    estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
-    estado.hubyMapa.rotaLayer = null;
+  const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
+  const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
+
+  if (estado.mapa) {
+    estado.markerOrigem = L.marker(coordsOrigem, {
+      icon: L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+    }).addTo(estado.mapa);
+
+    estado.markerDestino = L.marker(coordsDestino, {
+      icon: L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+    }).addTo(estado.mapa);
+
+    await tracarRotaRealRuas(coordsOrigem, coordsDestino, '#F59E0B');
   }
 
-  if (dados.coordsOrig && dados.coordsDest && estado.hubyMapa) {
-    try {
-      await estado.hubyMapa.calcularRota(dados.coordsOrig, dados.coordsDest, '#38BDF8');
-    } catch (err) {
-      console.warn('Erro ao traçar rota:', err);
-    }
-  }
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
 
-  const feed = document.getElementById('listaChamadasPendentes');
-  if (feed) {
-    const origemTxt = formatarTextoLocal(dados.origem, 'Local de Partida');
-    const destinoTxt = formatarTextoLocal(dados.destino, 'Destino do Passageiro');
+  const valorTotal = Number(dados.preco || 0);
+  const repasseLiquido = (valorTotal * 0.85).toFixed(2).replace('.', ',');
 
-    feed.innerHTML = `
-      <div class="order-card" style="border: 2px solid #F59E0B; background: #0E131F;">
-        <div class="order-card-header">
-          <span class="order-badge" style="background: rgba(245,158,11,0.2); color: #F59E0B;">🔍 ANALISANDO ROTA</span>
-          <span class="order-price">R$ ${Number(dados.preco).toFixed(2).replace('.', ',')}</span>
-        </div>
-        <div class="order-route">
-          <span style="display: block; color: #F59E0B; font-weight: 800; font-size: 13px; margin-bottom: 4px;">
-            Confira o trajeto traçado no mapa antes de aceitar
-          </span>
-          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
-            <strong>Origem:</strong> ${origemTxt}
-          </span>
-          <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
-            <strong>Destino:</strong> ${destinoTxt}
-          </span>
-          <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
-            📏 ${dados.dist} km • ⏱️ Estimativa: ~${dados.dur} min
-          </small>
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: 12px;">
-          <button type="button" id="btnRecusarPrevia" style="flex: 1; background: #1F2937; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 12px; font-weight: 700; cursor: pointer;">
-            ✕ Voltar
-          </button>
-          <button type="button" id="btnConfirmarAceite" style="flex: 1.3; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 12px; font-weight: 900; cursor: pointer; font-size: 14px;">
-            ✓ Aceitar Viagem
-          </button>
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--amber); background: rgba(245,158,11,0.15); padding: 4px 10px; border-radius: 8px;">
+          🔍 ROTA EM ANÁLISE
+        </span>
+        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900;">R$ ${repasseLiquido}</strong>
+      </div>
+
+      <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
+        <div style="color: #94A3B8;">🟢 <strong>Buscar em:</strong> ${dados.origem}</div>
+        <div style="margin-top: 3px;">📍 <strong>Destino:</strong> ${dados.destino}</div>
+        <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
+          📏 Distância: <strong>${dados.dist || '1.0'} km</strong> • ⏱️ ~${dados.dur || 5} min
         </div>
       </div>
-    `;
 
-    document.getElementById('btnRecusarPrevia')?.addEventListener('click', cancelarPrevia);
-    document.getElementById('btnConfirmarAceite')?.addEventListener('click', () => {
-      efetivarAceiteChamada(dados);
-    });
-  }
-}
-
-export function cancelarPrevia() {
-  estado.pedidoEmAnalise = null;
-  if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
-    estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
-    estado.hubyMapa.rotaLayer = null;
-  }
-  iniciarRadarChamadas();
-}
-
-async function efetivarAceiteChamada(dados) {
-  const token = localStorage.getItem('huby_token');
-  const btn = document.getElementById('btnConfirmarAceite');
-
-  try {
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Confirmando...';
-    }
-
-    const resp = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      }
-    });
-
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.erro || 'Não foi possível aceitar a chamada.');
-
-    chegouAoPontoEmbarque = false;
-    taxaEsperaAcumulada = 0;
-
-    estado.pedidoAceitoAtual = data.pedido || {};
-    estado.pedidoAceitoAtual.coordsOrigem = dados.coordsOrig;
-    estado.pedidoAceitoAtual.coordsDestino = dados.coordsDest;
-    estado.pedidoAceitoAtual.origem_lat = dados.coordsOrig ? dados.coordsOrig[0] : null;
-    estado.pedidoAceitoAtual.origem_lng = dados.coordsOrig ? dados.coordsOrig[1] : null;
-    estado.pedidoAceitoAtual.destino_lat = dados.coordsDest ? dados.coordsDest[0] : null;
-    estado.pedidoAceitoAtual.destino_lng = dados.coordsDest ? dados.coordsDest[1] : null;
-    estado.pedidoAceitoAtual.origem_endereco = dados.origem;
-    estado.pedidoAceitoAtual.destino_endereco = dados.destino;
-    estado.pedidoAceitoAtual.valor_base = Number(dados.preco);
-    estado.pedidoAceitoAtual.valor_total = Number(dados.preco);
-    estado.pedidoAceitoAtual.distancia_km = dados.dist;
-    estado.pedidoAceitoAtual.duracao_min = dados.dur;
-
-    estado.pedidoEmAnalise = null;
-    estado.etapaCorridaAtual = 'a_caminho';
-    estado.modoUltimaViagem = false;
-
-    const btnChat = document.getElementById('btnAbrirChat');
-    if (btnChat) btnChat.style.display = 'flex';
-
-    if (dados.coordsOrig && estado.hubyMapa) {
-      if (estado.hubyMapa.coordsOrigem) {
-        await estado.hubyMapa.calcularRota(estado.hubyMapa.coordsOrigem, dados.coordsOrig, '#38BDF8');
-      }
-      estado.hubyMapa.obterGPS(async (pos) => {
-        try {
-          const r = await estado.hubyMapa.calcularRota([pos.lat, pos.lng], dados.coordsOrig, '#38BDF8');
-          const lbl = document.getElementById('lblTempoPassageiro');
-          if (lbl) lbl.innerHTML = `⏳ Chega ao passageiro em <span style="font-size:18px;">${r.duracaoMin} min</span>`;
-        } catch (e) {}
-      });
-    }
-
-    renderizarCardEtapa();
-  } catch (err) {
-    alert(err.message);
-    cancelarPrevia();
-  }
-}
-
-export function renderizarCardEtapa() {
-  const feed = document.getElementById('listaChamadasPendentes');
-  if (!feed || !estado.pedidoAceitoAtual) return;
-
-  const estaACaminho = (estado.etapaCorridaAtual === 'a_caminho');
-
-  const coordsAlvo = estaACaminho 
-    ? (estado.pedidoAceitoAtual.coordsOrigem || [estado.pedidoAceitoAtual.origem_lat, estado.pedidoAceitoAtual.origem_lng])
-    : (estado.pedidoAceitoAtual.coordsDestino || [estado.pedidoAceitoAtual.destino_lat, estado.pedidoAceitoAtual.destino_lng]);
-
-  const latAlvo = coordsAlvo ? coordsAlvo[0] : null;
-  const lngAlvo = coordsAlvo ? coordsAlvo[1] : null;
-
-  const linkGoogleMaps = (latAlvo && lngAlvo)
-    ? `https://www.google.com/maps/dir/?api=1&destination=${latAlvo},${lngAlvo}`
-    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(estaACaminho ? (estado.pedidoAceitoAtual.origem_endereco || '') : estado.pedidoAceitoAtual.destino_endereco)}`;
-
-  const linkWaze = (latAlvo && lngAlvo)
-    ? `https://waze.com/ul?ll=${latAlvo},${lngAlvo}&navigate=yes`
-    : `https://waze.com/ul?q=${encodeURIComponent(estaACaminho ? (estado.pedidoAceitoAtual.origem_endereco || '') : estado.pedidoAceitoAtual.destino_endereco)}`;
-
-  const origemLimpa = formatarTextoLocal(estado.pedidoAceitoAtual.origem_endereco, 'Local de Embarque');
-  const destinoLimpo = formatarTextoLocal(estado.pedidoAceitoAtual.destino_endereco, 'Destino Final');
-
-  const valorExibicao = (Number(estado.pedidoAceitoAtual.valor_base || estado.pedidoAceitoAtual.valor_total) + taxaEsperaAcumulada);
-
-  feed.innerHTML = `
-    <div class="order-card" style="border-color: ${estaACaminho ? (chegouAoPontoEmbarque ? '#F59E0B' : '#38BDF8') : '#10B981'};">
-      <div class="order-card-header">
-        <span class="order-badge" style="background: ${estaACaminho ? (chegouAoPontoEmbarque ? 'rgba(245,158,11,0.2)' : 'rgba(56,189,248,0.2)') : 'rgba(16,185,129,0.2)'}; color: ${estaACaminho ? (chegouAoPontoEmbarque ? '#F59E0B' : '#38BDF8') : '#10B981'};">
-          ${estaACaminho ? (chegouAoPontoEmbarque ? 'AGUARDANDO PASSAGEIRO' : 'A CAMINHO DO CLIENTE') : 'EM CORRIDA'}
-        </span>
-        <span class="order-price" id="lblPrecoCorridaCard">R$ ${valorExibicao.toFixed(2).replace('.', ',')}</span>
-      </div>
-
-      <!-- PAINEL DE CRONÔMETRO DE ESPERA -->
-      <div id="painelEsperaEmbarque" style="display: ${chegouAoPontoEmbarque && estaACaminho ? 'block' : 'none'}; background: rgba(245, 158, 11, 0.1); border: 1px dashed #F59E0B; border-radius: 8px; padding: 10px; margin: 8px 0; text-align: center;">
-        <span style="font-size: 11px; color: #F59E0B; font-weight: 800; display: block;">⏱️ CRONÔMETRO NO LOCAL DE EMBARQUE</span>
-        <div id="txtTempoEsperaStatus" style="font-size: 15px; font-weight: 900; color: #FFF; margin-top: 3px;">
-          Cortesia: 03:00 restantes
-        </div>
-        <small id="txtTaxaEsperaAdicional" style="color: #94A3B8; font-size: 11px; display: block; margin-top: 2px;">
-          Taxa de espera: R$ 0,00 (+R$ 0,40/min após cortesia)
-        </small>
-      </div>
-
-      <div class="order-route">
-        <span style="display: block; color: ${estaACaminho ? '#38BDF8' : '#10B981'}; font-weight: 800; font-size: 14px; margin-bottom: 4px;" id="lblTempoPassageiro">
-          ${estaACaminho ? (chegouAoPontoEmbarque ? '📍 No ponto de embarque' : '📍 A caminho do local de embarque...') : '🏁 A caminho do destino final!'}
-        </span>
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
-          <strong>Recolha:</strong> ${origemLimpa}
-        </span>
-        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;">
-          <strong>Destino:</strong> ${destinoLimpo}
-        </span>
-      </div>
-
-      <!-- BOTÕES DE NAVEGAÇÃO EXTERNA COM PiP AUTOMÁTICO -->
-      <div style="display: flex; gap: 8px; margin-top: 10px;">
-        <a href="${linkGoogleMaps}" target="_blank" rel="noopener noreferrer" id="btnNavegarGoogle"
-          style="flex: 1; text-decoration: none; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.35); color: #38BDF8; border-radius: 8px; padding: 9px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🗺️ Google Maps
-        </a>
-        <a href="${linkWaze}" target="_blank" rel="noopener noreferrer" id="btnNavegarWaze"
-          style="flex: 1; text-decoration: none; background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); color: #10B981; border-radius: 8px; padding: 9px; font-size: 11px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🚗 Waze
-        </a>
-      </div>
-
-      <!-- BOTÕES DE ETAPA -->
-      <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-        ${estaACaminho && !chegouAoPontoEmbarque ? `
-          <button type="button" id="btnChegueiLocal" style="width: 100%; background: #F59E0B; color: #000; border: none; border-radius: 10px; padding: 13px; font-weight: 900; font-size: 14px; cursor: pointer;">
-            📍 Cheguei ao Ponto de Embarque
-          </button>
-        ` : ''}
-
-        ${estaACaminho ? `
-          <button type="button" id="btnIniciarViagemUnico" style="width: 100%; background: #2563EB; color: #FFF; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 14px; cursor: pointer;">
-            ▶ Iniciar Viagem (Passageiro a Bordo)
-          </button>
-        ` : `
-          <button type="button" id="btnConcluirViagemUnico" style="width: 100%; background: #10B981; color: #03251E; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 14px; cursor: pointer;">
-            ✅ Concluir Viagem
-          </button>
-        `}
-      </div>
-
-      <div style="margin-top: 8px;">
-        <button type="button" id="btnToggleUltimaViagem" style="width: 100%; background: ${estado.modoUltimaViagem ? 'rgba(245, 158, 11, 0.2)' : 'rgba(255,255,255,0.04)'}; border: 1px solid ${estado.modoUltimaViagem ? '#F59E0B' : 'rgba(255,255,255,0.08)'}; color: ${estado.modoUltimaViagem ? '#F59E0B' : 'var(--text-sec)'}; padding: 8px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer;">
-          ${estado.modoUltimaViagem ? '🛑 Última Viagem Ativa' : '☕ Parar após esta viagem'}
+      <div style="display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 4px;">
+        <button type="button" id="btnCancelarInspecao"
+          style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; font-weight: 700; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          ✕ Voltar
         </button>
-      </div>
-
-      <div style="display: flex; gap: 8px; margin-top: 8px;">
-        <button type="button" id="btnCancelarPeloMotorista" style="flex: 1; background: transparent; color: #EF4444; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer;">
-          Cancelar
-        </button>
-        <button type="button" id="btnSosMotorista" style="flex: 1; background: rgba(239, 68, 68, 0.2); color: #EF4444; border: 1px solid #EF4444; border-radius: 10px; padding: 10px; font-weight: 800; cursor: pointer;">
-          🚨 SOS Emergência
+        <button type="button" id="btnConfirmarAposVisualizar"
+          style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          ✅ Aceitar Corrida
         </button>
       </div>
     </div>
   `;
 
-  // Listener para PiP ao abrir navegação externa
-  const acionarPiP = () => {
-    const textoDest = estaACaminho ? 'Indo ao passageiro' : 'Indo ao destino final';
-    const precoTxt = `R$ ${valorExibicao.toFixed(2).replace('.', ',')}`;
-    abrirWidgetFlutuantePiP(textoDest, precoTxt, () => window.focus());
-  };
-  document.getElementById('btnNavegarGoogle')?.addEventListener('click', acionarPiP);
-  document.getElementById('btnNavegarWaze')?.addEventListener('click', acionarPiP);
-
-  // Listener "Cheguei ao Ponto de Embarque"
-  document.getElementById('btnChegueiLocal')?.addEventListener('click', () => {
-    chegouAoPontoEmbarque = true;
-    renderizarCardEtapa();
-
-    iniciarContadorEspera((info) => {
-      const txtStatus = document.getElementById('txtTempoEsperaStatus');
-      const txtTaxa = document.getElementById('txtTaxaEsperaAdicional');
-      const lblPreco = document.getElementById('lblPrecoCorridaCard');
-
-      taxaEsperaAcumulada = info.taxaAdicional;
-      const novoTotal = (Number(estado.pedidoAceitoAtual.valor_base) + taxaEsperaAcumulada);
-      estado.pedidoAceitoAtual.valor_total = novoTotal;
-
-      if (lblPreco) lblPreco.textContent = `R$ ${novoTotal.toFixed(2).replace('.', ',')}`;
-
-      if (info.emCortesia) {
-        if (txtStatus) txtStatus.textContent = `Cortesia: ${formatarTempo(info.segundosRestantesCortesia)} restantes`;
-      } else {
-        if (txtStatus) txtStatus.innerHTML = `<span style="color:#EF4444;">Aguardando: +${formatarTempo(info.segundosPassados - 180)}</span>`;
-        if (txtTaxa) txtTaxa.innerHTML = `Taxa extra: <strong style="color:#FFF;">+ R$ ${info.taxaAdicional.toFixed(2).replace('.', ',')}</strong>`;
-      }
-    });
+  document.getElementById('btnCancelarInspecao')?.addEventListener('click', () => {
+    limparRotasMapa();
+    estado.pedidoEmAnalise = null;
+    iniciarRadarChamadas();
   });
 
-  document.getElementById('btnToggleUltimaViagem')?.addEventListener('click', () => {
-    estado.modoUltimaViagem = !estado.modoUltimaViagem;
-    renderizarCardEtapa();
+  document.getElementById('btnConfirmarAposVisualizar')?.addEventListener('click', () => {
+    aceitarCorrida(dados);
   });
-
-  document.getElementById('btnCancelarPeloMotorista')?.addEventListener('click', cancelarCorridaAtual);
-
-  if (estaACaminho) {
-    document.getElementById('btnIniciarViagemUnico')?.addEventListener('click', async () => {
-      pararContadorEspera();
-      fecharWidgetFlutuantePiP();
-      estado.etapaCorridaAtual = 'em_viagem';
-
-      let destCoords = estado.pedidoAceitoAtual.coordsDestino;
-      if (!destCoords || !Array.isArray(destCoords)) {
-        const dLat = parseFloat(estado.pedidoAceitoAtual.destino_lat || estado.pedidoAceitoAtual.destinoLat);
-        const dLng = parseFloat(estado.pedidoAceitoAtual.destino_lng || estado.pedidoAceitoAtual.destinoLng);
-        if (!isNaN(dLat) && !isNaN(dLng)) destCoords = [dLat, dLng];
-      }
-
-      let origCoords = estado.hubyMapa?.coordsOrigem;
-      if (!origCoords || !Array.isArray(origCoords)) {
-        origCoords = estado.pedidoAceitoAtual.coordsOrigem;
-        if (!origCoords || !Array.isArray(origCoords)) {
-          const oLat = parseFloat(estado.pedidoAceitoAtual.origem_lat || estado.pedidoAceitoAtual.origemLat);
-          const oLng = parseFloat(estado.pedidoAceitoAtual.origem_lng || estado.pedidoAceitoAtual.origemLng);
-          if (!isNaN(oLat) && !isNaN(oLng)) origCoords = [oLat, oLng];
-        }
-      }
-
-      if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
-        estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
-        estado.hubyMapa.rotaLayer = null;
-      }
-
-      if (origCoords && destCoords && estado.hubyMapa) {
-        try {
-          await estado.hubyMapa.calcularRota(origCoords, destCoords, '#10B981');
-        } catch (err) {
-          console.warn('Erro ao traçar rota:', err);
-        }
-      }
-
-      renderizarCardEtapa();
-    });
-  } else {
-    document.getElementById('btnConcluirViagemUnico')?.addEventListener('click', concluirCorridaAtual);
-  }
 }
 
-export async function concluirCorridaAtual() {
-  if (!estado.pedidoAceitoAtual) return;
-  const token = localStorage.getItem('huby_token');
-
-  fecharWidgetFlutuantePiP();
-  pararContadorEspera();
-
+// ============================================================================
+// 2. ACEITAR CORRIDA E FLUXO A CAMINHO DO EMBARQUE
+// ============================================================================
+export async function aceitarCorrida(dados) {
   try {
-    const resp = await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/concluir`, {
+    const res = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
+      headers: obterHeaders(),
       body: JSON.stringify({
-        taxa_espera: taxaEsperaAcumulada,
-        valor_final: estado.pedidoAceitoAtual.valor_total
+        motoristaId: estado.motoristaId,
+        motoristaNome: estado.motoristaNome || 'Carol'
       })
     });
 
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.erro || 'Falha ao liquidar corrida.');
+    const resJson = await res.json().catch(() => ({}));
 
-    exibirToastConclusao(data.repasseLiquido || (estado.pedidoAceitoAtual.valor_total * 0.85));
+    if (res.ok || resJson.sucesso) {
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      iniciarFaseBuscarPassageiro(dados);
+    } else {
+      alert(resJson.erro || 'Esta corrida já não está disponível.');
+      limparRotasMapa();
+      estado.pedidoEmAnalise = null;
+      iniciarRadarChamadas();
+    }
+  } catch (err) {
+    iniciarFaseBuscarPassageiro(dados);
+  }
+}
 
-    limparAtendimento();
-    await carregarPerfilCompleto();
-    await carregarGanhosHoje();
+async function iniciarFaseBuscarPassageiro(dados) {
+  estado.pedidoAceitoAtual = dados;
+  estado.pedidoAtivo = dados;
+  estado.pedidoEmAnalise = null;
+  estado.etapaCorridaAtual = 'a_caminho';
+  pararRadarChamadas();
 
-    if (estado.modoUltimaViagem) {
-      document.getElementById('btnToggleStatusOnline')?.click();
+  const btnChat = document.getElementById('btnAbrirChat');
+  if (btnChat) btnChat.style.display = 'flex';
+
+  limparRotasMapa();
+  const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
+
+  if (estado.mapa) {
+    estado.markerOrigem = L.marker(coordsOrigem, {
+      icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+    }).addTo(estado.mapa);
+
+    await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
+  }
+
+  const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
+  const repasseLiquido = ((Number(dados.preco || 0)) * 0.85).toFixed(2).replace('.', ',');
+
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--blue); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
+          🚗 A CAMINHO DO PASSAGEIRO
+        </span>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseLiquido}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
+        🟢 <strong>Embarque:</strong> <span style="color: #94A3B8;">${dados.origem}</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <a href="${urlWaze}" target="_blank" rel="noopener"
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🧭 Waze (Embarque)
+        </a>
+        <a href="${urlGoogle}" target="_blank" rel="noopener"
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🗺️ Maps (Embarque)
+        </a>
+      </div>
+
+      <button type="button" id="btnPassageiroEmbarcou"
+        style="width: 100%; background: #38BDF8; border: none; color: #000; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
+        📍 Cheguei / Passageiro a Bordo
+      </button>
+    </div>
+  `;
+
+  document.getElementById('btnPassageiroEmbarcou')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
+}
+
+// ============================================================================
+// 3. PASSAGEIRO A BORDO -> EM VIAGEM AO DESTINO
+// ============================================================================
+export async function confirmarEmbarqueEIrAoDestino(dados) {
+  try {
+    await fetch(`${API_URL}/api/pedidos/${dados.id}/embarque`, {
+      method: 'PUT',
+      headers: obterHeaders()
+    });
+  } catch (e) { }
+
+  estado.etapaCorridaAtual = 'em_viagem';
+  if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+
+  limparRotasMapa();
+  const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
+
+  if (estado.mapa) {
+    estado.markerDestino = L.marker(coordsDestino, {
+      icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+    }).addTo(estado.mapa);
+
+    await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
+  }
+
+  const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
+  const repasseLiquido = ((Number(dados.preco || 0)) * 0.85).toFixed(2).replace('.', ',');
+
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
+          🚀 EM VIAGEM COM PASSAGEIRO
+        </span>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseLiquido}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
+        🏁 <strong>Destino Final:</strong> <span style="color: #94A3B8;">${dados.destino}</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <a href="${urlWaze}" target="_blank" rel="noopener"
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🧭 Waze (Destino)
+        </a>
+        <a href="${urlGoogle}" target="_blank" rel="noopener"
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          🗺️ Maps (Destino)
+        </a>
+      </div>
+
+      <button type="button" id="btnConcluirViagemAtiva"
+        style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
+        🏁 Cheguei ao Destino / Finalizar
+      </button>
+    </div>
+  `;
+
+  document.getElementById('btnConcluirViagemAtiva')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
+}
+
+// ============================================================================
+// 4. MODAL DE LIQUIDAÇÃO COM FILTRO DE PREFERÊNCIAS DO CONDUTOR
+// ============================================================================
+export function abrirModalOpcoesPagamento(dados) {
+  const modal = document.getElementById('modalEscolhaPagamentoMotorista');
+  const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
+
+  const valorTotal = Number(dados.preco || 0);
+  if (lblValor) {
+    lblValor.textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
+  }
+
+  const btnDinheiro = document.getElementById('btnPagarDinheiro');
+  const btnMaquininha = document.getElementById('btnPagarMaquininha');
+  const btnPixMP = document.getElementById('btnPagarPixMP');
+  const btnCancelar = document.getElementById('btnCancelarModalPagamento');
+
+  // Filtra as opções de acordo com o que o motorista salvou no perfil
+  if (btnDinheiro) btnDinheiro.style.display = estado.aceitaDinheiro ? 'flex' : 'none';
+  if (btnMaquininha) btnMaquininha.style.display = estado.aceitaCartao ? 'flex' : 'none';
+  if (btnPixMP) btnPixMP.style.display = estado.aceitaPix ? 'flex' : 'none';
+
+  // Se nenhuma forma ficou marcada, exibe todas como fallback seguro
+  if (!estado.aceitaDinheiro && !estado.aceitaCartao && !estado.aceitaPix) {
+    if (btnDinheiro) btnDinheiro.style.display = 'flex';
+    if (btnMaquininha) btnMaquininha.style.display = 'flex';
+    if (btnPixMP) btnPixMP.style.display = 'flex';
+  }
+
+  if (modal) modal.style.display = 'flex';
+
+  btnDinheiro.onclick = () => processarLiquidacao(dados.id, 'dinheiro');
+  btnMaquininha.onclick = () => processarLiquidacao(dados.id, 'cartao_maquininha');
+  btnPixMP.onclick = () => processarLiquidacao(dados.id, 'pix_mp');
+  btnCancelar.onclick = () => {
+    if (modal) modal.style.display = 'none';
+  };
+}
+
+export async function processarLiquidacao(pedidoId, formaPagamento) {
+  const modal = document.getElementById('modalEscolhaPagamentoMotorista');
+
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`, {
+      method: 'POST',
+      headers: obterHeaders(),
+      body: JSON.stringify({ forma_pagamento: formaPagamento })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Falha ao processar encerramento.');
+
+    if (modal) modal.style.display = 'none';
+
+    if (formaPagamento === 'pix_mp') {
+      exibirQrCodePixMotorista(data.pix);
+    } else {
+      alert('✅ Corrida encerrada com sucesso! A taxa da plataforma (15%) foi descontada da sua carteira.');
+      if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
+      concluirLimpezaPosCorrida();
     }
   } catch (err) {
     alert(err.message);
   }
 }
 
-export async function cancelarCorridaAtual() {
-  if (!estado.pedidoAceitoAtual) return;
-  if (!confirm('Deseja realmente cancelar este atendimento?')) return;
+export function exibirQrCodePixMotorista(pix) {
+  const modalPix = document.getElementById('modalExibicaoPixMotorista');
+  const imgQr = document.getElementById('imgQrCodePixMotorista');
+  const lblValor = document.getElementById('lblValorPixMotorista');
+  const btnFechar = document.getElementById('btnFecharPixMotorista');
 
-  fecharWidgetFlutuantePiP();
-  pararContadorEspera();
+  if (lblValor) lblValor.textContent = `R$ ${Number(pix.valor).toFixed(2).replace('.', ',')}`;
+  if (imgQr) imgQr.src = `data:image/png;base64,${pix.qr_code_base64}`;
 
-  const token = localStorage.getItem('huby_token');
-  try {
-    await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/cancelar`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ motivo: 'Cancelado pelo motorista parceiro' })
-    });
-  } catch (err) {
-    console.warn('Erro ao cancelar:', err);
-  }
+  if (modalPix) modalPix.style.display = 'flex';
 
-  limparAtendimento();
+  btnFechar.onclick = () => {
+    if (modalPix) modalPix.style.display = 'none';
+  };
 }
 
-export function limparAtendimento() {
-  fecharWidgetFlutuantePiP();
-  pararContadorEspera();
-  chegouAoPontoEmbarque = false;
-  taxaEsperaAcumulada = 0;
+export function fecharModaisPagamento() {
+  const modal1 = document.getElementById('modalEscolhaPagamentoMotorista');
+  const modal2 = document.getElementById('modalExibicaoPixMotorista');
+  if (modal1) modal1.style.display = 'none';
+  if (modal2) modal2.style.display = 'none';
+}
 
-  if (estado.hubyMapa?.rotaLayer && estado.hubyMapa.map) {
-    estado.hubyMapa.map.removeLayer(estado.hubyMapa.rotaLayer);
-    estado.hubyMapa.rotaLayer = null;
-  }
-  estado.pedidoAceitoAtual = null;
-  estado.pedidoEmAnalise = null;
-  estado.etapaCorridaAtual = 'a_caminho';
-  estado.modoUltimaViagem = false;
-
+export function concluirLimpezaPosCorrida() {
+  limparRotasMapa();
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'none';
-  fecharChat();
 
+  estado.pedidoAceitoAtual = null;
+  estado.pedidoAtivo = null;
+  carregarPerfil();
   iniciarRadarChamadas();
 }

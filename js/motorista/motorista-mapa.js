@@ -1,0 +1,140 @@
+// js/motorista/motorista-mapa.js
+import { API_URL } from '../config.js';
+import { estado } from './motorista-estado.js';
+import { configurarRecursosInteligentes } from './motorista-heatmap.js';
+import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-viagem.js';
+
+export function inicializarSocket() {
+  if (typeof io !== 'undefined') {
+    estado.socket = io(API_URL);
+
+    // Ouve confirmação de pagamento do Mercado Pago em tempo real
+    estado.socket.on('corrida_finalizada', (dados) => {
+      const pedidoIdAtual = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
+      if (pedidoIdAtual && String(dados.pedidoId) === String(pedidoIdAtual)) {
+        fecharModaisPagamento();
+        alert('🎉 Pagamento confirmado pelo Mercado Pago! Corrida concluída.');
+        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
+          sonsHUBy.tocarMetaBatida();
+        }
+        concluirLimpezaPosCorrida();
+      }
+    });
+  }
+}
+
+export function inicializarMapa() {
+  const container = document.getElementById('mapaMotorista');
+  if (!container) return;
+
+  if (estado.mapa) {
+    estado.mapa.remove();
+    estado.mapa = null;
+  }
+
+  try {
+    estado.mapa = L.map('mapaMotorista', {
+      zoomControl: false,
+      attributionControl: false
+    }).setView(estado.coords, 15);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(estado.mapa);
+
+    const iconeCarro = L.divIcon({
+      className: 'huby-driver-pin',
+      html: '<div style="width:38px;height:38px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(16,185,129,0.9);font-size:19px;">🚘</div>',
+      iconSize: [38, 38],
+      iconAnchor: [19, 19]
+    });
+
+    estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarro }).addTo(estado.mapa);
+
+    setTimeout(() => {
+      if (estado.mapa) estado.mapa.invalidateSize();
+    }, 300);
+
+    configurarRecursosInteligentes(estado.mapa, estado.token);
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.watchPosition((pos) => {
+        const { latitude, longitude } = pos.coords;
+        estado.coords = [latitude, longitude];
+        if (estado.mapa && estado.markerVeiculo) {
+          estado.markerVeiculo.setLatLng([latitude, longitude]);
+        }
+        const pedidoId = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
+        if (estado.socket && pedidoId) {
+          estado.socket.emit('posicao_motorista', {
+            pedidoId,
+            lat: latitude,
+            lng: longitude
+          });
+        }
+      }, null, { enableHighAccuracy: true });
+    }
+  } catch (err) {
+    console.error('Erro ao iniciar mapa do motorista:', err);
+  }
+}
+
+export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
+  if (!estado.mapa) return;
+
+  if (estado.linhaRota) {
+    estado.mapa.removeLayer(estado.linhaRota);
+    estado.linhaRota = null;
+  }
+
+  const [latOrig, lngOrig] = origem;
+  const [latDest, lngDest] = destino;
+
+  try {
+    const url = `https://router.project-osrm.org/route/v1/driving/${lngOrig},${latOrig};${lngDest},${latDest}?overview=full&geometries=geojson`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+
+    if (data.code === 'Ok' && data.routes && data.routes[0]) {
+      const coordenadasCurvas = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+      estado.linhaRota = L.polyline(coordenadasCurvas, {
+        color: cor,
+        weight: 6,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(estado.mapa);
+
+      estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+      return;
+    }
+  } catch (err) {
+    console.warn('Falha no OSRM, aplicando rota direta:', err);
+  }
+
+  estado.linhaRota = L.polyline([origem, destino], {
+    color: cor,
+    weight: 5,
+    dashArray: '8, 8',
+    opacity: 0.9
+  }).addTo(estado.mapa);
+
+  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+}
+
+export function limparRotasMapa() {
+  if (estado.linhaRota && estado.mapa) {
+    estado.mapa.removeLayer(estado.linhaRota);
+    estado.linhaRota = null;
+  }
+  if (estado.markerOrigem && estado.mapa) {
+    estado.mapa.removeLayer(estado.markerOrigem);
+    estado.markerOrigem = null;
+  }
+  if (estado.markerDestino && estado.mapa) {
+    estado.mapa.removeLayer(estado.markerDestino);
+    estado.markerDestino = null;
+  }
+}

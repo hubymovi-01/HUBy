@@ -1,6 +1,6 @@
 // js/motorista/motorista-chat.js
 import { API_URL } from '../config.js';
-import { estado } from './motorista-estado.js';
+import { estado, obterHeaders } from './motorista-estado.js';
 
 let chatInterval = null;
 
@@ -37,7 +37,9 @@ export function fecharChat() {
 async function enviarMensagemChat() {
   const inputMsg = document.getElementById('inputChatMsg');
   const txt = inputMsg ? inputMsg.value.trim() : '';
-  if (!txt || !estado.pedidoAceitoAtual?.id) return;
+  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
+
+  if (!txt || !pedido?.id) return;
 
   const quantidadeNumeros = (txt.match(/\d/g) || []).length;
   if (quantidadeNumeros >= 4) {
@@ -45,16 +47,12 @@ async function enviarMensagemChat() {
     return;
   }
 
-  const token = localStorage.getItem('huby_token');
   if (inputMsg) inputMsg.value = '';
 
   try {
-    await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/chat`, {
+    await fetch(`${API_URL}/api/pedidos/${pedido.id}/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
+      headers: obterHeaders(),
       body: JSON.stringify({ mensagem: txt })
     });
     carregarMensagensChat();
@@ -64,11 +62,13 @@ async function enviarMensagemChat() {
 }
 
 async function carregarMensagensChat() {
-  if (!estado.pedidoAceitoAtual?.id) return;
-  const token = localStorage.getItem('huby_token');
+  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
+  if (!pedido?.id) return;
 
-  let meuId = null;
-  if (token) {
+  const token = estado.token || localStorage.getItem('huby_token');
+  let meuId = estado.motoristaId;
+
+  if (!meuId && token) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       meuId = payload.id;
@@ -79,8 +79,8 @@ async function carregarMensagensChat() {
   if (!areaMensagens) return;
 
   try {
-    const resp = await fetch(`${API_URL}/api/pedidos/${estado.pedidoAceitoAtual.id}/chat`, {
-      headers: { Authorization: `Bearer ${token}` }
+    const resp = await fetch(`${API_URL}/api/pedidos/${pedido.id}/chat`, {
+      headers: obterHeaders()
     });
     if (!resp.ok) return;
     const msgs = await resp.json();
@@ -91,8 +91,8 @@ async function carregarMensagensChat() {
       const souEu = String(m.remetente_id) === String(meuId);
       html += `
         <div style="display: flex; flex-direction: column; align-items: ${souEu ? 'flex-end' : 'flex-start'}; margin-bottom: 6px;">
-          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome}</small>
-          <div style="background: ${souEu ? '#10B981' : '#1F2937'}; color: ${souEu ? '#000' : '#FFF'}; padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 80%;">
+          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome || 'Mensagem'}</small>
+          <div style="background: ${souEu ? '#10B981' : '#1F2937'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 80%;">
             ${m.mensagem}
           </div>
         </div>

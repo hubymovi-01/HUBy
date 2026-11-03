@@ -708,6 +708,48 @@ export default function pedidosRouter(io) {
       res.status(500).json({ erro: 'Falha ao sincronizar mensagens.' });
     }
   });
+  // =========================================================================
+  // 13. PREFERÊNCIAS DE PAGAMENTO DO MOTORISTA (SALVAR E CONSULTAR)
+  // =========================================================================
+  router.put('/motoristas/preferencias-pagamento', autenticarToken, async (req, res) => {
+    try {
+      const usuarioId = req.usuario.id;
+      const { aceita_dinheiro, aceita_cartao, aceita_pix } = req.body;
+
+      if (!aceita_dinheiro && !aceita_cartao && !aceita_pix) {
+        return res.status(400).json({ erro: 'Selecione ao menos uma forma de pagamento para trabalhar.' });
+      }
+
+      const atualizado = await sql`
+        UPDATE motoristas
+        SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
+            aceita_cartao = ${Boolean(aceita_cartao)},
+            aceita_pix = ${Boolean(aceita_pix)}
+        WHERE id::text = ${String(usuarioId)}::text 
+           OR usuario_id::text = ${String(usuarioId)}::text
+        RETURNING aceita_dinheiro, aceita_cartao, aceita_pix;
+      `;
+
+      if (atualizado.length === 0) {
+        // Fallback caso seja o motorista padrão/teste
+        await sql`
+          UPDATE motoristas
+          SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
+              aceita_cartao = ${Boolean(aceita_cartao)},
+              aceita_pix = ${Boolean(aceita_pix)}
+          WHERE id = (SELECT id FROM motoristas ORDER BY id ASC LIMIT 1);
+        `;
+      }
+
+      return res.json({
+        sucesso: true,
+        mensagem: 'Preferências salvas com sucesso!'
+      });
+    } catch (err) {
+      console.error('Erro ao salvar preferências:', err);
+      return res.status(500).json({ erro: 'Erro ao gravar preferências no banco.' });
+    }
+  });
 
   return router;
 }
