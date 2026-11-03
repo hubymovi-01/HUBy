@@ -620,7 +620,7 @@ async function enviarMensagemChat() {
 }
 
 // ============================================================================
-// 6. GESTÃO COMPLETA DE SAQUES PIX BANCÁRIOS
+// 6. GESTÃO COMPLETA DE SAQUES PIX BANCÁRIOS COM ATALHOS RÁPIDOS
 // ============================================================================
 function configurarEventosSaque() {
   const modalSaque = document.getElementById('modalSaquePix');
@@ -632,6 +632,24 @@ function configurarEventosSaque() {
   const inputChave = document.getElementById('saqueChavePix');
   const selectTipo = document.getElementById('saqueTipoChave');
   const modalSaldoTexto = document.getElementById('modalSaldoTexto');
+  const btnSacarTudo = document.getElementById('btnSacarTudo');
+
+  // Atalhos rápidos: R$ 20, R$ 50, R$ 100
+  document.querySelectorAll('.btn-fast-val').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const val = btn.getAttribute('data-val');
+      if (val && inputValor) {
+        inputValor.value = val;
+      }
+    });
+  });
+
+  // Atalho TUDO
+  btnSacarTudo?.addEventListener('click', () => {
+    if (inputValor) {
+      inputValor.value = Math.max(0, estado.saldoCarteira).toFixed(2);
+    }
+  });
 
   function abrirModal() {
     if (!modalSaque) return;
@@ -719,7 +737,7 @@ function configurarEventosSaque() {
 }
 
 // ============================================================================
-// 7. PERFIL, DRAWER E SALDO
+// 7. PERFIL, DRAWER E SALDO (CORRIGIDO)
 // ============================================================================
 async function carregarPerfil() {
   try {

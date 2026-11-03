@@ -400,6 +400,22 @@
       font-weight: 600;
       outline: none;
     }
+
+    .btn-fast-val {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-dark);
+      color: #FFF;
+      padding: 7px 4px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .btn-fast-val:active {
+      background: rgba(255, 255, 255, 0.18);
+    }
   </style>
 </head>
 
@@ -440,7 +456,7 @@
   <!-- MAPA PRINCIPAL -->
   <div id="mapaMotorista"></div>
 
-  <!-- BOTÃO CHAT -->
+  <!-- BOTÃO CHAT FLUTUANTE -->
   <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
     aria-label="Abrir Chat">💬</button>
 
@@ -562,7 +578,7 @@
     </div>
   </aside>
 
-  <!-- MODAL DE SAQUE PIX (COM IDs 100% SINCRONIZADOS COM JS) -->
+  <!-- MODAL DE SAQUE PIX COM ATALHOS RÁPIDOS -->
   <div id="modalSaquePix" class="modal-backdrop-custom">
     <div class="modal-box-edit" style="max-width: 380px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -592,8 +608,18 @@
       </div>
 
       <div class="form-group-driver">
+        <label>Valores Rápidos</label>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 8px;">
+          <button type="button" class="btn-fast-val" data-val="20">R$ 20</button>
+          <button type="button" class="btn-fast-val" data-val="50">R$ 50</button>
+          <button type="button" class="btn-fast-val" data-val="100">R$ 100</button>
+          <button type="button" id="btnSacarTudo" class="btn-fast-val" style="background: rgba(56,189,248,0.18); border-color: var(--blue); color: var(--blue);">TUDO</button>
+        </div>
+      </div>
+
+      <div class="form-group-driver">
         <label>Valor do Saque (R$)</label>
-        <input type="number" step="0.50" id="saqueValor" placeholder="50.00" style="color: var(--emerald); font-weight: 900; font-size: 16px;">
+        <input type="number" step="0.50" id="saqueValor" placeholder="0.00" style="color: var(--emerald); font-weight: 900; font-size: 18px;">
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 16px;">
@@ -631,7 +657,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=9.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=9.1.0"></script>
 </body>
 
 </html>

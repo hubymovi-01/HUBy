@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas, Frota e Gestão Master HUBy
+// routes/admin.routes.js - Métricas, Frota, DRE dos Sócios e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -37,8 +37,16 @@ async function inicializarTabelasAdmin() {
         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS configuracoes_plataforma (
+        chave VARCHAR(50) PRIMARY KEY,
+        valor JSONB NOT NULL,
+        atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
   } catch (err) {
-    console.warn('Aviso ao sincronizar tabela de zonas de risco:', err.message);
+    console.warn('Aviso ao sincronizar tabelas administrativas:', err.message);
   }
 }
 inicializarTabelasAdmin();
@@ -47,7 +55,7 @@ export default function adminRoutes(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. MÉTRICAS DA PLATAFORMA (COM CÁLCULO ATÔMICO VIA SALDO DA FROTA)
+  // 1. MÉTRICAS DA PLATAFORMA & SPLIT DE FATURAMENTO
   // =========================================================================
   router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -74,8 +82,7 @@ export default function adminRoutes(io) {
       let totalViagens = Number(statsFinanceiro[0]?.total_concluidas || 0);
       let faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_corridas || 0);
 
-      // 2. CONTINGÊNCIA INTELIGENTE NO BANCO:
-      // Se não há pedidos concluídos, calcula com base no saldo acumulado dos condutores
+      // 2. Contingência inteligente com base no saldo acumulado da frota
       const saldoMotoristas = await sql`
         SELECT 
           COALESCE(SUM(saldo_carteira), 0) AS repasse_acumulado,
@@ -99,7 +106,7 @@ export default function adminRoutes(io) {
         totalViagens = corridasFrota > 0 ? corridasFrota : 1;
       }
 
-      // 3. Alertas de segurança
+      // 3. Incidentes pendentes
       let incidentesAtivos = 0;
       try {
         const inc = await sql`SELECT COUNT(*) AS total FROM incidentes_seguranca WHERE resolvido = FALSE;`;
@@ -108,7 +115,7 @@ export default function adminRoutes(io) {
         incidentesAtivos = 0;
       }
 
-      // 4. Distribuição por categoria
+      // 4. Distribuição de categorias
       const statsCat = await sql`
         SELECT COALESCE(sub_tipo_id, tipo, 'carro') AS cat, COUNT(id) AS qtd
         FROM pedidos
@@ -141,7 +148,66 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 2. GESTÃO DE MOTORISTAS & FROTA
+  // 2. DRE / RELATÓRIO EXECUTIVO DA DIVISÃO DOS SÓCIOS
+  // =========================================================================
+  router.get('/financeiro/dre', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const relatorio = await sql`
+        SELECT 
+          COUNT(id) AS total_corridas_liquidadas,
+          COALESCE(SUM(valor_total), 0) AS faturamento_bruto_total,
+          COALESCE(SUM(valor_total * 0.85), 0) AS repasse_bruto_motoristas,
+          COALESCE(SUM(valor_total * 0.15), 0) AS receita_bruta_plataforma,
+          COALESCE(SUM(valor_gorjeta), 0) AS total_gorjetas_diretas
+        FROM pedidos 
+        WHERE LOWER(status) = 'concluido';
+      `;
+
+      const saquesPendentes = await sql`
+        SELECT COALESCE(SUM(valor), 0) AS total_a_pagar 
+        FROM saques_motoristas 
+        WHERE status = 'pendente';
+      `;
+
+      const saquesPagos = await sql`
+        SELECT COALESCE(SUM(valor), 0) AS total_ja_pago 
+        FROM saques_motoristas 
+        WHERE status = 'pago';
+      `;
+
+      const dados = relatorio[0];
+      const receitaPlataforma = Number(dados.receita_bruta_plataforma || 0);
+
+      // Política de split dos sócios (20% Reserva Operacional, 80% Distribuição líquida igualitária)
+      const reservaOperacional = Number((receitaPlataforma * 0.20).toFixed(2));
+      const lucroLiquidoSocios = Number((receitaPlataforma - reservaOperacional).toFixed(2));
+      const cotaPorSocio = Number((lucroLiquidoSocios / 2).toFixed(2));
+
+      res.json({
+        metricasGerais: {
+          corridasConcluidas: parseInt(dados.total_corridas_liquidadas, 10),
+          faturamentoBruto: Number(dados.faturamento_bruto_total),
+          repasseMotoristas: Number(dados.repasse_bruto_motoristas),
+          receitaPlataforma
+        },
+        divisaoSocios: {
+          fundoReservaTecnica: reservaOperacional,
+          lucroDistribuivelTotal: lucroLiquidoSocios,
+          proLaborePorSocio: cotaPorSocio
+        },
+        fluxoCaixaSaques: {
+          saquesPendentesAprovacao: Number(saquesPendentes[0]?.total_a_pagar || 0),
+          saquesLiquidados: Number(saquesPagos[0]?.total_ja_pago || 0)
+        }
+      });
+    } catch (err) {
+      console.error('Erro ao gerar relatório contábil DRE:', err);
+      res.status(500).json({ erro: 'Falha ao consolidar dados contábeis.' });
+    }
+  });
+
+  // =========================================================================
+  // 3. GESTÃO DE MOTORISTAS & FROTA
   // =========================================================================
   router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -190,14 +256,17 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 3. GESTÃO DE SAQUES PIX
+  // 4. GESTÃO DE SAQUES PIX (ROTA COM COMPATIBILIDADE TRANSACIONAL ACID)
   // =========================================================================
   router.get('/saques', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const saques = await sql`
-        SELECT id, motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, solicitado_em, pago_em
+        SELECT id, motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, 
+               COALESCE(criado_em, solicitado_em) AS criado_em, pago_em, motivo_recusa
         FROM saques_motoristas
-        ORDER BY solicitado_em DESC
+        ORDER BY 
+          CASE WHEN status = 'pendente' THEN 1 ELSE 2 END,
+          COALESCE(criado_em, solicitado_em) DESC
         LIMIT 50;
       `;
       res.json(saques);
@@ -208,42 +277,65 @@ export default function adminRoutes(io) {
   });
 
   router.put('/saques/:id/processar', autenticarToken, verificarAdmin, async (req, res) => {
+    const { id } = req.params;
+    const { status, motivo } = req.body;
+
+    if (!['pago', 'recusado'].includes(status)) {
+      return res.status(400).json({ erro: 'Status inválido. Escolha pago ou recusado.' });
+    }
+
     try {
-      const { id } = req.params;
-      const { status, motivo } = req.body;
-
-      const saqueReg = await sql`SELECT * FROM saques_motoristas WHERE id = ${id} LIMIT 1;`;
-      if (saqueReg.length === 0) return res.status(404).json({ erro: 'Saque não localizado.' });
-
-      const saque = saqueReg[0];
-      if (saque.status !== 'pendente') {
-        return res.status(400).json({ erro: 'Este pedido já foi finalizado anteriormente.' });
-      }
-
-      if (status === 'pago') {
-        await sql`
-          UPDATE saques_motoristas
-          SET status = 'pago', pago_em = CURRENT_TIMESTAMP
-          WHERE id = ${id};
+      await sql.begin(async (sqlTx) => {
+        const saqueReg = await sqlTx`
+          SELECT * FROM saques_motoristas 
+          WHERE id = ${id} 
+          LIMIT 1 
+          FOR UPDATE;
         `;
-      } else if (status === 'recusado') {
-        await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira + ${saque.valor} WHERE id = ${saque.motorista_id};`;
-        await sql`
-          UPDATE saques_motoristas
-          SET status = 'recusado', motivo_recusa = ${motivo || 'Dados bancários inconsistentes'}
-          WHERE id = ${id};
-        `;
-      }
 
-      res.json({ sucesso: true, mensagem: `Saque marcado como ${status}.` });
+        if (saqueReg.length === 0) throw new Error('Saque não localizado.');
+        const saque = saqueReg[0];
+
+        if (saque.status !== 'pendente') {
+          throw new Error('Este pedido de saque já foi finalizado anteriormente.');
+        }
+
+        if (status === 'pago') {
+          await sqlTx`
+            UPDATE saques_motoristas
+            SET status = 'pago', pago_em = CURRENT_TIMESTAMP
+            WHERE id = ${id};
+          `;
+        } else if (status === 'recusado') {
+          // Devolve o saldo com concorrência segura
+          await sqlTx`
+            UPDATE motoristas 
+            SET saldo_carteira = saldo_carteira + ${saque.valor} 
+            WHERE id = ${saque.motorista_id};
+          `;
+
+          await sqlTx`
+            UPDATE saques_motoristas
+            SET status = 'recusado', motivo_recusa = ${motivo || 'Dados bancários inconsistentes'}
+            WHERE id = ${id};
+          `;
+
+          await sqlTx`
+            INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+            VALUES (${saque.motorista_id}, 'motorista', 'estorno_saque_recusado', ${saque.valor}, ${id});
+          `;
+        }
+      });
+
+      res.json({ sucesso: true, mensagem: `Saque marcado como ${status.toUpperCase()}!` });
     } catch (err) {
       console.error('Erro ao processar saque:', err);
-      res.status(500).json({ erro: 'Falha ao processar saque.' });
+      res.status(400).json({ erro: err.message || 'Falha ao processar saque.' });
     }
   });
 
   // =========================================================================
-  // 4. MONITOR DE VIAGENS
+  // 5. MONITOR DE VIAGENS
   // =========================================================================
   router.get('/pedidos', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -260,7 +352,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 5. CONSULTA E ATUALIZAÇÃO DE TARIFAS (COM REGRAS DE VALOR MÍNIMO E PICO)
+  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
     try {
@@ -298,7 +390,6 @@ export default function adminRoutes(io) {
         SET valor = ${JSON.stringify(novasTarifas)}::jsonb, atualizado_em = CURRENT_TIMESTAMP;
       `;
 
-      // Notifica passageiros e motoristas conectados instantaneamente
       const socket = req.io || io;
       if (socket) {
         socket.emit('tarifas_atualizadas', novasTarifas);
@@ -312,7 +403,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. GESTÃO DE CUPONS
+  // 7. GESTÃO DE CUPONS
   // =========================================================================
   router.get('/cupons', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -378,7 +469,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. SEGURANÇA E ZONAS DE RISCO
+  // 8. SEGURANÇA E ZONAS DE RISCO
   // =========================================================================
   router.get('/seguranca/incidentes', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -442,7 +533,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 8. BROADCAST
+  // 9. BROADCAST E COMUNICADOS GLOBAIS
   // =========================================================================
   router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -463,7 +554,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 9. RELATÓRIO CSV
+  // 10. RELATÓRIO EXECUTIVO CSV
   // =========================================================================
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
