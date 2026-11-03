@@ -12,6 +12,7 @@ import adminRoutes from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
+import sociosRoutes from './routes/socios.routes.js';
 
 dotenv.config();
 
@@ -315,6 +316,7 @@ app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
+app.use('/api/socios', sociosRoutes);
 
 // ============================================================================
 // 6. TRATAMENTO GLOBAL DE ERROS

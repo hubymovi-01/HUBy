@@ -9,6 +9,7 @@ import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarB
 import { configurarMultiplasParadas } from './cliente/cliente-paradas.js';
 
 let intervalChatCliente = null;
+let intervalChecagemPix = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
@@ -134,23 +135,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 8. Modais de Avaliação e Pagamentos
+  // 8. Modais de Avaliação e Pagamentos com Mercado Pago Real
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
-
-  document.getElementById('btnFecharPagamento')?.addEventListener('click', () => {
-    const modal = document.getElementById('modalPagamento');
-    if (modal) modal.style.display = 'none';
-  });
-
-  document.getElementById('btnCopiarPix')?.addEventListener('click', () => {
-    const input = document.getElementById('chavePixInput');
-    if (input) {
-      input.select();
-      navigator.clipboard.writeText(input.value);
-      alert('Chave Pix copiada com sucesso!');
-    }
-  });
+  configurarFluxoPagamentoMercadoPago();
 
   // Configuração do Chat da Viagem no Passageiro
   configurarChatPassageiro();
@@ -167,8 +155,163 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('beforeunload', () => {
     if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
     if (intervalChatCliente) clearInterval(intervalChatCliente);
+    if (intervalChecagemPix) clearInterval(intervalChecagemPix);
   });
 });
+
+// ============================================================================
+// FLUXO DE PAGAMENTO PIX DINÂMICO MERCADO PAGO
+// ============================================================================
+function configurarFluxoPagamentoMercadoPago() {
+  const modalPagamento = document.getElementById('modalPagamento');
+  const btnFecharPagamento = document.getElementById('btnFecharPagamento');
+  const btnMenuPagamento = document.getElementById('menuItemPagamentos');
+  const cardPix = document.getElementById('metodoPixCard');
+  const cardDinheiro = document.getElementById('metodoDinheiroCard');
+  const areaPixMP = document.getElementById('areaPixMercadoPago');
+  const btnCopiarPix = document.getElementById('btnCopiarPix');
+  const inputChavePix = document.getElementById('chavePixInput');
+
+  function fecharModalPgto() {
+    if (modalPagamento) modalPagamento.style.display = 'none';
+    if (intervalChecagemPix) {
+      clearInterval(intervalChecagemPix);
+      intervalChecagemPix = null;
+    }
+  }
+
+  btnFecharPagamento?.addEventListener('click', fecharModalPgto);
+
+  btnMenuPagamento?.addEventListener('click', (e) => {
+    e.preventDefault();
+    fecharDrawer();
+    if (modalPagamento) modalPagamento.style.display = 'flex';
+  });
+
+  cardPix?.addEventListener('click', async () => {
+    cardPix.classList.add('active-method');
+    cardDinheiro?.classList.remove('active-method');
+    if (areaPixMP) areaPixMP.style.display = 'block';
+
+    let valorRecarga = 15.00;
+    if (estadoCliente.rotaAtual?.preco) {
+      valorRecarga = Number(estadoCliente.rotaAtual.preco);
+    }
+
+    const valorPrompt = prompt('Informe o valor para recarga/pagamento via Pix (R$):', valorRecarga.toFixed(2));
+    if (!valorPrompt) return;
+
+    const valorFinal = parseFloat(valorPrompt);
+    if (!valorFinal || valorFinal <= 0) {
+      alert('Informe um valor válido.');
+      return;
+    }
+
+    await requisitarPixMercadoPago(valorFinal);
+  });
+
+  cardDinheiro?.addEventListener('click', () => {
+    cardDinheiro.classList.add('active-method');
+    cardPix?.classList.remove('active-method');
+    if (areaPixMP) areaPixMP.style.display = 'none';
+    if (intervalChecagemPix) {
+      clearInterval(intervalChecagemPix);
+      intervalChecagemPix = null;
+    }
+    alert('Modo de pagamento presencial selecionado (Dinheiro/Maquininha com o condutor).');
+  });
+
+  btnCopiarPix?.addEventListener('click', () => {
+    if (inputChavePix && inputChavePix.value) {
+      inputChavePix.select();
+      navigator.clipboard.writeText(inputChavePix.value);
+      btnCopiarPix.textContent = 'Copiado!';
+      setTimeout(() => { btnCopiarPix.textContent = 'Copiar'; }, 2000);
+    }
+  });
+}
+
+async function requisitarPixMercadoPago(valor) {
+  const token = localStorage.getItem('huby_token');
+  const areaPixMP = document.getElementById('areaPixMercadoPago');
+  const imgQrCode = document.getElementById('imgPixQrCode');
+  const inputChavePix = document.getElementById('chavePixInput');
+  const txtStatus = document.getElementById('statusPagamentoPixTexto');
+
+  if (txtStatus) {
+    txtStatus.textContent = '🔄 Gerando QR Code oficial no Mercado Pago...';
+    txtStatus.style.color = '#38BDF8';
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/api/carteira/pix/gerar`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ valor, pedidoId: estadoCliente.pedidoAtivoId || null })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Falha ao gerar cobrança Pix.');
+
+    if (areaPixMP) areaPixMP.style.display = 'block';
+    if (imgQrCode && data.qrCodeUrl) imgQrCode.src = data.qrCodeUrl;
+    if (inputChavePix && data.copiaCola) inputChavePix.value = data.copiaCola;
+
+    if (txtStatus) {
+      txtStatus.textContent = `⏳ Pix de R$ ${Number(valor).toFixed(2).replace('.', ',')} aguardando liquidação...`;
+      txtStatus.style.color = '#F59E0B';
+    }
+
+    // Inicia monitoramento automático (Webhook / Polling)
+    iniciarMonitoramentoPix(data.txid, valor);
+
+  } catch (err) {
+    if (txtStatus) {
+      txtStatus.textContent = `❌ ${err.message}`;
+      txtStatus.style.color = '#EF4444';
+    }
+  }
+}
+
+function iniciarMonitoramentoPix(txid, valor) {
+  if (intervalChecagemPix) clearInterval(intervalChecagemPix);
+  const token = localStorage.getItem('huby_token');
+  const txtStatus = document.getElementById('statusPagamentoPixTexto');
+
+  intervalChecagemPix = setInterval(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/carteira/pix/status/${txid}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+      });
+      if (!res.ok) return;
+      const statusData = await res.json();
+
+      if (statusData.status === 'pago') {
+        clearInterval(intervalChecagemPix);
+        intervalChecagemPix = null;
+
+        if (txtStatus) {
+          txtStatus.textContent = `✅ Pagamento de R$ ${Number(valor).toFixed(2).replace('.', ',')} aprovado!`;
+          txtStatus.style.color = '#10B981';
+        }
+
+        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
+          sonsHUBy.tocarMetaBatida();
+        }
+
+        await carregarSaldoCarteiraCliente();
+
+        setTimeout(() => {
+          const modalPagamento = document.getElementById('modalPagamento');
+          if (modalPagamento) modalPagamento.style.display = 'none';
+        }, 2200);
+      }
+    } catch (e) {}
+  }, 3000);
+}
 
 // ============================================================================
 // FUNÇÕES DE COMUNICAÇÃO EM TEMPO REAL COM O MOTORISTA

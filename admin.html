@@ -316,6 +316,7 @@
   <!-- ABAS DE NAVEGAÇÃO -->
   <nav class="tabs-nav">
     <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
+    <button type="button" class="tab-btn" data-tab="tabSocios">🤝 Divisão Sócios</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
     <button type="button" class="tab-btn" data-tab="tabZonas">🛡️ Zonas de Risco</button>
     <button type="button" class="tab-btn" data-tab="tabCupons">🎟️ Cupons & Marketing</button>
@@ -338,6 +339,82 @@
         <h4 style="margin: 0 0 12px 0; font-size: 14px; color: var(--muted);">Fluxo Operacional de Corridas</h4>
         <canvas id="chartCategorias"></canvas>
       </div>
+    </div>
+  </section>
+
+  <!-- ABA NOVA: DIVISÃO DOS SÓCIOS (50% / 50%) -->
+  <section id="tabSocios" class="tab-pane">
+    <div style="margin-bottom: 20px;">
+      <h3 style="margin: 0 0 6px 0; font-size: 18px; color: #FFF;">🤝 Painel de Retiradas dos Sócios</h3>
+      <p style="margin: 0; font-size: 13px; color: var(--muted);">
+        Divisão automatizada da taxa de retenção da plataforma (15%). Cada sócio possui 50% de participação líquida.
+      </p>
+    </div>
+
+    <!-- CARDS DOS 2 SÓCIOS -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 24px;">
+      <!-- CARD SÓCIO 1 -->
+      <div class="card-panel" style="border: 1.5px solid rgba(56, 189, 248, 0.35);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+          <div>
+            <strong id="socio1Nome" style="color: #38BDF8; font-size: 17px; display: block;">Sócio 1 (50%)</strong>
+            <small id="socio1Chave" style="color: var(--muted); font-size: 12px; display: block; margin-top: 2px;">Chave Pix: pix1@huby.app.br</small>
+          </div>
+          <button type="button" class="btn-tbl alt" onclick="editarDadosSocio(1)">✏️ Editar</button>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 16px;">
+          <small style="color: var(--muted); font-size: 11px; text-transform: uppercase; font-weight: 700; display: block;">Saldo Disponível para Saque</small>
+          <div id="socio1Saldo" style="color: var(--primary); font-size: 28px; font-weight: 900; margin-top: 4px;">R$ 0,00</div>
+          <small id="socio1TotalSacado" style="color: var(--muted); font-size: 11px; display: block; margin-top: 4px;">Total já retirado: R$ 0,00</small>
+        </div>
+
+        <button type="button" class="btn-action" style="width: 100%; justify-content: center; background: #38BDF8; color: #000; padding: 12px;" onclick="solicitarSaqueSocio(1)">
+          💸 Transferir Minha Parte via Pix
+        </button>
+      </div>
+
+      <!-- CARD SÓCIO 2 -->
+      <div class="card-panel" style="border: 1.5px solid rgba(168, 85, 247, 0.35);">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+          <div>
+            <strong id="socio2Nome" style="color: #A855F7; font-size: 17px; display: block;">Sócio 2 (50%)</strong>
+            <small id="socio2Chave" style="color: var(--muted); font-size: 12px; display: block; margin-top: 2px;">Chave Pix: pix2@huby.app.br</small>
+          </div>
+          <button type="button" class="btn-tbl alt" style="background: var(--purple); color: #FFF;" onclick="editarDadosSocio(2)">✏️ Editar</button>
+        </div>
+
+        <div style="background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 16px;">
+          <small style="color: var(--muted); font-size: 11px; text-transform: uppercase; font-weight: 700; display: block;">Saldo Disponível para Saque</small>
+          <div id="socio2Saldo" style="color: var(--primary); font-size: 28px; font-weight: 900; margin-top: 4px;">R$ 0,00</div>
+          <small id="socio2TotalSacado" style="color: var(--muted); font-size: 11px; display: block; margin-top: 4px;">Total já retirado: R$ 0,00</small>
+        </div>
+
+        <button type="button" class="btn-action" style="width: 100%; justify-content: center; background: #A855F7; color: #FFF; padding: 12px;" onclick="solicitarSaqueSocio(2)">
+          💸 Transferir Minha Parte via Pix
+        </button>
+      </div>
+    </div>
+
+    <!-- HISTÓRICO DE RETIRADAS DOS SÓCIOS -->
+    <div class="table-responsive">
+      <div style="padding: 14px 16px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 14px; color: #FFF;">
+        📋 Histórico de Saques e Retiradas da Diretoria
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Sócio</th>
+            <th>Chave Pix de Destino</th>
+            <th>Valor Retirado</th>
+            <th>Data e Hora</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaRetiradasSociosBody">
+          <tr><td colspan="5" style="text-align: center; color: var(--muted);">Nenhuma retirada registrada até o momento.</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
@@ -586,29 +663,59 @@
     </div>
   </section>
 
-  <!-- ABA 9: REGRAS DE NEGÓCIO E TARIFAS -->
+  <!-- ABA 9: REGRAS DE NEGÓCIO, TARIFAS & GATEWAY MERCADO PAGO -->
   <section id="tabConfig" class="tab-pane">
-    <div class="card-panel" style="max-width: 550px;">
-      <h3 style="margin-top: 0;">Parâmetros da Plataforma</h3>
-      <form id="formConfiguracoes">
-        <div class="form-group">
-          <label>Taxa de Retenção HUBy (%)</label>
-          <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
-        </div>
-        <div class="form-group">
-          <label>Tarifa por Km - HUBy Carro (R$)</label>
-          <input type="number" id="cfgKmCarro" step="0.10" value="2.50" required>
-        </div>
-        <div class="form-group">
-          <label>Tarifa por Km - HUBy Moto (R$)</label>
-          <input type="number" id="cfgKmMoto" step="0.10" value="1.80" required>
-        </div>
-        <div class="form-group">
-          <label>Tarifa por Km - HUBy Entrega (R$)</label>
-          <input type="number" id="cfgKmEntrega" step="0.10" value="2.00" required>
-        </div>
-        <button type="submit" class="btn-action" style="width: 100%; justify-content: center; padding: 12px;">Salvar Parâmetros</button>
-      </form>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 20px;">
+      
+      <!-- PARÂMETROS E TARIFAS -->
+      <div class="card-panel">
+        <h3 style="margin-top: 0;">Parâmetros da Plataforma</h3>
+        <form id="formConfiguracoes">
+          <div class="form-group">
+            <label>Taxa de Retenção HUBy (%)</label>
+            <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
+          </div>
+          <div class="form-group">
+            <label>Tarifa por Km - HUBy Carro (R$)</label>
+            <input type="number" id="cfgKmCarro" step="0.10" value="2.50" required>
+          </div>
+          <div class="form-group">
+            <label>Tarifa por Km - HUBy Moto (R$)</label>
+            <input type="number" id="cfgKmMoto" step="0.10" value="1.80" required>
+          </div>
+          <div class="form-group">
+            <label>Tarifa por Km - HUBy Entrega (R$)</label>
+            <input type="number" id="cfgKmEntrega" step="0.10" value="2.00" required>
+          </div>
+          <button type="submit" class="btn-action" style="width: 100%; justify-content: center; padding: 12px;">Salvar Parâmetros</button>
+        </form>
+      </div>
+
+      <!-- GATEWAY DE PAGAMENTO (MERCADO PAGO) -->
+      <div class="card-panel">
+        <h3 style="margin-top: 0; color: #38BDF8;">💳 Gateway de Pagamento (Mercado Pago)</h3>
+        <p style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">
+          Insira suas credenciais oficiais para geração de Pix real e liquidação bancária instantânea.
+        </p>
+        <form id="formMercadoPagoConfig">
+          <div class="form-group">
+            <label>Access Token (Produção ou Teste)</label>
+            <input type="password" id="mpAccessToken" placeholder="APP_USR-0000000000000000-..." required>
+          </div>
+          <div class="form-group">
+            <label>Chave Pública (Public Key)</label>
+            <input type="text" id="mpPublicKey" placeholder="APP_USR-xxxx-xxxx...">
+          </div>
+          <div class="form-group">
+            <label>Taxa Estimada do Gateway (%)</label>
+            <input type="number" step="0.01" id="mpTaxaPercentual" value="0.99" placeholder="0.99">
+          </div>
+          <button type="submit" class="btn-action" style="width: 100%; justify-content: center; padding: 12px; background: #38BDF8; color: #000;">
+            Salvar Chaves Mercado Pago
+          </button>
+        </form>
+      </div>
+
     </div>
   </section>
 

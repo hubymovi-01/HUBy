@@ -1,6 +1,7 @@
-// routes/carteira.routes.js - Carteira Digital Pré-Paga, Pix & Saques Bancários HUBy
+// routes/carteira.routes.js - Carteira Digital Pré-Paga, Pix Real Mercado Pago & Saques Bancários HUBy
 import express from 'express';
 import crypto from 'crypto';
+import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 
@@ -63,6 +64,24 @@ async function inicializarTabelasCarteira() {
 }
 inicializarTabelasCarteira();
 
+// Auxiliar: obtém cliente oficial do Mercado Pago via banco ou .env
+async function obterClienteMercadoPago() {
+  try {
+    const config = await sql`
+      SELECT valor FROM configuracoes_plataforma 
+      WHERE chave = 'gateway_mercadopago' LIMIT 1;
+    `;
+    const accessToken = config[0]?.valor?.access_token || process.env.MP_ACCESS_TOKEN || '';
+    if (!accessToken) return null;
+
+    const client = new MercadoPagoConfig({ accessToken });
+    return { client, payment: new Payment(client), taxaPercentual: Number(config[0]?.valor?.taxa_percentual || 0.99) };
+  } catch (err) {
+    console.warn('Não foi possível inicializar Mercado Pago:', err.message);
+    return null;
+  }
+}
+
 // ============================================================================
 // 1. CONSULTA DE SALDO E EXTRATO GERAL
 // ============================================================================
@@ -104,21 +123,67 @@ router.get('/saldo', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 2. RECARGAS PIX (PASSAGEIRO)
+// 2. RECARGAS PIX (PASSAGEIRO COM MERCADO PAGO REAL & FALLBACK)
 // ============================================================================
 router.post('/pix/gerar', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
-    const { valor } = req.body;
+    const { valor, pedidoId } = req.body;
     const valorNum = parseFloat(Number(valor).toFixed(2));
 
     if (!valorNum || valorNum <= 0) {
       return res.status(400).json({ erro: 'O valor da recarga deve ser maior que zero.' });
     }
 
+    const mp = await obterClienteMercadoPago();
+
+    // 1. Caso o Mercado Pago esteja configurado, cria a cobrança real
+    if (mp && mp.payment) {
+      try {
+        const bodyMP = {
+          transaction_amount: valorNum,
+          description: `HUBy Mobilidade - Recarga #${pedidoId || 'Avulso'}`,
+          payment_method_id: 'pix',
+          payer: {
+            email: req.usuario.email || 'cliente@huby.app.br',
+            first_name: req.usuario.nome ? req.usuario.nome.split(' ')[0] : 'Cliente',
+            last_name: req.usuario.nome ? req.usuario.nome.split(' ').slice(1).join(' ') || 'HUBy' : 'HUBy'
+          },
+          notification_url: `${process.env.API_URL || 'https://sua-api.onrender.com'}/api/carteira/webhook/mercadopago`
+        };
+
+        const mpRes = await mp.payment.create({ body: bodyMP });
+        const txid = String(mpRes.id);
+        const copiaCola = mpRes.point_of_interaction?.transaction_data?.qr_code;
+        const qrCodeBase64 = mpRes.point_of_interaction?.transaction_data?.qr_code_base64;
+        const qrCodeUrl = qrCodeBase64
+          ? `data:image/png;base64,${qrCodeBase64}`
+          : `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(copiaCola)}`;
+        const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
+
+        await sql`
+          INSERT INTO cobrancas_pix (txid, usuario_id, valor, status, pix_copia_cola, expira_em)
+          VALUES (${txid}, ${usuarioId}, ${valorNum}, 'pendente', ${copiaCola}, ${expiraEm})
+          ON CONFLICT (txid) DO NOTHING;
+        `;
+
+        return res.json({
+          sucesso: true,
+          gateway: 'mercadopago',
+          txid,
+          valor: valorNum,
+          copiaCola,
+          qrCodeUrl,
+          expiraEm
+        });
+      } catch (mpErr) {
+        console.warn('Falha na API do Mercado Pago, recorrendo ao gerador padrão:', mpErr.message);
+      }
+    }
+
+    // 2. Fallback de contingência local se o token do Mercado Pago ainda não foi cadastrado
     const txid = `HUBY${Date.now()}${crypto.randomBytes(4).toString('hex').toUpperCase()}`.slice(0, 32);
     const chavePix = 'pix@huby.app.br';
-
     const copiaCola = `00020101021226580014br.gov.bcb.pix0115${chavePix}520400005303986540${valorNum.toFixed(2).length < 5 ? '0' : ''}${valorNum.toFixed(2)}5802BR5904HUBY6008SAOJOAO62240520${txid}6304${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(copiaCola)}`;
     const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
@@ -130,6 +195,7 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
 
     res.json({
       sucesso: true,
+      gateway: 'local',
       txid,
       valor: valorNum,
       chavePix,
@@ -140,6 +206,55 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
   } catch (err) {
     console.error('Erro ao gerar Pix de recarga:', err);
     res.status(500).json({ erro: 'Não foi possível gerar a cobrança Pix.' });
+  }
+});
+
+// WEBHOOK OFICIAL DO MERCADO PAGO (Liquidação automática em tempo real)
+router.post('/webhook/mercadopago', async (req, res) => {
+  try {
+    const { type, data } = req.body;
+    const paymentId = data?.id || req.query['data.id'] || req.body?.id;
+
+    if (type === 'payment' || paymentId) {
+      const mp = await obterClienteMercadoPago();
+      if (mp && mp.payment && paymentId) {
+        const info = await mp.payment.get({ id: paymentId });
+
+        if (info.status === 'approved') {
+          await sql.begin(async (sqlTx) => {
+            const cobranca = await sqlTx`
+              SELECT * FROM cobrancas_pix 
+              WHERE txid = ${String(paymentId)} 
+              LIMIT 1 
+              FOR UPDATE;
+            `;
+
+            if (cobranca.length > 0 && cobranca[0].status !== 'pago') {
+              await sqlTx`
+                UPDATE cobrancas_pix 
+                SET status = 'pago' 
+                WHERE txid = ${String(paymentId)};
+              `;
+
+              await sqlTx`
+                UPDATE usuarios 
+                SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${Number(cobranca[0].valor)}
+                WHERE id::text = ${cobranca[0].usuario_id}::text;
+              `;
+
+              await sqlTx`
+                INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor)
+                VALUES (${cobranca[0].usuario_id}, 'cliente', 'deposito_pix_mercadopago', ${Number(cobranca[0].valor)});
+              `;
+            }
+          });
+        }
+      }
+    }
+    res.sendStatus(200);
+  } catch (err) {
+    console.error('Erro no processamento do Webhook MP:', err.message);
+    res.sendStatus(200);
   }
 });
 
@@ -155,6 +270,22 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
 
     if (!cobranca.length) {
       return res.status(404).json({ erro: 'Cobrança Pix não localizada.' });
+    }
+
+    if (cobranca[0].status === 'pago') {
+      return res.json(cobranca[0]);
+    }
+
+    // Se estiver pendente localmente, faz dupla checagem direta no Mercado Pago
+    const mp = await obterClienteMercadoPago();
+    if (mp && mp.payment && !isNaN(Number(txid))) {
+      try {
+        const info = await mp.payment.get({ id: txid });
+        if (info.status === 'approved') {
+          await sql`UPDATE cobrancas_pix SET status = 'pago' WHERE txid = ${txid};`;
+          cobranca[0].status = 'pago';
+        }
+      } catch (e) {}
     }
 
     res.json(cobranca[0]);
@@ -275,7 +406,6 @@ router.post('/motorista/:id/saque', async (req, res) => {
 
   try {
     const resultado = await sql.begin(async (sqlTx) => {
-      // 1. Bloqueia o registro do motorista contra saques concorrentes
       const condutores = await sqlTx`
         SELECT id, nome, saldo_carteira 
         FROM motoristas 
@@ -297,14 +427,12 @@ router.post('/motorista/:id/saque', async (req, res) => {
 
       const novoSaldo = Number((saldoDisponivel - valorNum).toFixed(2));
 
-      // 2. Atualiza saldo de forma atômica
       await sqlTx`
         UPDATE motoristas 
         SET saldo_carteira = ${novoSaldo}, chave_pix_padrao = ${chave_pix.trim()} 
         WHERE id = ${condutor.id};
       `;
 
-      // 3. Registra a solicitação de saque
       const saqueCriado = await sqlTx`
         INSERT INTO saques_motoristas (
           motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status
@@ -313,7 +441,6 @@ router.post('/motorista/:id/saque', async (req, res) => {
         ) RETURNING id;
       `;
 
-      // 4. Registra no extrato/ledger da carteira
       await sqlTx`
         INSERT INTO transacoes_carteira (
           usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id
@@ -387,7 +514,6 @@ router.put('/admin/saques/:id', async (req, res) => {
       }
 
       if (status === 'recusado') {
-        // Estorno atômico para o motorista
         await sqlTx`
           UPDATE motoristas 
           SET saldo_carteira = saldo_carteira + ${saque.valor} 
@@ -505,7 +631,6 @@ router.post('/gorjeta', autenticarToken, async (req, res) => {
         throw new Error('Saldo insuficiente na carteira para enviar gorjeta.');
       }
 
-      // Abate do cliente e repassa 100% da gorjeta ao motorista (sem retenção de taxa)
       await sqlTx`UPDATE usuarios SET saldo_carteira = saldo_carteira - ${gorjetaNum} WHERE id::text = ${clienteId}::text;`;
       await sqlTx`UPDATE motoristas SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${gorjetaNum} WHERE id::text = ${motoristaId}::text;`;
       await sqlTx`UPDATE pedidos SET valor_gorjeta = COALESCE(valor_gorjeta, 0) + ${gorjetaNum} WHERE id = ${pedidoId};`;

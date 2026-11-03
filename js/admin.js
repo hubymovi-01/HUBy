@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   configurarFormCupons(token);
   configurarFormBroadcast(token);
   configurarFormTarifas(token);
+  configurarFormMercadoPago(token);
   configurarModalDocumentos(token);
 
   document.getElementById('btnSincronizar')?.addEventListener('click', () => sincronizarTudo(token));
@@ -62,14 +63,18 @@ async function sincronizarTudo(token) {
   // 2. Carrega as métricas com o fallback já pronto e desenha os gráficos
   await carregarMetricasECards(token, periodoAtual);
 
-  // 3. Carrega o restante em segundo plano
+  // 3. Carrega a divisão dos sócios
+  await carregarDadosSocios(token);
+
+  // 4. Carrega o restante em segundo plano
   Promise.allSettled([
     carregarTabelaZonasRisco(token),
     carregarTabelaCupons(token),
     carregarTabelaSeguranca(token),
     carregarTabelaSaques(token),
     carregarTabelaViagens(token),
-    carregarTarifasConfig(token)
+    carregarTarifasConfig(token),
+    carregarGatewayConfig(token)
   ]);
 }
 
@@ -211,7 +216,117 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
   }
 }
 
-// 3. Gestão de Frota e Documentos
+// ============================================================================
+// 3. DIVISÃO DOS SÓCIOS (50% / 50%)
+// ============================================================================
+async function carregarDadosSocios(token) {
+  try {
+    const res = await fetch(`${API_URL}/api/socios/saldo-divisao`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const socios = data.socios || [];
+
+    if (socios[0]) {
+      document.getElementById('socio1Nome').textContent = `${socios[0].nome} (${socios[0].porcentagem}%)`;
+      document.getElementById('socio1Chave').textContent = `Chave Pix: ${socios[0].chave_pix}`;
+      document.getElementById('socio1Saldo').textContent = `R$ ${Number(socios[0].saldoDisponivel).toFixed(2).replace('.', ',')}`;
+      const elSacado1 = document.getElementById('socio1TotalSacado');
+      if (elSacado1) elSacado1.textContent = `Total já retirado: R$ ${Number(socios[0].jaSacado).toFixed(2).replace('.', ',')}`;
+      window._socio1Max = Number(socios[0].saldoDisponivel);
+    }
+
+    if (socios[1]) {
+      document.getElementById('socio2Nome').textContent = `${socios[1].nome} (${socios[1].porcentagem}%)`;
+      document.getElementById('socio2Chave').textContent = `Chave Pix: ${socios[1].chave_pix}`;
+      document.getElementById('socio2Saldo').textContent = `R$ ${Number(socios[1].saldoDisponivel).toFixed(2).replace('.', ',')}`;
+      const elSacado2 = document.getElementById('socio2TotalSacado');
+      if (elSacado2) elSacado2.textContent = `Total já retirado: R$ ${Number(socios[1].jaSacado).toFixed(2).replace('.', ',')}`;
+      window._socio2Max = Number(socios[1].saldoDisponivel);
+    }
+
+    const tbodyRetiradas = document.getElementById('tabelaRetiradasSociosBody');
+    if (tbodyRetiradas && data.historicoRetiradas) {
+      if (!data.historicoRetiradas.length) {
+        tbodyRetiradas.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--muted);">Nenhuma retirada registrada até o momento.</td></tr>';
+      } else {
+        tbodyRetiradas.innerHTML = data.historicoRetiradas.map(r => `
+          <tr>
+            <td><strong>#${r.id}</strong></td>
+            <td><strong>${r.socio_nome}</strong></td>
+            <td><code>${r.chave_pix}</code></td>
+            <td style="color: var(--primary); font-weight: 800;">R$ ${Number(r.valor).toFixed(2).replace('.', ',')}</td>
+            <td>${new Date(r.criado_em).toLocaleString('pt-BR')}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (e) {
+    console.warn('Erro ao carregar dados dos sócios:', e);
+  }
+}
+
+window.editarDadosSocio = async (socioId) => {
+  const token = localStorage.getItem('huby_token');
+  const nome = prompt(`Informe o Nome do Sócio ${socioId}:`);
+  if (!nome) return;
+  const chave_pix = prompt(`Informe a Chave Pix de recebimento do Sócio ${socioId}:`);
+  if (!chave_pix) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/socios/atualizar/${socioId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ nome, chave_pix })
+    });
+    if (res.ok) {
+      alert('✅ Dados do sócio atualizados com sucesso!');
+      carregarDadosSocios(token);
+    }
+  } catch (e) {
+    alert('Erro ao atualizar dados do sócio.');
+  }
+};
+
+window.solicitarSaqueSocio = async (socioId) => {
+  const token = localStorage.getItem('huby_token');
+  const maxDisponivel = socioId === 1 ? (window._socio1Max || 0) : (window._socio2Max || 0);
+
+  if (maxDisponivel <= 0) {
+    alert('Não há saldo disponível para retirada no momento.');
+    return;
+  }
+
+  const valorStr = prompt(`Informe o valor da retirada (Disponível: R$ ${maxDisponivel.toFixed(2).replace('.', ',')}):`, maxDisponivel.toFixed(2));
+  if (!valorStr) return;
+
+  const valor = parseFloat(valorStr);
+  if (!valor || valor <= 0 || valor > maxDisponivel) {
+    alert('Valor inválido ou superior ao saldo disponível.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/api/socios/retirar/${socioId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ valor })
+    });
+
+    const data = await res.json();
+    if (res.ok) {
+      alert(data.mensagem || 'Retirada registrada com sucesso!');
+      carregarDadosSocios(token);
+    } else {
+      alert(data.erro || 'Falha ao registrar retirada.');
+    }
+  } catch (e) {
+    alert('Erro de conexão ao processar retirada.');
+  }
+};
+
+// 4. Gestão de Frota e Documentos
 async function carregarTabelaFrota(token) {
   const tbody = document.getElementById('tabelaFrotaBody');
   if (!tbody) return;
@@ -277,7 +392,7 @@ async function carregarTabelaFrota(token) {
   } catch (e) {}
 }
 
-// 4. Zonas de Risco
+// 5. Zonas de Risco
 async function carregarTabelaZonasRisco(token) {
   const tbody = document.getElementById('tabelaZonasBody');
   if (!tbody) return;
@@ -333,7 +448,7 @@ function configurarFormZonasRisco(token) {
   });
 }
 
-// 5. Cupons de Desconto
+// 6. Cupons de Desconto
 async function carregarTabelaCupons(token) {
   const tbody = document.getElementById('tabelaCuponsBody');
   if (!tbody) return;
@@ -388,7 +503,7 @@ function configurarFormCupons(token) {
   });
 }
 
-// 6. Incidentes e SOS
+// 7. Incidentes e SOS
 async function carregarTabelaSeguranca(token) {
   const tbody = document.getElementById('tabelaSegurancaBody');
   if (!tbody) return;
@@ -417,9 +532,7 @@ async function carregarTabelaSeguranca(token) {
   } catch (e) {}
 }
 
-// ============================================================================
-// 7. MODERAÇÃO DE SAQUES PIX BANCÁRIOS (ROTA OFICIAL /api/carteira/admin/saques)
-// ============================================================================
+// 8. Moderação de Saques dos Motoristas
 async function carregarTabelaSaques(token) {
   const tbody = document.getElementById('tabelaSaquesBody');
   if (!tbody) return;
@@ -472,7 +585,6 @@ async function carregarTabelaSaques(token) {
       `;
     }).join('');
 
-    // Listener para o botão de copiar chave Pix
     tbody.querySelectorAll('.btn-copiar-chave-pix').forEach(btn => {
       btn.addEventListener('click', () => {
         const chave = btn.getAttribute('data-chave');
@@ -487,7 +599,7 @@ async function carregarTabelaSaques(token) {
   }
 }
 
-// 8. Monitor de Viagens
+// 9. Monitor de Viagens
 async function carregarTabelaViagens(token) {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
@@ -520,7 +632,7 @@ async function carregarTabelaViagens(token) {
   } catch (e) {}
 }
 
-// 9. Tarifas
+// 10. Parâmetros e Tarifas
 async function carregarTarifasConfig(token) {
   try {
     const res = await fetch(`${API_URL}/api/config`);
@@ -531,6 +643,44 @@ async function carregarTarifasConfig(token) {
     if (cfg.km_moto) document.getElementById('cfgKmMoto').value = cfg.km_moto;
     if (cfg.km_entrega) document.getElementById('cfgKmEntrega').value = cfg.km_entrega;
   } catch (e) {}
+}
+
+// 11. Gateway de Pagamento (Mercado Pago)
+async function carregarGatewayConfig(token) {
+  try {
+    const res = await fetch(`${API_URL}/api/admin/gateway/mercadopago`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.access_token) document.getElementById('mpAccessToken').value = data.access_token;
+    if (data.public_key) document.getElementById('mpPublicKey').value = data.public_key;
+    if (data.taxa_percentual) document.getElementById('mpTaxaPercentual').value = data.taxa_percentual;
+  } catch (e) {}
+}
+
+function configurarFormMercadoPago(token) {
+  document.getElementById('formMercadoPagoConfig')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const access_token = document.getElementById('mpAccessToken').value.trim();
+    const public_key = document.getElementById('mpPublicKey').value.trim();
+    const taxa_percentual = parseFloat(document.getElementById('mpTaxaPercentual').value) || 0.99;
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/gateway/mercadopago`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ access_token, public_key, taxa_percentual })
+      });
+      if (res.ok) {
+        alert('✅ Credenciais do Mercado Pago salvas com sucesso!');
+      } else {
+        alert('Falha ao salvar chaves do Mercado Pago.');
+      }
+    } catch (err) {
+      alert('Erro de conexão ao salvar gateway.');
+    }
+  });
 }
 
 function configurarFormBroadcast(token) {
@@ -635,6 +785,8 @@ function configurarNavegacaoAbas() {
         tabAlvo.classList.add('active');
         tabAlvo.style.display = 'block';
 
+        const token = localStorage.getItem('huby_token');
+
         if (tabAlvoId === 'tabMetricas') {
           setTimeout(() => {
             if (chartFinanceiroInstance) chartFinanceiroInstance.resize();
@@ -642,8 +794,11 @@ function configurarNavegacaoAbas() {
           }, 150);
         }
 
+        if (tabAlvoId === 'tabSocios') {
+          carregarDadosSocios(token);
+        }
+
         if (tabAlvoId === 'tabSaques') {
-          const token = localStorage.getItem('huby_token');
           carregarTabelaSaques(token);
         }
 

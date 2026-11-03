@@ -1,3 +1,4 @@
+// js/auth.js - Autenticação e Cadastro HUBy
 import { API_URL } from './config.js';
 
 let roleAtual = 'cliente';
@@ -23,8 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (grpDataNascPassageiro) grpDataNascPassageiro.style.display = 'block';
     if (secaoMotorista) secaoMotorista.style.display = 'none';
 
-    txtSubtitulo.textContent = 'Crie a sua conta para solicitar viagens instantâneas';
-    btnSubmit.querySelector('span').textContent = 'Criar Conta de Passageiro';
+    if (txtSubtitulo) txtSubtitulo.textContent = 'Crie a sua conta para solicitar viagens instantâneas';
+    if (btnSubmit) btnSubmit.querySelector('span').textContent = 'Criar Conta de Passageiro';
     if (linkLoginDireto) linkLoginDireto.href = './login.html?perfil=cliente';
     localStorage.setItem('huby_tipo_acesso', 'cliente');
     esconderAlerta();
@@ -38,8 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'none';
     if (secaoMotorista) secaoMotorista.style.display = 'block';
 
-    txtSubtitulo.textContent = 'Cadastre seu veículo, defina seus horários e dirija com liberdade';
-    btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
+    if (txtSubtitulo) txtSubtitulo.textContent = 'Cadastre seu veículo, defina seus horários e dirija com liberdade';
+    if (btnSubmit) btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
     if (linkLoginDireto) linkLoginDireto.href = './login.html?perfil=motorista';
     localStorage.setItem('huby_tipo_acesso', 'motorista');
     esconderAlerta();
@@ -122,18 +123,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (senha.length < 6) {
-      exibirAlerta('A palavra-passe deve conter pelo menos 6 carateres.', 'error');
+      exibirAlerta('A senha deve conter pelo menos 6 caracteres.', 'error');
       return;
     }
 
-    // CAPTURA RESILIENTE DE DATA: Busca qualquer campo de data preenchido
+    // CAPTURA RESILIENTE DE DATA
     const inDataCliente = document.getElementById('cadDataNascCliente')?.value;
     const inDataMotorista = document.getElementById('cadDataNascMotorista')?.value;
     const inDataPadrao = document.getElementById('cadDataNascimento')?.value;
 
     let dataNascimentoVal = inDataCliente || inDataMotorista || inDataPadrao || '';
 
-    // Corrige anos acidentais de 5 dígitos (ex: 20055 -> 2005)
     if (dataNascimentoVal) {
       const partes = dataNascimentoVal.split('-');
       if (partes[0] && partes[0].length > 4) {
@@ -174,7 +174,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const cnh = document.getElementById('cadCnh')?.value.trim();
       const modelo = document.getElementById('cadModelo')?.value.trim();
       const placa = document.getElementById('cadPlaca')?.value.trim().toUpperCase();
-      const categoria = document.getElementById('cadCategoriaVeiculo')?.value;
+      const categoria = document.getElementById('cadCategoriaVeiculo')?.value || 'carro';
+      const cor = document.getElementById('cadCorVeiculo')?.value?.trim() || 'Prata';
+      const ano = document.getElementById('cadAnoVeiculo')?.value?.trim() || '2023';
+      const chavePix = document.getElementById('cadChavePix')?.value?.trim() || '';
       const fileInput = document.getElementById('cadFotoVeiculo');
 
       if (!cnh || cnh.replace(/\D/g, '').length !== 11) {
@@ -188,9 +191,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       payload.cnh = cnh;
+      payload.cnh_numero = cnh;
       payload.veiculo_modelo = modelo;
       payload.veiculo_placa = placa;
+      payload.veiculo_cor = cor;
+      payload.veiculo_ano = ano;
+      payload.categoria = categoria;
       payload.categoria_veiculo = categoria;
+      if (chavePix) payload.chave_pix_padrao = chavePix;
 
       if (fileInput?.files && fileInput.files[0]) {
         try {
@@ -231,6 +239,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (payload.contatoEmergenciaNome) {
         localStorage.setItem('huby_emergencia_nome', payload.contatoEmergenciaNome);
         localStorage.setItem('huby_emergencia_tel', payload.contatoEmergenciaTelefone);
+      }
+      if (payload.chave_pix_padrao) {
+        localStorage.setItem('huby_motorista_pix', payload.chave_pix_padrao);
       }
 
       exibirAlerta('Conta criada com sucesso! Redirecionando...', 'success');
