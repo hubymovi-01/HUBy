@@ -2,11 +2,12 @@
 import { API_URL, sonsHUBy } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
-import { extrairDadosDoBotao, iniciarRadar } from './motorista-radar.js';
+import { extrairDadosDoBotao, iniciarRadarChamadas } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
 
 export async function aceitarCorridaDefinitiva(btn, dadosCache) {
-  const dados = dadosCache || extrairDadosDoBotao(btn);
+  const dados = dadosCache || (btn ? extrairDadosDoBotao(btn) : null);
+  if (!dados) return;
 
   try {
     const r = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
@@ -14,7 +15,7 @@ export async function aceitarCorridaDefinitiva(btn, dadosCache) {
       headers: obterHeaders(),
       body: JSON.stringify({ 
         motoristaId: estado.motoristaId,
-        motoristaNome: estado.motoristaNome 
+        motoristaNome: estado.motoristaNome || 'Carol'
       })
     });
 
@@ -27,7 +28,8 @@ export async function aceitarCorridaDefinitiva(btn, dadosCache) {
       alert(resJson.erro || 'Esta corrida já não está disponível.');
       limparRotasMapa();
       estado.pedidoEmInspecao = null;
-      iniciarRadar();
+      estado.pedidoEmAnalise = null;
+      iniciarRadarChamadas();
     }
   } catch (err) {
     iniciarFaseBuscarPassageiro(dados);
@@ -38,24 +40,34 @@ export async function iniciarFaseBuscarPassageiro(dados) {
   estado.pedidoAtivo = dados;
   estado.pedidoAceitoAtual = dados;
   estado.pedidoEmInspecao = null;
+  estado.pedidoEmAnalise = null;
   estado.faseViagem = 'buscar_passageiro';
   estado.etapaCorridaAtual = 'a_caminho';
-  if (estado.intervalRadar) clearInterval(estado.intervalRadar);
+  
+  if (estado.intervalRadar) {
+    clearInterval(estado.intervalRadar);
+    estado.intervalRadar = null;
+  }
 
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'flex';
 
   limparRotasMapa();
-  const coordsOrigem = [dados.origLat, dados.origLng];
 
-  estado.markerOrigem = L.marker(coordsOrigem, {
-    icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
-  }).addTo(estado.mapa);
+  const coordsOrigem = dados.coordsOrig || (dados.origLat && dados.origLng ? [dados.origLat, dados.origLng] : [estado.coords[0] + 0.003, estado.coords[1] + 0.003]);
 
-  await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
+  if (estado.mapa) {
+    estado.markerOrigem = L.marker(coordsOrigem, {
+      icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+    }).addTo(estado.mapa);
 
-  const urlWaze = `https://waze.com/ul?ll=${dados.origLat},${dados.origLng}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.origLat},${dados.origLng}`;
+    await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
+  }
+
+  const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
+  const repasseLiquido = dados.repasse || ((Number(dados.preco || dados.valorTotal || 0)) * 0.85).toFixed(2).replace('.', ',');
+  const enderecoEmbarque = dados.origem || dados.origNome || 'Local do passageiro';
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
@@ -66,11 +78,11 @@ export async function iniciarFaseBuscarPassageiro(dados) {
         <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
           🚗 A CAMINHO DO PASSAGEIRO
         </span>
-        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${dados.repasse}</strong>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseLiquido}</strong>
       </div>
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-        🟢 <strong>Embarque:</strong> <span style="color: #94A3B8;">${dados.origNome}</span>
+        🟢 <strong>Embarque:</strong> <span style="color: #94A3B8;">${enderecoEmbarque}</span>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -107,16 +119,21 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
   if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
 
   limparRotasMapa();
-  const coordsDestino = [dados.destLat, dados.destLng];
 
-  estado.markerDestino = L.marker(coordsDestino, {
-    icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
-  }).addTo(estado.mapa);
+  const coordsDestino = dados.coordsDest || (dados.destLat && dados.destLng ? [dados.destLat, dados.destLng] : [estado.coords[0] + 0.009, estado.coords[1] + 0.009]);
 
-  await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
+  if (estado.mapa) {
+    estado.markerDestino = L.marker(coordsDestino, {
+      icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+    }).addTo(estado.mapa);
 
-  const urlWaze = `https://waze.com/ul?ll=${dados.destLat},${dados.destLng}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${dados.destLat},${dados.destLng}`;
+    await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
+  }
+
+  const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
+  const repasseLiquido = dados.repasse || ((Number(dados.preco || dados.valorTotal || 0)) * 0.85).toFixed(2).replace('.', ',');
+  const enderecoDestino = dados.destino || dados.destNome || 'Destino informado';
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
@@ -127,11 +144,11 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
         <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
           🚀 EM VIAGEM COM PASSAGEIRO
         </span>
-        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${dados.repasse}</strong>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseLiquido}</strong>
       </div>
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-        🏁 <strong>Destino Final:</strong> <span style="color: #94A3B8;">${dados.destNome}</span>
+        🏁 <strong>Destino Final:</strong> <span style="color: #94A3B8;">${enderecoDestino}</span>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -159,10 +176,12 @@ export function abrirModalOpcoesPagamento(dados) {
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
   const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
 
-  const valorBruto = dados.valorTotal > 0 ? dados.valorTotal : (parseFloat(String(dados.repasse).replace(',', '.')) / 0.85);
+  const valorTotalBruto = Number(dados.preco || dados.valorTotal || 0) > 0
+    ? Number(dados.preco || dados.valorTotal)
+    : (parseFloat(String(dados.repasse || 0).replace(',', '.')) / 0.85);
 
   if (lblValor) {
-    lblValor.textContent = `R$ ${valorBruto.toFixed(2).replace('.', ',')}`;
+    lblValor.textContent = `R$ ${valorTotalBruto.toFixed(2).replace('.', ',')}`;
   }
 
   const btnDinheiro = document.getElementById('btnPagarDinheiro');
@@ -248,5 +267,5 @@ export function concluirLimpezaPosCorrida() {
   estado.pedidoAtivo = null;
   estado.pedidoAceitoAtual = null;
   carregarPerfil();
-  iniciarRadar();
+  iniciarRadarChamadas();
 }

@@ -7,6 +7,37 @@ let intervalAlertaChamada = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
+// ============================================================================
+// UTILITÁRIO: EXTRAIR DADOS DO CARD/BOTÃO
+// ============================================================================
+export function extrairDadosDoBotao(btn) {
+  const precoTotal = parseFloat(btn.getAttribute('data-preco')) || 0;
+  const repasse = btn.getAttribute('data-repasse') || (precoTotal * 0.85).toFixed(2).replace('.', ',');
+  const km = btn.getAttribute('data-dist') || btn.getAttribute('data-km') || '1.0';
+  const dur = btn.getAttribute('data-dur') || Math.round(Number(km) * 2.2);
+
+  const latOrig = parseFloat(btn.getAttribute('data-lat-orig'));
+  const lngOrig = parseFloat(btn.getAttribute('data-lng-orig'));
+  const latDest = parseFloat(btn.getAttribute('data-lat-dest'));
+  const lngDest = parseFloat(btn.getAttribute('data-lng-dest'));
+
+  const coordsOrig = (!isNaN(latOrig) && !isNaN(lngOrig)) ? [latOrig, lngOrig] : null;
+  const coordsDest = (!isNaN(latDest) && !isNaN(lngDest)) ? [latDest, lngDest] : null;
+
+  return {
+    id: btn.getAttribute('data-id'),
+    preco: precoTotal,
+    valorTotal: precoTotal,
+    repasse,
+    origem: btn.getAttribute('data-origem') || 'Local do passageiro',
+    destino: btn.getAttribute('data-destino') || 'Destino informado',
+    dist: km,
+    dur,
+    coordsOrig,
+    coordsDest
+  };
+}
+
 // Inicia bipe sonoro de alta atenção em pulso até o motorista interagir
 export function iniciarAlertaSonoroChamada() {
   if (intervalAlertaChamada) return;
@@ -103,7 +134,11 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     if (!resp.ok) return;
 
     const pedidos = await resp.json();
-    const idsAtuais = Array.isArray(pedidos) ? pedidos.map((p) => p.id) : [];
+    const chamadasFiltradas = Array.isArray(pedidos)
+      ? pedidos.filter((p) => !estado.pedidosIgnorados?.has(String(p.id)))
+      : [];
+
+    const idsAtuais = chamadasFiltradas.map((p) => p.id);
 
     if (!idsAtuais.length) {
       pararAlertaSonoroChamada();
@@ -119,11 +154,11 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     if (existeNovaChamada || tocarSomForcado) {
       iniciarAlertaSonoroChamada();
-      dispararNotificacaoNovaChamada(pedidos.length);
+      dispararNotificacaoNovaChamada(chamadasFiltradas.length);
     }
 
     estado.chamadasAnterioresIds = new Set(idsAtuais);
-    renderizarRadar(pedidos);
+    renderizarRadar(chamadasFiltradas);
   } catch (err) {
     console.warn('Erro no radar:', err);
   }
@@ -139,19 +174,26 @@ function renderizarRadar(pedidos) {
   }
 
   feedEl.innerHTML = pedidos.map((p) => {
+    const valorBruto = Number(p.valor_total || 0);
+    const repasse = (valorBruto * 0.85).toFixed(2).replace('.', ',');
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
     const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
 
     return `
-      <div class="order-card" style="border: 2px solid #10B981; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px;">
-        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <div class="order-card" style="position: relative; border: 2px solid #10B981; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px;">
+        <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Dispensar corrida"
+          style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-dark); color: var(--text-sec); width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; cursor: pointer;">
+          ✕
+        </button>
+
+        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-right: 30px;">
           <span class="order-badge" style="background: rgba(16,185,129,0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
             ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
           </span>
           <span class="order-price" style="font-size: 17px; font-weight: 900; color: #FFF;">
-            R$ ${Number(p.valor_total).toFixed(2).replace('.', ',')}
+            R$ ${repasse}
           </span>
         </div>
         <div class="order-route" style="font-size: 13px; line-height: 1.5; color: #E2E8F0;">
@@ -166,6 +208,7 @@ function renderizarRadar(pedidos) {
                 style="width: 100%; margin-top: 10px; background: #10B981; color: #022C22; border: none; border-radius: 10px; padding: 12px; font-weight: 900; font-size: 13px; cursor: pointer;"
                 data-id="${p.id}" 
                 data-preco="${p.valor_total}"
+                data-repasse="${repasse}"
                 data-origem="${p.origem_endereco || 'Local do passageiro'}"
                 data-destino="${p.destino_endereco}"
                 data-dist="${p.distancia_km || '1.5'}"
@@ -180,35 +223,23 @@ function renderizarRadar(pedidos) {
     `;
   }).join('');
 
+  feedEl.querySelectorAll('.btn-dispensar-pedido').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute('data-id');
+      if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
+      estado.pedidosIgnorados.add(String(id));
+      buscarChamadasPendentes(false);
+    });
+  });
+
   feedEl.querySelectorAll('.btn-accept-order').forEach((btn) => {
     btn.addEventListener('click', () => {
       pararAlertaSonoroChamada();
       sonsHUBy.tocarSucessoAceite();
 
-      const id = btn.getAttribute('data-id');
-      const preco = btn.getAttribute('data-preco');
-      const origem = btn.getAttribute('data-origem');
-      const destino = btn.getAttribute('data-destino');
-      const dist = btn.getAttribute('data-dist');
-      const dur = btn.getAttribute('data-dur');
-      const latOrig = parseFloat(btn.getAttribute('data-lat-orig'));
-      const lngOrig = parseFloat(btn.getAttribute('data-lng-orig'));
-      const latDest = parseFloat(btn.getAttribute('data-lat-dest'));
-      const lngDest = parseFloat(btn.getAttribute('data-lng-dest'));
-
-      const coordsOrig = (!isNaN(latOrig) && !isNaN(lngOrig)) ? [latOrig, lngOrig] : null;
-      const coordsDest = (!isNaN(latDest) && !isNaN(lngDest)) ? [latDest, lngDest] : null;
-
-      preVisualizarRotaPedido({
-        id,
-        preco,
-        origem,
-        destino,
-        dist,
-        dur,
-        coordsOrig,
-        coordsDest
-      });
+      const dadosExtraidos = extrairDadosDoBotao(btn);
+      preVisualizarRotaPedido(dadosExtraidos);
     });
   });
 }
