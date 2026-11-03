@@ -10,7 +10,7 @@ const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null))
 
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('huby_token');
-  const role = localStorage.getItem('huby_user_role');
+  const role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
 
   if (!token || (role !== 'admin' && role !== 'administrador')) {
     alert('Acesso restrito ao Painel Administrativo Master.');
@@ -118,7 +118,6 @@ async function carregarMetricasECards(token, periodo = 'total') {
     setTexto('metricConcluidas', viagensConcluidas);
     setTexto('metricAlertas', incidentesAtivos);
 
-    // Renderiza gráficos com pequeno timeout para layout estável
     setTimeout(() => {
       renderizarGraficos(
         faturamentoBruto,
@@ -229,7 +228,6 @@ async function carregarTabelaFrota(token) {
       return;
     }
 
-    // Soma o saldo de toda a frota para o fallback
     window._ultimoSaldoAcumuladoFrota = motoristas.reduce((acc, m) => acc + Number(m.saldo_carteira || 0), 0);
 
     tbody.innerHTML = motoristas.map(m => {
@@ -245,13 +243,13 @@ async function carregarTabelaFrota(token) {
         <tr>
           <td>
             <strong>${m.nome}</strong><br>
-            <small style="color:var(--muted);">CNH: ${m.cnh || '---'}</small>
+            <small style="color:var(--muted);">CNH: ${m.cnh || m.cnh_numero || '---'}</small>
           </td>
           <td>
             ${m.veiculo_modelo || 'Não inf.'}<br>
             <small style="color:var(--blue); font-weight:700;">${(m.veiculo_placa || 'SEM PLACA').toUpperCase()}</small>
           </td>
-          <td><span class="badge badge-aceito">${(m.categoria_veiculo || 'carro').toUpperCase()}</span></td>
+          <td><span class="badge badge-aceito">${(m.categoria || m.categoria_veiculo || 'carro').toUpperCase()}</span></td>
           <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
           <td><span class="badge ${badgeStatus}">${statusLimpo.toUpperCase()}</span></td>
           <td>
@@ -419,41 +417,74 @@ async function carregarTabelaSeguranca(token) {
   } catch (e) {}
 }
 
-// 7. Moderação de Saques
+// ============================================================================
+// 7. MODERAÇÃO DE SAQUES PIX BANCÁRIOS (ROTA OFICIAL /api/carteira/admin/saques)
+// ============================================================================
 async function carregarTabelaSaques(token) {
   const tbody = document.getElementById('tabelaSaquesBody');
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/saques`, {
-      headers: { Authorization: `Bearer ${token}` }
+    const res = await fetch(`${API_URL}/api/carteira/admin/saques`, {
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
     });
     if (!res.ok) return;
     const saques = await res.json();
+
     if (!saques.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">Nenhum pedido de saque registrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:18px;">Nenhum pedido de saque registrado.</td></tr>';
       return;
     }
 
     tbody.innerHTML = saques.map(s => {
       const badgeClass = s.status === 'pago' ? 'badge-pago' : (s.status === 'recusado' ? 'badge-recusado' : 'badge-pendente');
+      const dataFormatada = s.criado_em ? new Date(s.criado_em).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--';
+
       return `
         <tr>
-          <td>#${s.id}</td>
-          <td><strong>${s.motorista_nome || 'Condutor'}</strong></td>
-          <td><code>${s.chave_pix}</code></td>
-          <td style="font-weight: 800; color: #FFF;">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</td>
+          <td><strong>#${s.id}</strong></td>
+          <td>
+            <strong>${s.motorista_nome || 'Condutor'}</strong><br>
+            <small style="color:var(--muted);">${dataFormatada}</small>
+          </td>
+          <td>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <code style="background:rgba(255,255,255,0.06); padding:3px 6px; border-radius:4px; font-family:monospace; color:#38BDF8;">
+                ${s.chave_pix}
+              </code>
+              <button type="button" class="btn-copiar-chave-pix" data-chave="${s.chave_pix}" title="Copiar Chave Pix" 
+                style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:13px;">
+                📋
+              </button>
+            </div>
+          </td>
+          <td style="font-weight: 800; color: var(--primary);">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</td>
           <td><span class="badge ${badgeClass}">${s.status.toUpperCase()}</span></td>
           <td>
             ${s.status === 'pendente' ? `
-              <button class="btn-tbl app" onclick="processarSaqueMaster(${s.id}, 'pago')">Pagar Pix</button>
-              <button class="btn-tbl rej" onclick="processarSaqueMaster(${s.id}, 'recusado')">Recusar</button>
-            ` : '---'}
+              <div style="display:flex; gap:6px;">
+                <button class="btn-tbl app" onclick="processarSaqueMaster(${s.id}, 'pago')" title="Marcar como Pago">Pagar Pix</button>
+                <button class="btn-tbl rej" onclick="processarSaqueMaster(${s.id}, 'recusado')" title="Recusar e Devolver Saldo">Recusar</button>
+              </div>
+            ` : `<small style="color:var(--muted);">${s.status === 'pago' ? 'Liquidado' : 'Estornado'}</small>`}
           </td>
         </tr>
       `;
     }).join('');
-  } catch (e) {}
+
+    // Listener para o botão de copiar chave Pix
+    tbody.querySelectorAll('.btn-copiar-chave-pix').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const chave = btn.getAttribute('data-chave');
+        navigator.clipboard.writeText(chave);
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = '📋'; }, 1500);
+      });
+    });
+
+  } catch (e) {
+    console.warn('Erro ao listar saques:', e);
+  }
 }
 
 // 8. Monitor de Viagens
@@ -611,6 +642,11 @@ function configurarNavegacaoAbas() {
           }, 150);
         }
 
+        if (tabAlvoId === 'tabSaques') {
+          const token = localStorage.getItem('huby_token');
+          carregarTabelaSaques(token);
+        }
+
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
             window.dispatchEvent(new Event('resize'));
@@ -689,21 +725,37 @@ window.alterarStatusCondutor = async (id, acao) => {
   } catch (e) {}
 };
 
+// LIQUIDAÇÃO DE SAQUE PIX COM RETORNO DE SALDO EM CASO DE RECUSA
 window.processarSaqueMaster = async (id, status) => {
   const token = localStorage.getItem('huby_token');
-  if (!confirm(`Deseja marcar este saque como ${status.toUpperCase()}?`)) return;
+  let motivo = '';
+
+  if (status === 'recusado') {
+    motivo = prompt('Informe o motivo da recusa (o valor será estornado para a carteira do parceiro):');
+    if (motivo === null) return;
+  } else {
+    if (!confirm('Confirma que realizou a transferência Pix para a chave indicada?')) return;
+  }
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/saques/${id}/processar`, {
+    const res = await fetch(`${API_URL}/api/carteira/admin/saques/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status })
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({ status, motivo_recusa: motivo })
     });
-    if (res.ok) {
-      await carregarTabelaSaques(token);
-      await carregarMetricasECards(token);
-    }
-  } catch (e) {}
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
+
+    alert(status === 'pago' ? '✅ Saque marcado como PAGO!' : '⚠️ Saque recusado e valor estornado com sucesso.');
+    await carregarTabelaSaques(token);
+    await carregarMetricasECards(token);
+  } catch (e) {
+    alert(e.message);
+  }
 };
 
 window.resolverIncidente = async (id) => {
