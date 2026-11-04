@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBY 2.0 - ESTILOS COMPLETOS DA INTERFACE DO CLIENTE (css/cliente.css)
+   HUBY 2.0 - css/cliente.css (COMPONENTES, MODAIS, DRAWER E FLUXOS)
    ========================================================================== */
 
 :root {
@@ -32,24 +32,11 @@ html, body.client-viewport {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 1. MAPA LEAFLET EM ECRÃ INTEIRO */
-#mapaCliente {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 1;
-  background: #0B0F19;
-}
-
-/* 2. SPLASH SCREEN */
+/* 1. SPLASH SCREEN */
 .splash-screen {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 99999;
   background: #0B0F19;
   display: flex;
   align-items: center;
@@ -91,268 +78,7 @@ html, body.client-viewport {
   font-size: 13px;
 }
 
-/* 3. BARRA SUPERIOR FLUTUANTE */
-.top-nav-bar {
-  position: absolute;
-  top: calc(env(safe-area-inset-top, 14px) + 8px);
-  left: 14px;
-  right: 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 50;
-  pointer-events: none;
-}
-
-.btn-menu-burger {
-  pointer-events: auto;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-glass);
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  transition: transform 0.15s ease;
-}
-
-.btn-menu-burger:active {
-  transform: scale(0.92);
-}
-
-.btn-menu-burger span {
-  display: block;
-  width: 18px;
-  height: 2px;
-  background: #FFF;
-  border-radius: 2px;
-}
-
-.brand-pill {
-  pointer-events: auto;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-glass);
-  padding: 8px 18px;
-  border-radius: 999px;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  font-weight: 900;
-  font-size: 16px;
-  letter-spacing: -0.5px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-}
-
-.brand-pill .hub-txt { color: #FFF; }
-.brand-pill .y-txt { color: var(--hub-green); }
-
-.btn-action-pill {
-  pointer-events: auto;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-glass);
-  color: var(--text-primary);
-  border-radius: 999px;
-  padding: 8px 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  transition: transform 0.15s ease;
-}
-
-.btn-action-pill:active {
-  transform: scale(0.92);
-}
-
-/* 4. BOTÃO FLUTUANTE DE GPS */
-.btn-floating-gps {
-  position: absolute;
-  bottom: calc(240px + env(safe-area-inset-bottom, 16px));
-  right: 18px;
-  z-index: 50;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-glass);
-  color: var(--hub-green);
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-  transition: transform 0.15s ease, background 0.2s ease;
-}
-
-.btn-floating-gps:active {
-  transform: scale(0.92);
-  background: rgba(16, 185, 129, 0.15);
-}
-
-/* 5. DOCK INFERIOR (BOTTOM SHEET) */
-.client-dock-sheet {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 60;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-glass);
-  border-top-left-radius: 28px;
-  border-top-right-radius: 28px;
-  padding: 12px 18px calc(env(safe-area-inset-bottom, 16px) + 16px);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.65);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.sheet-drag-handle {
-  width: 38px;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  margin: 0 auto 4px auto;
-}
-
-/* SELETOR DE CATEGORIAS */
-.category-slider {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  width: 100%;
-}
-
-.category-chip {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--border-glass);
-  border-radius: 14px;
-  padding: 10px 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.category-chip .cat-icon {
-  font-size: 22px;
-  line-height: 1;
-}
-
-.category-chip .cat-label {
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--text-secondary);
-}
-
-.category-chip.active {
-  background: var(--hub-green-glow);
-  border-color: var(--hub-green);
-  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.25);
-}
-
-.category-chip.active .cat-label {
-  color: var(--hub-green);
-}
-
-/* RESUMO DO DESTINO E VALOR */
-.trip-summary-card {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid var(--border-glass);
-  border-radius: 16px;
-  padding: 12px 14px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-}
-
-.route-details {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  overflow: hidden;
-  flex: 1;
-  min-width: 0;
-}
-
-.route-point-indicator {
-  width: 8px;
-  height: 8px;
-  background: var(--hub-green);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--hub-green);
-  margin-top: 5px;
-  flex-shrink: 0;
-}
-
-.route-texts {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  flex: 1;
-  min-width: 0;
-}
-
-.route-title {
-  font-size: 10px;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  font-weight: 800;
-  letter-spacing: 0.5px;
-}
-
-.route-subtitle {
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 700;
-  margin-top: 2px;
-}
-
-.trip-price-block {
-  text-align: right;
-  flex-shrink: 0;
-  padding-left: 6px;
-}
-
-.trip-price-block .price-val {
-  display: block;
-  font-size: 20px;
-  font-weight: 900;
-  color: var(--hub-green);
-  line-height: 1.1;
-}
-
-.trip-price-block .eta-val {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-weight: 700;
-  margin-top: 2px;
-  display: block;
-}
-
-/* CARD DE VIAGEM EM ANDAMENTO */
+/* 2. CARD DE RADAR / VIAGEM ATIVA */
 .active-ride-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--hub-green);
@@ -393,27 +119,7 @@ html, body.client-viewport {
   color: var(--text-secondary);
 }
 
-/* BOTÃO PRINCIPAL */
-.btn-main-action {
-  width: 100%;
-  background: var(--hub-green);
-  color: #02241C;
-  border: none;
-  border-radius: 16px;
-  padding: 14px;
-  font-size: 15px;
-  font-weight: 900;
-  cursor: pointer;
-  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.35);
-  letter-spacing: 0.3px;
-  transition: transform 0.15s ease;
-}
-
-.btn-main-action:active {
-  transform: scale(0.98);
-}
-
-/* 6. CARD DO CONDUTOR E PLACA MERCOSUL */
+/* 3. CARD DO CONDUTOR ACEITO & CHAT DA CORRIDA */
 .driver-card-accepted {
   background: rgba(18, 24, 38, 0.98);
   border: 1.5px solid var(--border-glass);
@@ -429,109 +135,16 @@ html, body.client-viewport {
   margin-bottom: 12px;
 }
 
-.driver-avatar-container {
-  position: relative;
+/* Botão flutuante do chat: 100% oculto nativamente, só abre no aceite da corrida */
+#btnAbrirChat {
+  display: none !important;
 }
 
-.driver-avatar-img {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--hub-green);
+#btnAbrirChat.chat-visivel {
+  display: flex !important;
 }
 
-.badge-verified-driver {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  background: var(--hub-green);
-  color: #02241C;
-  font-size: 10px;
-  font-weight: 900;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.mercosul-plate-passenger {
-  display: inline-flex;
-  flex-direction: column;
-  border: 1.5px solid #FFFFFF;
-  border-radius: 4px;
-  overflow: hidden;
-  background: #FFFFFF;
-  color: #000000;
-  font-family: monospace;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-}
-
-.mercosul-plate-header {
-  background: #003399;
-  color: #FFFFFF;
-  font-size: 8px;
-  font-weight: 900;
-  padding: 1px 4px;
-  display: flex;
-  justify-content: space-between;
-}
-
-.mercosul-plate-body {
-  font-size: 12px;
-  font-weight: 900;
-  padding: 1px 6px;
-  text-align: center;
-  letter-spacing: 1px;
-}
-
-.btn-contact-call {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--border-glass);
-  color: #FFF;
-  font-weight: 800;
-  padding: 10px;
-  border-radius: 10px;
-  text-decoration: none;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-
-.btn-contact-chat {
-  background: rgba(56, 189, 248, 0.18);
-  border: 1px solid var(--blue);
-  color: var(--blue);
-  font-weight: 800;
-  padding: 10px;
-  border-radius: 10px;
-  font-size: 13px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-}
-
-/* 7. PARADAS INTERMEDIÁRIAS */
-.stop-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: rgba(56, 189, 248, 0.08);
-  border-left: 2.5px solid var(--blue);
-  padding: 6px 10px;
-  border-radius: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-}
-
-/* 8. MENU LATERAL (DRAWER) */
+/* 4. DRAWER LATERAL (MENU) */
 .drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -643,7 +256,7 @@ html, body.client-viewport {
   text-align: center;
 }
 
-/* 9. MODAIS */
+/* 5. SISTEMA MODAL (AVALIAÇÃO, HISTÓRICO, PIX, SEGURANÇA, CHAT) */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -681,11 +294,26 @@ html, body.client-viewport {
 }
 
 .btn-icon-close {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.08);
   border: none;
+  border-radius: 50%;
   color: var(--text-secondary);
-  font-size: 18px;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
   cursor: pointer;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.btn-icon-close:active {
+  background: rgba(239, 68, 68, 0.25);
+  color: #EF4444;
+  transform: scale(0.92);
 }
 
 .historico-scroll-box {
@@ -752,7 +380,7 @@ html, body.client-viewport {
   cursor: pointer;
 }
 
-/* RECARGA PIX */
+/* RECARGA E PAGAMENTO PIX */
 .pix-charge-box {
   background: rgba(0, 0, 0, 0.25);
   border-radius: 12px;
