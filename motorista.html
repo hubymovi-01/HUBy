@@ -21,6 +21,8 @@
       --card-dark: #121826;
       --card-alt: #1A2234;
       --border-dark: rgba(255, 255, 255, 0.08);
+      --glass-bg: rgba(18, 24, 38, 0.82);
+      --glass-border: rgba(255, 255, 255, 0.1);
       --emerald: #10B981;
       --emerald-glow: rgba(16, 185, 129, 0.25);
       --amber: #F59E0B;
@@ -55,7 +57,6 @@
       z-index: 1;
     }
 
-    /* Estilo Dark Mode nativo para o OpenStreetMap */
     .leaflet-tile-pane {
       filter: brightness(0.65) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.3) brightness(0.7);
     }
@@ -75,9 +76,10 @@
     .btn-driver-profile-trigger,
     .btn-exit-partner {
       pointer-events: auto;
-      background: rgba(18, 24, 38, 0.94);
-      border: 1px solid var(--border-dark);
-      backdrop-filter: blur(12px);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
       border-radius: 14px;
       padding: 7px 12px;
       display: inline-flex;
@@ -109,8 +111,9 @@
     }
 
     .btn-nav-action {
-      background: rgba(18, 24, 38, 0.94);
-      border: 1px solid var(--border-dark);
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(14px);
       color: var(--text-sec);
       border-radius: 12px;
       padding: 7px 10px;
@@ -154,11 +157,13 @@
       left: 0;
       right: 0;
       z-index: 10;
-      background: var(--card-dark);
-      border-top: 1px solid var(--border-dark);
-      border-radius: 20px 20px 0 0;
+      background: rgba(18, 24, 38, 0.94);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-top: 1px solid var(--glass-border);
+      border-radius: 24px 24px 0 0;
       padding: 16px;
-      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.65);
       max-height: 52vh;
       display: flex;
       flex-direction: column;
@@ -168,8 +173,8 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid var(--border-dark);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
       border-radius: 14px;
       padding: 10px 14px;
       margin-bottom: 12px;
@@ -223,12 +228,13 @@
       font-weight: 600;
     }
 
-    /* DRAWER LATERAL */
+    /* DRAWER LATERAL ULTRA-MODERNO (GLASSMORPHISM) */
     .drawer-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.7);
-      backdrop-filter: blur(5px);
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       z-index: 10001;
       opacity: 0;
       pointer-events: none;
@@ -243,16 +249,18 @@
     .driver-drawer {
       position: fixed;
       top: 0;
-      left: -340px;
-      width: 320px;
+      left: -350px;
+      width: 335px;
       height: 100vh;
-      background: #0D121F;
-      border-right: 1px solid var(--border-dark);
+      background: rgba(13, 18, 31, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-right: 1px solid var(--glass-border);
       z-index: 10002;
-      transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      transition: left 0.35s cubic-bezier(0.16, 1, 0.3, 1);
       display: flex;
       flex-direction: column;
-      box-shadow: 10px 0 30px rgba(0, 0, 0, 0.7);
+      box-shadow: 16px 0 40px rgba(0, 0, 0, 0.8);
     }
 
     .driver-drawer.active {
@@ -260,9 +268,9 @@
     }
 
     .drawer-header {
-      padding: 20px 18px 16px;
-      background: #121826;
-      border-bottom: 1px solid var(--border-dark);
+      padding: 24px 18px 18px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--glass-border);
       position: relative;
     }
 
@@ -271,30 +279,38 @@
       top: 16px;
       right: 16px;
       background: rgba(255, 255, 255, 0.08);
-      border: none;
+      border: 1px solid var(--border-dark);
       color: #FFF;
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
       cursor: pointer;
       font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .btn-close-drawer:hover {
+      background: rgba(255, 255, 255, 0.16);
     }
 
     .drawer-profile-info {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-top: 6px;
+      gap: 14px;
+      margin-top: 4px;
     }
 
     .drawer-avatar {
-      width: 60px;
-      height: 60px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      border: 2px solid var(--emerald);
+      border: 2.5px solid var(--emerald);
       object-fit: cover;
       background: #1E293B;
-      box-shadow: 0 0 12px var(--emerald-glow);
+      box-shadow: 0 4px 14px var(--emerald-glow);
     }
 
     .drawer-content {
@@ -303,22 +319,25 @@
       padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 12px;
     }
 
     .drawer-section-card {
-      background: var(--card-alt);
-      border: 1px solid var(--border-dark);
-      border-radius: 12px;
-      padding: 12px 14px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(10px);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
     }
 
     .drawer-section-card h4 {
-      margin: 0 0 8px;
-      font-size: 12px;
+      margin: 0 0 10px;
+      font-size: 11px;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-sec);
+      letter-spacing: 0.6px;
+      color: #CBD5E1;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -328,14 +347,15 @@
       display: inline-flex;
       flex-direction: column;
       border: 1.5px solid #FFF;
-      border-radius: 4px;
+      border-radius: 5px;
       background: #FFF;
       color: #000;
       width: 105px;
       overflow: hidden;
       font-family: monospace;
       font-weight: 900;
-      margin-top: 4px;
+      margin-top: 2px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
     }
 
     .placa-mercosul-header {
@@ -359,8 +379,9 @@
     .modal-backdrop-custom {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(8px);
+      background: rgba(5, 8, 15, 0.88);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
       z-index: 10006;
       display: none;
       align-items: center;
@@ -369,40 +390,48 @@
     }
 
     .modal-box-edit {
-      background: #111726;
-      border: 1px solid var(--border-dark);
-      border-radius: 16px;
+      background: rgba(17, 23, 38, 0.96);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
       width: 100%;
-      max-width: 390px;
+      max-width: 400px;
       max-height: 90vh;
       overflow-y: auto;
-      padding: 18px;
+      padding: 22px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
     }
 
     .form-group-driver {
-      margin-bottom: 11px;
+      margin-bottom: 12px;
     }
 
     .form-group-driver label {
       display: block;
       font-size: 11px;
-      font-weight: 700;
+      font-weight: 800;
       color: var(--text-sec);
-      margin-bottom: 4px;
+      margin-bottom: 5px;
       text-transform: uppercase;
+      letter-spacing: 0.4px;
     }
 
     .form-group-driver input,
     .form-group-driver select {
       width: 100%;
       background: #080C14;
-      border: 1px solid var(--border-dark);
-      border-radius: 8px;
-      padding: 9px 12px;
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      padding: 10px 12px;
       color: #FFF;
       font-size: 13px;
       font-weight: 600;
       outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group-driver input:focus,
+    .form-group-driver select:focus {
+      border-color: var(--blue);
     }
 
     .btn-fast-val {
@@ -421,7 +450,6 @@
       background: rgba(255, 255, 255, 0.18);
     }
 
-    /* BOTÕES SELEÇÃO DE PAGAMENTO */
     .btn-metodo-pagto {
       width: 100%;
       display: flex;
@@ -443,7 +471,6 @@
       transform: scale(0.98);
     }
 
-    /* OPÇÕES DE FORMAS ACEITAS NO PERFIL */
     .item-preferencia-pagto {
       display: flex;
       align-items: center;
@@ -451,10 +478,15 @@
       padding: 10px 12px;
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid var(--border-dark);
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 12px;
       color: #FFF;
       cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .item-preferencia-pagto:hover {
+      background: rgba(255, 255, 255, 0.07);
     }
 
     .item-preferencia-pagto input[type="checkbox"] {
@@ -564,9 +596,8 @@
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
-          <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY
-            CARRO</span>
+          <strong style="font-size: 17px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;" id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
             <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
             <span id="drawerTotalViagensTxt">0 viagens</span>
@@ -574,7 +605,7 @@
         </div>
       </div>
       <button type="button" id="btnAbrirModalEdicaoPerfil"
-        style="margin-top: 12px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 7px; border-radius: 8px; font-size: 11px; font-weight: 800; cursor: pointer;">
+        style="margin-top: 14px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 9px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; transition: background 0.2s;">
         ✏️ Editar Dados e Foto
       </button>
     </div>
@@ -601,7 +632,7 @@
           </label>
         </div>
         <button type="button" id="btnSalvarPreferenciasPagto"
-          style="margin-top: 12px; width: 100%; background: var(--emerald); border: none; color: #02261C; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
+          style="margin-top: 12px; width: 100%; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
           Salvar Preferências
         </button>
       </div>
@@ -610,8 +641,8 @@
         <h4>🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
-            <strong style="font-size: 13px; color: #FFF;" id="drawerCarroModelo">Onix</strong>
-            <div style="font-size: 11px; color: var(--text-sec);" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div>
+            <strong style="font-size: 14px; color: #FFF;" id="drawerCarroModelo">Onix</strong>
+            <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div>
           </div>
           <div class="placa-mercosul">
             <div class="placa-mercosul-header"><span>BRASIL</span> <span>🇧🇷</span></div>
@@ -631,28 +662,28 @@
         </div>
       </div>
 
-
       <div class="drawer-section-card">
         <h4>⚡ Chave Pix Padrão</h4>
         <div style="display: flex; gap: 6px;">
           <input type="text" id="drawerInputChavePix" placeholder="Chave Pix para saques"
-            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 6px; padding: 6px 8px; color: #FFF; font-size: 12px;">
+            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 8px; padding: 8px 10px; color: #FFF; font-size: 12px; outline: none;">
           <button type="button" id="btnSalvarChavePix"
-            style="background: var(--blue); border: none; border-radius: 6px; color: #000; font-weight: 800; font-size: 11px; padding: 0 10px; cursor: pointer;">Salvar</button>
+            style="background: var(--blue); border: none; border-radius: 8px; color: #000; font-weight: 800; font-size: 11px; padding: 0 12px; cursor: pointer;">Salvar</button>
         </div>
       </div>
 
-      <button type="button" id="btnLogoutMotorista"
-        style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
-        🚪 Encerrar Sessão
-      </button>
       <button type="button" id="btnExportarFechamentoDia"
-        style="width: 100%; margin-top: 10px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">
+        style="width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); color: #FFF; padding: 11px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">
         📄 Descarregar Fechamento do Dia
       </button>
 
+      <button type="button" id="btnLogoutMotorista"
+        style="margin-top: 4px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 11px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer;">
+        🚪 Encerrar Sessão
+      </button>
+
       <button type="button" id="btnAbrirModalIncidente"
-        style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.25); color: #EF4444; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; padding: 10px; border-radius: 10px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
         🛡️ Reportar Problema ou Objeto Esquecido
       </button>
     </div>
@@ -661,22 +692,23 @@
   <!-- MODAL DE EDIÇÃO DE PERFIL E FOTO -->
   <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
     <div class="modal-box-edit">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="margin: 0; font-size: 16px; color: #FFF; font-weight: 800;">✏️ Editar Perfil</h3>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3 style="margin: 0; font-size: 17px; color: #FFF; font-weight: 800;">✏️ Editar Dados e Foto</h3>
         <button type="button" id="btnFecharModalEdicao"
-          style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+          style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
-      <div style="text-align: center; margin-bottom: 14px;">
-        <img id="previewFotoModal" src="" alt="Prévia"
-          style="width: 80px; height: 80px; border-radius: 50%; border: 2px solid var(--blue); object-fit: cover; margin-bottom: 8px;">
-        <div>
+      <div style="text-align: center; margin-bottom: 16px;">
+        <div style="position: relative; width: 84px; height: 84px; margin: 0 auto 8px;">
+          <img id="previewFotoModal" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Prévia"
+            style="width: 100%; height: 100%; border-radius: 50%; border: 2.5px solid var(--emerald); object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
           <label for="inputUploadFotoPerfil"
-            style="background: rgba(56, 189, 248, 0.15); color: var(--blue); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 800; cursor: pointer; display: inline-block;">
-            📷 Trocar Foto
+            style="position: absolute; bottom: 0; right: 0; background: var(--blue); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; font-weight: 900; box-shadow: 0 2px 6px rgba(0,0,0,0.5);">
+            📷
           </label>
-          <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
         </div>
+        <small style="color: var(--text-sec); font-size: 11px;">Toque na câmera para selecionar uma nova foto</small>
+        <input type="file" id="inputUploadFotoPerfil" accept="image/*" style="display: none;">
       </div>
 
       <div class="form-group-driver">
@@ -686,7 +718,7 @@
 
       <div class="form-group-driver">
         <label>Telefone / WhatsApp</label>
-        <input type="tel" id="editTelefone" placeholder="(00) 00000-0000">
+        <input type="tel" id="editTelefone" placeholder="(89) 99999-9999">
       </div>
 
       <div class="form-group-driver">
@@ -707,15 +739,14 @@
 
       <div class="form-group-driver">
         <label>Ano de Fabricação</label>
-        <input type="text" id="editCarroAno" placeholder="2023">
+        <input type="number" id="editCarroAno" placeholder="2023">
       </div>
 
-      <div style="display: flex; gap: 8px; margin-top: 14px;">
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
         <button type="button" id="btnCancelarEdicao"
-          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 10px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.5; background: var(--blue); border: none; color: #000; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
-          Alterações</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 10px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
       </div>
     </div>
   </div>
@@ -889,7 +920,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=9.3.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=10.1.0"></script>
 </body>
 
 </html>

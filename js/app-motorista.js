@@ -4,7 +4,7 @@
 
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
 import { alternarStatusOnline, iniciarRadarChamadas } from './motorista/motorista-radar.js';
-import { carregarPerfil, configurarSalvarPreferenciasPagto } from './motorista/motorista-perfil.js';
+import { carregarPerfil, configurarSalvarPreferenciasPagto, configurarEdicaoPerfil } from './motorista/motorista-perfil.js';
 import { configurarChatMotorista } from './motorista/motorista-chat.js';
 import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 
@@ -48,6 +48,7 @@ function registrarEventosUI() {
   if (typeof configurarChatMotorista === 'function') configurarChatMotorista();
   if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
   if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
+  if (typeof configurarEdicaoPerfil === 'function') configurarEdicaoPerfil();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {

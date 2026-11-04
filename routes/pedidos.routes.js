@@ -803,5 +803,106 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // =========================================================================
+  // 15. ATUALIZAR DADOS CADASTRAIS, FOTO E CHAVE PIX DO MOTORISTA
+  // =========================================================================
+  router.put('/motoristas/perfil/atualizar', autenticarToken, async (req, res) => {
+    try {
+      const usuarioId = req.usuario.id;
+      const { nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, foto_base64, chave_pix_padrao } = req.body;
+
+      if (chave_pix_padrao) {
+        await sql`
+          UPDATE motoristas
+          SET chave_pix_padrao = ${chave_pix_padrao}
+          WHERE id::text = ${String(usuarioId)}::text 
+             OR usuario_id::text = ${String(usuarioId)}::text;
+        `;
+        return res.json({ sucesso: true, mensagem: 'Chave Pix padrão salva com sucesso!' });
+      }
+
+      if (!nome) {
+        return res.status(400).json({ erro: 'O nome completo é obrigatório.' });
+      }
+
+      if (foto_base64) {
+        await sql`
+          UPDATE motoristas
+          SET nome = ${nome},
+              telefone = ${telefone || ''},
+              veiculo_modelo = ${veiculo_modelo || 'Onix'},
+              veiculo_placa = ${veiculo_placa ? veiculo_placa.toUpperCase() : 'ABC1D23'},
+              veiculo_cor = ${veiculo_cor || 'Prata'},
+              veiculo_ano = ${veiculo_ano ? Number(veiculo_ano) : 2023},
+              foto_perfil_url = ${foto_base64}
+          WHERE id::text = ${String(usuarioId)}::text 
+             OR usuario_id::text = ${String(usuarioId)}::text;
+        `;
+      } else {
+        await sql`
+          UPDATE motoristas
+          SET nome = ${nome},
+              telefone = ${telefone || ''},
+              veiculo_modelo = ${veiculo_modelo || 'Onix'},
+              veiculo_placa = ${veiculo_placa ? veiculo_placa.toUpperCase() : 'ABC1D23'},
+              veiculo_cor = ${veiculo_cor || 'Prata'},
+              veiculo_ano = ${veiculo_ano ? Number(veiculo_ano) : 2023}
+          WHERE id::text = ${String(usuarioId)}::text 
+             OR usuario_id::text = ${String(usuarioId)}::text;
+        `;
+      }
+
+      return res.json({ sucesso: true, mensagem: 'Perfil atualizado com sucesso!' });
+    } catch (err) {
+      console.error('Erro ao atualizar dados do motorista:', err);
+      return res.status(500).json({ erro: 'Erro interno ao gravar dados.' });
+    }
+  });
+
+  // =========================================================================
+  // 16. CONSULTAR PERFIL DO CONDUTOR
+  // =========================================================================
+  router.get('/motoristas/perfil', autenticarToken, async (req, res) => {
+    try {
+      const usuarioId = req.usuario.id;
+      const emailUsuario = req.usuario.email || '';
+
+      let motoristas = await sql`
+        SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+               foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+               COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
+               COALESCE(aceita_cartao, true) AS aceita_cartao,
+               COALESCE(aceita_pix, true) AS aceita_pix
+        FROM motoristas 
+        WHERE id::text = ${String(usuarioId)}::text 
+           OR usuario_id::text = ${String(usuarioId)}::text
+           OR (email = ${emailUsuario} AND ${emailUsuario} != '')
+        LIMIT 1;
+      `;
+
+      if (motoristas.length === 0) {
+        motoristas = await sql`
+          SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+                 foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+                 COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
+                 COALESCE(aceita_cartao, true) AS aceita_cartao,
+                 COALESCE(aceita_pix, true) AS aceita_pix
+          FROM motoristas 
+          ORDER BY saldo_carteira DESC, criado_em ASC
+          LIMIT 1;
+        `;
+      }
+
+      if (motoristas.length === 0) {
+        return res.status(404).json({ erro: 'Motorista não localizado.' });
+      }
+
+      return res.json(motoristas[0]);
+    } catch (err) {
+      console.error('Erro ao obter perfil do motorista:', err);
+      return res.status(500).json({ erro: 'Falha ao carregar perfil.' });
+    }
+  });
+
   return router;
 }
