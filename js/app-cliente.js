@@ -121,7 +121,7 @@ function configurarBarraPesquisaAnimada() {
     abrirBarra();
   });
 
-  // AO TOCAR NO X: Limpa tudo e retrai para círculo imediatamente
+  // AO TOCAR NO X: Limpa tudo e recolhe para círculo
   btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -195,16 +195,59 @@ function configurarAlternanciaSatélite() {
   });
 }
 
-// Atalhos Rápidos (Casa e Trabalho)
-function configurarAtalhosRapidos() {
-  const btnCasa = document.getElementById('btnAtalhoCasa');
-  const btnTrabalho = document.getElementById('btnAtalhoTrabalho');
+// Configuração de Locais Favoritos (Gerenciados no Menu Lateral com Endereço Real)
+function configurarLocaisFavoritosMenu() {
+  const itemCasa = document.getElementById('menuItemCasa');
+  const itemTrabalho = document.getElementById('menuItemTrabalho');
 
-  async function definirDestinoRapido(tipo, coordsFallback, nomeLocal) {
+  async function acionarFavorito(tipo, label) {
+    fecharDrawer();
+
+    const enderecoSalvo = localStorage.getItem(`huby_endereco_${tipo}`);
+    const coordsSalvas = localStorage.getItem(`huby_coords_${tipo}`);
+
+    // Se o usuário ainda não cadastrou o local, abre o prompt para digitar o endereço real
+    if (!enderecoSalvo || !coordsSalvas) {
+      abrirPromptParada({
+        titulo: `Cadastrar ${label}`,
+        placeholder: 'Digite rua, número e cidade...',
+        onConfirmar: async (enderecoDigitado) => {
+          if (!enderecoDigitado || !enderecoDigitado.trim()) return;
+
+          notificarCliente(`Buscando localização de "${enderecoDigitado}"...`, 'info');
+
+          try {
+            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(enderecoDigitado)}&limit=1`);
+            const dados = await resp.json();
+
+            if (dados && dados.length > 0) {
+              const coords = [parseFloat(dados[0].lat), parseFloat(dados[0].lon)];
+              localStorage.setItem(`huby_endereco_${tipo}`, enderecoDigitado);
+              localStorage.setItem(`huby_coords_${tipo}`, JSON.stringify(coords));
+
+              // Atualiza o subtítulo no menu lateral
+              const descElem = document.getElementById(tipo === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
+              if (descElem) descElem.textContent = enderecoDigitado;
+
+              notificarCliente(`${label} configurado com sucesso!`, 'sucesso');
+              tracarRotaFavorito(enderecoDigitado, coords);
+            } else {
+              notificarCliente('Endereço não localizado no mapa. Tente ser mais específico.', 'alerta');
+            }
+          } catch (e) {
+            notificarCliente('Erro ao conectar com serviço de mapas.', 'erro');
+          }
+        }
+      });
+      return;
+    }
+
+    // Se já foi cadastrado pelo usuário, traça a rota diretamente
+    tracarRotaFavorito(enderecoSalvo, JSON.parse(coordsSalvas));
+  }
+
+  async function tracarRotaFavorito(nomeLocal, coords) {
     if (estadoCliente.pedidoAtivoId) return;
-
-    const destinoSalvo = localStorage.getItem(`huby_coords_${tipo}`);
-    const coords = destinoSalvo ? JSON.parse(destinoSalvo) : coordsFallback;
 
     estadoCliente.coordsDestino = coords;
     const txtDestino = document.getElementById('txtDestinoSelecionado');
@@ -224,16 +267,14 @@ function configurarAtalhosRapidos() {
     notificarCliente(`Destino definido: ${nomeLocal}`, 'sucesso');
   }
 
-  btnCasa?.addEventListener('click', (e) => {
+  itemCasa?.addEventListener('click', (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    definirDestinoRapido('casa', [-8.3610, -42.2530], '🏠 Minha Casa');
+    acionarFavorito('casa', 'Minha Casa');
   });
 
-  btnTrabalho?.addEventListener('click', (e) => {
+  itemTrabalho?.addEventListener('click', (e) => {
     e.preventDefault();
-    e.stopPropagation();
-    definirDestinoRapido('trabalho', [-8.3550, -42.2460], '🏢 Meu Trabalho');
+    acionarFavorito('trabalho', 'Meu Trabalho');
   });
 }
 
@@ -317,11 +358,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Ativação dos controles
+  // 3. Ativação dos controles e favoritos
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
-  configurarAtalhosRapidos();
+  configurarLocaisFavoritosMenu();
 
   // 4. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');

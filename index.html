@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES -->
+  <!-- ÍCONES APPLE & FAVICON -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.3.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.4.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
   <!-- BIBLIOTECAS CDN -->
@@ -79,7 +79,7 @@
     </button>
   </header>
 
-  <!-- BARRA DE PESQUISA FLUTUANTE (SEM ATALHOS POLUINDO A TELA) -->
+  <!-- BARRA DE PESQUISA FLUTUANTE (TOTALMENTE LIMPA) -->
   <div class="search-floating-wrapper">
     <div class="search-glass-box">
       <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">🔍</button>
@@ -88,18 +88,6 @@
     </div>
     <ul id="listaResultadosPesquisa" class="search-results-glass" style="display: none;"></ul>
   </div>
-    <!-- ATALHOS RÁPIDOS DE DESTINO -->
-    <div class="quick-shortcuts-row">
-      <button type="button" id="btnAtalhoCasa" class="quick-chip">
-        <span class="qc-icon">🏠</span>
-        <span>Casa</span>
-      </button>
-      <button type="button" id="btnAtalhoTrabalho" class="quick-chip">
-        <span class="qc-icon">🏢</span>
-        <span>Trabalho</span>
-      </button>
-    </div>
-  </div>
 
   <!-- DRAWER LATERAL DO PASSAGEIRO -->
   <div id="menuBackdrop" class="drawer-backdrop"></div>
@@ -107,6 +95,19 @@
     <div class="drawer-profile" id="drawerPerfilBox"></div>
 
     <nav class="drawer-nav">
+      <!-- LOCAIS FAVORITOS DENTRO DO MENU ONDE DEVEM ESTAR -->
+      <div style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; margin: 4px 10px; letter-spacing: 0.5px;">Favoritos</div>
+      <a href="#" id="menuItemCasa" class="drawer-item">
+        <span class="d-icon">🏠</span>
+        <div class="d-info"><strong id="txtMenuCasaTitulo">Minha Casa</strong><small id="txtMenuCasaDesc">Definir endereço residencial</small></div>
+      </a>
+      <a href="#" id="menuItemTrabalho" class="drawer-item">
+        <span class="d-icon">🏢</span>
+        <div class="d-info"><strong id="txtMenuTrabalhoTitulo">Meu Trabalho</strong><small id="txtMenuTrabalhoDesc">Definir endereço comercial</small></div>
+      </a>
+
+      <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 6px 10px;"></div>
+
       <a href="#" id="menuItemViagens" class="drawer-item">
         <span class="d-icon">📋</span>
         <div class="d-info"><strong>Minhas Viagens</strong><small>Histórico e recibos de corridas</small></div>
@@ -423,6 +424,16 @@
           </div>
         `;
       }
+
+      // Atualiza os textos de Casa e Trabalho com o que estiver salvo de verdade
+      const casaSalva = localStorage.getItem('huby_endereco_casa');
+      const trabSalvo = localStorage.getItem('huby_endereco_trabalho');
+      if (casaSalva) {
+        document.getElementById('txtMenuCasaDesc').textContent = casaSalva;
+      }
+      if (trabSalvo) {
+        document.getElementById('txtMenuTrabalhoDesc').textContent = trabSalvo;
+      }
     }
 
     document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
@@ -430,7 +441,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.10.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.11.0"></script>
 </body>
 
 </html>
