@@ -14,8 +14,6 @@ import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
-// No topo do server.js com os outros imports:
-import marketplaceRouter from './routes/marketplace.routes.js';
 
 dotenv.config();
 
@@ -320,7 +318,6 @@ app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 app.use('/api/socios', sociosRoutes);
-// Abaixo onde você registra as outras rotas (ex: app.use('/api/pedidos', ...)):
 app.use('/api/marketplace', marketplaceRouter);
 
 // ============================================================================
