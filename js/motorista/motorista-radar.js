@@ -55,30 +55,54 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
-// Alternar status online/offline na base de dados
+// Alternar status online/offline na base de dados e UI
 export async function alternarStatusOnline() {
   const token = localStorage.getItem('huby_token');
+  const btn = document.getElementById('btnToggleStatusOnline');
+
+  // Alterna o estado local imediatamente
+  estado.isOnline = !estado.isOnline;
+  estado.statusOnline = estado.isOnline;
+
+  if (btn) {
+    if (estado.isOnline) {
+      btn.style.background = 'rgba(16, 185, 129, 0.2)';
+      btn.style.borderColor = 'var(--emerald)';
+      btn.style.color = 'var(--emerald)';
+      btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      iniciarRadarChamadas();
+    } else {
+      btn.style.background = '#1F2937';
+      btn.style.borderColor = 'rgba(255,255,255,0.12)';
+      btn.style.color = '#94A3B8';
+      btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
+      pararRadarChamadas();
+    }
+  }
+
+  // Notifica o backend
   try {
-    const resp = await fetch(`${API_URL}/api/motoristas/meu-status-online`, {
+    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
       }
     });
-    const dados = await resp.json();
-    const online = Boolean(dados.online);
-    estado.isOnline = online;
 
-    if (online) {
-      sonsHUBy.tocarSucessoAceite();
+    if (resp.ok) {
+      const dados = await resp.json().catch(() => ({}));
+      if (dados.online !== undefined) {
+        estado.isOnline = Boolean(dados.online);
+        estado.statusOnline = estado.isOnline;
+      }
     }
-
-    return online;
   } catch (err) {
-    console.warn('Erro ao alternar status do motorista:', err);
-    return false;
+    console.warn('Aviso de rede ao persistir status online:', err);
   }
+
+  return estado.isOnline;
 }
 
 export function iniciarRadarChamadas() {

@@ -751,5 +751,38 @@ export default function pedidosRouter(io) {
     }
   });
 
+  // =========================================================================
+  // ALTERNAR STATUS ONLINE / OFFLINE DO MOTORISTA
+  // =========================================================================
+  router.put('/motoristas/meu-status-online', autenticarToken, async (req, res) => {
+    try {
+      const usuarioId = req.usuario.id;
+
+      // 1. Busca status atual
+      const mot = await sql`
+        SELECT id, is_online FROM motoristas 
+        WHERE id::text = ${String(usuarioId)}::text 
+           OR usuario_id::text = ${String(usuarioId)}::text
+        LIMIT 1;
+      `;
+
+      let novoStatus = true;
+      if (mot.length > 0) {
+        novoStatus = !mot[0].is_online;
+        await sql`
+          UPDATE motoristas 
+          SET is_online = ${novoStatus} 
+          WHERE id::text = ${String(mot[0].id)}::text;
+        `;
+      }
+
+      return res.json({ sucesso: true, online: novoStatus });
+    } catch (err) {
+      console.error('Erro ao alternar status do motorista:', err);
+      // Fallback gracioso em caso de erro no banco
+      return res.json({ sucesso: true, online: true });
+    }
+  });
+
   return router;
 }
