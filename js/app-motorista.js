@@ -9,6 +9,7 @@ import { configurarChatMotorista } from './motorista/motorista-chat.js';
 import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
+import { configurarModosInteligentes } from './motorista/motorista-modos.js';
 
 function registrarEventosUI() {
   // Alternar Online / Offline
@@ -33,25 +34,13 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
-  // Ações da Barra Superior (Modos Inteligentes)
-  document.getElementById('btnToggleHeatmap')?.addEventListener('click', (e) => {
-    e.currentTarget.classList.toggle('active');
-  });
-
-  document.getElementById('btnModoPausa')?.addEventListener('click', (e) => {
-    e.currentTarget.classList.toggle('active');
-  });
-
-  document.getElementById('btnModoDestino')?.addEventListener('click', (e) => {
-    e.currentTarget.classList.toggle('active');
-  });
-
   // Módulos especializados
   if (typeof configurarChatMotorista === 'function') configurarChatMotorista();
   if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
   if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
   if (typeof configurarEdicaoPerfil === 'function') configurarEdicaoPerfil();
   if (typeof configurarMarketplace === 'function') configurarMarketplace();
+  if (typeof configurarModosInteligentes === 'function') configurarModosInteligentes();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
