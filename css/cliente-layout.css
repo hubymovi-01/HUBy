@@ -1,21 +1,24 @@
-/* css/cliente-layout.css - Redesign Premium HUBy Passageiro */
+/* css/cliente-layout.css - Sistema de Design Completo HUBy Passageiro */
 
 :root {
   --hub-bg: #090D16;
   --hub-surface: rgba(14, 20, 32, 0.94);
   --hub-card-bg: rgba(255, 255, 255, 0.04);
   --hub-border: rgba(255, 255, 255, 0.08);
+  --hub-border-glow: rgba(16, 185, 129, 0.3);
   --hub-emerald: #10B981;
   --hub-emerald-subtle: rgba(16, 185, 129, 0.14);
   --hub-emerald-glow: rgba(16, 185, 129, 0.28);
   --hub-blue: #38BDF8;
+  --hub-amber: #F59E0B;
+  --hub-rose: #EF4444;
   --hub-text-pri: #F8FAFC;
   --hub-text-sec: #94A3B8;
   --hub-blur: blur(24px);
 }
 
 /* ==========================================================================
-   1. MAPA E SPLASH SCREEN
+   1. MAPA LEAFLET E SPLASH SCREEN
    ========================================================================== */
 #mapaCliente {
   position: absolute;
@@ -43,7 +46,7 @@
 }
 
 /* ==========================================================================
-   2. BARRA SUPERIOR E PESQUISA FLUIDA
+   2. NAVEGAÇÃO SUPERIOR
    ========================================================================== */
 .top-nav-bar {
   position: absolute;
@@ -77,55 +80,132 @@
   transform: scale(0.92);
 }
 
+/* ==========================================================================
+   3. MODERN SEARCH BAR ANIMADA (ESTILO VÍDEO)
+   ========================================================================== */
 .search-floating-wrapper {
   position: absolute;
-  top: calc(env(safe-area-inset-top, 14px) + 66px);
-  left: 14px;
-  right: 14px;
-  z-index: 99;
+  top: calc(env(safe-area-inset-top, 14px) + 68px);
+  left: 16px;
+  right: 16px;
+  z-index: 100;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .search-glass-box {
-  background: var(--hub-surface) !important;
+  pointer-events: auto;
+  position: relative;
+  width: 48px;
+  height: 48px;
+  background: rgba(14, 20, 32, 0.94) !important;
   backdrop-filter: var(--hub-blur) !important;
   -webkit-backdrop-filter: var(--hub-blur) !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 20px !important;
-  padding: 6px 14px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 50px !important;
   display: flex;
   align-items: center;
+  padding: 0 6px !important;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
-  transition: border-color 0.25s ease;
+  cursor: pointer;
+  overflow: hidden;
+  transition: width 0.7s cubic-bezier(0.8, -0.6, 0.2, 1.5),
+              border-color 0.3s ease,
+              box-shadow 0.3s ease;
 }
 
-.search-glass-box:focus-within {
-  border-color: rgba(56, 189, 248, 0.5) !important;
+.search-icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  background: transparent;
+  border: none;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  color: #FFF;
+  transition: transform 0.3s ease;
 }
 
 .search-glass-box input {
   flex: 1;
+  width: 100%;
   background: transparent;
   border: none;
   outline: none;
-  color: var(--hub-text-pri);
+  color: #F8FAFC;
   font-size: 14px !important;
   font-weight: 600 !important;
+  padding: 0 10px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease 0.1s;
 }
 
 .search-glass-box input::placeholder {
-  color: var(--hub-text-sec);
+  color: #94A3B8;
+}
+
+.clear-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  color: #94A3B8;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.6);
+  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.8, -0.6, 0.2, 1.5);
+  outline: none;
+}
+
+.search-glass-box.active {
+  width: 100%;
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.7);
+  padding: 0 10px 0 6px !important;
+}
+
+.search-glass-box.active input {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.search-glass-box.active .clear-btn {
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+.clear-btn:active {
+  background: rgba(239, 68, 68, 0.2);
+  color: #EF4444;
 }
 
 .search-results-glass {
-  background: var(--hub-surface);
+  pointer-events: auto;
+  width: 100%;
+  background: rgba(14, 20, 32, 0.96);
   backdrop-filter: var(--hub-blur);
   -webkit-backdrop-filter: var(--hub-blur);
-  border: 1px solid var(--hub-border);
-  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
   margin-top: 8px;
   padding: 8px 0;
   list-style: none;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75);
   max-height: 220px;
   overflow-y: auto;
 }
@@ -144,7 +224,7 @@
 }
 
 /* ==========================================================================
-   3. BOTÃO GPS FLUTUANTE
+   4. BOTÕES FLUTUANTES (GPS E CHAT)
    ========================================================================== */
 .btn-floating-gps {
   position: absolute;
@@ -163,15 +243,16 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   z-index: 90;
   cursor: pointer;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, background 0.2s ease;
 }
 
 .btn-floating-gps:active {
   transform: scale(0.92);
+  background: rgba(16, 185, 129, 0.15) !important;
 }
 
 /* ==========================================================================
-   4. DOCK INFERIOR (BOTTOM SHEET MODERNO)
+   5. DOCK INFERIOR (BOTTOM SHEET)
    ========================================================================== */
 .client-dock-sheet {
   position: absolute;
@@ -200,7 +281,7 @@
 }
 
 /* ==========================================================================
-   5. SELETOR DE CATEGORIAS COMPACTO E MODERNO
+   6. SELETOR DE MODALIDADES
    ========================================================================== */
 .category-slider {
   display: grid !important;
@@ -246,7 +327,43 @@
 }
 
 /* ==========================================================================
-   6. CARD DE DESTINO, VALOR E PARADAS
+   7. FORMULÁRIO DE ENCOMENDA
+   ========================================================================== */
+#blocoDetalhesEntrega {
+  background: var(--hub-card-bg) !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 14px !important;
+  padding: 12px !important;
+  margin-bottom: 4px !important;
+  animation: slideFadeDown 0.2s ease-out;
+}
+
+@keyframes slideFadeDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+#blocoDetalhesEntrega input,
+#blocoDetalhesEntrega select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #070B12 !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  color: #FFF !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  outline: none;
+}
+
+#blocoDetalhesEntrega input:focus,
+#blocoDetalhesEntrega select:focus {
+  border-color: var(--hub-blue) !important;
+}
+
+/* ==========================================================================
+   8. RESUMO DO DESTINO, PREÇO E PARADAS
    ========================================================================== */
 .trip-summary-card {
   background: var(--hub-card-bg) !important;
@@ -347,43 +464,7 @@
 }
 
 /* ==========================================================================
-   7. FORMULÁRIO DE ENCOMENDA
-   ========================================================================== */
-#blocoDetalhesEntrega {
-  background: var(--hub-card-bg) !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 14px !important;
-  padding: 12px !important;
-  margin-bottom: 4px !important;
-  animation: slideFadeDown 0.2s ease-out;
-}
-
-@keyframes slideFadeDown {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-#blocoDetalhesEntrega input,
-#blocoDetalhesEntrega select {
-  width: 100%;
-  box-sizing: border-box;
-  background: #070B12 !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 10px !important;
-  padding: 10px 12px !important;
-  color: #FFF !important;
-  font-size: 13px !important;
-  font-weight: 600;
-  outline: none;
-}
-
-#blocoDetalhesEntrega input:focus,
-#blocoDetalhesEntrega select:focus {
-  border-color: var(--hub-blue) !important;
-}
-
-/* ==========================================================================
-   8. BOTÃO PRINCIPAL (CHAMADA)
+   9. BOTÃO DE CONFIRMAR CHAMADA
    ========================================================================== */
 .btn-main-action {
   width: 100%;
