@@ -17,24 +17,33 @@ export function atualizarBotaoChamar(resumo = null) {
 }
 
 export function atualizarResumoValores() {
-  const cat = estadoCliente.categoriaSelecionada || 'carro';
-  const dist = estadoCliente.rotaAtual?.distanciaKm || 1.0;
+  const lblPreco = document.getElementById('txtPrecoEstimado');
+  const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
-  const resumo = calcularPreco(cat, dist);
+  // SE NÃO HOUVER DESTINO OU ROTA DEFINIDA, NÃO MOSTRA PREÇO
+  if (!estadoCliente.coordsDestino || !estadoCliente.rotaAtual) {
+    if (lblPreco) lblPreco.textContent = '--';
+    if (lblDistancia) lblDistancia.textContent = '-- km';
+    return;
+  }
 
-  const lblPreco = document.getElementById('lblValorEstimado') || document.getElementById('txtPrecoEstimado') || document.querySelector('.preco-card-huby');
+  // Só calcula e exibe se houver rota com distância e preço calculados
+  const precoBase = Number(estadoCliente.rotaAtual.preco || 0);
+  const distanciaKm = Number(estadoCliente.rotaAtual.distanciaKm || 0);
+
+  // Acréscimo por paradas intermediárias (R$ 2,50 por parada, se houver)
+  const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
+  const taxaParadas = qtdParadas * 2.50;
+
+  const precoFinal = precoBase + taxaParadas;
+  estadoCliente.precoFinalCalculado = precoFinal;
+
   if (lblPreco) {
-    lblPreco.textContent = resumo.formatado;
+    lblPreco.textContent = `R$ ${precoFinal.toFixed(2).replace('.', ',')}`;
   }
-
-  const lblDistancia = document.getElementById('lblDistanciaKm') || document.getElementById('txtDistanciaEstimada');
   if (lblDistancia) {
-    lblDistancia.textContent = estadoCliente.rotaAtual?.distanciaKm 
-      ? `${estadoCliente.rotaAtual.distanciaKm} km` 
-      : '-- km';
+    lblDistancia.textContent = `${distanciaKm.toFixed(1)} km`;
   }
-
-  atualizarBotaoChamar(resumo);
 }
 
 export async function submeterPedido() {

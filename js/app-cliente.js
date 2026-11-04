@@ -88,6 +88,8 @@ function configurarBarraPesquisaAnimada() {
   const listaResultados = document.getElementById('listaResultadosPesquisa');
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const containerParadas = document.getElementById('containerParadasIntermediarias');
+  const lblPreco = document.getElementById('txtPrecoEstimado');
+  const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
   // Ao clicar na lupa, expande a cápsula
   btnLupa?.addEventListener('click', (e) => {
@@ -128,15 +130,21 @@ function configurarBarraPesquisaAnimada() {
       }
     }
 
-    // 4. Reseta a interface do card inferior
+    // 4. Reseta a interface do card inferior e limpa o preço
     if (txtDestino) {
       txtDestino.textContent = 'Toque no mapa para indicar o destino';
     }
     if (containerParadas) {
       containerParadas.innerHTML = '';
     }
+    if (lblPreco) {
+      lblPreco.textContent = '--';
+    }
+    if (lblDistancia) {
+      lblDistancia.textContent = '-- km';
+    }
 
-    // 5. Atualiza preços de volta para a tarifa base
+    // 5. Atualiza o resumo
     atualizarResumoValores();
 
     // 6. Retrai a barra de volta para o formato de botão circular
@@ -165,6 +173,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
+
+  // Garante que o valor inicial seja omitido até que o destino seja traçado
+  const lblPrecoInicial = document.getElementById('txtPrecoEstimado');
+  const lblDistanciaInicial = document.getElementById('txtDistanciaEstimada');
+  if (!estadoCliente.coordsDestino) {
+    if (lblPrecoInicial) lblPrecoInicial.textContent = '--';
+    if (lblDistanciaInicial) lblDistanciaInicial.textContent = '-- km';
+  }
 
   // 1. Inicializa o Mapa com abertura automática da barra ao tocar em qualquer local
   try {
