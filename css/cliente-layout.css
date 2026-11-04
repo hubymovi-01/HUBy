@@ -2,10 +2,10 @@
 
 :root {
   --huby-bg: #090D16;
-  --huby-surface: rgba(14, 20, 34, 0.92);
-  --huby-card: rgba(255, 255, 255, 0.035);
+  --huby-surface: rgba(14, 20, 34, 0.94);
+  --huby-card: rgba(255, 255, 255, 0.04);
   --huby-border: rgba(255, 255, 255, 0.08);
-  --huby-border-glow: rgba(16, 185, 129, 0.35);
+  --huby-border-glow: rgba(16, 185, 129, 0.3);
   --huby-emerald: #10B981;
   --huby-blue: #38BDF8;
   --huby-amber: #F59E0B;
@@ -15,7 +15,7 @@
   --huby-blur: blur(20px);
 }
 
-/* Splash Screen */
+/* 1. SPLASH SCREEN */
 #hubySplash {
   position: fixed;
   inset: 0;
@@ -33,7 +33,7 @@
   100% { opacity: 0; visibility: hidden; display: none !important; pointer-events: none; }
 }
 
-/* Mapa em Tela Cheia */
+/* 2. MAPA EM TELA CHEIA */
 #mapaCliente {
   position: absolute;
   inset: 0;
@@ -42,10 +42,10 @@
   z-index: 1;
 }
 
-/* Barra Superior Flutuante */
+/* 3. BARRA SUPERIOR FLUTUANTE */
 .top-nav-bar {
   position: absolute;
-  top: 14px;
+  top: calc(env(safe-area-inset-top, 14px) + 8px);
   left: 14px;
   right: 14px;
   z-index: 100;
@@ -61,10 +61,10 @@
 
 .btn-menu-burger,
 .btn-action-pill {
-  background: var(--huby-surface);
+  background: var(--huby-surface) !important;
   backdrop-filter: var(--huby-blur);
   -webkit-backdrop-filter: var(--huby-blur);
-  border: 1px solid var(--huby-border);
+  border: 1px solid var(--huby-border) !important;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   transition: transform 0.15s ease;
 }
@@ -74,10 +74,10 @@
   transform: scale(0.92);
 }
 
-/* Caixa de Busca com Efeito Vidro */
+/* 4. BUSCA COM AUTOCOMPLETAR */
 .search-floating-wrapper {
   position: absolute;
-  top: 76px;
+  top: calc(env(safe-area-inset-top, 14px) + 68px);
   left: 14px;
   right: 14px;
   z-index: 99;
@@ -114,18 +114,49 @@
   color: var(--huby-muted);
 }
 
-/* Botões Flutuantes Redondos (GPS e Chat) */
+.search-results-glass {
+  background: var(--huby-surface);
+  backdrop-filter: var(--huby-blur);
+  -webkit-backdrop-filter: var(--huby-blur);
+  border: 1px solid var(--huby-border);
+  border-radius: 16px;
+  margin-top: 8px;
+  padding: 8px 0;
+  list-style: none;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.search-results-glass li {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--huby-text);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.search-results-glass li:last-child {
+  border-bottom: none;
+}
+
+.search-results-glass li:active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* 5. BOTÕES FLUTUANTES (GPS E CHAT) */
 .btn-floating-gps {
   position: absolute;
   right: 18px;
   width: 44px;
   height: 44px;
-  background: var(--huby-surface);
+  background: var(--huby-surface) !important;
   backdrop-filter: var(--huby-blur);
   -webkit-backdrop-filter: var(--huby-blur);
-  border: 1px solid var(--huby-border);
-  border-radius: 50%;
-  color: var(--huby-emerald);
+  border: 1px solid var(--huby-border) !important;
+  border-radius: 50% !important;
+  color: var(--huby-emerald) !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -137,10 +168,10 @@
 
 .btn-floating-gps:active {
   transform: scale(0.92);
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.15) !important;
 }
 
-/* Dock Inferior do Passageiro */
+/* 6. DOCK INFERIOR (BOTTOM SHEET) */
 .client-dock-sheet {
   position: absolute;
   bottom: 0;
@@ -152,7 +183,7 @@
   -webkit-backdrop-filter: var(--huby-blur) !important;
   border-top: 1px solid var(--huby-border) !important;
   border-radius: 28px 28px 0 0 !important;
-  padding: 12px 18px 24px !important;
+  padding: 12px 18px calc(env(safe-area-inset-bottom, 16px) + 14px) !important;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.7) !important;
 }
 
@@ -161,10 +192,10 @@
   height: 4px;
   background: rgba(255, 255, 255, 0.18);
   border-radius: 4px;
-  margin: 0 auto 14px;
+  margin: 0 auto 12px;
 }
 
-/* Seletor de Categorias */
+/* 7. SELETOR DE MODALIDADES */
 .category-slider {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -176,7 +207,7 @@
   background: var(--huby-card) !important;
   border: 1.5px solid var(--huby-border) !important;
   border-radius: 16px !important;
-  padding: 10px 8px !important;
+  padding: 11px 8px !important;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -186,11 +217,11 @@
 }
 
 .category-chip .cat-icon {
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .category-chip .cat-label {
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 800 !important;
   color: var(--huby-muted) !important;
 }
@@ -205,7 +236,17 @@
   color: var(--huby-emerald) !important;
 }
 
-/* Card Resumo de Viagem */
+/* 8. FORMULÁRIO DE ENCOMENDA SUAVE */
+#blocoDetalhesEntrega {
+  animation: popDown 0.25s ease-out;
+}
+
+@keyframes popDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 9. RESUMO DE DESTINO E PREÇO */
 .trip-summary-card {
   background: var(--huby-card) !important;
   border: 1px solid var(--huby-border) !important;
@@ -240,7 +281,7 @@
   color: var(--huby-muted) !important;
 }
 
-/* Botão de Chamar */
+/* 10. BOTÃO DE CONFIRMAR */
 .btn-main-action {
   width: 100%;
   background: var(--huby-emerald) !important;
