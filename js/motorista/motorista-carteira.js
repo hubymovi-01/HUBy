@@ -3,6 +3,39 @@ import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { carregarPerfil } from './motorista-perfil.js';
 
+// ============================================================================
+// EXPORTAÇÃO DO FECHAMENTO / RESUMO DIÁRIO
+// ============================================================================
+export function exportarResumoDia() {
+  const saldo = document.getElementById('saldoCarteiraValor')?.textContent || `R$ ${Number(estado.saldoCarteira || 0).toFixed(2).replace('.', ',')}`;
+  const ganhosHoje = document.getElementById('lblGanhosHojeValor')?.textContent || 'R$ 0,00';
+  const corridasHoje = document.getElementById('lblCorridasHojeQtd')?.textContent || '0 viagens';
+  const dataHoje = new Date().toLocaleDateString('pt-BR');
+
+  const relatorio = `
+=========================================
+          HUBY • FECHAMENTO DO DIA
+=========================================
+Data: ${dataHoje}
+Condutor: ${estado.motoristaNome || 'Carol'}
+Viagens Realizadas Hoje: ${corridasHoje}
+Repasse Líquido Ganho (85%): ${ganhosHoje}
+Saldo Disponível em Carteira: ${saldo}
+=========================================
+Emitido via Central do Motorista HUBy
+`;
+
+  const blob = new Blob([relatorio.trim()], { type: 'text/plain;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `HUBy_Fechamento_${dataHoje.replace(/\//g, '-')}.txt`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+// ============================================================================
+// EVENTOS DE SAQUE PIX E RELATÓRIO
+// ============================================================================
 export function configurarEventosSaque() {
   const modalSaque = document.getElementById('modalSaquePix');
   const btnAbrir = document.getElementById('btnAbrirModalSaque');
@@ -14,7 +47,12 @@ export function configurarEventosSaque() {
   const selectTipo = document.getElementById('saqueTipoChave');
   const modalSaldoTexto = document.getElementById('modalSaldoTexto');
   const btnSacarTudo = document.getElementById('btnSacarTudo');
+  const btnExportarRelatorio = document.getElementById('btnExportarFechamentoDia') || document.getElementById('btnExportarResumoDia');
 
+  // Botão de exportação do fechamento diário
+  btnExportarRelatorio?.addEventListener('click', exportarResumoDia);
+
+  // Botões de valor rápido (R$ 20, R$ 50, R$ 100)
   document.querySelectorAll('.btn-fast-val').forEach(btn => {
     btn.addEventListener('click', () => {
       const val = btn.getAttribute('data-val');
@@ -24,6 +62,7 @@ export function configurarEventosSaque() {
     });
   });
 
+  // Botão Sacar Tudo
   btnSacarTudo?.addEventListener('click', () => {
     if (inputValor) {
       inputValor.value = Math.max(0, estado.saldoCarteira).toFixed(2);

@@ -225,7 +225,10 @@ export default function pedidosRouter(io) {
           m.veiculo_ano,
           m.foto_perfil_url AS motorista_foto,
           m.avaliacao_media AS motorista_avaliacao,
-          m.total_corridas AS motorista_corridas
+          m.total_corridas AS motorista_corridas,
+          COALESCE(m.aceita_dinheiro, true) AS aceita_dinheiro,
+          COALESCE(m.aceita_cartao, true) AS aceita_cartao,
+          COALESCE(m.aceita_pix, true) AS aceita_pix
         FROM pedidos p
         LEFT JOIN motoristas m ON p.motorista_id::text = m.id::text
         WHERE p.id = ${id} 
@@ -241,7 +244,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7. ACEITAR VIAGEM (AVISA O CLIENTE QUE MOTORISTA ESTÁ A CAMINHO)
+  // 7. ACEITAR VIAGEM (COM TRAVA DE SALDO DEVEDOR NA CARTEIRA)
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
@@ -250,7 +253,11 @@ export default function pedidosRouter(io) {
       const emailUsuario = req.usuario.email || '';
 
       let motoristas = await sql`
-        SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, avaliacao_media, total_corridas
+        SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, 
+               avaliacao_media, total_corridas, saldo_carteira,
+               COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
+               COALESCE(aceita_cartao, true) AS aceita_cartao,
+               COALESCE(aceita_pix, true) AS aceita_pix
         FROM motoristas 
         WHERE id::text = ${usuarioId}::text 
            OR usuario_id::text = ${usuarioId}::text
@@ -260,7 +267,11 @@ export default function pedidosRouter(io) {
 
       if (motoristas.length === 0) {
         motoristas = await sql`
-          SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, avaliacao_media, total_corridas
+          SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, 
+                 avaliacao_media, total_corridas, saldo_carteira,
+                 COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
+                 COALESCE(aceita_cartao, true) AS aceita_cartao,
+                 COALESCE(aceita_pix, true) AS aceita_pix
           FROM motoristas 
           ORDER BY saldo_carteira DESC, criado_em ASC
           LIMIT 1;
@@ -272,6 +283,14 @@ export default function pedidosRouter(io) {
       }
 
       const mot = motoristas[0];
+
+      // Bloqueio financeiro: impede o aceite se o saldo devedor exceder -R$ 50,00
+      const saldoAtual = Number(mot.saldo_carteira || 0);
+      if (saldoAtual <= -50) {
+        return res.status(403).json({
+          erro: `Acesso suspenso: Seu saldo na carteira é de R$ ${saldoAtual.toFixed(2).replace('.', ',')}. Regularize seus repasses pendentes para aceitar novas corridas.`
+        });
+      }
 
       const pedidoAtualizado = await sql`
         UPDATE pedidos 
@@ -303,7 +322,10 @@ export default function pedidosRouter(io) {
         motorista_foto: mot.foto_perfil_url,
         motorista_avaliacao: mot.avaliacao_media,
         motorista_corridas: mot.total_corridas,
-        veiculo_cor: mot.veiculo_cor
+        veiculo_cor: mot.veiculo_cor,
+        aceita_dinheiro: mot.aceita_dinheiro,
+        aceita_cartao: mot.aceita_cartao,
+        aceita_pix: mot.aceita_pix
       };
 
       io.emit('corrida_aceita', {
@@ -317,7 +339,10 @@ export default function pedidosRouter(io) {
           placa: mot.veiculo_placa || 'ABC1D23',
           cor: mot.veiculo_cor || 'Prata',
           foto: mot.foto_perfil_url,
-          avaliacao: mot.avaliacao_media
+          avaliacao: mot.avaliacao_media,
+          aceita_dinheiro: mot.aceita_dinheiro,
+          aceita_cartao: mot.aceita_cartao,
+          aceita_pix: mot.aceita_pix
         }
       });
 
@@ -440,7 +465,6 @@ export default function pedidosRouter(io) {
     const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
 
     try {
-      // 1. Busca pedido garantindo compatibilidade de tipos
       const pedidos = await sql`
         SELECT * FROM pedidos 
         WHERE id::text = ${String(id)}::text 
@@ -469,7 +493,6 @@ export default function pedidosRouter(io) {
       // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA (SEM sql.begin)
       // -----------------------------------------------------------------------
       if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
-        // 1. Marca pedido como concluído
         await sql`
           UPDATE pedidos
           SET status = 'concluido', 
@@ -478,7 +501,6 @@ export default function pedidosRouter(io) {
           WHERE id::text = ${String(id)}::text;
         `;
 
-        // 2. Desconta a taxa da plataforma (15%) da carteira do condutor
         if (motoristaIdAlvo) {
           await sql`
             UPDATE motoristas
@@ -498,7 +520,6 @@ export default function pedidosRouter(io) {
           }
         }
 
-        // 3. Emite avisos Socket em tempo real
         if (io) {
           io.emit(`corrida_finalizada_${id}`, {
             sucesso: true,
@@ -708,6 +729,7 @@ export default function pedidosRouter(io) {
       res.status(500).json({ erro: 'Falha ao sincronizar mensagens.' });
     }
   });
+
   // =========================================================================
   // 13. PREFERÊNCIAS DE PAGAMENTO DO MOTORISTA (SALVAR E CONSULTAR)
   // =========================================================================
@@ -731,7 +753,6 @@ export default function pedidosRouter(io) {
       `;
 
       if (atualizado.length === 0) {
-        // Fallback caso seja o motorista padrão/teste
         await sql`
           UPDATE motoristas
           SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
@@ -752,13 +773,12 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // ALTERNAR STATUS ONLINE / OFFLINE DO MOTORISTA
+  // 14. ALTERNAR STATUS ONLINE / OFFLINE DO MOTORISTA
   // =========================================================================
   router.put('/motoristas/meu-status-online', autenticarToken, async (req, res) => {
     try {
       const usuarioId = req.usuario.id;
 
-      // 1. Busca status atual
       const mot = await sql`
         SELECT id, is_online FROM motoristas 
         WHERE id::text = ${String(usuarioId)}::text 
@@ -779,7 +799,6 @@ export default function pedidosRouter(io) {
       return res.json({ sucesso: true, online: novoStatus });
     } catch (err) {
       console.error('Erro ao alternar status do motorista:', err);
-      // Fallback gracioso em caso de erro no banco
       return res.json({ sucesso: true, online: true });
     }
   });

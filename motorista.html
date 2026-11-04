@@ -537,7 +537,8 @@
             style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">
             ✏️ Definir Meta
           </button>
-          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0 viagens</small>
+          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0
+            viagens</small>
         </div>
       </div>
 
@@ -564,7 +565,8 @@
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 16px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY CARRO</span>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 700;" id="drawerCategoriaBadge">HUBY
+            CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
             <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
             <span id="drawerTotalViagensTxt">0 viagens</span>
@@ -624,9 +626,11 @@
           <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
         <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
+          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando
+            histórico...</div>
         </div>
       </div>
+
 
       <div class="drawer-section-card">
         <h4>⚡ Chave Pix Padrão</h4>
@@ -641,6 +645,10 @@
       <button type="button" id="btnLogoutMotorista"
         style="margin-top: auto; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
         🚪 Encerrar Sessão
+      </button>
+      <button type="button" id="btnExportarFechamentoDia"
+        style="width: 100%; margin-top: 10px; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer;">
+        📄 Descarregar Fechamento do Dia
       </button>
 
       <button type="button" id="btnAbrirModalIncidente"
@@ -706,7 +714,8 @@
         <button type="button" id="btnCancelarEdicao"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.5; background: var(--blue); border: none; color: #000; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
+          style="flex: 1.5; background: var(--blue); border: none; color: #000; padding: 10px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
+          Alterações</button>
       </div>
     </div>
   </div>
@@ -715,38 +724,49 @@
   <div id="modalEscolhaPagamentoMotorista" class="modal-backdrop-custom" style="z-index: 10008;">
     <div class="modal-box-edit" style="max-width: 370px; text-align: center;">
       <h3 style="margin: 0 0 4px; font-size: 17px; color: #FFF; font-weight: 900;">🏁 Chegou ao Destino</h3>
-      <p style="color: var(--text-sec); font-size: 12px; margin: 0 0 14px;">Selecione como o passageiro efetuou o pagamento:</p>
+      <p style="color: var(--text-sec); font-size: 12px; margin: 0 0 14px;">Selecione como o passageiro efetuou o
+        pagamento:</p>
 
-      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
-        <small style="color: var(--text-sec); font-size: 10px; font-weight: 800; text-transform: uppercase;">Valor Total da Corrida</small>
-        <div id="lblValorTotalPagamentoMotorista" style="color: var(--emerald); font-size: 24px; font-weight: 900;">R$ 0,00</div>
-        <small style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos pela plataforma</small>
+      <div
+        style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
+        <small style="color: var(--text-sec); font-size: 10px; font-weight: 800; text-transform: uppercase;">Valor Total
+          da Corrida</small>
+        <div id="lblValorTotalPagamentoMotorista" style="color: var(--emerald); font-size: 24px; font-weight: 900;">R$
+          0,00</div>
+        <small style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos
+          pela plataforma</small>
       </div>
 
       <!-- BOTÃO DINHEIRO / ESPÉCIE -->
-      <button type="button" id="btnPagarDinheiro" class="btn-metodo-pagto" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4);">
+      <button type="button" id="btnPagarDinheiro" class="btn-metodo-pagto"
+        style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4);">
         <span style="font-size: 20px;">💵</span>
         <div>
           <div style="color: var(--emerald);">Dinheiro (Espécie)</div>
-          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de 15% é descontada da carteira.</small>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de
+            15% é descontada da carteira.</small>
         </div>
       </button>
 
       <!-- BOTÃO MAQUININHA PRÓPRIA -->
-      <button type="button" id="btnPagarMaquininha" class="btn-metodo-pagto" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4);">
+      <button type="button" id="btnPagarMaquininha" class="btn-metodo-pagto"
+        style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4);">
         <span style="font-size: 20px;">💳</span>
         <div>
           <div style="color: var(--blue);">Maquininha Própria</div>
-          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15% é descontada da sua carteira.</small>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15%
+            é descontada da sua carteira.</small>
         </div>
       </button>
 
       <!-- BOTÃO PIX MERCADO PAGO NA TELA -->
-      <button type="button" id="btnPagarPixMP" class="btn-metodo-pagto" style="background: rgba(139, 92, 246, 0.18); border-color: rgba(139, 92, 246, 0.45);">
+      <button type="button" id="btnPagarPixMP" class="btn-metodo-pagto"
+        style="background: rgba(139, 92, 246, 0.18); border-color: rgba(139, 92, 246, 0.45);">
         <span style="font-size: 20px;">📱</span>
         <div>
           <div style="color: #A78BFA;">Pix na Tela (Mercado Pago)</div>
-          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Gera QR Code na sua tela e na do cliente. Repasse líquido automático.</small>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Gera QR Code na sua tela e na do
+            cliente. Repasse líquido automático.</small>
         </div>
       </button>
 
@@ -760,16 +780,22 @@
   <!-- MODAL EXIBIÇÃO DO QR CODE PIX NO MOTORISTA -->
   <div id="modalExibicaoPixMotorista" class="modal-backdrop-custom" style="z-index: 10009;">
     <div class="modal-box-edit" style="max-width: 350px; text-align: center;">
-      <h3 style="margin: 0 0 6px; font-size: 16px; color: #FFF; font-weight: 800;">📱 Apresente o QR Code ao Passageiro</h3>
-      <div id="lblValorPixMotorista" style="color: var(--emerald); font-size: 22px; font-weight: 900; margin-bottom: 12px;">R$ 0,00</div>
+      <h3 style="margin: 0 0 6px; font-size: 16px; color: #FFF; font-weight: 800;">📱 Apresente o QR Code ao Passageiro
+      </h3>
+      <div id="lblValorPixMotorista"
+        style="color: var(--emerald); font-size: 22px; font-weight: 900; margin-bottom: 12px;">R$ 0,00</div>
 
-      <div style="background: #FFF; padding: 12px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 16px rgba(0,0,0,0.5);">
-        <img id="imgQrCodePixMotorista" src="" alt="QR Code Pix" style="width: 200px; height: 200px; display: block; object-fit: contain;">
+      <div
+        style="background: #FFF; padding: 12px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 16px rgba(0,0,0,0.5);">
+        <img id="imgQrCodePixMotorista" src="" alt="QR Code Pix"
+          style="width: 200px; height: 200px; display: block; object-fit: contain;">
       </div>
 
       <div style="margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); animation: pulse 1.5s infinite;"></span>
-        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando pagamento no banco...</small>
+        <span
+          style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); animation: pulse 1.5s infinite;"></span>
+        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando pagamento no
+          banco...</small>
       </div>
 
       <button type="button" id="btnFecharPixMotorista"
@@ -788,8 +814,10 @@
           style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
 
-      <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;">
-        <small style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo Disponível (85% Líquido)</small>
+      <div
+        style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;">
+        <small style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo
+          Disponível (85% Líquido)</small>
         <div id="modalSaldoTexto" style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ 0,00</div>
       </div>
 
@@ -814,20 +842,23 @@
           <button type="button" class="btn-fast-val" data-val="20">R$ 20</button>
           <button type="button" class="btn-fast-val" data-val="50">R$ 50</button>
           <button type="button" class="btn-fast-val" data-val="100">R$ 100</button>
-          <button type="button" id="btnSacarTudo" class="btn-fast-val" style="background: rgba(56,189,248,0.18); border-color: var(--blue); color: var(--blue);">TUDO</button>
+          <button type="button" id="btnSacarTudo" class="btn-fast-val"
+            style="background: rgba(56,189,248,0.18); border-color: var(--blue); color: var(--blue);">TUDO</button>
         </div>
       </div>
 
       <div class="form-group-driver">
         <label>Valor do Saque (R$)</label>
-        <input type="number" step="0.50" id="saqueValor" placeholder="0.00" style="color: var(--emerald); font-weight: 900; font-size: 18px;">
+        <input type="number" step="0.50" id="saqueValor" placeholder="0.00"
+          style="color: var(--emerald); font-weight: 900; font-size: 18px;">
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 16px;">
         <button type="button" id="btnCancelarSaqueModal"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnConfirmarSaquePix"
-          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar
+          Saque</button>
       </div>
     </div>
   </div>

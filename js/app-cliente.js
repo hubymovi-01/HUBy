@@ -10,6 +10,19 @@ import { configurarMultiplasParadas } from './cliente/cliente-paradas.js';
 
 let intervalChatCliente = null;
 let intervalChecagemPix = null;
+let alertaProximidadeEmitido = false;
+
+// Cálculo da distância esférica entre dois pontos (metros)
+function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
+  const R = 6371e3;
+  const rad = Math.PI / 180;
+  const dLat = (lat2 - lat1) * rad;
+  const dLon = (lon2 - lon1) * rad;
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
@@ -316,7 +329,6 @@ function iniciarMonitoramentoPix(txid, valor) {
 // MODAL PIX AUTOMÁTICO NA TELA DO PASSAGEIRO (AO FINALIZAR VIAGEM)
 // ============================================================================
 function exibirModalPixCorridaCliente(pix) {
-  // Remove modal anterior caso exista
   document.getElementById('modalPixCorridaAtivaCliente')?.remove();
 
   const modalHTML = `
@@ -375,7 +387,7 @@ function exibirModalPixCorridaCliente(pix) {
 }
 
 // ============================================================================
-// FUNÇÕES DE COMUNICAÇÃO EM TEMPO REAL COM O MOTORISTA
+// COMUNICAÇÃO EM TEMPO REAL COM O MOTORISTA E GEOFENCE (200 METROS)
 // ============================================================================
 function conectarSocketEPollingCliente() {
   const socket = window.io ? window.io(API_URL) : null;
@@ -387,6 +399,7 @@ function conectarSocketEPollingCliente() {
         if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarSucessoAceite) {
           sonsHUBy.tocarSucessoAceite();
         }
+        alertaProximidadeEmitido = false;
         renderizarMotoristaChegando(data.motorista);
       }
     });
@@ -398,7 +411,26 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // 1. Escuta a exibição do Pix gerado pelo motorista no encerramento da corrida
+    // Geofence de Proximidade (200m)
+    socket.on('posicao_motorista', (pos) => {
+      const coordsEmbarque = estadoCliente.rotaAtual?.origemCoords || estadoCliente.coordsOrigem;
+      if (coordsEmbarque && !alertaProximidadeEmitido && pos.lat && pos.lng) {
+        const dist = calcularDistanciaMetros(pos.lat, pos.lng, coordsEmbarque[0], coordsEmbarque[1]);
+        if (dist <= 200) {
+          alertaProximidadeEmitido = true;
+          if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarAlertaChamada) {
+            sonsHUBy.tocarAlertaChamada();
+          }
+          const lblStatus = document.getElementById('lblStatusTextoPassageiro');
+          if (lblStatus) {
+            lblStatus.textContent = '⚡ MOTORISTA ESTÁ CHEGANDO (MENOS DE 200M)!';
+            lblStatus.style.color = '#10B981';
+          }
+        }
+      }
+    });
+
+    // Escuta eventos dinâmicos do pedido
     socket.onAny((evento, dados) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (pedidoAtivo && evento === `exibir_pix_corrida_${pedidoAtivo}`) {
@@ -410,7 +442,7 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // 2. Escuta finalização padrão do pedido
+    // Escuta finalização padrão do pedido
     socket.on('corrida_finalizada', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
@@ -438,7 +470,10 @@ function conectarSocketEPollingCliente() {
           placa: p.motorista_placa,
           cor: p.veiculo_cor,
           foto: p.motorista_foto,
-          avaliacao: p.motorista_avaliacao
+          avaliacao: p.motorista_avaliacao,
+          aceita_dinheiro: p.aceita_dinheiro,
+          aceita_cartao: p.aceita_cartao,
+          aceita_pix: p.aceita_pix
         });
       } else if (p.status === 'em_viagem') {
         atualizarParaViagemEmAndamento();
@@ -478,6 +513,20 @@ function renderizarMotoristaChegando(mot = {}) {
   const nota = Number(mot.avaliacao || 5.0).toFixed(1);
   const telefone = mot.telefone || '';
 
+  // Badges das preferências aceitas pelo motorista
+  const aceitaDinheiro = mot.aceita_dinheiro !== false;
+  const aceitaCartao = mot.aceita_cartao !== false;
+  const aceitaPix = mot.aceita_pix !== false;
+
+  const badgesHTML = `
+    <div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding:8px 10px;background:rgba(255,255,255,0.04);border-radius:10px;font-size:11px;color:#94A3B8;flex-wrap:wrap;">
+      <span style="font-weight:700;color:#CBD5E1;">Formas aceitas:</span>
+      ${aceitaDinheiro ? '<span style="background:rgba(16,185,129,0.15);color:#10B981;padding:2px 8px;border-radius:6px;font-weight:700;">💵 Dinheiro</span>' : ''}
+      ${aceitaCartao ? '<span style="background:rgba(56,189,248,0.15);color:#38BDF8;padding:2px 8px;border-radius:6px;font-weight:700;">💳 Maquininha</span>' : ''}
+      ${aceitaPix ? '<span style="background:rgba(168,85,247,0.15);color:#A855F7;padding:2px 8px;border-radius:6px;font-weight:700;">📱 Pix</span>' : ''}
+    </div>
+  `;
+
   painel.style.display = 'block';
   painel.innerHTML = `
     <div id="boxCronometroChegada" style="text-align: center; margin-bottom: 12px; background: rgba(56, 189, 248, 0.12); border: 1.5px solid rgba(56, 189, 248, 0.35); padding: 12px; border-radius: 14px;">
@@ -509,6 +558,8 @@ function renderizarMotoristaChegando(mot = {}) {
           </div>
         </div>
       </div>
+
+      ${badgesHTML}
 
       <div class="driver-card-actions" style="display: grid; grid-template-columns: ${telefone ? '1fr 1.5fr' : '1fr'}; gap: 8px; margin-top: 10px;">
         ${telefone ? `

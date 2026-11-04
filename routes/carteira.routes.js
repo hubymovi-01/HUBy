@@ -32,12 +32,16 @@ async function inicializarTabelasCarteira() {
     await sql`
       CREATE TABLE IF NOT EXISTS cobrancas_pix (
         id SERIAL PRIMARY KEY,
-        txid VARCHAR(64) UNIQUE NOT NULL,
-        usuario_id TEXT NOT NULL,
+        transacao_id VARCHAR(64) UNIQUE,
+        txid VARCHAR(64) UNIQUE,
+        pedido_id TEXT,
+        usuario_id TEXT,
         valor NUMERIC(10,2) NOT NULL,
         status VARCHAR(20) DEFAULT 'pendente',
-        pix_copia_cola TEXT NOT NULL,
-        expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+        qr_code TEXT,
+        qr_code_base64 TEXT,
+        pix_copia_cola TEXT,
+        expira_em TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15 minutes'),
         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -149,7 +153,7 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
             first_name: req.usuario.nome ? req.usuario.nome.split(' ')[0] : 'Cliente',
             last_name: req.usuario.nome ? req.usuario.nome.split(' ').slice(1).join(' ') || 'HUBy' : 'HUBy'
           },
-          notification_url: `${process.env.API_URL || 'https://sua-api.onrender.com'}/api/carteira/webhook/mercadopago`
+          notification_url: `${process.env.API_URL || 'https://huby.onrender.com'}/api/carteira/webhook/mercadopago`
         };
 
         const mpRes = await mp.payment.create({ body: bodyMP });
@@ -162,8 +166,8 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
         const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
 
         await sql`
-          INSERT INTO cobrancas_pix (txid, usuario_id, valor, status, pix_copia_cola, expira_em)
-          VALUES (${txid}, ${usuarioId}, ${valorNum}, 'pendente', ${copiaCola}, ${expiraEm})
+          INSERT INTO cobrancas_pix (txid, transacao_id, usuario_id, valor, status, pix_copia_cola, qr_code, qr_code_base64, expira_em)
+          VALUES (${txid}, ${txid}, ${usuarioId}, ${valorNum}, 'pendente', ${copiaCola}, ${copiaCola}, ${qrCodeBase64}, ${expiraEm})
           ON CONFLICT (txid) DO NOTHING;
         `;
 
@@ -189,8 +193,8 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
     const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
 
     await sql`
-      INSERT INTO cobrancas_pix (txid, usuario_id, valor, status, pix_copia_cola, expira_em)
-      VALUES (${txid}, ${usuarioId}, ${valorNum}, 'pendente', ${copiaCola}, ${expiraEm});
+      INSERT INTO cobrancas_pix (txid, transacao_id, usuario_id, valor, status, pix_copia_cola, expira_em)
+      VALUES (${txid}, ${txid}, ${usuarioId}, ${valorNum}, 'pendente', ${copiaCola}, ${expiraEm});
     `;
 
     res.json({
@@ -209,52 +213,88 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
   }
 });
 
-// WEBHOOK OFICIAL DO MERCADO PAGO (Liquidação automática em tempo real)
+// ============================================================================
+// WEBHOOK OFICIAL DO MERCADO PAGO (LIQUIDAÇÃO DE RECARGAS E DE CORRIDAS)
+// ============================================================================
 router.post('/webhook/mercadopago', async (req, res) => {
   try {
-    const { type, data } = req.body;
-    const paymentId = data?.id || req.query['data.id'] || req.body?.id;
+    const { action, type, data } = req.body;
+    const paymentId = data?.id || req.query['data.id'] || req.query.id || req.body?.id;
 
-    if (type === 'payment' || paymentId) {
+    if (type === 'payment' || action === 'payment.updated' || paymentId) {
       const mp = await obterClienteMercadoPago();
       if (mp && mp.payment && paymentId) {
         const info = await mp.payment.get({ id: paymentId });
 
         if (info.status === 'approved') {
-          await sql.begin(async (sqlTx) => {
-            const cobranca = await sqlTx`
-              SELECT * FROM cobrancas_pix 
-              WHERE txid = ${String(paymentId)} 
-              LIMIT 1 
-              FOR UPDATE;
+          // Busca tanto por transacao_id quanto por txid
+          const cobrancas = await sql`
+            SELECT * FROM cobrancas_pix 
+            WHERE transacao_id = ${String(paymentId)} 
+               OR txid = ${String(paymentId)}
+            LIMIT 1;
+          `;
+
+          if (cobrancas.length > 0 && cobrancas[0].status !== 'pago') {
+            const cobranca = cobrancas[0];
+            const valorPago = Number(cobranca.valor);
+
+            // Marca cobrança como paga
+            await sql`
+              UPDATE cobrancas_pix 
+              SET status = 'pago' 
+              WHERE id = ${cobranca.id};
             `;
 
-            if (cobranca.length > 0 && cobranca[0].status !== 'pago') {
-              await sqlTx`
-                UPDATE cobrancas_pix 
-                SET status = 'pago' 
-                WHERE txid = ${String(paymentId)};
+            // CASO A: Liquidando uma Corrida com QR Code Pix na tela
+            if (cobranca.pedido_id) {
+              const pedidoId = cobranca.pedido_id;
+
+              await sql`
+                UPDATE pedidos 
+                SET status = 'concluido', 
+                    forma_pagamento = 'pix_mp', 
+                    concluido_em = CURRENT_TIMESTAMP 
+                WHERE id::text = ${String(pedidoId)}::text;
               `;
 
-              await sqlTx`
+              const io = req.app.get('io');
+              if (io) {
+                io.emit(`corrida_finalizada_${pedidoId}`, {
+                  sucesso: true,
+                  forma_pagamento: 'pix_mp',
+                  valorFinal: valorPago,
+                  mensagem: 'Pagamento Pix aprovado!'
+                });
+                io.emit('corrida_finalizada', {
+                  pedidoId,
+                  status: 'concluido',
+                  forma_pagamento: 'pix_mp',
+                  valorFinal: valorPago
+                });
+              }
+            } 
+            // CASO B: Recarga de Saldo do Usuário/Passageiro
+            else if (cobranca.usuario_id) {
+              await sql`
                 UPDATE usuarios 
-                SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${Number(cobranca[0].valor)}
-                WHERE id::text = ${cobranca[0].usuario_id}::text;
+                SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${valorPago}
+                WHERE id::text = ${cobranca.usuario_id}::text;
               `;
 
-              await sqlTx`
+              await sql`
                 INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor)
-                VALUES (${cobranca[0].usuario_id}, 'cliente', 'deposito_pix_mercadopago', ${Number(cobranca[0].valor)});
+                VALUES (${cobranca.usuario_id}, 'cliente', 'deposito_pix_mercadopago', ${valorPago});
               `;
             }
-          });
+          }
         }
       }
     }
-    res.sendStatus(200);
+    return res.status(200).send('OK');
   } catch (err) {
     console.error('Erro no processamento do Webhook MP:', err.message);
-    res.sendStatus(200);
+    return res.status(200).send('OK');
   }
 });
 
@@ -264,7 +304,7 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
     const cobranca = await sql`
       SELECT txid, valor, status, expira_em 
       FROM cobrancas_pix 
-      WHERE txid = ${txid} 
+      WHERE txid = ${txid} OR transacao_id = ${txid}
       LIMIT 1;
     `;
 
@@ -276,13 +316,12 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
       return res.json(cobranca[0]);
     }
 
-    // Se estiver pendente localmente, faz dupla checagem direta no Mercado Pago
     const mp = await obterClienteMercadoPago();
     if (mp && mp.payment && !isNaN(Number(txid))) {
       try {
         const info = await mp.payment.get({ id: txid });
         if (info.status === 'approved') {
-          await sql`UPDATE cobrancas_pix SET status = 'pago' WHERE txid = ${txid};`;
+          await sql`UPDATE cobrancas_pix SET status = 'pago' WHERE txid = ${txid} OR transacao_id = ${txid};`;
           cobranca[0].status = 'pago';
         }
       } catch (e) {}
@@ -303,50 +342,42 @@ router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
   }
 
   try {
-    const resultado = await sql.begin(async (sqlTx) => {
-      const cob = await sqlTx`
-        SELECT id, usuario_id, valor, status 
-        FROM cobrancas_pix 
-        WHERE txid = ${txid} AND usuario_id::text = ${usuarioId}::text
-        LIMIT 1
-        FOR UPDATE;
-      `;
+    const cobs = await sql`
+      SELECT id, usuario_id, valor, status 
+      FROM cobrancas_pix 
+      WHERE (txid = ${txid} OR transacao_id = ${txid}) 
+        AND usuario_id::text = ${usuarioId}::text
+      LIMIT 1;
+    `;
 
-      if (!cob.length) {
-        throw new Error('Cobrança Pix não encontrada.');
-      }
+    if (!cobs.length) {
+      return res.status(404).json({ erro: 'Cobrança Pix não encontrada.' });
+    }
 
-      if (cob[0].status === 'pago') {
-        return { jaProcessado: true };
-      }
-
-      const valorCreditar = Number(cob[0].valor);
-
-      await sqlTx`UPDATE cobrancas_pix SET status = 'pago' WHERE txid = ${txid};`;
-
-      const userAtualizado = await sqlTx`
-        UPDATE usuarios 
-        SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${valorCreditar}
-        WHERE id::text = ${usuarioId}::text
-        RETURNING saldo_carteira;
-      `;
-
-      await sqlTx`
-        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor)
-        VALUES (${usuarioId}, 'cliente', 'deposito_pix', ${valorCreditar});
-      `;
-
-      return { novoSaldo: Number(userAtualizado[0].saldo_carteira) };
-    });
-
-    if (resultado.jaProcessado) {
+    if (cobs[0].status === 'pago') {
       return res.json({ sucesso: true, mensagem: 'Essa recarga já foi processada anteriormente.' });
     }
+
+    const valorCreditar = Number(cobs[0].valor);
+
+    await sql`UPDATE cobrancas_pix SET status = 'pago' WHERE id = ${cobs[0].id};`;
+
+    const userAtualizado = await sql`
+      UPDATE usuarios 
+      SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${valorCreditar}
+      WHERE id::text = ${usuarioId}::text
+      RETURNING saldo_carteira;
+    `;
+
+    await sql`
+      INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor)
+      VALUES (${usuarioId}, 'cliente', 'deposito_pix', ${valorCreditar});
+    `;
 
     res.json({
       sucesso: true,
       mensagem: 'Recarga confirmada com sucesso!',
-      novoSaldo: resultado.novoSaldo
+      novoSaldo: Number(userAtualizado[0].saldo_carteira)
     });
   } catch (err) {
     console.error('Erro na confirmação da recarga Pix:', err);
@@ -355,7 +386,7 @@ router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 3. CONTAS BANCÁRIAS E SAQUES DO MOTORISTA (TRANSAÇÃO ACID)
+// 3. CONTAS BANCÁRIAS E SAQUES DO MOTORISTA (SEQUENCIAL ATÔMICO NEON)
 // ============================================================================
 router.get('/motorista/:id', async (req, res) => {
   try {
@@ -405,60 +436,54 @@ router.post('/motorista/:id/saque', async (req, res) => {
   }
 
   try {
-    const resultado = await sql.begin(async (sqlTx) => {
-      const condutores = await sqlTx`
-        SELECT id, nome, saldo_carteira 
-        FROM motoristas 
-        WHERE id::text = ${id}::text OR usuario_id::text = ${id}::text 
-        LIMIT 1
-        FOR UPDATE;
-      `;
+    const condutores = await sql`
+      SELECT id, nome, saldo_carteira 
+      FROM motoristas 
+      WHERE id::text = ${id}::text OR usuario_id::text = ${id}::text 
+      LIMIT 1;
+    `;
 
-      if (!condutores.length) {
-        throw new Error('Motorista não encontrado no sistema.');
-      }
+    if (!condutores.length) {
+      return res.status(404).json({ erro: 'Motorista não encontrado no sistema.' });
+    }
 
-      const condutor = condutores[0];
-      const saldoDisponivel = Number(condutor.saldo_carteira || 0);
+    const condutor = condutores[0];
+    const saldoDisponivel = Number(condutor.saldo_carteira || 0);
 
-      if (saldoDisponivel < valorNum) {
-        throw new Error(`Saldo insuficiente. Disponível: R$ ${saldoDisponivel.toFixed(2).replace('.', ',')}`);
-      }
+    if (saldoDisponivel < valorNum) {
+      return res.status(400).json({ erro: `Saldo insuficiente. Disponível: R$ ${saldoDisponivel.toFixed(2).replace('.', ',')}` });
+    }
 
-      const novoSaldo = Number((saldoDisponivel - valorNum).toFixed(2));
+    const novoSaldo = Number((saldoDisponivel - valorNum).toFixed(2));
 
-      await sqlTx`
-        UPDATE motoristas 
-        SET saldo_carteira = ${novoSaldo}, chave_pix_padrao = ${chave_pix.trim()} 
-        WHERE id = ${condutor.id};
-      `;
+    await sql`
+      UPDATE motoristas 
+      SET saldo_carteira = ${novoSaldo}, chave_pix_padrao = ${chave_pix.trim()} 
+      WHERE id = ${condutor.id};
+    `;
 
-      const saqueCriado = await sqlTx`
-        INSERT INTO saques_motoristas (
-          motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status
-        ) VALUES (
-          ${condutor.id}, ${condutor.nome}, ${chave_pix.trim()}, ${tipo_chave || 'pix'}, ${valorNum}, 'pendente'
-        ) RETURNING id;
-      `;
+    const saqueCriado = await sql`
+      INSERT INTO saques_motoristas (
+        motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status
+      ) VALUES (
+        ${condutor.id}, ${condutor.nome}, ${chave_pix.trim()}, ${tipo_chave || 'pix'}, ${valorNum}, 'pendente'
+      ) RETURNING id;
+    `;
 
-      await sqlTx`
-        INSERT INTO transacoes_carteira (
-          usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id
-        ) VALUES (
-          ${condutor.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${saqueCriado[0].id}
-        );
-      `;
-
-      return { novoSaldo, saqueId: saqueCriado[0].id };
-    });
+    await sql`
+      INSERT INTO transacoes_carteira (
+        usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id
+      ) VALUES (
+        ${condutor.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${saqueCriado[0].id}
+      );
+    `;
 
     res.json({
       sucesso: true,
       mensagem: `Solicitação de saque de R$ ${valorNum.toFixed(2).replace('.', ',')} enviada para a administração!`,
-      novoSaldo: resultado.novoSaldo,
-      saqueId: resultado.saqueId
+      novoSaldo,
+      saqueId: saqueCriado[0].id
     });
-
   } catch (err) {
     console.error('Erro na solicitação de saque:', err);
     res.status(400).json({ erro: err.message || 'Falha ao processar solicitação de saque.' });
@@ -495,49 +520,46 @@ router.put('/admin/saques/:id', async (req, res) => {
   }
 
   try {
-    await sql.begin(async (sqlTx) => {
-      const saqueExistente = await sqlTx`
-        SELECT * FROM saques_motoristas 
-        WHERE id = ${id} 
-        LIMIT 1
-        FOR UPDATE;
+    const saqueExistente = await sql`
+      SELECT * FROM saques_motoristas 
+      WHERE id = ${id} 
+      LIMIT 1;
+    `;
+
+    if (!saqueExistente.length) {
+      return res.status(404).json({ erro: 'Solicitação de saque não encontrada.' });
+    }
+
+    const saque = saqueExistente[0];
+
+    if (saque.status !== 'pendente') {
+      return res.status(400).json({ erro: `Este saque já foi finalizado como '${saque.status}'.` });
+    }
+
+    if (status === 'recusado') {
+      await sql`
+        UPDATE motoristas 
+        SET saldo_carteira = saldo_carteira + ${saque.valor} 
+        WHERE id = ${saque.motorista_id};
       `;
 
-      if (!saqueExistente.length) {
-        throw new Error('Solicitação de saque não encontrada.');
-      }
+      await sql`
+        UPDATE saques_motoristas 
+        SET status = 'recusado', motivo_recusa = ${motivo_recusa || 'Dados bancários inconsistentes'} 
+        WHERE id = ${id};
+      `;
 
-      const saque = saqueExistente[0];
-
-      if (saque.status !== 'pendente') {
-        throw new Error(`Este saque já foi finalizado como '${saque.status}'.`);
-      }
-
-      if (status === 'recusado') {
-        await sqlTx`
-          UPDATE motoristas 
-          SET saldo_carteira = saldo_carteira + ${saque.valor} 
-          WHERE id = ${saque.motorista_id};
-        `;
-
-        await sqlTx`
-          UPDATE saques_motoristas 
-          SET status = 'recusado', motivo_recusa = ${motivo_recusa || 'Dados bancários inconsistentes'} 
-          WHERE id = ${id};
-        `;
-
-        await sqlTx`
-          INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-          VALUES (${saque.motorista_id}, 'motorista', 'estorno_saque_recusado', ${saque.valor}, ${id});
-        `;
-      } else {
-        await sqlTx`
-          UPDATE saques_motoristas 
-          SET status = 'pago', pago_em = CURRENT_TIMESTAMP 
-          WHERE id = ${id};
-        `;
-      }
-    });
+      await sql`
+        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+        VALUES (${saque.motorista_id}, 'motorista', 'estorno_saque_recusado', ${saque.valor}, ${id});
+      `;
+    } else {
+      await sql`
+        UPDATE saques_motoristas 
+        SET status = 'pago', pago_em = CURRENT_TIMESTAMP 
+        WHERE id = ${id};
+      `;
+    }
 
     res.json({ sucesso: true, statusAtualizado: status });
   } catch (err) {
@@ -547,7 +569,7 @@ router.put('/admin/saques/:id', async (req, res) => {
 });
 
 // ============================================================================
-// 5. ABATE DE CORRIDA E GORJETAS (TRANSAÇÕES SEGURAS)
+// 5. ABATE DE CORRIDA E GORJETAS (SEQUENCIAL ATÔMICO NEON)
 // ============================================================================
 router.post('/debito-corrida', autenticarToken, async (req, res) => {
   const clienteId = req.usuario.id;
@@ -559,31 +581,28 @@ router.post('/debito-corrida', autenticarToken, async (req, res) => {
   }
 
   try {
-    await sql.begin(async (sqlTx) => {
-      const cliente = await sqlTx`
-        SELECT saldo_carteira FROM usuarios 
-        WHERE id::text = ${clienteId}::text 
-        LIMIT 1
-        FOR UPDATE;
-      `;
+    const cliente = await sql`
+      SELECT saldo_carteira FROM usuarios 
+      WHERE id::text = ${clienteId}::text 
+      LIMIT 1;
+    `;
 
-      const saldoAtual = Number(cliente[0]?.saldo_carteira || 0);
+    const saldoAtual = Number(cliente[0]?.saldo_carteira || 0);
 
-      if (saldoAtual < valorDebitar) {
-        throw new Error(`Saldo insuficiente na carteira. Saldo atual: R$ ${saldoAtual.toFixed(2).replace('.', ',')}`);
-      }
+    if (saldoAtual < valorDebitar) {
+      return res.status(400).json({ erro: `Saldo insuficiente na carteira. Saldo atual: R$ ${saldoAtual.toFixed(2).replace('.', ',')}` });
+    }
 
-      await sqlTx`
-        UPDATE usuarios 
-        SET saldo_carteira = saldo_carteira - ${valorDebitar} 
-        WHERE id::text = ${clienteId}::text;
-      `;
+    await sql`
+      UPDATE usuarios 
+      SET saldo_carteira = saldo_carteira - ${valorDebitar} 
+      WHERE id::text = ${clienteId}::text;
+    `;
 
-      await sqlTx`
-        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-        VALUES (${clienteId}, 'cliente', 'pagamento_corrida', ${-valorDebitar}, ${pedidoId});
-      `;
-    });
+    await sql`
+      INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+      VALUES (${clienteId}, 'cliente', 'pagamento_corrida', ${-valorDebitar}, ${pedidoId});
+    `;
 
     res.json({ sucesso: true, mensagem: 'Valor debitado com sucesso da carteira digital.' });
   } catch (err) {
@@ -602,46 +621,43 @@ router.post('/gorjeta', autenticarToken, async (req, res) => {
   }
 
   try {
-    await sql.begin(async (sqlTx) => {
-      const pedido = await sqlTx`
-        SELECT id, motorista_id, status 
-        FROM pedidos 
-        WHERE id = ${pedidoId} AND cliente_id::text = ${clienteId}::text AND status = 'concluido'
-        LIMIT 1;
-      `;
+    const pedido = await sql`
+      SELECT id, motorista_id, status 
+      FROM pedidos 
+      WHERE id = ${pedidoId} AND cliente_id::text = ${clienteId}::text AND status = 'concluido'
+      LIMIT 1;
+    `;
 
-      if (pedido.length === 0) {
-        throw new Error('Viagem concluída não localizada.');
-      }
+    if (pedido.length === 0) {
+      return res.status(404).json({ erro: 'Viagem concluída não localizada.' });
+    }
 
-      const motoristaId = pedido[0].motorista_id;
-      if (!motoristaId) {
-        throw new Error('Motorista não vinculado à viagem.');
-      }
+    const motoristaId = pedido[0].motorista_id;
+    if (!motoristaId) {
+      return res.status(400).json({ erro: 'Motorista não vinculado à viagem.' });
+    }
 
-      const cliente = await sqlTx`
-        SELECT saldo_carteira FROM usuarios 
-        WHERE id::text = ${clienteId}::text 
-        LIMIT 1
-        FOR UPDATE;
-      `;
+    const cliente = await sql`
+      SELECT saldo_carteira FROM usuarios 
+      WHERE id::text = ${clienteId}::text 
+      LIMIT 1;
+    `;
 
-      const saldoCliente = Number(cliente[0]?.saldo_carteira || 0);
-      if (saldoCliente < gorjetaNum) {
-        throw new Error('Saldo insuficiente na carteira para enviar gorjeta.');
-      }
+    const saldoCliente = Number(cliente[0]?.saldo_carteira || 0);
+    if (saldoCliente < gorjetaNum) {
+      return res.status(400).json({ erro: 'Saldo insuficiente na carteira para enviar gorjeta.' });
+    }
 
-      await sqlTx`UPDATE usuarios SET saldo_carteira = saldo_carteira - ${gorjetaNum} WHERE id::text = ${clienteId}::text;`;
-      await sqlTx`UPDATE motoristas SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${gorjetaNum} WHERE id::text = ${motoristaId}::text;`;
-      await sqlTx`UPDATE pedidos SET valor_gorjeta = COALESCE(valor_gorjeta, 0) + ${gorjetaNum} WHERE id = ${pedidoId};`;
+    await sql`UPDATE usuarios SET saldo_carteira = saldo_carteira - ${gorjetaNum} WHERE id::text = ${clienteId}::text;`;
+    await sql`UPDATE motoristas SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${gorjetaNum} WHERE id::text = ${motoristaId}::text;`;
+    await sql`UPDATE pedidos SET valor_gorjeta = COALESCE(valor_gorjeta, 0) + ${gorjetaNum} WHERE id = ${pedidoId};`;
 
-      await sqlTx`
-        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-        VALUES 
-          (${clienteId}, 'cliente', 'gorjeta_paga', ${-gorjetaNum}, ${pedidoId}),
-          (${motoristaId}, 'motorista', 'gorjeta_recebida', ${gorjetaNum}, ${pedidoId});
-      `;
-    });
+    await sql`
+      INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+      VALUES 
+        (${clienteId}, 'cliente', 'gorjeta_paga', ${-gorjetaNum}, ${pedidoId}),
+        (${motoristaId}, 'motorista', 'gorjeta_recebida', ${gorjetaNum}, ${pedidoId});
+    `;
 
     res.json({ sucesso: true, mensagem: 'Gorjeta enviada com sucesso!' });
   } catch (err) {
