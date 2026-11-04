@@ -116,7 +116,8 @@
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
         style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
         <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
+            financeiro</small></div>
       </a>
       <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
@@ -130,7 +131,8 @@
   </aside>
 
   <!-- BOTÃO FLUTUANTE DE GPS -->
-  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" style="bottom: 250px;" aria-label="Recentralizar GPS">
+  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" style="bottom: 250px;"
+    aria-label="Recentralizar GPS">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
       stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
@@ -170,7 +172,9 @@
     <!-- FORMULÁRIO DE ENTREGA -->
     <div id="blocoDetalhesEntrega"
       style="display: none; margin-bottom: 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--huby-border); border-radius: 14px; padding: 14px;">
-      <div style="font-size: 11px; color: #10B981; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px;">📋 Detalhes da Encomenda</div>
+      <div
+        style="font-size: 11px; color: #10B981; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px;">
+        📋 Detalhes da Encomenda</div>
       <input type="text" id="inputRecebedor" placeholder="Quem vai receber? (Nome e Telefone)"
         style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid var(--huby-border); color: #FFF; padding: 11px 14px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; outline: none;" />
       <select id="selectTipoItem"
@@ -224,10 +228,13 @@
         <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
       <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
-        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
+          tempo real.</p>
+        <div
+          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
+            contato cadastrado</div>
         </div>
         <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal"
           style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -255,7 +262,8 @@
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
       <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
+          data-val="4">★</span><span data-val="5">★</span>
       </div>
       <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
       <div class="modal-btn-row">
@@ -296,9 +304,11 @@
       </div>
 
       <div id="areaPixMercadoPago" style="display: none;">
-        <div class="mp-qr-container" style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
+        <div class="mp-qr-container"
+          style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
           <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
-          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app do seu banco para pagar</span>
+          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app
+            do seu banco para pagar</span>
         </div>
 
         <div class="pix-charge-box" style="margin-top: 10px;">
@@ -309,7 +319,8 @@
           </div>
         </div>
 
-        <div id="statusPagamentoPixTexto" style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
+        <div id="statusPagamentoPixTexto"
+          style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
           ⏳ Aguardando confirmação do pagamento...
         </div>
       </div>
@@ -321,13 +332,17 @@
     <div class="modal-card"
       style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
       <div class="modal-header-row"
-        style="padding: 14px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
-        <h3 style="margin: 0; font-size: 15px; color: #38BDF8;">💬 Mensagens da Viagem</h3>
-        <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
+        style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; align-items: center; justify-content: space-between;">
+        <h3
+          style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700; display: flex; align-items: center; gap: 6px;">
+          <span>💬</span> Mensagens da Viagem
+        </h3>
+        <button type="button" id="btnFecharChat" class="btn-icon-close" aria-label="Fechar">✕</button>
       </div>
       <div id="chatAreaMensagens"
         style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
+        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
+          pessoais.</div>
       </div>
       <div
         style="padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; gap: 8px;">
