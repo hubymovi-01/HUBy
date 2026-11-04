@@ -119,7 +119,7 @@ html, body.client-viewport {
   color: var(--text-secondary);
 }
 
-/* 3. CARD DO CONDUTOR ACEITO & CHAT DA CORRIDA */
+/* 3. CARD DO CONDUTOR ACEITO & CHAT */
 .driver-card-accepted {
   background: rgba(18, 24, 38, 0.98);
   border: 1.5px solid var(--border-glass);
@@ -135,7 +135,7 @@ html, body.client-viewport {
   margin-bottom: 12px;
 }
 
-/* Botão flutuante do chat: 100% oculto nativamente, só abre no aceite da corrida */
+/* Chat flutuante: 100% oculto por padrão, ativado apenas via JS ao aceitar corrida */
 #btnAbrirChat {
   display: none !important;
 }
@@ -381,6 +381,56 @@ html, body.client-viewport {
 }
 
 /* RECARGA E PAGAMENTO PIX */
+.payment-methods-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.payment-method-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.payment-method-card.active-method {
+  border-color: var(--hub-green);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.method-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.method-header strong {
+  display: block;
+  font-size: 13px;
+  color: #FFF;
+}
+
+.method-header small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.badge-active {
+  background: var(--hub-green);
+  color: #02241C;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
 .pix-charge-box {
   background: rgba(0, 0, 0, 0.25);
   border-radius: 12px;

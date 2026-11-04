@@ -60,7 +60,7 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA COM ALTA PRIORIDADE */
+/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA COM TOUCH PRIORITÁRIO */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 68px) !important;
@@ -200,7 +200,7 @@
   border-bottom: none;
 }
 
-/* 4. BOTÃO FLUTUANTE DE GPS (POSICIONADO ACIMA DO DOCK) */
+/* 4. BOTÃO FLUTUANTE DE GPS (LIVRE ACIMA DO DOCK) */
 .btn-floating-gps {
   position: absolute !important;
   bottom: calc(295px + env(safe-area-inset-bottom, 16px)) !important;
