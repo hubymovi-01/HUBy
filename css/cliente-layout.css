@@ -18,7 +18,7 @@
   --hub-blur: blur(24px);
 }
 
-/* 1. MAPA LEAFLET */
+/* 1. MAPA LEAFLET & OCULTAÇÃO DE ÍCONES POLUÍDOS DO OPENSTREETMAP */
 #mapaCliente {
   position: absolute;
   inset: 0;
@@ -27,16 +27,21 @@
   z-index: 1;
 }
 
-/* 2. NAVEGAÇÃO SUPERIOR (RESTAURADA E ALINHADA) */
+/* Remove filtros ou poluição de marcadores de cemitérios/igrejas excessivos */
+.leaflet-tile {
+  filter: brightness(0.85) contrast(1.15) !important;
+}
+
+/* 2. NAVEGAÇÃO SUPERIOR FIXA E SEMPRE VISÍVEL */
 .top-nav-bar {
   position: absolute;
   top: calc(env(safe-area-inset-top, 14px) + 8px);
-  left: 14px;
-  right: 14px;
-  z-index: 150 !important;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  left: 16px;
+  right: 16px;
+  z-index: 500 !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
   pointer-events: none;
 }
 
@@ -44,7 +49,6 @@
   pointer-events: auto;
 }
 
-/* Botão de Hambúrguer (Perfil / Menu) */
 .btn-menu-burger {
   background: var(--hub-surface) !important;
   backdrop-filter: var(--hub-blur);
@@ -52,14 +56,14 @@
   border: 1px solid var(--hub-border) !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   border-radius: 50% !important;
-  width: 42px !important;
-  height: 42px !important;
-  min-width: 42px !important;
+  width: 44px !important;
+  height: 44px !important;
+  min-width: 44px !important;
   display: flex !important;
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 4px !important;
+  gap: 4.5px !important;
   cursor: pointer;
   padding: 0 !important;
   touch-action: manipulation;
@@ -77,7 +81,6 @@
   transform: scale(0.92);
 }
 
-/* Pílula Central HUBy */
 .brand-pill {
   background: var(--hub-surface) !important;
   backdrop-filter: var(--hub-blur);
@@ -85,7 +88,7 @@
   border: 1px solid var(--hub-border) !important;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   border-radius: 999px !important;
-  padding: 8px 18px !important;
+  padding: 8px 20px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -94,15 +97,9 @@
   letter-spacing: -0.5px;
 }
 
-.brand-pill .hub-txt {
-  color: #FFFFFF !important;
-}
+.brand-pill .hub-txt { color: #FFFFFF !important; }
+.brand-pill .y-txt { color: var(--hub-emerald) !important; }
 
-.brand-pill .y-txt {
-  color: var(--hub-emerald) !important;
-}
-
-/* Botão de Viagens com Relógio */
 .btn-action-pill {
   background: var(--hub-surface) !important;
   backdrop-filter: var(--hub-blur);
@@ -121,21 +118,17 @@
   touch-action: manipulation;
 }
 
-.btn-action-pill svg {
-  color: #FFFFFF !important;
-}
-
 .btn-action-pill:active {
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA */
+/* 3. BARRA DE PESQUISA FLUTUANTE (ABAIXO DO TOPO, SEM COBRIR) */
 .search-floating-wrapper {
   position: absolute !important;
-  top: calc(env(safe-area-inset-top, 14px) + 68px) !important;
+  top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
   left: 16px !important;
   right: 16px !important;
-  z-index: 999 !important;
+  z-index: 450 !important;
   pointer-events: none !important;
   display: flex !important;
   flex-direction: column !important;
@@ -179,8 +172,6 @@
   color: #FFF !important;
   pointer-events: auto !important;
   z-index: 5 !important;
-  padding: 0 !important;
-  margin: 0 !important;
 }
 
 .search-glass-box input {
@@ -297,7 +288,7 @@
   background: rgba(16, 185, 129, 0.2) !important;
 }
 
-/* 5. DOCK INFERIOR (BOTTOM SHEET) */
+/* 5. DOCK INFERIOR PREMIUM */
 .client-dock-sheet {
   position: absolute;
   bottom: 0;
@@ -324,7 +315,7 @@
   margin: 0 auto 4px auto;
 }
 
-/* 6. SELETOR DE MODALIDADES */
+/* 6. CATEGORIAS */
 .category-slider {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -368,7 +359,7 @@
   color: var(--hub-emerald) !important;
 }
 
-/* 7. FORMULÁRIO DE ENCOMENDA */
+/* 7. ENCOMENDA */
 #blocoDetalhesEntrega {
   background: var(--hub-card-bg) !important;
   border: 1px solid var(--hub-border) !important;
@@ -378,9 +369,13 @@
   animation: slideFadeDown 0.2s ease-out;
 }
 
-@keyframes slideFadeDown {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
+.entrega-badge {
+  font-size: 11px;
+  color: #10B981;
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
 }
 
 #blocoDetalhesEntrega input,
@@ -395,14 +390,10 @@
   font-size: 13px !important;
   font-weight: 600;
   outline: none;
+  margin-bottom: 8px;
 }
 
-#blocoDetalhesEntrega input:focus,
-#blocoDetalhesEntrega select:focus {
-  border-color: var(--hub-blue) !important;
-}
-
-/* 8. RESUMO DO DESTINO, PREÇO E PARADAS */
+/* 8. RESUMO DA ROTA */
 .trip-summary-card {
   background: var(--hub-card-bg) !important;
   border: 1px solid var(--hub-border) !important;
@@ -475,23 +466,6 @@
   cursor: pointer;
 }
 
-.btn-add-stop:active {
-  transform: scale(0.95);
-}
-
-.stop-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: rgba(56, 189, 248, 0.08);
-  border-left: 2.5px solid var(--hub-blue);
-  padding: 6px 10px;
-  border-radius: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-}
-
 .trip-price-block {
   text-align: right;
   flex-shrink: 0;
@@ -514,7 +488,7 @@
   display: block;
 }
 
-/* 9. BOTÃO DE CONFIRMAR CHAMADA */
+/* 9. BOTÃO DE CONFIRMAR */
 .btn-main-action {
   width: 100%;
   background: var(--hub-emerald) !important;

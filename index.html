@@ -19,19 +19,18 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES APPLE & FAVICON -->
+  <!-- ÍCONES -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
-  <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
-  <!-- ESTILOS MODULARES (pesquisa.css removido para eliminar conflitos de toque) -->
+  <!-- ESTILOS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
-  <link rel="stylesheet" href="./css/cliente.css?v=3.0.0">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.0.0">
+  <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.2.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
-  <!-- BIBLIOTECAS CDN -->
+  <!-- SCRIPTS EXTERNOS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
@@ -62,7 +61,7 @@
   <!-- MAPA PRINCIPAL -->
   <div id="mapaCliente"></div>
 
-  <!-- NAVEGAÇÃO SUPERIOR -->
+  <!-- CABEÇALHO SUPERIOR (FIXO E ELEGANTE) -->
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
       <span></span><span></span><span></span>
@@ -140,14 +139,14 @@
     </svg>
   </button>
 
-  <!-- BOTÃO FLUTUANTE DE CHAT (Bloqueado para ficar oculto na tela inicial) -->
+  <!-- BOTÃO FLUTUANTE DE CHAT -->
   <button type="button" id="btnAbrirChat" class="btn-floating-gps"
     style="display: none !important; bottom: 355px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
     aria-label="Abrir Chat">
     💬
   </button>
 
-  <!-- DOCK INFERIOR (BOTTOM SHEET) -->
+  <!-- DOCK INFERIOR PREMIUM -->
   <section class="client-dock-sheet">
     <div class="sheet-drag-handle"></div>
 
@@ -167,15 +166,10 @@
     </div>
 
     <!-- FORMULÁRIO DE ENTREGA -->
-    <div id="blocoDetalhesEntrega"
-      style="display: none; margin-bottom: 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--huby-border); border-radius: 14px; padding: 14px;">
-      <div
-        style="font-size: 11px; color: #10B981; font-weight: 800; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px;">
-        📋 Detalhes da Encomenda</div>
-      <input type="text" id="inputRecebedor" placeholder="Quem vai receber? (Nome e Telefone)"
-        style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid var(--huby-border); color: #FFF; padding: 11px 14px; border-radius: 10px; margin-bottom: 10px; font-size: 13px; outline: none;" />
-      <select id="selectTipoItem"
-        style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid var(--huby-border); color: #FFF; padding: 11px 14px; border-radius: 10px; font-size: 13px; outline: none;">
+    <div id="blocoDetalhesEntrega" style="display: none;">
+      <div class="entrega-badge">📋 Detalhes da Encomenda</div>
+      <input type="text" id="inputRecebedor" placeholder="Quem vai receber? (Nome e Telefone)" />
+      <select id="selectTipoItem">
         <option value="" disabled selected>O que você está enviando?</option>
         <option value="documento">📄 Documentos / Chaves (Envelope)</option>
         <option value="pequeno">📦 Pacote Pequeno (Até 5kg)</option>
@@ -184,7 +178,7 @@
       </select>
     </div>
 
-    <!-- BLOCO RESUMO DA VIAGEM COM PARADAS -->
+    <!-- RESUMO DO DESTINO E PREÇO -->
     <div id="blocoResumo" class="trip-summary-card">
       <div class="route-details">
         <div class="route-point-indicator"></div>
@@ -226,13 +220,11 @@
       </div>
       <div style="text-align: left; margin: 12px 0;">
         <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
-        <div
-          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
           <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
         </div>
-        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal"
-          style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%;">
           <span>📲 Compartilhar Rota no WhatsApp</span>
         </button>
       </div>
@@ -281,7 +273,7 @@
             <span class="m-icon">💠</span>
             <div>
               <strong>Pix Dinâmico Oficial</strong>
-              <small>Gera QR Code do Mercado Pago com baixa instantânea</small>
+              <small>Gera QR Code com liquidação automática</small>
             </div>
           </div>
           <span class="badge-active">Recomendado</span>
@@ -291,15 +283,14 @@
             <span class="m-icon">💵</span>
             <div>
               <strong>Dinheiro ou Maquininha</strong>
-              <small>Pague direto ao motorista parceiro no veículo</small>
+              <small>Pague direto ao motorista parceiro</small>
             </div>
           </div>
         </div>
       </div>
 
       <div id="areaPixMercadoPago" style="display: none;">
-        <div class="mp-qr-container"
-          style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
+        <div class="mp-qr-container" style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
           <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
           <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app do seu banco para pagar</span>
         </div>
@@ -312,8 +303,7 @@
           </div>
         </div>
 
-        <div id="statusPagamentoPixTexto"
-          style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
+        <div id="statusPagamentoPixTexto" style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
           ⏳ Aguardando confirmação do pagamento...
         </div>
       </div>
@@ -322,33 +312,23 @@
 
   <!-- CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
-    <div class="modal-card"
-      style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-      <div class="modal-header-row"
-        style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; align-items: center; justify-content: space-between;">
-        <h3
-          style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700; display: flex; align-items: center; gap: 6px;">
-          <span>💬</span> Mensagens da Viagem
-        </h3>
-        <button type="button" id="btnFecharChat" class="btn-icon-close" aria-label="Fechar">✕</button>
+    <div class="modal-card modal-chat-custom">
+      <div class="modal-header-row" style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
+        <h3 style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700;">💬 Mensagens da Viagem</h3>
+        <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
       </div>
-      <div id="chatAreaMensagens"
-        style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
+      <div id="chatAreaMensagens" class="chat-area-messages">
         <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
       </div>
-      <div
-        style="padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; gap: 8px;">
-        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..."
-          style="flex: 1; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
-        <button type="button" id="btnEnviarMsgChat"
-          style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer; font-size: 14px;">Enviar</button>
+      <div class="chat-input-row">
+        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." />
+        <button type="button" id="btnEnviarMsgChat">Enviar</button>
       </div>
     </div>
   </div>
 
   <!-- CONTROLES ESSENCIAIS DO MENU LATERAL E SEGURANÇA -->
   <script type="module">
-    // Rastreio via WhatsApp
     const modalSeg = document.getElementById('modalSeguranca');
     const btnMenuSeg = document.getElementById('menuItemSeguranca');
     const btnFecharSeg = document.getElementById('btnFecharSeguranca');
@@ -382,12 +362,11 @@
         ? `https://hubymovi-01.github.io/HUBy/viagem.html?id=${corridaAtivaId}`
         : 'https://hubymovi-01.github.io/HUBy/';
 
-      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto em tempo real no mapa através deste link: ${linkRastreio}`);
+      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto em tempo real: ${linkRastreio}`);
       const link = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
       window.open(link, '_blank');
     });
 
-    // Visibilidade do Menu Admin
     function checarAdminInstantaneo() {
       const token = localStorage.getItem('huby_token');
       const role = localStorage.getItem('huby_user_role');
@@ -400,7 +379,6 @@
     checarAdminInstantaneo();
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
 
-    // Perfil no Drawer Lateral
     function atualizarMenuLateral() {
       const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
       const fotoLocal = localStorage.getItem('huby_user_foto');
@@ -431,7 +409,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.8.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.9.0"></script>
 </body>
 
 </html>

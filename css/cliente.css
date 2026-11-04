@@ -119,7 +119,7 @@ html, body.client-viewport {
   color: var(--text-secondary);
 }
 
-/* 3. CARD DO CONDUTOR ACEITO & CHAT */
+/* 3. CARD DO CONDUTOR ACEITO */
 .driver-card-accepted {
   background: rgba(18, 24, 38, 0.98);
   border: 1.5px solid var(--border-glass);
@@ -135,7 +135,7 @@ html, body.client-viewport {
   margin-bottom: 12px;
 }
 
-/* Chat flutuante: 100% oculto por padrão na tela inicial */
+/* Chat flutuante bloqueado na tela inicial */
 #btnAbrirChat {
   display: none !important;
 }
@@ -256,7 +256,7 @@ html, body.client-viewport {
   text-align: center;
 }
 
-/* 5. SISTEMA MODAL (AVALIAÇÃO, HISTÓRICO, PIX, SEGURANÇA, CHAT) */
+/* 5. MODAIS & CHAT CUSTOMIZADO */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -284,6 +284,55 @@ html, body.client-viewport {
 .modal-wide {
   max-width: 380px !important;
   text-align: left !important;
+}
+
+.modal-chat-custom {
+  height: 65vh;
+  max-height: 500px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.chat-area-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.chat-input-row {
+  padding: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: #121826;
+  display: flex;
+  gap: 8px;
+}
+
+.chat-input-row input {
+  flex: 1;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #090D16;
+  color: #FFF;
+  padding: 10px 14px;
+  font-size: 14px;
+  outline: none;
+}
+
+.chat-input-row button {
+  background: #38BDF8;
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 14px;
 }
 
 .modal-header-row {
@@ -380,7 +429,6 @@ html, body.client-viewport {
   cursor: pointer;
 }
 
-/* FORMAS DE PAGAMENTO E PIX */
 .payment-methods-list {
   display: flex;
   flex-direction: column;
