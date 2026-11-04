@@ -16,25 +16,33 @@ export function atualizarBotaoChamar(resumo = null) {
   btn.textContent = labels[estadoCliente.categoriaSelecionada] || 'Chamar HUBy';
 }
 
+// js/cliente/cliente-pedidos.js
+
 export function atualizarResumoValores() {
   const lblPreco = document.getElementById('txtPrecoEstimado');
   const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
-  // SE NÃO HOUVER DESTINO OU ROTA DEFINIDA, NÃO MOSTRA PREÇO
+  // REGRA DE OURO: Se não houver destino marcado ou rota calculada, NUNCA mostra preço
   if (!estadoCliente.coordsDestino || !estadoCliente.rotaAtual) {
+    if (lblPreco) lblPreco.textContent = '--';
+    if (lblDistancia) lblDistancia.textContent = '-- km';
+    estadoCliente.precoFinalCalculado = null;
+    return;
+  }
+
+  // Preço base vindo da rota OSRM traçada
+  const precoBase = Number(estadoCliente.rotaAtual.preco || 0);
+  const distanciaKm = Number(estadoCliente.rotaAtual.distanciaKm || 0);
+
+  if (precoBase <= 0) {
     if (lblPreco) lblPreco.textContent = '--';
     if (lblDistancia) lblDistancia.textContent = '-- km';
     return;
   }
 
-  // Só calcula e exibe se houver rota com distância e preço calculados
-  const precoBase = Number(estadoCliente.rotaAtual.preco || 0);
-  const distanciaKm = Number(estadoCliente.rotaAtual.distanciaKm || 0);
-
-  // Acréscimo por paradas intermediárias (R$ 2,50 por parada, se houver)
+  // Acréscimo por paradas intermediárias (R$ 2,50 cada)
   const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
   const taxaParadas = qtdParadas * 2.50;
-
   const precoFinal = precoBase + taxaParadas;
   estadoCliente.precoFinalCalculado = precoFinal;
 
