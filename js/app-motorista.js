@@ -7,6 +7,8 @@ import { alternarStatusOnline, iniciarRadarChamadas } from './motorista/motorist
 import { carregarPerfil, configurarSalvarPreferenciasPagto, configurarEdicaoPerfil } from './motorista/motorista-perfil.js';
 import { configurarChatMotorista } from './motorista/motorista-chat.js';
 import { configurarEventosSaque } from './motorista/motorista-carteira.js';
+import { configurarMarketplace } from './motorista/motorista-loja.js';
+import { inicializarPushNotifications } from './motorista/motorista-push.js';
 
 function registrarEventosUI() {
   // Alternar Online / Offline
@@ -49,6 +51,7 @@ function registrarEventosUI() {
   if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
   if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
   if (typeof configurarEdicaoPerfil === 'function') configurarEdicaoPerfil();
+  if (typeof configurarMarketplace === 'function') configurarMarketplace();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -57,4 +60,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   registrarEventosUI();
   await carregarPerfil();
   iniciarRadarChamadas();
+  inicializarPushNotifications();
 });

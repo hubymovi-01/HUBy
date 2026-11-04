@@ -518,6 +518,10 @@
 
     <!-- FERRAMENTAS INTELIGENTES DO MOTORISTA -->
     <div style="display: flex; gap: 6px; pointer-events: auto;">
+      <!-- ATALHO DA LOJA NO TOPO -->
+      <button type="button" id="btnAbrirMarketplaceTopo" class="btn-nav-action" title="HUBy Loja & Clube" style="border-color: rgba(139, 92, 246, 0.4); color: #C084FC;">
+        🛍️ Loja
+      </button>
       <button type="button" id="btnToggleHeatmap" class="btn-nav-action" title="Mapa de Calor de Demanda">
         🔥 Calor
       </button>
@@ -611,6 +615,18 @@
     </div>
 
     <div class="drawer-content">
+      <!-- HUBY CLUBE & VANTAGENS NO DRAWER -->
+      <div class="drawer-section-card" style="border: 1px solid rgba(139, 92, 246, 0.35); background: rgba(139, 92, 246, 0.08);">
+        <h4 style="color: #C084FC;">🛍️ HUBy Clube & Vantagens</h4>
+        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 10px;">
+          Descontos exclusivos em oficinas, adesivos oficiais e guincho parceiro.
+        </p>
+        <button type="button" id="btnAbrirMarketplaceDrawer"
+          style="width: 100%; background: #8B5CF6; border: none; color: #FFF; font-weight: 800; font-size: 12px; padding: 10px; border-radius: 8px; cursor: pointer; box-shadow: 0 2px 10px rgba(139, 92, 246, 0.3);">
+          Explorar Benefícios
+        </button>
+      </div>
+
       <!-- FORMAS DE RECEBIMENTO DO MOTORISTA -->
       <div class="drawer-section-card">
         <h4>💳 Formas Aceitas de Pagamento</h4>
@@ -748,6 +764,34 @@
         <button type="button" id="btnSalvarEdicaoPerfil"
           style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 10px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL HUBY CLUBE & MARKETPLACE -->
+  <div id="modalMarketplace" class="modal-backdrop-custom" style="z-index: 10015;">
+    <div class="modal-box-edit" style="max-width: 440px; max-height: 85vh; display: flex; flex-direction: column; padding: 18px;">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div>
+          <h3 style="margin: 0; color: #FFF; font-size: 17px; font-weight: 800;">🛍️ HUBy Clube de Vantagens</h3>
+          <small style="color: #94A3B8; font-size: 11px;">Benefícios e descontos exclusivos para parceiros</small>
+        </div>
+        <button type="button" id="btnFecharMarketplace" style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+
+      <!-- Filtro de Categorias -->
+      <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px;" id="filtrosMarketplace">
+        <button type="button" class="btn-fast-val active" data-cat="todos" style="padding: 6px 12px; border-radius: 20px; background: rgba(139, 92, 246, 0.25); border-color: #8B5CF6;">Todos</button>
+        <button type="button" class="btn-fast-val" data-cat="adesivos" style="padding: 6px 12px; border-radius: 20px;">🎨 Adesivos</button>
+        <button type="button" class="btn-fast-val" data-cat="oficina" style="padding: 6px 12px; border-radius: 20px;">🔧 Oficinas</button>
+        <button type="button" class="btn-fast-val" data-cat="guincho" style="padding: 6px 12px; border-radius: 20px;">🛞 Guincho</button>
+      </div>
+
+      <!-- Feed de Itens -->
+      <div id="feedItensMarketplace" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+        <div style="text-align: center; color: #94A3B8; font-size: 12px; padding: 20px 0;">Carregando benefícios...</div>
+      </div>
+
     </div>
   </div>
 
@@ -920,7 +964,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=10.1.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=10.2.0"></script>
 </body>
 
 </html>
