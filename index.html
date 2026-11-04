@@ -81,7 +81,7 @@
     </button>
   </header>
 
- <!-- BARRA DE PESQUISA FLUTUANTE -->
+  <!-- BARRA DE PESQUISA FLUTUANTE -->
   <div class="search-floating-wrapper">
     <div class="search-glass-box">
       <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">🔍</button>
@@ -196,7 +196,6 @@
           <div id="containerParadasIntermediarias"></div>
         </div>
       </div>
-
       <div class="trip-price-block">
         <span id="txtPrecoEstimado" class="price-val">--</span>
         <span id="txtDistanciaEstimada" class="eta-val">-- km</span>
@@ -340,9 +339,6 @@
     </div>
   </div>
 
-  <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.0.0"></script>
-
   <!-- CONTROLES ESSENCIAIS DO MENU LATERAL E SEGURANÇA -->
   <script type="module">
     // Rastreio via WhatsApp
@@ -426,8 +422,9 @@
     document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
-  <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.5.0"></script>
+
+  <!-- ORQUESTRADOR CENTRAL (ÚNICO) -->
+  <script type="module" src="./js/app-cliente.js?v=9.6.0"></script>
 </body>
 
 </html>
