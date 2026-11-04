@@ -1,0 +1,154 @@
+/* css/huby-pro.css - Sistema de Design Moderno & Profissional HUBy */
+
+:root {
+  --huby-bg: #0A0E17;
+  --huby-card: rgba(18, 24, 38, 0.88);
+  --huby-card-hover: rgba(26, 34, 53, 0.95);
+  --huby-border: rgba(255, 255, 255, 0.08);
+  --huby-border-glow: rgba(56, 189, 248, 0.25);
+  --huby-emerald: #10B981;
+  --huby-blue: #38BDF8;
+  --huby-purple: #8B5CF6;
+  --huby-amber: #F59E0B;
+  --huby-rose: #EF4444;
+  --huby-text: #F8FAFC;
+  --huby-muted: #94A3B8;
+  --huby-glass-blur: blur(20px);
+}
+
+/* ==========================================================================
+   1. TOPO DO MOTORISTA MAIS LIMPO E ORGANIZADO
+   ========================================================================== */
+.top-driver-nav {
+  top: 12px !important;
+  left: 12px !important;
+  right: 12px !important;
+  gap: 8px;
+}
+
+/* Agrupamento dos botões inteligentes em uma pílula fosca */
+.top-driver-nav > div[style*="display: flex; gap: 6px;"] {
+  background: rgba(15, 21, 34, 0.85) !important;
+  backdrop-filter: var(--huby-glass-blur);
+  -webkit-backdrop-filter: var(--huby-glass-blur);
+  padding: 4px 6px;
+  border-radius: 30px;
+  border: 1px solid var(--huby-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.btn-nav-action {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 20px !important;
+  padding: 6px 10px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--huby-muted) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.btn-nav-action:hover,
+.btn-nav-action.active {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #FFF !important;
+}
+
+#btnToggleStatusOnline {
+  transition: all 0.25s ease !important;
+  border-radius: 30px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* ==========================================================================
+   2. DOCK INFERIOR (PASSAGEIRO & MOTORISTA) ESTILO UBER/99
+   ========================================================================== */
+.driver-dock,
+.dock-reserva-passageiro {
+  background: rgba(13, 18, 30, 0.94) !important;
+  backdrop-filter: var(--huby-glass-blur) !important;
+  -webkit-backdrop-filter: var(--huby-glass-blur) !important;
+  border-top: 1px solid var(--huby-border) !important;
+  border-radius: 28px 28px 0 0 !important;
+  box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.7) !important;
+  padding: 16px 18px 22px !important;
+}
+
+/* Cards com cantos orgânicos e bordas sutis */
+.wallet-card-row,
+.order-card {
+  background: rgba(255, 255, 255, 0.035) !important;
+  border: 1px solid var(--huby-border) !important;
+  border-radius: 18px !important;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.order-card:hover {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+}
+
+/* Botões primários mais expressivos */
+button[style*="background: var(--emerald)"],
+button[id*="btnPassageiroEmbarcou"],
+button[id*="btnConcluirViagemAtiva"],
+.btn-chamar-huby {
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
+  border-radius: 14px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.3px;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+button:active {
+  transform: scale(0.97) !important;
+}
+
+/* ==========================================================================
+   3. DRAWER LATERAL REFINADO
+   ========================================================================== */
+.driver-drawer,
+.drawer-passageiro {
+  background: rgba(10, 14, 24, 0.95) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
+  border-right: 1px solid var(--huby-border) !important;
+}
+
+.drawer-header {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  padding: 24px 20px 18px !important;
+}
+
+.drawer-section-card {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 16px !important;
+  padding: 14px 16px !important;
+}
+
+/* ==========================================================================
+   4. MODAIS E CAIXAS FLUTUANTES
+   ========================================================================== */
+.modal-box-edit {
+  background: #0F1626 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 24px !important;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8) !important;
+}
+
+/* Scrollbars discretas em toda a interface */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
