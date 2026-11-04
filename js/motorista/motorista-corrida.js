@@ -4,6 +4,7 @@ import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
 import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
+import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motorista-rotas.js';
 
 // ============================================================================
 // 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR
@@ -11,6 +12,7 @@ import { carregarPerfil } from './motorista-perfil.js';
 export async function preVisualizarRotaPedido(dados) {
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
+  pararMonitoramentoDesvios();
   limparRotasMapa();
 
   const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
@@ -66,6 +68,7 @@ export async function preVisualizarRotaPedido(dados) {
 
   document.getElementById('btnCancelarInspecao')?.addEventListener('click', () => {
     limparRotasMapa();
+    pararMonitoramentoDesvios();
     estado.pedidoEmAnalise = null;
     iniciarRadarChamadas();
   });
@@ -97,6 +100,7 @@ export async function aceitarCorrida(dados) {
     } else {
       alert(resJson.erro || 'Esta corrida já não está disponível.');
       limparRotasMapa();
+      pararMonitoramentoDesvios();
       estado.pedidoEmAnalise = null;
       iniciarRadarChamadas();
     }
@@ -125,6 +129,9 @@ async function iniciarFaseBuscarPassageiro(dados) {
 
     await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
   }
+
+  // Ativa monitoramento de desvio em direção ao passageiro
+  iniciarMonitoramentoDesvios(coordsOrigem);
 
   const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
@@ -192,6 +199,9 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
     await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
   }
 
+  // Atualiza o monitoramento de desvios em direção ao destino final
+  iniciarMonitoramentoDesvios(coordsDestino);
+
   const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
   const repasseLiquido = ((Number(dados.preco || 0)) * 0.85).toFixed(2).replace('.', ',');
@@ -250,12 +260,10 @@ export function abrirModalOpcoesPagamento(dados) {
   const btnPixMP = document.getElementById('btnPagarPixMP');
   const btnCancelar = document.getElementById('btnCancelarModalPagamento');
 
-  // Filtra as opções de acordo com o que o motorista salvou no perfil
   if (btnDinheiro) btnDinheiro.style.display = estado.aceitaDinheiro ? 'flex' : 'none';
   if (btnMaquininha) btnMaquininha.style.display = estado.aceitaCartao ? 'flex' : 'none';
   if (btnPixMP) btnPixMP.style.display = estado.aceitaPix ? 'flex' : 'none';
 
-  // Se nenhuma forma ficou marcada, exibe todas como fallback seguro
   if (!estado.aceitaDinheiro && !estado.aceitaCartao && !estado.aceitaPix) {
     if (btnDinheiro) btnDinheiro.style.display = 'flex';
     if (btnMaquininha) btnMaquininha.style.display = 'flex';
@@ -312,6 +320,7 @@ export function exibirQrCodePixMotorista(pix) {
 
   btnFechar.onclick = () => {
     if (modalPix) modalPix.style.display = 'none';
+    concluirLimpezaPosCorrida();
   };
 }
 
@@ -323,6 +332,7 @@ export function fecharModaisPagamento() {
 }
 
 export function concluirLimpezaPosCorrida() {
+  pararMonitoramentoDesvios();
   limparRotasMapa();
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'none';
