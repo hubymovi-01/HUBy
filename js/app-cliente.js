@@ -5,7 +5,7 @@ import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.8.0';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
 import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
 
 let intervalChatCliente = null;
@@ -24,7 +24,7 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Configuração modular e sem prompt nativo para paradas intermediárias
+// Configuração de paradas intermediárias
 function configurarParadasIntermediariasSemPrompt() {
   const btnAdd = document.getElementById('btnAddParada');
   const container = document.getElementById('containerParadasIntermediarias');
@@ -79,7 +79,7 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
-// Controle de Expansão e Retração Rápida da Barra de Pesquisa
+// Controle de Expansão e Retração da Barra de Pesquisa
 function configurarBarraPesquisaAnimada() {
   const searchBox = document.querySelector('.search-glass-box');
   const btnLupa = document.getElementById('btnAcionarPesquisa');
@@ -94,11 +94,11 @@ function configurarBarraPesquisaAnimada() {
   function abrirBarra() {
     if (!searchBox?.classList.contains('active')) {
       searchBox?.classList.add('active');
-      setTimeout(() => inputPesquisa?.focus(), 150);
+      setTimeout(() => inputPesquisa?.focus(), 80);
     }
   }
 
-  function fecharBarra() {
+  function recolherBarra() {
     searchBox?.classList.remove('active');
     if (inputPesquisa) {
       inputPesquisa.value = '';
@@ -110,35 +110,30 @@ function configurarBarraPesquisaAnimada() {
     }
   }
 
-  // Evento direto para abrir a barra ao tocar na lupa ou no círculo (suporta clique e toque)
-  const acionarAbertura = (e) => {
-    if (e.target === btnLimpar || btnLimpar?.contains(e.target)) return;
-    abrirBarra();
-  };
-
   btnLupa?.addEventListener('click', (e) => {
+    e.preventDefault();
     e.stopPropagation();
     abrirBarra();
   });
 
-  searchBox?.addEventListener('click', acionarAbertura);
+  searchBox?.addEventListener('click', (e) => {
+    if (e.target === btnLimpar || btnLimpar?.contains(e.target)) return;
+    abrirBarra();
+  });
 
-  // AO TOCAR NO X: Limpa tudo e recolhe a barra de volta para o formato de botão
+  // AO TOCAR NO X: Limpa tudo e retrai para círculo imediatamente
   btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // 1. Fecha e retrai o elemento visual
-    fecharBarra();
+    recolherBarra();
 
-    // 2. Reseta o estado global
     estadoCliente.coordsDestino = null;
     estadoCliente.rotaAtual = null;
     if (estadoCliente.paradasIntermediarias) {
       estadoCliente.paradasIntermediarias = [];
     }
 
-    // 3. Remove os traçados e marcadores do mapa Leaflet
     if (estadoCliente.hubyMapa) {
       if (estadoCliente.hubyMapa.linhaRota && estadoCliente.hubyMapa.map) {
         estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.linhaRota);
@@ -150,21 +145,95 @@ function configurarBarraPesquisaAnimada() {
       }
     }
 
-    // 4. Reseta a interface do dock inferior e zera o preço para '--'
     if (txtDestino) txtDestino.textContent = 'Toque no mapa para indicar o destino';
     if (containerParadas) containerParadas.innerHTML = '';
     if (lblPreco) lblPreco.textContent = '--';
     if (lblDistancia) lblDistancia.textContent = '-- km';
 
-    // 5. Atualiza o resumo de valores
     atualizarResumoValores();
   });
 
-  // Ao tocar fora (no mapa) quando estiver vazia, apenas recolhe
   document.getElementById('mapaCliente')?.addEventListener('click', () => {
     if (searchBox?.classList.contains('active') && !inputPesquisa?.value.trim()) {
-      fecharBarra();
+      recolherBarra();
     }
+  });
+}
+
+// Alternância entre Mapa Dark e Visão Satélite
+function configurarAlternanciaSatélite() {
+  const btnCamada = document.getElementById('btnAlternarCamadaMapa');
+  let modoSatelite = false;
+  let layerSatelite = null;
+
+  btnCamada?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!estadoCliente.hubyMapa || !estadoCliente.hubyMapa.map) return;
+    const map = estadoCliente.hubyMapa.map;
+
+    modoSatelite = !modoSatelite;
+
+    if (modoSatelite) {
+      btnCamada.classList.add('modo-satelite');
+      if (!layerSatelite) {
+        layerSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+          maxZoom: 19,
+          attribution: 'Esri Satellite'
+        });
+      }
+      layerSatelite.addTo(map);
+      notificarCliente('🛰️ Visão Satélite Ativada', 'info');
+    } else {
+      btnCamada.classList.remove('modo-satelite');
+      if (layerSatelite && map.hasLayer(layerSatelite)) {
+        map.removeLayer(layerSatelite);
+      }
+      notificarCliente('🗺️ Mapa Noturno Ativado', 'info');
+    }
+  });
+}
+
+// Atalhos Rápidos (Casa e Trabalho)
+function configurarAtalhosRapidos() {
+  const btnCasa = document.getElementById('btnAtalhoCasa');
+  const btnTrabalho = document.getElementById('btnAtalhoTrabalho');
+
+  async function definirDestinoRapido(tipo, coordsFallback, nomeLocal) {
+    if (estadoCliente.pedidoAtivoId) return;
+
+    const destinoSalvo = localStorage.getItem(`huby_coords_${tipo}`);
+    const coords = destinoSalvo ? JSON.parse(destinoSalvo) : coordsFallback;
+
+    estadoCliente.coordsDestino = coords;
+    const txtDestino = document.getElementById('txtDestinoSelecionado');
+    const inputPesquisa = document.getElementById('inputPesquisaLocal');
+    const searchBox = document.querySelector('.search-glass-box');
+
+    if (txtDestino) txtDestino.textContent = nomeLocal;
+    if (inputPesquisa) inputPesquisa.value = nomeLocal;
+    if (searchBox) searchBox.classList.add('active');
+
+    if (estadoCliente.hubyMapa) {
+      const origem = estadoCliente.coordsOrigem || [-8.3582, -42.2476];
+      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
+      estadoCliente.rotaAtual = rota;
+      atualizarResumoValores();
+    }
+    notificarCliente(`Destino definido: ${nomeLocal}`, 'sucesso');
+  }
+
+  btnCasa?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    definirDestinoRapido('casa', [-8.3610, -42.2530], '🏠 Minha Casa');
+  });
+
+  btnTrabalho?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    definirDestinoRapido('trabalho', [-8.3550, -42.2460], '🏢 Meu Trabalho');
   });
 }
 
@@ -180,7 +249,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
 
-  // Garante que o valor inicial seja omitido até que o destino seja traçado
   const lblPrecoInicial = document.getElementById('txtPrecoEstimado');
   const lblDistanciaInicial = document.getElementById('txtDistanciaEstimada');
   if (!estadoCliente.coordsDestino) {
@@ -188,7 +256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (lblDistanciaInicial) lblDistanciaInicial.textContent = '-- km';
   }
 
-  // 1. Inicializa o Mapa com abertura automática da barra ao tocar em qualquer local
+  // 1. Inicializa o Mapa
   try {
     if (!estadoCliente.hubyMapa) {
       estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
@@ -206,17 +274,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       const textoDestino = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
 
-      if (txtDestino) {
-        txtDestino.textContent = textoDestino;
-      }
-      
-      // Abre a barra de pesquisa sem disparar busca de texto/erro
-      if (inputPesquisa) {
-        inputPesquisa.value = textoDestino;
-      }
-      if (searchBox) {
-        searchBox.classList.add('active');
-      }
+      if (txtDestino) txtDestino.textContent = textoDestino;
+      if (inputPesquisa) inputPesquisa.value = textoDestino;
+      if (searchBox) searchBox.classList.add('active');
       if (listaResultados) {
         listaResultados.innerHTML = '';
         listaResultados.style.display = 'none';
@@ -231,7 +291,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }, 250);
   } catch (err) {
-    console.warn('Aviso na inicialização do mapa do cliente:', err);
+    console.warn('Aviso na inicialização do mapa:', err);
   }
 
   // 2. Pesquisa de locais
@@ -257,11 +317,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Ativa as Paradas Customizadas e a Barra de Pesquisa Animada
+  // 3. Ativação dos controles
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
+  configurarAlternanciaSatélite();
+  configurarAtalhosRapidos();
 
-  // 4. Botão de Centralização GPS
+  // 4. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
@@ -312,7 +374,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 7. Botão de Chamada
+  // 7. Botão Chamar
   document.getElementById('btnPedirHuby')?.addEventListener('click', () => {
     if (estadoCliente.pedidoAtivoId) {
       cancelarBusca();
@@ -325,15 +387,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  // 8. Modais de Avaliação e Pagamentos com Mercado Pago Real
+  // 8. Modais e Chat
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
   configurarFluxoPagamentoMercadoPago();
-
-  // Configuração do Chat da Viagem no Passageiro
   configurarChatPassageiro();
 
-  // 9. Monitoramento em tempo real
+  // 9. Conexão Socket
   conectarSocketEPollingCliente();
 
   if ('serviceWorker' in navigator) {
@@ -347,9 +407,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-// ============================================================================
-// FLUXO DE PAGAMENTO PIX DINÂMICO MERCADO PAGO
-// ============================================================================
+// FLUXO DE PAGAMENTO PIX DINÂMICO
 function configurarFluxoPagamentoMercadoPago() {
   const modalPagamento = document.getElementById('modalPagamento');
   const btnFecharPagamento = document.getElementById('btnFecharPagamento');
@@ -506,47 +564,36 @@ function iniciarMonitoramentoPix(txid, valor) {
   }, 3000);
 }
 
-// ============================================================================
-// MODAL PIX AUTOMÁTICO NA TELA DO PASSAGEIRO (AO FINALIZAR VIAGEM)
-// ============================================================================
 function exibirModalPixCorridaCliente(pix) {
   document.getElementById('modalPixCorrivaAtivaCliente')?.remove();
 
   const modalHTML = `
     <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
       <div style="background:#111726;border:1.5px solid rgba(139,92,246,0.5);border-radius:20px;max-width:370px;width:100%;padding:22px;text-align:center;box-shadow:0 12px 35px rgba(0,0,0,0.8);color:#FFF;">
-        
         <div style="display:inline-block;padding:5px 12px;border-radius:20px;background:rgba(139,92,246,0.2);color:#A78BFA;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">
           📱 Pagamento da Corrida
         </div>
-
         <h3 style="margin:4px 0 2px;font-size:17px;font-weight:900;color:#FFF;">Pague via Pix</h3>
         <p style="color:#94A3B8;font-size:12px;margin:0 0 12px;">Escaneie o QR Code ou use a chave Copia e Cola no app do seu banco</p>
-
         <div style="background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.3);border-radius:12px;padding:10px;margin-bottom:14px;">
           <small style="color:#94A3B8;font-size:10px;font-weight:800;text-transform:uppercase;display:block;">Valor Total</small>
           <div style="color:#10B981;font-size:24px;font-weight:900;">R$ ${Number(pix.valor).toFixed(2).replace('.', ',')}</div>
         </div>
-
         <div style="background:#FFF;padding:12px;border-radius:14px;display:inline-block;box-shadow:0 6px 20px rgba(0,0,0,0.5);">
           <img src="data:image/png;base64,${pix.qr_code_base64}" alt="QR Code Pix" style="width:190px;height:190px;display:block;object-fit:contain;">
         </div>
-
         <div style="margin-top:14px;">
           <input type="text" id="inputPixCopiaColaCliente" readonly value="${pix.qr_code || ''}" 
             style="width:100%;background:#080C14;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 10px;color:#94A3B8;font-size:11px;font-family:monospace;outline:none;text-align:center;margin-bottom:8px;">
-          
           <button type="button" id="btnCopiarPixCorridaCliente"
             style="width:100%;background:#8B5CF6;border:none;color:#FFF;padding:12px;border-radius:10px;font-weight:900;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background 0.2s;">
             📋 Copiar Código Pix
           </button>
         </div>
-
         <div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:6px;">
           <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#F59E0B;animation:pulse 1.5s infinite;"></span>
           <small style="color:#94A3B8;font-size:11px;font-weight:700;">Aguardando liquidação no banco...</small>
         </div>
-
       </div>
     </div>
   `;
@@ -568,9 +615,6 @@ function exibirModalPixCorridaCliente(pix) {
   });
 }
 
-// ============================================================================
-// COMUNICAÇÃO EM TEMPO REAL COM O MOTORISTA E GEOFENCE (200 METROS)
-// ============================================================================
 function conectarSocketEPollingCliente() {
   const socket = window.io ? window.io(API_URL) : null;
 
@@ -593,7 +637,6 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // Geofence de Proximidade (200m)
     socket.on('posicao_motorista', (pos) => {
       const coordsEmbarque = estadoCliente.rotaAtual?.origemCoords || estadoCliente.coordsOrigem;
       if (coordsEmbarque && !alertaProximidadeEmitido && pos.lat && pos.lng) {
@@ -613,7 +656,6 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // Escuta eventos dinâmicos do pedido
     socket.onAny((evento, dados) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (pedidoAtivo && evento === `exibir_pix_corrida_${pedidoAtivo}`) {
@@ -625,7 +667,6 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    // Escuta finalização padrão do pedido
     socket.on('corrida_finalizada', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
@@ -682,10 +723,7 @@ function renderizarMotoristaChegando(mot = {}) {
   if (btnPedirHuby) btnPedirHuby.style.display = 'none';
 
   let painel = document.getElementById('painelMotoristaAceitou');
-  if (!painel) {
-    painel = document.getElementById('cardStatusViagemPassageiro');
-  }
-
+  if (!painel) painel = document.getElementById('cardStatusViagemPassageiro');
   if (!painel) return;
 
   const nome = mot.nome || 'Carol';
@@ -763,7 +801,8 @@ function renderizarMotoristaChegando(mot = {}) {
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) {
-    btnChatFlutuante.style.display = 'flex';
+    btnChatFlutuante.classList.add('chat-visivel');
+    btnChatFlutuante.style.setProperty('display', 'flex', 'important');
     btnChatFlutuante.onclick = abrirModalChat;
   }
 }
@@ -799,14 +838,14 @@ function finalizarViagemCliente(data) {
     painel.innerHTML = '';
   }
 
-  const dockTemp = document.getElementById('cardStatusViagemPassageiro');
-  if (dockTemp) dockTemp.style.display = 'none';
-
   localStorage.removeItem('huby_pedido_ativo_id');
   estadoCliente.pedidoAtivoId = null;
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
-  if (btnChatFlutuante) btnChatFlutuante.style.display = 'none';
+  if (btnChatFlutuante) {
+    btnChatFlutuante.classList.remove('chat-visivel');
+    btnChatFlutuante.style.setProperty('display', 'none', 'important');
+  }
 
   if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
     sonsHUBy.tocarMetaBatida();
@@ -821,9 +860,7 @@ function finalizarViagemCliente(data) {
   }
 }
 
-// ============================================================================
 // CHAT DO PASSAGEIRO
-// ============================================================================
 function configurarChatPassageiro() {
   const btnFechar = document.getElementById('btnFecharChat');
   const btnEnviar = document.getElementById('btnEnviarMsgChat');

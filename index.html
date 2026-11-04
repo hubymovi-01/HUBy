@@ -27,10 +27,10 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.2.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.3.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
-  <!-- SCRIPTS EXTERNOS -->
+  <!-- BIBLIOTECAS CDN -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
@@ -61,7 +61,7 @@
   <!-- MAPA PRINCIPAL -->
   <div id="mapaCliente"></div>
 
-  <!-- CABEÇALHO SUPERIOR (FIXO E ELEGANTE) -->
+  <!-- NAVEGAÇÃO SUPERIOR -->
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
       <span></span><span></span><span></span>
@@ -79,7 +79,7 @@
     </button>
   </header>
 
-  <!-- BARRA DE PESQUISA FLUTUANTE -->
+  <!-- BARRA DE PESQUISA FLUTUANTE COM ATALHOS -->
   <div class="search-floating-wrapper">
     <div class="search-glass-box">
       <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">🔍</button>
@@ -87,6 +87,18 @@
       <button type="button" id="btnLimparPesquisa" class="clear-btn" aria-label="Limpar">✕</button>
     </div>
     <ul id="listaResultadosPesquisa" class="search-results-glass" style="display: none;"></ul>
+
+    <!-- ATALHOS RÁPIDOS DE DESTINO -->
+    <div class="quick-shortcuts-row">
+      <button type="button" id="btnAtalhoCasa" class="quick-chip">
+        <span class="qc-icon">🏠</span>
+        <span>Casa</span>
+      </button>
+      <button type="button" id="btnAtalhoTrabalho" class="quick-chip">
+        <span class="qc-icon">🏢</span>
+        <span>Trabalho</span>
+      </button>
+    </div>
   </div>
 
   <!-- DRAWER LATERAL DO PASSAGEIRO -->
@@ -127,6 +139,15 @@
     </div>
   </aside>
 
+  <!-- BOTÃO FLUTUANTE DE CAMADA (SATÉLITE / DARK) -->
+  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+      <polyline points="2 17 12 22 22 17"></polyline>
+      <polyline points="2 12 12 17 22 12"></polyline>
+    </svg>
+  </button>
+
   <!-- BOTÃO FLUTUANTE DE GPS -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
@@ -146,7 +167,7 @@
     💬
   </button>
 
-  <!-- DOCK INFERIOR PREMIUM -->
+  <!-- DOCK INFERIOR -->
   <section class="client-dock-sheet">
     <div class="sheet-drag-handle"></div>
 
@@ -409,7 +430,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.9.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.10.0"></script>
 </body>
 
 </html>
