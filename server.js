@@ -13,6 +13,7 @@ import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
+import marketplaceRouter from './routes/marketplace.routes.js';
 // No topo do server.js com os outros imports:
 import marketplaceRouter from './routes/marketplace.routes.js';
 
