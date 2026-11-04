@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS, ATALHOS E DOCK)
+   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS E DOCK)
    ========================================================================== */
 
 :root {
@@ -31,7 +31,7 @@
   filter: brightness(0.85) contrast(1.15) !important;
 }
 
-/* 2. NAVEGAÇÃO SUPERIOR FIXA */
+/* 2. NAVEGAÇÃO SUPERIOR FIXA (SEMPRE ACIMA E COM TOQUE PRIORITÁRIO) */
 .top-nav-bar {
   position: absolute;
   top: calc(env(safe-area-inset-top, 14px) + 8px);
@@ -121,7 +121,7 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA FLUTUANTE */
+/* 3. BARRA DE PESQUISA FLUTUANTE LIMPA (SEM ATALHOS) */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
@@ -171,6 +171,8 @@
   color: #FFF !important;
   pointer-events: auto !important;
   z-index: 5 !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
 .search-glass-box input {
@@ -215,6 +217,7 @@
   color: #EF4444 !important;
 }
 
+/* Estado Expandido */
 .search-glass-box.active {
   width: 100% !important;
   border-color: rgba(56, 189, 248, 0.6) !important;
@@ -258,46 +261,7 @@
   border-bottom: none;
 }
 
-/* 4. ATALHOS RÁPIDOS (CASA / TRABALHO) */
-.quick-shortcuts-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-  pointer-events: auto;
-  overflow-x: auto;
-  max-width: 100%;
-  padding-bottom: 2px;
-}
-
-.quick-chip {
-  background: rgba(14, 20, 32, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-  padding: 6px 14px;
-  color: #F8FAFC;
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.2s ease;
-  touch-action: manipulation;
-}
-
-.quick-chip:active {
-  transform: scale(0.92);
-  border-color: var(--hub-emerald);
-}
-
-.quick-chip .qc-icon {
-  font-size: 14px;
-}
-
-/* 5. BOTÕES FLUTUANTES (CAMADA SATÉLITE E GPS) */
+/* 4. BOTÕES FLUTUANTES (CAMADA SATÉLITE E GPS) */
 .btn-floating-gps {
   position: absolute !important;
   bottom: calc(295px + env(safe-area-inset-bottom, 16px)) !important;
@@ -337,7 +301,7 @@
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
 }
 
-/* 6. DOCK INFERIOR (BOTTOM SHEET) */
+/* 5. DOCK INFERIOR (BOTTOM SHEET) */
 .client-dock-sheet {
   position: absolute;
   bottom: 0;
@@ -364,6 +328,7 @@
   margin: 0 auto 4px auto;
 }
 
+/* 6. CATEGORIAS */
 .category-slider {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -407,6 +372,7 @@
   color: var(--hub-emerald) !important;
 }
 
+/* 7. DETALHES DE ENCOMENDA */
 #blocoDetalhesEntrega {
   background: var(--hub-card-bg) !important;
   border: 1px solid var(--hub-border) !important;
@@ -414,6 +380,11 @@
   padding: 12px !important;
   margin-bottom: 4px !important;
   animation: slideFadeDown 0.2s ease-out;
+}
+
+@keyframes slideFadeDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .entrega-badge {
@@ -440,6 +411,7 @@
   margin-bottom: 8px;
 }
 
+/* 8. RESUMO DA ROTA E PREÇO */
 .trip-summary-card {
   background: var(--hub-card-bg) !important;
   border: 1px solid var(--hub-border) !important;
@@ -512,6 +484,10 @@
   cursor: pointer;
 }
 
+.btn-add-stop:active {
+  transform: scale(0.95);
+}
+
 .stop-row {
   display: flex;
   align-items: center;
@@ -547,6 +523,7 @@
   display: block;
 }
 
+/* 9. BOTÃO DE CONFIRMAR */
 .btn-main-action {
   width: 100%;
   background: var(--hub-emerald) !important;
