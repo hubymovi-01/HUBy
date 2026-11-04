@@ -1,8 +1,8 @@
 // js/motorista/motorista-mapa.js
-import { API_URL } from '../config.js';
+import { API_URL, sonsHUBy } from '../config.js';
 import { estado } from './motorista-estado.js';
-import { configurarRecursosInteligentes } from './motorista-heatmap.js';
 import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-viagem.js';
+import { notificar } from './motorista-alertas.js';
 
 export function inicializarSocket() {
   if (typeof io !== 'undefined') {
@@ -13,7 +13,7 @@ export function inicializarSocket() {
       const pedidoIdAtual = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
       if (pedidoIdAtual && String(dados.pedidoId) === String(pedidoIdAtual)) {
         fecharModaisPagamento();
-        alert('🎉 Pagamento confirmado pelo Mercado Pago! Corrida concluída.');
+        notificar('🎉 Pagamento confirmado pelo Mercado Pago! Corrida concluída.', 'sucesso');
         if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
           sonsHUBy.tocarMetaBatida();
         }
@@ -55,8 +55,6 @@ export function inicializarMapa() {
     setTimeout(() => {
       if (estado.mapa) estado.mapa.invalidateSize();
     }, 300);
-
-    configurarRecursosInteligentes(estado.mapa, estado.token);
 
     if ('geolocation' in navigator) {
       navigator.geolocation.watchPosition((pos) => {

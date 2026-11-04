@@ -2,6 +2,7 @@
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { notificar, abrirPromptCustom } from './motorista-alertas.js';
+import { pararRadarChamadas, buscarChamadasPendentes } from './motorista-radar.js';
 
 let emPausa = false;
 let destinoCasaAtivo = false;
@@ -14,16 +15,21 @@ export function configurarModosInteligentes() {
   // 1. MODO PAUSA RÁPIDA (15 minutos)
   btnPausa?.addEventListener('click', async () => {
     emPausa = !emPausa;
+    estado.emPausa = emPausa;
     btnPausa.classList.toggle('active', emPausa);
 
     if (emPausa) {
       btnPausa.style.background = 'rgba(239, 68, 68, 0.2)';
       btnPausa.style.borderColor = '#EF4444';
       notificar('Pausa ativada! Você não receberá novas corridas por 15 minutos.', 'pausa');
+      pararRadarChamadas();
     } else {
       btnPausa.style.background = '';
       btnPausa.style.borderColor = '';
       notificar('Pausa desativada. Radar de corridas restabelecido.', 'sucesso');
+      if (estado.isOnline) {
+        buscarChamadasPendentes(false);
+      }
     }
 
     try {
@@ -39,6 +45,8 @@ export function configurarModosInteligentes() {
   btnCasa?.addEventListener('click', () => {
     if (destinoCasaAtivo) {
       destinoCasaAtivo = false;
+      estado.destinoCasaAtivo = false;
+      estado.destinoCasaNome = null;
       btnCasa.classList.remove('active');
       btnCasa.style.background = '';
       btnCasa.style.borderColor = '';
@@ -52,6 +60,7 @@ export function configurarModosInteligentes() {
       valorPadrao: estado.destinoCasaNome || '',
       onConfirmar: async (destinoDigitado) => {
         destinoCasaAtivo = true;
+        estado.destinoCasaAtivo = true;
         estado.destinoCasaNome = destinoDigitado;
         btnCasa.classList.add('active');
         btnCasa.style.background = 'rgba(56, 189, 248, 0.25)';
