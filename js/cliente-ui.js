@@ -65,9 +65,10 @@ export function notificarCliente(mensagem, tipo = 'info') {
   }, 3500);
 }
 
-// Substitui o prompt() nativo por um modal translúcido com animação
+// Modal escuro translúcido substituindo prompt()
 export function abrirPromptParada({ titulo, placeholder, onConfirmar }) {
   const overlay = document.createElement('div');
+  overlay.className = 'modal-backdrop';
   overlay.style.cssText = `
     position: fixed;
     inset: 0;
@@ -83,7 +84,7 @@ export function abrirPromptParada({ titulo, placeholder, onConfirmar }) {
   overlay.innerHTML = `
     <div style="background: rgba(18, 24, 38, 0.98); border: 1px solid rgba(255,255,255,0.12); border-radius: 20px; padding: 22px; width: 100%; max-width: 350px; box-shadow: 0 20px 40px rgba(0,0,0,0.7);">
       <h3 style="margin: 0 0 8px; font-size: 16px; color: #FFF; font-weight: 800;">${titulo}</h3>
-      <p style="color: #94A3B8; font-size: 12px; margin: 0 0 14px;">Adicione um ponto intermediário à sua viagem:</p>
+      <p style="color: #94A3B8; font-size: 12px; margin: 0 0 14px;">Adicione um ponto intermediário à rota:</p>
       <input type="text" id="inputCustomParada" placeholder="${placeholder}"
         style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px; color: #FFF; font-size: 13px; font-weight: 600; outline: none; margin-bottom: 16px;">
       <div style="display: flex; gap: 8px;">
