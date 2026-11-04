@@ -81,7 +81,7 @@
 }
 
 /* ==========================================================================
-   3. MODERN SEARCH BAR ANIMADA (ESTILO VÍDEO)
+   3. MODERN SEARCH BAR ANIMADA
    ========================================================================== */
 .search-floating-wrapper {
   position: absolute;
@@ -103,23 +103,23 @@
   background: rgba(14, 20, 32, 0.94) !important;
   backdrop-filter: var(--hub-blur) !important;
   -webkit-backdrop-filter: var(--hub-blur) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 50px !important;
   display: flex;
   align-items: center;
-  padding: 0 6px !important;
+  padding: 0 4px !important;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
   cursor: pointer;
   overflow: hidden;
-  transition: width 0.7s cubic-bezier(0.8, -0.6, 0.2, 1.5),
-              border-color 0.3s ease,
-              box-shadow 0.3s ease;
+  transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.25s ease,
+              box-shadow 0.25s ease;
 }
 
 .search-icon {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
   background: transparent;
   border: none;
   outline: none;
@@ -129,7 +129,8 @@
   font-size: 18px;
   cursor: pointer;
   color: #FFF;
-  transition: transform 0.3s ease;
+  pointer-events: auto;
+  z-index: 2;
 }
 
 .search-glass-box input {
@@ -141,10 +142,10 @@
   color: #F8FAFC;
   font-size: 14px !important;
   font-weight: 600 !important;
-  padding: 0 10px;
+  padding: 0 8px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s ease 0.1s;
+  transition: opacity 0.2s ease;
 }
 
 .search-glass-box input::placeholder {
@@ -158,24 +159,28 @@
   background: rgba(255, 255, 255, 0.08);
   border: none;
   border-radius: 50%;
-  color: #94A3B8;
+  color: #CBD5E1;
   font-size: 13px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-  transform: scale(0.6);
-  transition: opacity 0.25s ease, transform 0.25s cubic-bezier(0.8, -0.6, 0.2, 1.5);
   outline: none;
+  margin-right: 4px;
+  pointer-events: auto;
+  z-index: 2;
 }
 
+.clear-btn:active {
+  background: rgba(239, 68, 68, 0.2);
+  color: #EF4444;
+}
+
+/* ESTADO EXPANDIDO */
 .search-glass-box.active {
   width: 100%;
-  border-color: rgba(56, 189, 248, 0.45) !important;
-  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.7);
-  padding: 0 10px 0 6px !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.75);
 }
 
 .search-glass-box.active input {
@@ -184,14 +189,7 @@
 }
 
 .search-glass-box.active .clear-btn {
-  opacity: 1;
-  pointer-events: auto;
-  transform: scale(1);
-}
-
-.clear-btn:active {
-  background: rgba(239, 68, 68, 0.2);
-  color: #EF4444;
+  display: flex;
 }
 
 .search-results-glass {
@@ -227,28 +225,29 @@
    4. BOTÕES FLUTUANTES (GPS E CHAT)
    ========================================================================== */
 .btn-floating-gps {
-  position: absolute;
-  right: 18px;
-  width: 44px;
-  height: 44px;
+  position: absolute !important;
+  bottom: calc(295px + env(safe-area-inset-bottom, 16px)) !important;
+  right: 18px !important;
+  width: 46px !important;
+  height: 46px !important;
   background: var(--hub-surface) !important;
-  backdrop-filter: var(--hub-blur);
-  -webkit-backdrop-filter: var(--hub-blur);
-  border: 1px solid var(--hub-border) !important;
+  backdrop-filter: var(--hub-blur) !important;
+  -webkit-backdrop-filter: var(--hub-blur) !important;
+  border: 1.5px solid var(--hub-emerald) !important;
   border-radius: 50% !important;
   color: var(--hub-emerald) !important;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
-  z-index: 90;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  z-index: 120 !important;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.2s ease;
 }
 
 .btn-floating-gps:active {
   transform: scale(0.92);
-  background: rgba(16, 185, 129, 0.15) !important;
+  background: rgba(16, 185, 129, 0.2) !important;
 }
 
 /* ==========================================================================
