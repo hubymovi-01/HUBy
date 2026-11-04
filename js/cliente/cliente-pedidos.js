@@ -4,6 +4,7 @@ import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
 import { carregarSaldoCarteiraCliente } from './cliente-ui-menu.js';
 import { resetarParadasIntermediarias } from './cliente-paradas.js';
+
 export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn || estadoCliente.pedidoAtivoId) return;
@@ -16,13 +17,11 @@ export function atualizarBotaoChamar(resumo = null) {
   btn.textContent = labels[estadoCliente.categoriaSelecionada] || 'Chamar HUBy';
 }
 
-// js/cliente/cliente-pedidos.js
-
 export function atualizarResumoValores() {
   const lblPreco = document.getElementById('txtPrecoEstimado');
   const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
-  // REGRA DE OURO: Se não houver destino marcado ou rota calculada, NUNCA mostra preço
+  // REGRA DE OURO: Sem destino e sem rota, NUNCA exibe preço
   if (!estadoCliente.coordsDestino || !estadoCliente.rotaAtual) {
     if (lblPreco) lblPreco.textContent = '--';
     if (lblDistancia) lblDistancia.textContent = '-- km';
@@ -30,27 +29,49 @@ export function atualizarResumoValores() {
     return;
   }
 
-  // Preço base vindo da rota OSRM traçada
-  const precoBase = Number(estadoCliente.rotaAtual.preco || 0);
-  const distanciaKm = Number(estadoCliente.rotaAtual.distanciaKm || 0);
-
-  if (precoBase <= 0) {
-    if (lblPreco) lblPreco.textContent = '--';
-    if (lblDistancia) lblDistancia.textContent = '-- km';
-    return;
+  // Obtém a distância real da rota
+  let distanciaKm = 0;
+  if (estadoCliente.rotaAtual.distanciaKm) {
+    distanciaKm = Number(estadoCliente.rotaAtual.distanciaKm);
+  } else if (estadoCliente.distanciaTotalComParadas) {
+    distanciaKm = Number(estadoCliente.distanciaTotalComParadas);
   }
 
-  // Acréscimo por paradas intermediárias (R$ 2,50 cada)
+  // Tarifas base por modalidade
+  const categoria = estadoCliente.categoriaSelecionada || 'carro';
+  let precoBase = 7.00;
+  let valorKm = 2.00;
+
+  if (categoria === 'moto') {
+    precoBase = 5.00;
+    valorKm = 1.40;
+  } else if (categoria === 'entrega') {
+    precoBase = 6.00;
+    valorKm = 1.60;
+  }
+
+  // Se a rota já calculou o preço direto do OSRM/Servidor, utiliza-o; senão, calcula por km
+  let precoFinal = 0;
+  if (estadoCliente.rotaAtual.preco && Number(estadoCliente.rotaAtual.preco) > 0) {
+    precoFinal = Number(estadoCliente.rotaAtual.preco);
+  } else if (distanciaKm > 0) {
+    precoFinal = precoBase + (distanciaKm * valorKm);
+  } else {
+    precoFinal = precoBase;
+  }
+
+  // Adicional por paradas intermediárias (R$ 2,50 cada)
   const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
-  const taxaParadas = qtdParadas * 2.50;
-  const precoFinal = precoBase + taxaParadas;
+  precoFinal += (qtdParadas * 2.50);
+
+  if (precoFinal < precoBase) precoFinal = precoBase;
   estadoCliente.precoFinalCalculado = precoFinal;
 
   if (lblPreco) {
     lblPreco.textContent = `R$ ${precoFinal.toFixed(2).replace('.', ',')}`;
   }
   if (lblDistancia) {
-    lblDistancia.textContent = `${distanciaKm.toFixed(1)} km`;
+    lblDistancia.textContent = distanciaKm > 0 ? `${distanciaKm.toFixed(1)} km` : '-- km';
   }
 }
 
@@ -193,7 +214,6 @@ export function mostrarAguardandoMotorista() {
   }
 }
 
-// Escuta via WebSocket em tempo real para resposta instantânea
 function conectarSocketCliente(pedidoId) {
   const socket = window.io ? window.io(API_URL) : null;
   if (!socket) return;
@@ -249,7 +269,6 @@ export function iniciarPollingStatus() {
 
       const pedido = await resp.json();
 
-      // Suporta os novos status 'a_caminho', 'em_andamento' e 'em_viagem'
       if (pedido.status === 'a_caminho' || pedido.status === 'em_andamento' || pedido.status === 'aceito' || pedido.status === 'em_viagem') {
         if (!estadoCliente.motoristaAceitouTocado) {
           sonsHUBy.tocarSucessoAceite();
@@ -322,7 +341,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
     : '🚘 Motorista a caminho';
 
   painelMotorista.innerHTML = `
-    <!-- CRONÔMETRO DE CHEGADA -->
     <div id="boxCronometroChegada" style="text-align: center; margin-bottom: 12px; background: rgba(16, 185, 129, 0.12); border: 1.5px solid rgba(16, 185, 129, 0.4); padding: 12px; border-radius: 14px;">
       <div style="color: #10B981; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
         ${tituloStatus}
@@ -332,7 +350,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
       </div>
     </div>
 
-    <!-- CARD DO MOTORISTA -->
     <div class="driver-card-accepted" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--border-dark); border-radius: 16px; padding: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
       <div class="driver-card-top" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
         <div style="display: flex; align-items: center; gap: 12px;">
@@ -462,7 +479,7 @@ export function resetarPainelCliente() {
 
   if (txtDestino) txtDestino.textContent = 'Toque no mapa para indicar o destino';
   if (txtDist) txtDist.textContent = '-- km';
-  if (txtPreco) txtPreco.textContent = 'R$ 10,00';
+  if (txtPreco) txtPreco.textContent = '--'; // ← CORRIGIDO: Retorna ao traço (--), nunca R$ 10,00
 
   if (btn) {
     btn.disabled = false;
