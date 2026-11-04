@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBY 2.0 - css/cliente-layout.css (MAPA, NAV, SEARCHBAR, GPS E DOCK)
+   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS E DOCK)
    ========================================================================== */
 
 :root {
@@ -27,13 +27,13 @@
   z-index: 1;
 }
 
-/* 2. NAVEGAÇÃO SUPERIOR */
+/* 2. NAVEGAÇÃO SUPERIOR (RESTAURADA E ALINHADA) */
 .top-nav-bar {
   position: absolute;
   top: calc(env(safe-area-inset-top, 14px) + 8px);
   left: 14px;
   right: 14px;
-  z-index: 100;
+  z-index: 150 !important;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -44,23 +44,92 @@
   pointer-events: auto;
 }
 
-.btn-menu-burger,
+/* Botão de Hambúrguer (Perfil / Menu) */
+.btn-menu-burger {
+  background: var(--hub-surface) !important;
+  backdrop-filter: var(--hub-blur);
+  -webkit-backdrop-filter: var(--hub-blur);
+  border: 1px solid var(--hub-border) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  border-radius: 50% !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-width: 42px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  cursor: pointer;
+  padding: 0 !important;
+  touch-action: manipulation;
+}
+
+.btn-menu-burger span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: #FFF;
+  border-radius: 2px;
+}
+
+.btn-menu-burger:active {
+  transform: scale(0.92);
+}
+
+/* Pílula Central HUBy */
+.brand-pill {
+  background: var(--hub-surface) !important;
+  backdrop-filter: var(--hub-blur);
+  -webkit-backdrop-filter: var(--hub-blur);
+  border: 1px solid var(--hub-border) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  border-radius: 999px !important;
+  padding: 8px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: 900 !important;
+  font-size: 16px !important;
+  letter-spacing: -0.5px;
+}
+
+.brand-pill .hub-txt {
+  color: #FFFFFF !important;
+}
+
+.brand-pill .y-txt {
+  color: var(--hub-emerald) !important;
+}
+
+/* Botão de Viagens com Relógio */
 .btn-action-pill {
   background: var(--hub-surface) !important;
   backdrop-filter: var(--hub-blur);
   -webkit-backdrop-filter: var(--hub-blur);
   border: 1px solid var(--hub-border) !important;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
   border-radius: 999px !important;
-  transition: transform 0.15s ease;
+  padding: 8px 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: #FFFFFF !important;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-.btn-menu-burger:active,
+.btn-action-pill svg {
+  color: #FFFFFF !important;
+}
+
 .btn-action-pill:active {
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA (TOUCH FIÁVEL NO MOBILE) */
+/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 68px) !important;
@@ -95,7 +164,6 @@
               box-shadow 0.25s ease !important;
 }
 
-/* A lupa ocupa 100% da caixa circular quando fechada */
 .search-icon {
   width: 48px !important;
   height: 48px !important;
@@ -111,10 +179,10 @@
   color: #FFF !important;
   pointer-events: auto !important;
   z-index: 5 !important;
-  -webkit-tap-highlight-color: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
 }
 
-/* O input fica oculto quando fechado para não roubar o clique da lupa */
 .search-glass-box input {
   display: none;
   flex: 1 !important;
@@ -148,7 +216,7 @@
   outline: none !important;
   margin-right: 8px !important;
   pointer-events: auto !important;
-  z-index: 5 !important;
+  z-index: 6 !important;
   touch-action: manipulation !important;
 }
 
@@ -157,7 +225,7 @@
   color: #EF4444 !important;
 }
 
-/* ESTADO EXPANDIDO (.active) */
+/* Estado Expandido */
 .search-glass-box.active {
   width: 100% !important;
   border-color: rgba(56, 189, 248, 0.6) !important;
@@ -201,7 +269,7 @@
   border-bottom: none;
 }
 
-/* 4. BOTÃO FLUTUANTE DE GPS (LIVRE ACIMA DO DOCK) */
+/* 4. BOTÃO FLUTUANTE DE GPS */
 .btn-floating-gps {
   position: absolute !important;
   bottom: calc(295px + env(safe-area-inset-bottom, 16px)) !important;
