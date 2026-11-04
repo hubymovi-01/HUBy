@@ -24,12 +24,11 @@
   <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
-  <!-- ESTILOS MODULARES -->
+  <!-- ESTILOS MODULARES (pesquisa.css removido para eliminar conflitos de toque) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
-  <link rel="stylesheet" href="./css/pesquisa.css?v=2.2.1">
-  <link rel="stylesheet" href="./css/cliente.css?v=2.2.1">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=1.0.0">
+  <link rel="stylesheet" href="./css/cliente.css?v=3.0.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
   <!-- BIBLIOTECAS CDN -->
@@ -116,8 +115,7 @@
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
         style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
         <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
-            financeiro</small></div>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
       </a>
       <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
@@ -131,8 +129,7 @@
   </aside>
 
   <!-- BOTÃO FLUTUANTE DE GPS -->
-  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" style="bottom: 250px;"
-    aria-label="Recentralizar GPS">
+  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
       stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
@@ -143,9 +140,9 @@
     </svg>
   </button>
 
-  <!-- BOTÃO FLUTUANTE DE CHAT -->
+  <!-- BOTÃO FLUTUANTE DE CHAT (Bloqueado para ficar oculto na tela inicial) -->
   <button type="button" id="btnAbrirChat" class="btn-floating-gps"
-    style="display: none; bottom: 305px; border-color: #38BDF8; color: #38BDF8; font-size: 20px; z-index: 9998;"
+    style="display: none !important; bottom: 355px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
     aria-label="Abrir Chat">
     💬
   </button>
@@ -228,13 +225,11 @@
         <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
       <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
-          tempo real.</p>
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
         <div
           style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
-            contato cadastrado</div>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
         </div>
         <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal"
           style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -262,8 +257,7 @@
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
       <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
-          data-val="4">★</span><span data-val="5">★</span>
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
       </div>
       <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
       <div class="modal-btn-row">
@@ -307,8 +301,7 @@
         <div class="mp-qr-container"
           style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
           <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
-          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app
-            do seu banco para pagar</span>
+          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app do seu banco para pagar</span>
         </div>
 
         <div class="pix-charge-box" style="margin-top: 10px;">
@@ -341,8 +334,7 @@
       </div>
       <div id="chatAreaMensagens"
         style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
-          pessoais.</div>
+        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
       </div>
       <div
         style="padding: 12px; border-top: 1px solid rgba(255,255,255,0.08); background: #121826; display: flex; gap: 8px;">
@@ -438,8 +430,8 @@
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
 
-  <!-- ORQUESTRADOR CENTRAL (ÚNICO) -->
-  <script type="module" src="./js/app-cliente.js?v=9.6.0"></script>
+  <!-- ORQUESTRADOR CENTRAL -->
+  <script type="module" src="./js/app-cliente.js?v=9.8.0"></script>
 </body>
 
 </html>
