@@ -5,7 +5,7 @@ import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.7.0';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.8.0';
 import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
 
 let intervalChatCliente = null;
@@ -79,7 +79,7 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
-// Controle de Expansão Elástica e Cancelamento Total pelo Botão X
+// Controle de Expansão e Retração Rápida da Barra de Pesquisa
 function configurarBarraPesquisaAnimada() {
   const searchBox = document.querySelector('.search-glass-box');
   const btnLupa = document.getElementById('btnAcionarPesquisa');
@@ -91,27 +91,47 @@ function configurarBarraPesquisaAnimada() {
   const lblPreco = document.getElementById('txtPrecoEstimado');
   const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
-  // Ao clicar na lupa, expande a cápsula
-  btnLupa?.addEventListener('click', (e) => {
-    e.stopPropagation();
+  function abrirBarra() {
     if (!searchBox?.classList.contains('active')) {
       searchBox?.classList.add('active');
-      setTimeout(() => inputPesquisa?.focus(), 250);
+      setTimeout(() => inputPesquisa?.focus(), 150);
     }
-  });
+  }
 
-  // AO TOCAR NO X: Limpa pesquisa, destino, rota no mapa e reseta os valores
-  btnLimpar?.addEventListener('click', (e) => {
-    e.stopPropagation();
-
-    // 1. Limpa o texto da caixa e esconde sugestões
-    if (inputPesquisa) inputPesquisa.value = '';
+  function fecharBarra() {
+    searchBox?.classList.remove('active');
+    if (inputPesquisa) {
+      inputPesquisa.value = '';
+      inputPesquisa.blur();
+    }
     if (listaResultados) {
       listaResultados.innerHTML = '';
       listaResultados.style.display = 'none';
     }
+  }
 
-    // 2. Limpa o estado global
+  // Evento direto para abrir a barra ao tocar na lupa ou no círculo (suporta clique e toque)
+  const acionarAbertura = (e) => {
+    if (e.target === btnLimpar || btnLimpar?.contains(e.target)) return;
+    abrirBarra();
+  };
+
+  btnLupa?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    abrirBarra();
+  });
+
+  searchBox?.addEventListener('click', acionarAbertura);
+
+  // AO TOCAR NO X: Limpa tudo e recolhe a barra de volta para o formato de botão
+  btnLimpar?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // 1. Fecha e retrai o elemento visual
+    fecharBarra();
+
+    // 2. Reseta o estado global
     estadoCliente.coordsDestino = null;
     estadoCliente.rotaAtual = null;
     if (estadoCliente.paradasIntermediarias) {
@@ -130,34 +150,20 @@ function configurarBarraPesquisaAnimada() {
       }
     }
 
-    // 4. Reseta a interface do card inferior e limpa o preço
-    if (txtDestino) {
-      txtDestino.textContent = 'Toque no mapa para indicar o destino';
-    }
-    if (containerParadas) {
-      containerParadas.innerHTML = '';
-    }
-    if (lblPreco) {
-      lblPreco.textContent = '--';
-    }
-    if (lblDistancia) {
-      lblDistancia.textContent = '-- km';
-    }
+    // 4. Reseta a interface do dock inferior e zera o preço para '--'
+    if (txtDestino) txtDestino.textContent = 'Toque no mapa para indicar o destino';
+    if (containerParadas) containerParadas.innerHTML = '';
+    if (lblPreco) lblPreco.textContent = '--';
+    if (lblDistancia) lblDistancia.textContent = '-- km';
 
-    // 5. Atualiza o resumo
+    // 5. Atualiza o resumo de valores
     atualizarResumoValores();
-
-    // 6. Retrai a barra de volta para o formato de botão circular
-    searchBox?.classList.remove('active');
-    inputPesquisa?.blur();
   });
 
-  // Ao tocar fora (no mapa) quando estiver vazia, apenas fecha
+  // Ao tocar fora (no mapa) quando estiver vazia, apenas recolhe
   document.getElementById('mapaCliente')?.addEventListener('click', () => {
     if (searchBox?.classList.contains('active') && !inputPesquisa?.value.trim()) {
-      searchBox.classList.remove('active');
-      if (listaResultados) listaResultados.style.display = 'none';
-      inputPesquisa?.blur();
+      fecharBarra();
     }
   });
 }
