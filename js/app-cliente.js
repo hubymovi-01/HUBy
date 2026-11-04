@@ -79,15 +79,17 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
-// Controle de Expansão Elástica da Barra de Pesquisa
+// Controle de Expansão Elástica e Cancelamento Total pelo Botão X
 function configurarBarraPesquisaAnimada() {
   const searchBox = document.querySelector('.search-glass-box');
   const btnLupa = document.getElementById('btnAcionarPesquisa');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
   const listaResultados = document.getElementById('listaResultadosPesquisa');
+  const txtDestino = document.getElementById('txtDestinoSelecionado');
+  const containerParadas = document.getElementById('containerParadasIntermediarias');
 
-  // Ao clicar na lupa ou na caixinha, expande com a transição elástica
+  // Ao clicar na lupa, expande a cápsula
   btnLupa?.addEventListener('click', (e) => {
     e.stopPropagation();
     if (!searchBox?.classList.contains('active')) {
@@ -96,16 +98,53 @@ function configurarBarraPesquisaAnimada() {
     }
   });
 
-  // Ao tocar no botão ✕, limpa o texto digitado e recolhe
+  // AO TOCAR NO X: Limpa pesquisa, destino, rota no mapa e reseta os valores
   btnLimpar?.addEventListener('click', (e) => {
     e.stopPropagation();
+
+    // 1. Limpa o texto da caixa e esconde sugestões
     if (inputPesquisa) inputPesquisa.value = '';
-    if (listaResultados) listaResultados.style.display = 'none';
+    if (listaResultados) {
+      listaResultados.innerHTML = '';
+      listaResultados.style.display = 'none';
+    }
+
+    // 2. Limpa o estado global
+    estadoCliente.coordsDestino = null;
+    estadoCliente.rotaAtual = null;
+    if (estadoCliente.paradasIntermediarias) {
+      estadoCliente.paradasIntermediarias = [];
+    }
+
+    // 3. Remove os traçados e marcadores do mapa Leaflet
+    if (estadoCliente.hubyMapa) {
+      if (estadoCliente.hubyMapa.linhaRota && estadoCliente.hubyMapa.map) {
+        estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.linhaRota);
+        estadoCliente.hubyMapa.linhaRota = null;
+      }
+      if (estadoCliente.hubyMapa.markerDestino && estadoCliente.hubyMapa.map) {
+        estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.markerDestino);
+        estadoCliente.hubyMapa.markerDestino = null;
+      }
+    }
+
+    // 4. Reseta a interface do card inferior
+    if (txtDestino) {
+      txtDestino.textContent = 'Toque no mapa para indicar o destino';
+    }
+    if (containerParadas) {
+      containerParadas.innerHTML = '';
+    }
+
+    // 5. Atualiza preços de volta para a tarifa base
+    atualizarResumoValores();
+
+    // 6. Retrai a barra de volta para o formato de botão circular
     searchBox?.classList.remove('active');
     inputPesquisa?.blur();
   });
 
-  // Ao tocar fora (no mapa), se o campo estiver vazio, retrai para o botão circular
+  // Ao tocar fora (no mapa) quando estiver vazia, apenas fecha
   document.getElementById('mapaCliente')?.addEventListener('click', () => {
     if (searchBox?.classList.contains('active') && !inputPesquisa?.value.trim()) {
       searchBox.classList.remove('active');
@@ -127,7 +166,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
 
-  // 1. Inicializa o Mapa de forma única e segura
+  // 1. Inicializa o Mapa com abertura automática da barra ao tocar em qualquer local
   try {
     if (!estadoCliente.hubyMapa) {
       estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
@@ -142,13 +181,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
       const searchBox = document.querySelector('.search-glass-box');
       
+      const textoDestino = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+
       if (txtDestino) {
-        txtDestino.textContent = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+        txtDestino.textContent = textoDestino;
       }
       
+      // Abre a barra de pesquisa automaticamente ao marcar o ponto no mapa
       if (inputPesquisa) {
-        inputPesquisa.value = 'Destino selecionado no mapa';
-        searchBox?.classList.add('active');
+        inputPesquisa.value = textoDestino;
+      }
+      if (searchBox) {
+        searchBox.classList.add('active');
       }
 
       atualizarResumoValores();
@@ -170,7 +214,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       estadoCliente.coordsDestino = coords;
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
+      const inputPesquisa = document.getElementById('inputPesquisaLocal');
+      const searchBox = document.querySelector('.search-glass-box');
+
       if (txtDestino) txtDestino.textContent = nomeCurto;
+      if (inputPesquisa) inputPesquisa.value = nomeCurto;
+      if (searchBox) searchBox.classList.add('active');
 
       atualizarResumoValores(); 
     });
@@ -429,7 +478,7 @@ function iniciarMonitoramentoPix(txid, valor) {
 // MODAL PIX AUTOMÁTICO NA TELA DO PASSAGEIRO (AO FINALIZAR VIAGEM)
 // ============================================================================
 function exibirModalPixCorridaCliente(pix) {
-  document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+  document.getElementById('modalPixCorrivaAtivaCliente')?.remove();
 
   const modalHTML = `
     <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
