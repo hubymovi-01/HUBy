@@ -10,7 +10,7 @@ async function inicializarMarketplace() {
     await sql`
       CREATE TABLE IF NOT EXISTS marketplace_parceiros (
         id SERIAL PRIMARY KEY,
-        categoria VARCHAR(50) NOT NULL, -- 'adesivos', 'oficina', 'guincho'
+        categoria VARCHAR(50) NOT NULL,
         titulo VARCHAR(120) NOT NULL,
         empresa_nome VARCHAR(100) NOT NULL,
         descricao TEXT NOT NULL,
@@ -26,7 +26,7 @@ async function inicializarMarketplace() {
     `;
 
     const qtd = await sql`SELECT COUNT(*)::int AS total FROM marketplace_parceiros;`;
-    if (qtd[0].total === 0) {
+    if (qtd && qtd[0] && qtd[0].total === 0) {
       await sql`
         INSERT INTO marketplace_parceiros 
           (categoria, titulo, empresa_nome, descricao, preco_original, preco_parceiro, desconto_percentual, imagem_url, whatsapp_contato, endereco)
@@ -34,6 +34,7 @@ async function inicializarMarketplace() {
           ('adesivos', 'Kit Oficial Adesivo HUBy + QR Code', 'HUBy Design', 'Kit de identificação para vidro e laterais. Ganhe prioridade de chamadas!', 120.00, 49.90, 58, 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80', '5589999999999', 'Centro - São João do Piauí'),
           ('oficina', 'Troca de Óleo + Filtro + Checkup Geral', 'Auto Center Parceiro', 'Revisão com óleo sintético e desconto para condutores ativos.', 190.00, 139.90, 26, 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=400&q=80', '5589999999999', 'Av. Cândido Coelho'),
           ('guincho', 'Socorro Mecânico & Reboque 24h', 'Guincho Ágil', 'Atendimento emergencial na cidade e região com tarifa exclusiva HUBy.', 200.00, 120.00, 40, 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80', '5589999999999', 'Base Central');
+      `;
     }
   } catch (err) {
     console.warn('Tabela marketplace já sincronizada:', err.message);
@@ -59,7 +60,7 @@ router.get('/itens', async (req, res) => {
         ORDER BY id ASC;
       `;
     }
-    return res.json(itens);
+    return res.json(itens || []);
   } catch (err) {
     console.error('Erro ao buscar marketplace:', err);
     return res.status(500).json({ erro: 'Falha ao buscar itens da loja.' });
