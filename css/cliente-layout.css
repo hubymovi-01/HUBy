@@ -60,7 +60,7 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA COM TOUCH PRIORITÁRIO */
+/* 3. BARRA DE PESQUISA FLUTUANTE ANIMADA (TOUCH FIÁVEL NO MOBILE) */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 68px) !important;
@@ -79,8 +79,8 @@
   width: 48px !important;
   height: 48px !important;
   background: rgba(14, 20, 32, 0.95) !important;
-  backdrop-filter: var(--hub-blur) !important;
-  -webkit-backdrop-filter: var(--hub-blur) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
   border: 1.5px solid rgba(255, 255, 255, 0.15) !important;
   border-radius: 50px !important;
   display: flex !important;
@@ -90,11 +90,12 @@
   cursor: pointer !important;
   overflow: hidden !important;
   touch-action: manipulation !important;
-  transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.25s ease,
               box-shadow 0.25s ease !important;
 }
 
+/* A lupa ocupa 100% da caixa circular quando fechada */
 .search-icon {
   width: 48px !important;
   height: 48px !important;
@@ -109,10 +110,13 @@
   cursor: pointer !important;
   color: #FFF !important;
   pointer-events: auto !important;
-  z-index: 2 !important;
+  z-index: 5 !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
+/* O input fica oculto quando fechado para não roubar o clique da lupa */
 .search-glass-box input {
+  display: none;
   flex: 1 !important;
   width: 100% !important;
   background: transparent !important;
@@ -121,10 +125,7 @@
   color: #F8FAFC !important;
   font-size: 14px !important;
   font-weight: 600 !important;
-  padding: 0 10px 0 4px !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-  transition: opacity 0.2s ease !important;
+  padding: 0 10px 0 2px !important;
 }
 
 .search-glass-box input::placeholder {
@@ -132,6 +133,7 @@
 }
 
 .clear-btn {
+  display: none;
   width: 32px !important;
   height: 32px !important;
   min-width: 32px !important;
@@ -139,23 +141,23 @@
   border: none !important;
   border-radius: 50% !important;
   color: #FFF !important;
-  font-size: 13px !important;
-  display: none !important;
+  font-size: 14px !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
   outline: none !important;
   margin-right: 8px !important;
   pointer-events: auto !important;
-  z-index: 2 !important;
+  z-index: 5 !important;
+  touch-action: manipulation !important;
 }
 
 .clear-btn:active {
-  background: rgba(239, 68, 68, 0.3) !important;
+  background: rgba(239, 68, 68, 0.35) !important;
   color: #EF4444 !important;
 }
 
-/* ESTADO EXPANDIDO DA PESQUISA */
+/* ESTADO EXPANDIDO (.active) */
 .search-glass-box.active {
   width: 100% !important;
   border-color: rgba(56, 189, 248, 0.6) !important;
@@ -163,8 +165,7 @@
 }
 
 .search-glass-box.active input {
-  opacity: 1 !important;
-  pointer-events: auto !important;
+  display: block !important;
 }
 
 .search-glass-box.active .clear-btn {
@@ -175,8 +176,8 @@
   pointer-events: auto !important;
   width: 100% !important;
   background: rgba(14, 20, 32, 0.96) !important;
-  backdrop-filter: var(--hub-blur) !important;
-  -webkit-backdrop-filter: var(--hub-blur) !important;
+  backdrop-filter: blur(24px) !important;
+  -webkit-backdrop-filter: blur(24px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 18px !important;
   margin-top: 8px !important;
@@ -191,7 +192,7 @@
   padding: 11px 16px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--hub-text-pri);
+  color: #F8FAFC;
   cursor: pointer;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }

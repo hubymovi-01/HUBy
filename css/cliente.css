@@ -135,7 +135,7 @@ html, body.client-viewport {
   margin-bottom: 12px;
 }
 
-/* Chat flutuante: 100% oculto por padrão, ativado apenas via JS ao aceitar corrida */
+/* Chat flutuante: 100% oculto por padrão na tela inicial */
 #btnAbrirChat {
   display: none !important;
 }
@@ -380,7 +380,7 @@ html, body.client-viewport {
   cursor: pointer;
 }
 
-/* RECARGA E PAGAMENTO PIX */
+/* FORMAS DE PAGAMENTO E PIX */
 .payment-methods-list {
   display: flex;
   flex-direction: column;
