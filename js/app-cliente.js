@@ -79,6 +79,42 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
+// Controle de Expansão Elástica da Barra de Pesquisa
+function configurarBarraPesquisaAnimada() {
+  const searchBox = document.querySelector('.search-glass-box');
+  const btnLupa = document.getElementById('btnAcionarPesquisa');
+  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  const btnLimpar = document.getElementById('btnLimparPesquisa');
+  const listaResultados = document.getElementById('listaResultadosPesquisa');
+
+  // Ao clicar na lupa ou na caixinha, expande com a transição elástica
+  btnLupa?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (!searchBox?.classList.contains('active')) {
+      searchBox?.classList.add('active');
+      setTimeout(() => inputPesquisa?.focus(), 250);
+    }
+  });
+
+  // Ao tocar no botão ✕, limpa o texto digitado e recolhe
+  btnLimpar?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (inputPesquisa) inputPesquisa.value = '';
+    if (listaResultados) listaResultados.style.display = 'none';
+    searchBox?.classList.remove('active');
+    inputPesquisa?.blur();
+  });
+
+  // Ao tocar fora (no mapa), se o campo estiver vazio, retrai para o botão circular
+  document.getElementById('mapaCliente')?.addEventListener('click', () => {
+    if (searchBox?.classList.contains('active') && !inputPesquisa?.value.trim()) {
+      searchBox.classList.remove('active');
+      if (listaResultados) listaResultados.style.display = 'none';
+      inputPesquisa?.blur();
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -104,6 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
+      const searchBox = document.querySelector('.search-glass-box');
       
       if (txtDestino) {
         txtDestino.textContent = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
@@ -111,8 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       
       if (inputPesquisa) {
         inputPesquisa.value = 'Destino selecionado no mapa';
-        const btnLimpar = document.getElementById('btnLimparPesquisa');
-        if (btnLimpar) btnLimpar.style.display = 'block';
+        searchBox?.classList.add('active');
       }
 
       atualizarResumoValores();
@@ -140,8 +176,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Ativa as Múltiplas Paradas Customizadas
+  // 3. Ativa as Paradas Customizadas e a Barra de Pesquisa Animada
   configurarParadasIntermediariasSemPrompt();
+  configurarBarraPesquisaAnimada();
 
   // 4. Botão de Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
