@@ -185,20 +185,21 @@
 
     <!-- BLOCO RESUMO DA VIAGEM COM PARADAS -->
     <div id="blocoResumo" class="trip-summary-card">
-      <div class="route-details" style="flex: 1; min-width: 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-          <small style="font-size: 10px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px;">Destino</small>
-          <button type="button" id="btnAddParada" class="btn-add-stop">+ Parada</button>
+      <div class="route-details">
+        <div class="route-point-indicator"></div>
+        <div class="route-texts">
+          <div class="route-header-row">
+            <span class="route-title">Destino</span>
+            <button type="button" id="btnAddParada" class="btn-add-stop">+ Parada</button>
+          </div>
+          <span id="txtDestinoSelecionado" class="route-subtitle">Toque no mapa para indicar o destino</span>
+          <div id="containerParadasIntermediarias"></div>
         </div>
-        <div id="txtDestinoSelecionado" style="font-size: 13px; font-weight: 700; color: #FFF; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-          Toque no mapa para indicar o destino
-        </div>
-        <div id="containerParadasIntermediarias"></div>
       </div>
 
-      <div class="trip-price-block" style="text-align: right; flex-shrink: 0;">
+      <div class="trip-price-block">
         <span id="txtPrecoEstimado" class="price-val">R$ 10,00</span>
-        <span id="txtDistanciaEstimada" class="eta-val" style="display: block;">-- km</span>
+        <span id="txtDistanciaEstimada" class="eta-val">-- km</span>
       </div>
     </div>
 

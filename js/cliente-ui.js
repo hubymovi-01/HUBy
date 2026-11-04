@@ -6,7 +6,7 @@ export function notificarCliente(mensagem, tipo = 'info') {
     container.id = 'hubyClientToast';
     container.style.cssText = `
       position: fixed;
-      top: 20px;
+      top: calc(env(safe-area-inset-top, 14px) + 12px);
       left: 50%;
       transform: translateX(-50%);
       z-index: 10050;
@@ -14,11 +14,14 @@ export function notificarCliente(mensagem, tipo = 'info') {
       max-width: 360px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
       pointer-events: none;
     `;
     document.body.appendChild(container);
   }
+
+  // Remove notificações anteriores para não acumular nem sobrepor o topo
+  container.innerHTML = '';
 
   const icones = { sucesso: '✅', alerta: '⚠️', info: '📍', erro: '❌' };
   const bordas = {
@@ -30,27 +33,27 @@ export function notificarCliente(mensagem, tipo = 'info') {
 
   const toast = document.createElement('div');
   toast.style.cssText = `
-    background: rgba(13, 18, 30, 0.94);
+    background: rgba(13, 18, 30, 0.95);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-left: 4px solid ${bordas[tipo] || bordas.info};
     border-radius: 14px;
-    padding: 12px 14px;
+    padding: 10px 14px;
     color: #FFF;
     font-size: 13px;
     font-weight: 700;
     display: flex;
     align-items: center;
     gap: 10px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    box-shadow: 0 10px 28px rgba(0,0,0,0.65);
     pointer-events: auto;
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(-8px);
     transition: all 0.25s ease;
   `;
 
-  toast.innerHTML = `<span>${icones[tipo] || '💡'}</span><div style="flex:1;">${mensagem}</div>`;
+  toast.innerHTML = `<span>${icones[tipo] || '💡'}</span><div style="flex:1; line-height: 1.3;">${mensagem}</div>`;
   container.appendChild(toast);
 
   requestAnimationFrame(() => {
@@ -60,11 +63,10 @@ export function notificarCliente(mensagem, tipo = 'info') {
 
   setTimeout(() => {
     toast.style.opacity = '0';
-    toast.style.transform = 'translateY(-10px)';
+    toast.style.transform = 'translateY(-8px)';
     setTimeout(() => toast.remove(), 250);
-  }, 3500);
+  }, 3200);
 }
-
 // Modal escuro translúcido substituindo prompt()
 export function abrirPromptParada({ titulo, placeholder, onConfirmar }) {
   const overlay = document.createElement('div');
