@@ -5,7 +5,8 @@ import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.5.0';import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.7.0';
+import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
 
 let intervalChatCliente = null;
 let intervalChecagemPix = null;
@@ -195,6 +196,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
       const searchBox = document.querySelector('.search-glass-box');
+      const listaResultados = document.getElementById('listaResultadosPesquisa');
       
       const textoDestino = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
 
@@ -202,12 +204,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         txtDestino.textContent = textoDestino;
       }
       
-      // Abre a barra de pesquisa automaticamente ao marcar o ponto no mapa
+      // Abre a barra de pesquisa sem disparar busca de texto/erro
       if (inputPesquisa) {
         inputPesquisa.value = textoDestino;
       }
       if (searchBox) {
         searchBox.classList.add('active');
+      }
+      if (listaResultados) {
+        listaResultados.innerHTML = '';
+        listaResultados.style.display = 'none';
       }
 
       atualizarResumoValores();
@@ -231,10 +237,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
       const searchBox = document.querySelector('.search-glass-box');
+      const listaResultados = document.getElementById('listaResultadosPesquisa');
 
       if (txtDestino) txtDestino.textContent = nomeCurto;
       if (inputPesquisa) inputPesquisa.value = nomeCurto;
       if (searchBox) searchBox.classList.add('active');
+      if (listaResultados) {
+        listaResultados.innerHTML = '';
+        listaResultados.style.display = 'none';
+      }
 
       atualizarResumoValores(); 
     });
