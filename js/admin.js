@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   configurarFormTarifas(token);
   configurarFormMercadoPago(token);
   configurarModalDocumentos(token);
+  configurarFormMarketplace(token); // <-- Nova configuração do Clube
 
   document.getElementById('btnSincronizar')?.addEventListener('click', () => sincronizarTudo(token));
   document.getElementById('btnBaixarCSV')?.addEventListener('click', () => exportarRelatorioCSV(token));
@@ -57,10 +58,10 @@ async function sincronizarTudo(token) {
 
   const periodoAtual = document.getElementById('selectFiltroPeriodo')?.value || 'total';
 
-  // 1. Carrega primeiro a frota (pega o saldo dos motoristas reais)
+  // 1. Carrega primeiro a frota
   await carregarTabelaFrota(token);
 
-  // 2. Carrega as métricas com o fallback já pronto e desenha os gráficos
+  // 2. Carrega as métricas com o fallback
   await carregarMetricasECards(token, periodoAtual);
 
   // 3. Carrega a divisão dos sócios
@@ -73,6 +74,7 @@ async function sincronizarTudo(token) {
     carregarTabelaSeguranca(token),
     carregarTabelaSaques(token),
     carregarTabelaViagens(token),
+    carregarTabelaMarketplace(token), // <-- Carregamento da Loja Parceira
     carregarTarifasConfig(token),
     carregarGatewayConfig(token)
   ]);
@@ -140,7 +142,6 @@ async function carregarMetricasECards(token, periodo = 'total') {
 function renderizarGraficos(bruto, lucro, repasse, categorias) {
   if (typeof Chart === 'undefined') return;
 
-  // 1. Gráfico de Rosca: Divisão de Receitas
   const canvasFin = document.getElementById('chartFinanceiro');
   const ctxFin = canvasFin?.getContext('2d');
   if (ctxFin) {
@@ -175,7 +176,6 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
     });
   }
 
-  // 2. Gráfico de Barras: Categorias Atendidas
   const canvasCat = document.getElementById('chartCategorias');
   const ctxCat = canvasCat?.getContext('2d');
   if (ctxCat) {
@@ -326,7 +326,103 @@ window.solicitarSaqueSocio = async (socioId) => {
   }
 };
 
-// 4. Gestão de Frota e Documentos
+// ============================================================================
+// GESTÃO DO CLUBE HUBy / MARKETPLACE (NOVIDADE)
+// ============================================================================
+async function carregarTabelaMarketplace(token) {
+  const tbody = document.getElementById('tabelaMarketplaceBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/marketplace/admin/itens`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const itens = await res.json();
+
+    if (!itens.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:15px;">Nenhum benefício ou parceria cadastrada no momento.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = itens.map(i => `
+      <tr>
+        <td><strong>${i.titulo}</strong><br><small style="color:var(--muted);">${i.empresa_nome}</small></td>
+        <td><span class="badge badge-aceito" style="text-transform:uppercase;">${i.categoria}</span></td>
+        <td style="color:var(--rose); text-decoration:line-through;">R$ ${Number(i.preco_original).toFixed(2).replace('.', ',')}</td>
+        <td style="color:var(--primary); font-weight:800;">R$ ${Number(i.preco_parceiro).toFixed(2).replace('.', ',')}</td>
+        <td><span class="badge ${i.ativo ? 'badge-ativo' : 'badge-inativo'}">${i.ativo ? 'Disponível' : 'Oculto'}</span></td>
+        <td>
+          <button class="btn-tbl alt" onclick="alternarStatusMarketplace('${i.id}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
+          <button class="btn-tbl rej" onclick="excluirItemMarketplace('${i.id}')">Excluir</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    console.warn('Falha ao listar itens do Marketplace.');
+  }
+}
+
+function configurarFormMarketplace(token) {
+  document.getElementById('formNovoMarketplace')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const titulo = document.getElementById('mkpTitulo').value.trim();
+    const empresa_nome = document.getElementById('mkpEmpresa').value.trim();
+    const categoria = document.getElementById('mkpCategoria').value;
+    const descricao = document.getElementById('mkpDescricao').value.trim();
+    const preco_original = document.getElementById('mkpPrecoDe').value;
+    const preco_parceiro = document.getElementById('mkpPrecoPor').value;
+    const whatsapp_contato = document.getElementById('mkpWhatsapp').value.replace(/\D/g, '');
+    const imagem_url = document.getElementById('mkpImagemUrl').value.trim();
+
+    try {
+      const res = await fetch(`${API_URL}/api/marketplace/admin/itens`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ 
+          titulo, empresa_nome, categoria, descricao, 
+          preco_original, preco_parceiro, whatsapp_contato, imagem_url 
+        })
+      });
+      if (res.ok) {
+        alert('✅ Nova parceria adicionada com sucesso ao Clube HUBy!');
+        e.target.reset();
+        carregarTabelaMarketplace(token);
+      } else {
+        alert('Erro ao guardar a parceria.');
+      }
+    } catch (err) {
+      alert('Falha de conexão.');
+    }
+  });
+}
+
+window.alternarStatusMarketplace = async (id) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/marketplace/admin/itens/${id}/toggle`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) carregarTabelaMarketplace(token);
+  } catch (e) {}
+};
+
+window.excluirItemMarketplace = async (id) => {
+  if (!confirm('Tem a certeza de que deseja remover esta oferta permanentemente?')) return;
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/marketplace/admin/itens/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) carregarTabelaMarketplace(token);
+  } catch (e) {}
+};
+
+// ============================================================================
+// 4. GESTÃO DE FROTA E DOCUMENTOS
+// ============================================================================
 async function carregarTabelaFrota(token) {
   const tbody = document.getElementById('tabelaFrotaBody');
   if (!tbody) return;
@@ -794,13 +890,9 @@ function configurarNavegacaoAbas() {
           }, 150);
         }
 
-        if (tabAlvoId === 'tabSocios') {
-          carregarDadosSocios(token);
-        }
-
-        if (tabAlvoId === 'tabSaques') {
-          carregarTabelaSaques(token);
-        }
+        if (tabAlvoId === 'tabSocios') carregarDadosSocios(token);
+        if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
+        if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token); // <-- Renderiza a tabela da loja
 
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
