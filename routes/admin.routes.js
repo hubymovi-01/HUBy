@@ -253,6 +253,72 @@ export default function adminRoutes(io) {
   // =========================================================================
   // 4. SAQUE AUTOMÁTICO INSTANTÂNEO PIX & AUDITORIA
   // =========================================================================
+  
+  // A) SAQUE PARA OS SÓCIOS (Faltava esta rota! Resolve o erro no painel)
+  router.post('/saques/automatico', autenticarToken, verificarAdmin, async (req, res) => {
+    const { valor, chavePix, tipoChave } = req.body;
+    const valorSaque = Number(valor);
+
+    if (!valorSaque || valorSaque <= 0) {
+      return res.status(400).json({ erro: 'Informe um valor válido para saque.' });
+    }
+    if (!chavePix) {
+      return res.status(400).json({ erro: 'Chave Pix de destino é obrigatória.' });
+    }
+
+    try {
+      const accessToken = process.env.MP_ACCESS_TOKEN;
+      if (!accessToken) {
+        throw new Error('Configuração MP_ACCESS_TOKEN ausente nas variáveis de ambiente.');
+      }
+
+      // Requisição de saque via Mercado Pago
+      const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Idempotency-Key': `saque-socio-${Date.now()}`
+        },
+        body: JSON.stringify({
+          transaction_amount: valorSaque,
+          description: `Repasse de Lucros HUBy (Sócio)`,
+          payment_method_id: 'pix',
+          payer: {
+            email: req.usuario?.email || 'diretoria@huby.app',
+            identification: {
+              type: 'OUTRO',
+              number: chavePix.replace(/\D/g, '') || '00000000000'
+            }
+          }
+        })
+      });
+
+      const mpData = await mpResponse.json();
+
+      if (!mpResponse.ok) {
+        return res.status(400).json({ erro: `Falha na transferência bancária: ${mpData.message || 'Verifique a chave Pix'}` });
+      }
+
+      // Auditoria do saque
+      await sql`
+        INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
+        VALUES (${'saque_socio_' + Date.now()}, ${JSON.stringify({ valor: valorSaque, chave: chavePix })}::jsonb, CURRENT_TIMESTAMP);
+      `;
+
+      res.json({
+        sucesso: true,
+        mensagem: 'Transferência Pix para o Sócio processada com sucesso!',
+        valorTransferido: valorSaque
+      });
+
+    } catch (err) {
+      console.error('Erro no saque da diretoria:', err);
+      res.status(500).json({ erro: err.message || 'Erro interno ao processar saque.' });
+    }
+  });
+
+  // B) SAQUE PARA OS MOTORISTAS
   router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
     const motoristaId = req.usuario?.id;
     const { valor, chavePix, tipoChave } = req.body;
