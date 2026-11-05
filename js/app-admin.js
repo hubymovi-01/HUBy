@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 2. Navegação por Abas (compatível com as classes tab-pane e tab-btn)
+  // 2. Navegação por Abas
   const tabs = document.querySelectorAll('.tab-btn');
   const contents = document.querySelectorAll('.tab-pane');
 
@@ -110,9 +110,13 @@ function atualizarGraficos(data) {
   const ctxFin = document.getElementById('chartFinanceiro');
   const ctxCat = document.getElementById('chartCategorias');
 
-  if (!ctxFin || !ctxCat) return;
+  // Verifica se os elementos canvas existem e se a biblioteca Chart.js foi carregada
+  if (!ctxFin || !ctxCat || typeof Chart === 'undefined') {
+      console.warn("Elementos do gráfico ou biblioteca Chart.js não encontrados.");
+      return;
+  }
 
-  // Destrói gráficos antigos se o usuário mudar o filtro de período (Hoje, 7 dias, etc.)
+  // Destrói gráficos antigos se o usuário mudar o filtro de período
   if (window.chartFinInstance) window.chartFinInstance.destroy();
   if (window.chartCatInstance) window.chartCatInstance.destroy();
 
@@ -237,8 +241,19 @@ async function salvarTarifasServidor(e) {
       },
       body: JSON.stringify(tarifasPayload)
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro || 'Falha ao gravar tarifas.');
+    
+    // Tratamento de erro melhorado
+    if (!res.ok) {
+        let errorMessage = 'Falha ao gravar tarifas no Neon.';
+        try {
+            const data = await res.json();
+            errorMessage = data.erro || errorMessage;
+        } catch (jsonErr) {
+             console.error("Erro ao analisar resposta de erro JSON", jsonErr);
+        }
+        throw new Error(errorMessage);
+    }
+    
     alert('✅ Tarifas calibradas com sucesso!');
   } catch (err) {
     alert(`Erro ao salvar tarifas: ${err.message}`);
@@ -272,7 +287,18 @@ async function salvarConfigMercadoPago(e) {
       },
       body: JSON.stringify(body)
     });
-    if (!res.ok) throw new Error('Falha ao atualizar chaves.');
+    
+     if (!res.ok) {
+        let errorMessage = 'Falha ao atualizar chaves.';
+        try {
+            const data = await res.json();
+            errorMessage = data.erro || errorMessage;
+        } catch (jsonErr) {
+             console.error("Erro ao analisar resposta de erro JSON", jsonErr);
+        }
+        throw new Error(errorMessage);
+    }
+    
     alert('✅ Credenciais do Mercado Pago salvas com sucesso no banco!');
   } catch (err) {
     alert(`Erro ao salvar Mercado Pago: ${err.message}`);
@@ -397,17 +423,19 @@ async function carregarTabelaSaques() {
 // 7. GESTÃO DOS SÓCIOS (50% / 50%) - HUBy Diretoria
 // ============================================================================
 function carregarDadosSocios() {
-  const s1Nome = localStorage.getItem('huby_socio_1_nome');
-  const s1Pix = localStorage.getItem('huby_socio_1_pix');
-  const s2Nome = localStorage.getItem('huby_socio_2_nome');
-  const s2Pix = localStorage.getItem('huby_socio_2_pix');
+  // Define valores iniciais caso o localStorage esteja vazio
+  const s1Nome = localStorage.getItem('huby_socio_1_nome') || 'Sócio 1 (50%)';
+  const s1Pix = localStorage.getItem('huby_socio_1_pix') || 'pix1@huby.app.br';
+  const s2Nome = localStorage.getItem('huby_socio_2_nome') || 'Sócio 2 (50%)';
+  const s2Pix = localStorage.getItem('huby_socio_2_pix') || 'pix2@huby.app.br';
 
-  if (s1Nome && document.getElementById('socio1Nome')) document.getElementById('socio1Nome').textContent = s1Nome;
-  if (s1Pix && document.getElementById('socio1Chave')) document.getElementById('socio1Chave').textContent = `Chave Pix: ${s1Pix}`;
-  if (s2Nome && document.getElementById('socio2Nome')) document.getElementById('socio2Nome').textContent = s2Nome;
-  if (s2Pix && document.getElementById('socio2Chave')) document.getElementById('socio2Chave').textContent = `Chave Pix: ${s2Pix}`;
+  if (document.getElementById('socio1Nome')) document.getElementById('socio1Nome').textContent = s1Nome;
+  if (document.getElementById('socio1Chave')) document.getElementById('socio1Chave').textContent = `Chave Pix: ${s1Pix}`;
+  if (document.getElementById('socio2Nome')) document.getElementById('socio2Nome').textContent = s2Nome;
+  if (document.getElementById('socio2Chave')) document.getElementById('socio2Chave').textContent = `Chave Pix: ${s2Pix}`;
 }
 
+// Expõe a função globalmente sem causar erro no parsing
 window.editarDadosSocio = function(numSocio) {
   const elemNome = document.getElementById(`socio${numSocio}Nome`);
   const elemChave = document.getElementById(`socio${numSocio}Chave`);
@@ -415,12 +443,14 @@ window.editarDadosSocio = function(numSocio) {
   const nomeAtual = elemNome ? elemNome.textContent : `Sócio ${numSocio} (50%)`;
   const chaveAtual = elemChave ? elemChave.textContent.replace('Chave Pix: ', '').trim() : `pix${numSocio}@huby.app.br`;
 
+  // Utiliza prompt simples, que não causará JSON parse error se não houver requisição subsequente
   const novoNome = prompt(`Nome para exibição do Sócio ${numSocio}:`, nomeAtual);
-  if (novoNome === null || !novoNome.trim()) return;
+  if (novoNome === null || novoNome.trim() === '') return;
 
   const novaChave = prompt(`Chave Pix oficial de destino para ${novoNome}:`, chaveAtual);
-  if (novaChave === null || !novaChave.trim()) return;
+  if (novaChave === null || novaChave.trim() === '') return;
 
+  // Guarda no LocalStorage e atualiza a UI
   localStorage.setItem(`huby_socio_${numSocio}_nome`, novoNome.trim());
   localStorage.setItem(`huby_socio_${numSocio}_pix`, novaChave.trim());
 
@@ -454,9 +484,17 @@ window.solicitarSaqueSocio = async function(numSocio) {
       },
       body: JSON.stringify({ valor, chavePix, tipoChave: 'chave' })
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque do sócio.');
+    
+     if (!res.ok) {
+        let errorMessage = 'Falha ao processar saque do sócio.';
+        try {
+            const data = await res.json();
+            errorMessage = data.erro || errorMessage;
+        } catch (jsonErr) {
+             console.error("Erro ao analisar resposta de erro JSON", jsonErr);
+        }
+        throw new Error(errorMessage);
+    }
 
     alert(`✅ Saque de R$ ${valor.toFixed(2)} transferido com sucesso para ${nome}!`);
     await sincronizarTudo();
