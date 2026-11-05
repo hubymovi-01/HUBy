@@ -55,7 +55,8 @@ async function sincronizarTudo() {
     carregarTarifasAtuais(),
     carregarTabelaCorridas(),
     carregarTabelaMotoristas(),
-    carregarTabelaSaques()
+    carregarTabelaSaques(),
+    carregarDadosSocios()
   ]);
 }
 
@@ -196,11 +197,23 @@ async function carregarMetricasKPI() {
     const elemConcluidas = document.getElementById('metricConcluidas');
     const elemAlertas = document.getElementById('metricAlertas');
 
-    if (elemBruto) elemBruto.textContent = `R$ ${Number(data.faturamentoBruto || 0).toFixed(2).replace('.', ',')}`;
-    if (elemLiquido) elemLiquido.textContent = `R$ ${Number(data.lucroHuby || 0).toFixed(2).replace('.', ',')}`;
-    if (elemRepasse) elemRepasse.textContent = `R$ ${Number(data.repasseMotoristas || 0).toFixed(2).replace('.', ',')}`;
+    const faturamentoBruto = Number(data.faturamentoBruto || 0);
+    const lucroHuby = Number(data.lucroHuby || 0);
+    const repasseMotoristas = Number(data.repasseMotoristas || 0);
+
+    if (elemBruto) elemBruto.textContent = `R$ ${faturamentoBruto.toFixed(2).replace('.', ',')}`;
+    if (elemLiquido) elemLiquido.textContent = `R$ ${lucroHuby.toFixed(2).replace('.', ',')}`;
+    if (elemRepasse) elemRepasse.textContent = `R$ ${repasseMotoristas.toFixed(2).replace('.', ',')}`;
     if (elemConcluidas) elemConcluidas.textContent = data.viagensConcluidas || 0;
     if (elemAlertas) elemAlertas.textContent = data.alertasSeguranca || 0;
+
+    // Atualiza saldo projetado de cada sócio (50% da taxa da plataforma de 15%)
+    const saldoCadaSocio = (lucroHuby * 0.40); // 80% do lucro divido por 2 (considerando 20% de reserva operacional)
+    const s1 = document.getElementById('socio1Saldo');
+    const s2 = document.getElementById('socio2Saldo');
+    if (s1) s1.textContent = `R$ ${saldoCadaSocio.toFixed(2).replace('.', ',')}`;
+    if (s2) s2.textContent = `R$ ${saldoCadaSocio.toFixed(2).replace('.', ',')}`;
+
   } catch (e) {
     console.warn('Falha ao sincronizar KPIs:', e);
   }
@@ -320,6 +333,86 @@ async function carregarTabelaSaques() {
   }
 }
 
+// ============================================================================
+// 7. GESTÃO DOS SÓCIOS (50% / 50%) - HUBy Diretoria
+// ============================================================================
+function carregarDadosSocios() {
+  const s1Nome = localStorage.getItem('huby_socio_1_nome');
+  const s1Pix = localStorage.getItem('huby_socio_1_pix');
+  const s2Nome = localStorage.getItem('huby_socio_2_nome');
+  const s2Pix = localStorage.getItem('huby_socio_2_pix');
+
+  if (s1Nome && document.getElementById('socio1Nome')) document.getElementById('socio1Nome').textContent = s1Nome;
+  if (s1Pix && document.getElementById('socio1Chave')) document.getElementById('socio1Chave').textContent = `Chave Pix: ${s1Pix}`;
+  if (s2Nome && document.getElementById('socio2Nome')) document.getElementById('socio2Nome').textContent = s2Nome;
+  if (s2Pix && document.getElementById('socio2Chave')) document.getElementById('socio2Chave').textContent = `Chave Pix: ${s2Pix}`;
+}
+
+window.editarDadosSocio = function(numSocio) {
+  const elemNome = document.getElementById(`socio${numSocio}Nome`);
+  const elemChave = document.getElementById(`socio${numSocio}Chave`);
+
+  const nomeAtual = elemNome ? elemNome.textContent : `Sócio ${numSocio} (50%)`;
+  const chaveAtual = elemChave ? elemChave.textContent.replace('Chave Pix: ', '').trim() : `pix${numSocio}@huby.app.br`;
+
+  const novoNome = prompt(`Nome para exibição do Sócio ${numSocio}:`, nomeAtual);
+  if (novoNome === null || !novoNome.trim()) return;
+
+  const novaChave = prompt(`Chave Pix oficial de destino para ${novoNome}:`, chaveAtual);
+  if (novaChave === null || !novaChave.trim()) return;
+
+  localStorage.setItem(`huby_socio_${numSocio}_nome`, novoNome.trim());
+  localStorage.setItem(`huby_socio_${numSocio}_pix`, novaChave.trim());
+
+  if (elemNome) elemNome.textContent = novoNome.trim();
+  if (elemChave) elemChave.textContent = `Chave Pix: ${novaChave.trim()}`;
+
+  alert(`✅ Dados do Sócio ${numSocio} salvos com sucesso!`);
+};
+
+window.solicitarSaqueSocio = async function(numSocio) {
+  const token = localStorage.getItem('huby_token');
+  const nome = document.getElementById(`socio${numSocio}Nome`)?.textContent || `Sócio ${numSocio}`;
+  const chavePix = document.getElementById(`socio${numSocio}Chave`)?.textContent.replace('Chave Pix: ', '').trim();
+  const saldoTxt = document.getElementById(`socio${numSocio}Saldo`)?.textContent || 'R$ 0,00';
+
+  const valorStr = prompt(`Retirada de lucros para ${nome}\nChave Pix: ${chavePix}\nSaldo Disponível: ${saldoTxt}\n\nInforme o valor do repasse (R$):`, '1.00');
+  if (!valorStr) return;
+
+  const valor = parseFloat(valorStr.replace(',', '.'));
+  if (isNaN(valor) || valor <= 0) {
+    alert('⚠️ Informe um valor numérico válido.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/saques/automatico`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        valor,
+        chavePix,
+        tipoChave: 'chave'
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque do sócio.');
+
+    alert(`✅ Saque de R$ ${valor.toFixed(2)} transferido com sucesso para ${nome}!`);
+    await sincronizarTudo();
+  } catch (err) {
+    console.error(err);
+    alert(`❌ Erro no saque: ${err.message}`);
+  }
+};
+
+// ============================================================================
+// 8. FUNÇÕES AUXILIARES
+// ============================================================================
 function obterBadgeStatus(status) {
   const st = String(status).toLowerCase();
   if (st === 'concluido' || st === 'pago' || st === 'finalizado') return 'concluido';
