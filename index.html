@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES -->
+  <!-- ÍCONES APPLE & FAVICON -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=4.0.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=4.1.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
   <!-- BIBLIOTECAS CDN -->
@@ -132,7 +132,7 @@
 
       <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
 
-      <!-- ITENS DO MENU -->
+      <!-- ITENS GERAIS DO MENU -->
       <a href="#" id="menuItemViagens" class="drawer-item">
         <span class="d-icon">📋</span>
         <div class="d-info"><strong>Minhas Viagens</strong><small>Histórico e recibos de corridas</small></div>
@@ -193,7 +193,7 @@
     💬
   </button>
 
-  <!-- DOCK INFERIOR (BOTTOM SHEET SOFISTICADO) -->
+  <!-- DOCK INFERIOR (COMPACTO E PROPORCIONAL) -->
   <section class="client-dock-sheet pro-dock">
     <div class="sheet-drag-handle"></div>
 
@@ -220,7 +220,7 @@
       </div>
     </div>
 
-    <!-- SELETOR HORIZONTAL DE CATEGORIAS ESTILO UBER BLACK -->
+    <!-- SELETOR HORIZONTAL DE 3 COLUNAS -->
     <div class="categories-container" id="sliderCategorias">
       <div class="category-card-pro active" data-id="carro">
         <div class="cat-left">
@@ -230,9 +230,7 @@
         <div class="cat-center">
           <div class="cat-name-row">
             <strong>HUBy Carro</strong>
-            <span class="cat-seats">👤 4</span>
           </div>
-          <small class="cat-sub">Rápido e confortável</small>
         </div>
         <div class="cat-right">
           <span class="cat-price-est" id="priceEstCarro">--</span>
@@ -247,9 +245,7 @@
         <div class="cat-center">
           <div class="cat-name-row">
             <strong>HUBy Moto</strong>
-            <span class="cat-seats">👤 1</span>
           </div>
-          <small class="cat-sub">Econômico e ágil</small>
         </div>
         <div class="cat-right">
           <span class="cat-price-est" id="priceEstMoto">--</span>
@@ -264,9 +260,7 @@
         <div class="cat-center">
           <div class="cat-name-row">
             <strong>HUBy Flash</strong>
-            <span class="cat-seats">Pacotes</span>
           </div>
-          <small class="cat-sub">Envio de mercadorias</small>
         </div>
         <div class="cat-right">
           <span class="cat-price-est" id="priceEstEntrega">--</span>
@@ -324,7 +318,7 @@
     <!-- PAINEL MOTORISTA ACEITOU -->
     <div id="painelMotoristaAceitou" style="display: none; width: 100%;"></div>
 
-    <!-- BOTÃO PRINCIPAL COM GRADIENTE E PREÇO EMBUTIDO -->
+    <!-- BOTÃO PRINCIPAL COM PREÇO EMBUTIDO -->
     <button type="button" id="btnPedirHuby" class="btn-main-action pro-btn">
       <span class="btn-text">Confirmar HUBy Carro</span>
       <span class="btn-price-preview" id="txtPrecoEstimado">--</span>
@@ -365,7 +359,7 @@
     </div>
   </div>
 
-  <!-- MODAL DE EDIÇÃO DE FAVORITO (TEXTO OU MAPA) -->
+  <!-- MODAL DE EDIÇÃO DE FAVORITO -->
   <div id="modalConfigFavorito" class="modal-backdrop" style="display: none; z-index: 10008;">
     <div class="modal-card modal-wide">
       <div class="modal-header-row">
@@ -606,7 +600,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.14.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.15.0"></script>
 </body>
 
 </html>

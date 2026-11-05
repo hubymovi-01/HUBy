@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS, DOCK E CARTOES)
+   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS E DOCK COMPACTO)
    ========================================================================== */
 
 :root {
@@ -254,47 +254,7 @@
   border-bottom: none;
 }
 
-/* 4. BOTÕES FLUTUANTES (CAMADA SATÉLITE E GPS) */
-.btn-floating-gps {
-  position: absolute !important;
-  bottom: calc(340px + env(safe-area-inset-bottom, 16px)) !important;
-  right: 18px !important;
-  width: 46px !important;
-  height: 46px !important;
-  background: var(--hub-surface) !important;
-  backdrop-filter: var(--hub-blur) !important;
-  -webkit-backdrop-filter: var(--hub-blur) !important;
-  border: 1.5px solid var(--hub-emerald) !important;
-  border-radius: 50% !important;
-  color: var(--hub-emerald) !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
-  z-index: 120 !important;
-  cursor: pointer !important;
-  transition: transform 0.15s ease, background 0.2s ease;
-  touch-action: manipulation;
-}
-
-.btn-floating-gps:active {
-  transform: scale(0.92);
-  background: rgba(16, 185, 129, 0.2) !important;
-}
-
-.btn-floating-layer {
-  bottom: calc(395px + env(safe-area-inset-bottom, 16px)) !important;
-  border-color: rgba(56, 189, 248, 0.5) !important;
-  color: #38BDF8 !important;
-}
-
-.btn-floating-layer.modo-satelite {
-  background: rgba(56, 189, 248, 0.2) !important;
-  border-color: #38BDF8 !important;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
-}
-
-/* 5. DOCK INFERIOR (BOTTOM SHEET PRO) */
+/* 4. DOCK INFERIOR COMPACTO (ALTURA CALIBRADA) */
 .pro-dock {
   position: absolute;
   bottom: 0;
@@ -305,30 +265,31 @@
   backdrop-filter: blur(32px) !important;
   -webkit-backdrop-filter: blur(32px) !important;
   border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 28px 28px 0 0 !important;
-  box-shadow: 0 -16px 50px rgba(0, 0, 0, 0.85) !important;
-  padding: 12px 18px calc(env(safe-area-inset-bottom, 16px) + 12px) !important;
+  border-radius: 24px 24px 0 0 !important;
+  box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.85) !important;
+  padding: 8px 14px calc(env(safe-area-inset-bottom, 16px) + 8px) !important;
   display: flex;
   flex-direction: column;
-  gap: 12px !important;
+  gap: 8px !important;
+  max-height: 52vh !important;
 }
 
 .sheet-drag-handle {
-  width: 38px;
+  width: 36px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   margin: 0 auto 2px auto;
 }
 
-/* 6. RESUMO DO PERCURSO EM TIMELINE */
+/* 5. TIMELINE COMPACTA */
 .trip-summary-card-pro {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  padding: 12px 14px;
+  border-radius: 14px;
+  padding: 8px 12px;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: stretch;
 }
 
@@ -337,32 +298,32 @@
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 0;
-  width: 14px;
+  padding: 3px 0;
+  width: 12px;
   flex-shrink: 0;
 }
 
 .timeline-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
 .timeline-dot.pickup {
   background: #38BDF8;
-  box-shadow: 0 0 8px #38BDF8;
+  box-shadow: 0 0 6px #38BDF8;
 }
 
 .timeline-dot.dropoff {
   background: var(--hub-emerald);
-  box-shadow: 0 0 8px var(--hub-emerald);
+  box-shadow: 0 0 6px var(--hub-emerald);
 }
 
 .timeline-line {
   flex: 1;
   width: 2px;
   background: rgba(255, 255, 255, 0.15);
-  margin: 3px 0;
+  margin: 2px 0;
 }
 
 .route-details-column {
@@ -370,21 +331,20 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .route-label {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
   text-transform: uppercase;
   color: #64748B;
   letter-spacing: 0.5px;
-  display: block;
 }
 
 .route-text {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #E2E8F0;
   white-space: nowrap;
@@ -398,58 +358,39 @@
   font-weight: 700;
 }
 
-.dest-title-group {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .btn-add-stop-pill {
   background: rgba(56, 189, 248, 0.12);
   border: 1px solid rgba(56, 189, 248, 0.35);
   color: var(--hub-blue);
-  border-radius: 12px;
-  font-size: 10.5px;
+  border-radius: 10px;
+  font-size: 9.5px;
   font-weight: 800;
-  padding: 2px 8px;
+  padding: 1px 6px;
   cursor: pointer;
 }
 
-.btn-add-stop-pill:active {
-  transform: scale(0.95);
-}
-
-.stop-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: rgba(56, 189, 248, 0.08);
-  border-left: 2.5px solid var(--hub-blue);
-  padding: 6px 10px;
-  border-radius: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  border: 1px solid rgba(56, 189, 248, 0.2);
-}
-
-/* 7. CARTÕES DE MODALIDADE (ESTILO UBER BLACK) */
+/* 6. CARROSSEL HORIZONTAL DE CATEGORIAS (3 COLUNAS LADO A LADO) */
 .categories-container {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 195px;
-  overflow-y: auto;
-  padding-right: 2px;
+  display: grid !important;
+  grid-template-columns: repeat(3, 1fr) !important;
+  gap: 6px !important;
+  width: 100%;
+  max-height: none !important;
+  overflow: visible !important;
+  padding: 0 !important;
 }
 
 .category-card-pro {
   background: rgba(255, 255, 255, 0.03);
   border: 1.5px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  padding: 10px 14px;
+  border-radius: 14px;
+  padding: 6px 4px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  text-align: center;
+  gap: 2px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   touch-action: manipulation;
@@ -462,7 +403,7 @@
 .category-card-pro.active {
   background: rgba(16, 185, 129, 0.08);
   border-color: var(--hub-emerald);
-  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
 }
 
 .cat-left {
@@ -470,118 +411,71 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  min-width: 44px;
 }
 
 .cat-emoji {
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
 }
 
 .cat-badge-eta {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 800;
   color: var(--hub-emerald);
   background: rgba(16, 185, 129, 0.15);
-  padding: 1px 6px;
-  border-radius: 6px;
+  padding: 1px 4px;
+  border-radius: 4px;
 }
 
 .cat-center {
-  flex: 1;
-  padding: 0 12px;
-  min-width: 0;
+  padding: 0 !important;
+  width: 100%;
 }
 
 .cat-name-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 3px;
 }
 
 .cat-name-row strong {
-  font-size: 14px;
+  font-size: 11.5px;
   font-weight: 800;
   color: #FFFFFF;
 }
 
-.cat-seats {
-  font-size: 11px;
-  color: #94A3B8;
-  font-weight: 600;
-}
-
-.cat-sub {
-  font-size: 11px;
-  color: #94A3B8;
-  display: block;
-}
-
 .cat-right {
-  text-align: right;
-  flex-shrink: 0;
+  text-align: center;
 }
 
 .cat-price-est {
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 900;
   color: var(--hub-emerald);
+  display: block;
 }
 
-/* 8. FORMULÁRIO DE ENCOMENDA */
-.delivery-details-pro {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 12px;
-  animation: slideFadeDown 0.2s ease-out;
-}
-
-.delivery-header-title {
-  font-size: 11px;
-  color: var(--hub-emerald);
-  font-weight: 800;
-  text-transform: uppercase;
-  margin-bottom: 10px;
-  letter-spacing: 0.5px;
-}
-
-.delivery-details-pro input,
-.delivery-details-pro select {
-  width: 100%;
-  box-sizing: border-box;
-  background: #070B12 !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 10px !important;
-  padding: 10px 12px !important;
-  color: #FFF !important;
-  font-size: 13px !important;
-  font-weight: 600;
-  outline: none;
-  margin-bottom: 8px;
-}
-
-/* 9. LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM E NOTA */
+/* 7. LINHA DE BOTÕES RÁPIDOS (PAGAMENTO, CUPOM, NOTA) */
 .dock-quick-actions-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .btn-dock-quick-pill {
   background: rgba(255, 255, 255, 0.04) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 999px;
-  padding: 8px 14px !important;
+  padding: 6px 10px !important;
   color: #F8FAFC;
-  font-size: 12.5px !important;
+  font-size: 11.5px !important;
   font-weight: 700;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   cursor: pointer;
-  transition: all 0.15s ease;
   touch-action: manipulation;
 }
 
@@ -600,9 +494,9 @@
   background: rgba(16, 185, 129, 0.2);
   border: 1px solid var(--hub-emerald);
   color: var(--hub-emerald);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 800;
-  padding: 3px 8px;
+  padding: 2px 6px;
   border-radius: 6px;
 }
 
@@ -612,27 +506,27 @@
   color: #38BDF8;
   font-size: 11px;
   font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* 10. BOTÃO DE CONFIRMAR COM PREÇO EMBUTIDO */
+/* 8. BOTÃO DE CONFIRMAR */
 .pro-btn {
   width: 100%;
   background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
   color: #01241A !important;
   border: none !important;
-  border-radius: 18px !important;
-  padding: 15px 18px !important;
+  border-radius: 14px !important;
+  padding: 12px 14px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
-  transition: transform 0.15s ease;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
+  touch-action: manipulation;
 }
 
 .pro-btn:active {
@@ -640,20 +534,58 @@
 }
 
 .pro-btn .btn-text {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
-  letter-spacing: -0.2px;
 }
 
 .pro-btn .btn-price-preview {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 900;
-  background: rgba(0, 0, 0, 0.12);
-  padding: 4px 10px;
-  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 3px 8px;
+  border-radius: 8px;
 }
 
-/* 11. CARDS DE FAVORITOS NO DRAWER */
+/* 9. BOTÕES FLUTUANTES (GPS E CAMADA SATÉLITE) */
+.btn-floating-gps {
+  position: absolute !important;
+  bottom: calc(270px + env(safe-area-inset-bottom, 16px)) !important;
+  right: 14px !important;
+  width: 44px !important;
+  height: 44px !important;
+  background: var(--hub-surface) !important;
+  backdrop-filter: var(--hub-blur) !important;
+  -webkit-backdrop-filter: var(--hub-blur) !important;
+  border: 1.5px solid var(--hub-emerald) !important;
+  border-radius: 50% !important;
+  color: var(--hub-emerald) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6) !important;
+  z-index: 120 !important;
+  cursor: pointer !important;
+  touch-action: manipulation;
+}
+
+.btn-floating-gps:active {
+  transform: scale(0.92);
+  background: rgba(16, 185, 129, 0.2) !important;
+}
+
+.btn-floating-layer {
+  bottom: calc(322px + env(safe-area-inset-bottom, 16px)) !important;
+  border-color: rgba(56, 189, 248, 0.5) !important;
+  color: #38BDF8 !important;
+}
+
+.btn-floating-layer.modo-satelite {
+  background: rgba(56, 189, 248, 0.2) !important;
+  border-color: #38BDF8 !important;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
+}
+
+/* 10. CARDS DE FAVORITOS NO DRAWER */
 .drawer-fav-card {
   display: flex;
   align-items: center;
@@ -725,7 +657,7 @@
   transform: scale(0.92);
 }
 
-/* 12. SELETOR RÁPIDO DE FORMAS DE PAGAMENTO */
+/* 11. SELETOR RÁPIDO DE FORMAS DE PAGAMENTO */
 .opcoes-pagamento-rapido-grid {
   display: flex;
   flex-direction: column;
@@ -768,6 +700,39 @@
 .opcao-pagamento-rapido .op-text small {
   font-size: 11px;
   color: #94A3B8;
+}
+
+/* 12. DETALHES DE ENCOMENDA */
+.delivery-details-pro {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 10px;
+  margin-bottom: 2px;
+}
+
+.delivery-header-title {
+  font-size: 10.5px;
+  color: var(--hub-emerald);
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.delivery-details-pro input,
+.delivery-details-pro select {
+  width: 100%;
+  box-sizing: border-box;
+  background: #070B12 !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+  color: #FFF !important;
+  font-size: 12px !important;
+  font-weight: 600;
+  outline: none;
+  margin-bottom: 6px;
 }
 
 /* 13. MARCADOR DE VEÍCULO ANIMADO */
