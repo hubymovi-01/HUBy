@@ -13,7 +13,32 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
-// 1. Listar todas as Zonas Dinâmicas
+// =========================================================================
+// INICIALIZAÇÃO DA TABELA (Segurança contra falhas no banco Neon)
+// =========================================================================
+async function inicializarTabelaZonas() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS zonas_dinamicas (
+        id SERIAL PRIMARY KEY,
+        nome VARCHAR(100) NOT NULL,
+        multiplicador NUMERIC(5,2) NOT NULL DEFAULT 1.00,
+        centro_lat NUMERIC NOT NULL,
+        centro_lng NUMERIC NOT NULL,
+        raio_metros INT DEFAULT 2000,
+        ativa BOOLEAN DEFAULT TRUE,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+  } catch (err) {
+    console.warn('Aviso ao sincronizar tabela zonas_dinamicas:', err.message);
+  }
+}
+inicializarTabelaZonas();
+
+// =========================================================================
+// 1. Listar todas as Zonas Dinâmicas (Usado no Radar)
+// =========================================================================
 router.get('/', async (req, res) => {
   try {
     const zonas = await sql`
@@ -27,7 +52,9 @@ router.get('/', async (req, res) => {
   }
 });
 
-// 2. Criar Nova Zona Dinâmica (Admin)
+// =========================================================================
+// 2. Criar Nova Zona Dinâmica (Admin clica no mapa)
+// =========================================================================
 router.post('/', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const { nome, multiplicador, centro_lat, centro_lng, raio_metros } = req.body;
@@ -49,7 +76,9 @@ router.post('/', autenticarToken, verificarAdmin, async (req, res) => {
   }
 });
 
+// =========================================================================
 // 3. Alternar Ativação ou Excluir Zona
+// =========================================================================
 router.put('/:id/toggle', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const { id } = req.params;
