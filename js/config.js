@@ -12,16 +12,16 @@ fetch(`${API_URL}/`).catch(() => {
   console.log('A acordar a instância do servidor HUBy...');
 });
 
-// Opções pré-definidas para recarga de saldo na Carteira Digital Pix
-export const OPCOES_RECARGA_PIX = [10.00, 20.00, 50.00, 100.00];
+// Opções pré-definidas para recarga de saldo na Carteira Digital Pix (R$ 1.00 adicionado para testes)
+export const OPCOES_RECARGA_PIX = [1.00, 10.00, 20.00, 50.00, 100.00];
 
-// Tabela de categorias com valores base, custo por km e limite mínimo de corrida
+// Tabela de categorias com valores base otimizados para permitir testes de R$ 1.00
 export let CATEGORIAS = {
-  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 5.0, km: 2.5, min: 10.0 },
-  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 3.5, km: 1.8, min: 7.0 },
-  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 4.0, km: 2.0, min: 8.0 },
-  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 4.0, km: 2.0, min: 8.0 },
-  cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 35.0, km: 4.5, min: 45.0 }
+  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 1.0, km: 1.0, min: 1.0 },
+  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 1.0, km: 0.8, min: 1.0 },
+  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 1.0, km: 1.0, min: 1.0 },
+  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 1.0, km: 1.0, min: 1.0 },
+  cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 10.0, km: 2.0, min: 10.0 }
 };
 
 export let MULTIPLICADOR_PICO = 1.0;
@@ -66,12 +66,14 @@ export async function sincronizarTarifasServidor() {
 export function calcularPreco(catId, distanciaKm) {
   const chave = String(catId || 'carro').toLowerCase();
   const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
-  const dist = Math.max(0.5, Number(distanciaKm) || 1.0);
+  
+  // Evita calcular distância 0; assume pelo menos 0.1km para trajetos minúsculos
+  const dist = Math.max(0.1, Number(distanciaKm) || 1.0);
 
   // Fórmula base: Taxa Base + (Distância * Valor por Km)
   const custoBaseMaisKm = cat.base + (dist * cat.km);
   
-  // Garante que o valor final nunca fique abaixo da tarifa mínima
+  // Garante que o valor final nunca fique abaixo da tarifa mínima configurada
   const valorComMinimo = Math.max(cat.min, custoBaseMaisKm);
   const valorFinal = Number((valorComMinimo * MULTIPLICADOR_PICO).toFixed(2));
 
