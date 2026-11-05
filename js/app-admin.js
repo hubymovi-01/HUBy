@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 2. Navegação por Abas
+  // 2. Navegação por Abas (compatível com as classes tab-pane e tab-btn)
   const tabs = document.querySelectorAll('.tab-btn');
   const contents = document.querySelectorAll('.tab-pane');
 
@@ -30,6 +30,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Inicializa o mapa apenas quando a aba Radar for aberta
       if (target === 'tabRadar') {
         inicializarRadarMaster(token);
+      }
+      
+      // Força a atualização do tamanho e redesenho dos gráficos de métricas no mobile
+      if (target === 'tabMetricas') {
+        setTimeout(() => {
+          if (window.chartFinInstance) window.chartFinInstance.update();
+          if (window.chartCatInstance) window.chartCatInstance.update();
+        }, 150);
       }
     });
   });
