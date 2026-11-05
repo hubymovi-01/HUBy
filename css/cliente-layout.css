@@ -369,7 +369,7 @@
   cursor: pointer;
 }
 
-/* 6. CARROSSEL HORIZONTAL DE CATEGORIAS (3 COLUNAS LADO A LADO) */
+/* 6. CARROSSEL HORIZONTAL DE CATEGORIAS (SEM AS TAGS DE MINUTOS) */
 .categories-container {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
@@ -384,13 +384,13 @@
   background: rgba(255, 255, 255, 0.03);
   border: 1.5px solid rgba(255, 255, 255, 0.06);
   border-radius: 14px;
-  padding: 6px 4px;
+  padding: 8px 4px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  gap: 2px;
+  gap: 3px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   touch-action: manipulation;
@@ -410,17 +410,16 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-}
-
-.cat-badge-eta {
-  display: none !important;
 }
 
 .cat-emoji {
   font-size: 24px;
   line-height: 1;
   margin-bottom: 2px;
+}
+
+.cat-badge-eta {
+  display: none !important;
 }
 
 .cat-center {
@@ -452,7 +451,7 @@
   display: block;
 }
 
-/* 7. LINHA DE BOTÕES RÁPIDOS (PAGAMENTO, CUPOM, NOTA) */
+/* 7. LINHA DE BOTÕES RÁPIDOS */
 .dock-quick-actions-row {
   display: flex;
   align-items: center;
@@ -542,7 +541,7 @@
   border-radius: 8px;
 }
 
-/* 9. BOTÕES FLUTUANTES (GPS E CAMADA SATÉLITE) */
+/* 9. BOTÕES FLUTUANTES */
 .btn-floating-gps {
   position: absolute !important;
   bottom: calc(270px + env(safe-area-inset-bottom, 16px)) !important;
