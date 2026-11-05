@@ -91,43 +91,69 @@
 
   <!-- DRAWER LATERAL DO PASSAGEIRO -->
   <div id="menuBackdrop" class="drawer-backdrop"></div>
-  <aside id="drawerMenu" class="drawer-panel">
+  <aside id="drawerMenu" class="drawer-panel" style="overflow-y: auto;">
     <div class="drawer-profile" id="drawerPerfilBox"></div>
 
-    <!-- LOCAIS FAVORITOS COM EDIÇÃO E MARCAÇÃO NO MAPA -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin: 8px 12px 4px;">
-      <span
-        style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus
-        Favoritos</span>
-    </div>
-
-    <!-- Item Casa -->
-    <div class="drawer-fav-card">
-      <div class="fav-main-action" id="actionIrCasa">
-        <span class="d-icon">🏠</span>
-        <div class="d-info">
-          <strong>Minha Casa</strong>
-          <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
-        </div>
+    <nav class="drawer-nav">
+      <!-- LOCAIS FAVORITOS COM EDIÇÃO E MARCAÇÃO NO MAPA -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin: 4px 10px 4px;">
+        <span style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus Favoritos</span>
       </div>
-      <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar endereço da Casa"
-        aria-label="Editar Casa">✏️</button>
-    </div>
 
-    <!-- Item Trabalho -->
-    <div class="drawer-fav-card">
-      <div class="fav-main-action" id="actionIrTrabalho">
-        <span class="d-icon">🏢</span>
-        <div class="d-info">
-          <strong>Meu Trabalho</strong>
-          <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
+      <!-- Item Casa -->
+      <div class="drawer-fav-card">
+        <div class="fav-main-action" id="actionIrCasa">
+          <span class="d-icon">🏠</span>
+          <div class="d-info">
+            <strong>Minha Casa</strong>
+            <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
+          </div>
         </div>
+        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar endereço da Casa" aria-label="Editar Casa">✏️</button>
       </div>
-      <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar endereço do Trabalho"
-        aria-label="Editar Trabalho">✏️</button>
-    </div>
 
-    <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
+      <!-- Item Trabalho -->
+      <div class="drawer-fav-card">
+        <div class="fav-main-action" id="actionIrTrabalho">
+          <span class="d-icon">🏢</span>
+          <div class="d-info">
+            <strong>Meu Trabalho</strong>
+            <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
+          </div>
+        </div>
+        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar endereço do Trabalho" aria-label="Editar Trabalho">✏️</button>
+      </div>
+
+      <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
+
+      <!-- MENU GERAL COMPLETO DO PASSAGEIRO -->
+      <a href="#" id="menuItemViagens" class="drawer-item">
+        <span class="d-icon">📋</span>
+        <div class="d-info"><strong>Minhas Viagens</strong><small>Histórico e recibos de corridas</small></div>
+      </a>
+      <a href="#" id="menuItemPagamentos" class="drawer-item">
+        <span class="d-icon">💳</span>
+        <div class="d-info"><strong>Formas de Pagamento</strong><small>Pix, Cartão e Dinheiro</small></div>
+      </a>
+      <a href="#" id="menuItemSeguranca" class="drawer-item">
+        <span class="d-icon">🛡️</span>
+        <div class="d-info"><strong>Contato de Segurança</strong><small>Compartilhar trajeto e emergência</small></div>
+      </a>
+      <a href="./motorista.html" class="drawer-item highlight-driver">
+        <span class="d-icon">🚘</span>
+        <div class="d-info"><strong>Painel do Motorista</strong><small>Aceder ao modo parceiro</small></div>
+      </a>
+      <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
+        style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 4px;">
+        <span class="d-icon">⚡</span>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
+      </a>
+      <a href="./perfil.html" class="drawer-item">
+        <span class="d-icon">👤</span>
+        <div class="d-info"><strong>Meu Perfil</strong><small>Editar foto e dados</small></div>
+      </a>
+    </nav>
+
     <div class="drawer-footer">
       <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Entrar ou Cadastrar</button>
       <span class="version-tag">HUBy v2.0 • 2026</span>
@@ -354,6 +380,39 @@
     </div>
   </div>
 
+  <!-- MODAL DE EDIÇÃO DE FAVORITO (TEXTO OU MAPA) -->
+  <div id="modalConfigFavorito" class="modal-backdrop" style="display: none; z-index: 10008;">
+    <div class="modal-card modal-wide">
+      <div class="modal-header-row">
+        <h3 id="tituloModalFav">Definir Local</h3>
+        <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
+      </div>
+      <p style="font-size: 12px; color: #94A3B8; margin-top: -6px; margin-bottom: 14px;">
+        Escolha como prefere definir o seu endereço:
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
+        <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
+          style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
+        
+        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
+          💾 Salvar Endereço Escrito
+        </button>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+          <span style="font-size: 11px; color: #64748B; font-weight: 700;">OU</span>
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+        </div>
+
+        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
+          📍 Marcar Direto no Mapa
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- CONTROLES ESSENCIAIS DO MENU LATERAL E SEGURANÇA -->
   <script type="module">
     const modalSeg = document.getElementById('modalSeguranca');
@@ -430,55 +489,24 @@
         `;
       }
 
-      // Atualiza os textos de Casa e Trabalho com o que estiver salvo de verdade
       const casaSalva = localStorage.getItem('huby_endereco_casa');
       const trabSalvo = localStorage.getItem('huby_endereco_trabalho');
       if (casaSalva) {
-        document.getElementById('txtMenuCasaDesc').textContent = casaSalva;
+        const el = document.getElementById('txtMenuCasaDesc');
+        if (el) el.textContent = casaSalva;
       }
       if (trabSalvo) {
-        document.getElementById('txtMenuTrabalhoDesc').textContent = trabSalvo;
+        const el = document.getElementById('txtMenuTrabalhoDesc');
+        if (el) el.textContent = trabSalvo;
       }
     }
 
     document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
-  <!-- MODAL DE EDIÇÃO DE FAVORITO (TEXTO OU MAPA) -->
-  <div id="modalConfigFavorito" class="modal-backdrop" style="display: none; z-index: 10008;">
-    <div class="modal-card modal-wide">
-      <div class="modal-header-row">
-        <h3 id="tituloModalFav">Definir Local</h3>
-        <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
-      </div>
-      <p style="font-size: 12px; color: #94A3B8; margin-top: -6px; margin-bottom: 14px;">
-        Escolha como prefere definir o seu endereço:
-      </p>
-
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
-        <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
-          style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
-        
-        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
-          💾 Salvar Endereço Escrito
-        </button>
-
-        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
-          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-          <span style="font-size: 11px; color: #64748B; font-weight: 700;">OU</span>
-          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-        </div>
-
-        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
-          📍 Marcar Direto no Mapa
-        </button>
-      </div>
-    </div>
-  </div>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.11.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.12.0"></script>
 </body>
 
 </html>

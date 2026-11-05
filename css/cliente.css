@@ -20,7 +20,8 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-html, body.client-viewport {
+html,
+body.client-viewport {
   margin: 0;
   padding: 0;
   width: 100%;
@@ -57,8 +58,13 @@ html, body.client-viewport {
   letter-spacing: -1.5px;
 }
 
-.splash-logo .s-hub { color: #FFFFFF; }
-.splash-logo .s-y { color: var(--hub-green); }
+.splash-logo .s-hub {
+  color: #FFFFFF;
+}
+
+.splash-logo .s-y {
+  color: var(--hub-green);
+}
 
 .splash-spinner {
   width: 28px;
@@ -70,7 +76,9 @@ html, body.client-viewport {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .splash-tagline {
@@ -102,9 +110,20 @@ html, body.client-viewport {
 }
 
 @keyframes pulseGreen {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
 }
 
 .ride-header h4 {
@@ -177,6 +196,8 @@ html, body.client-viewport {
   display: flex;
   flex-direction: column;
   padding: calc(env(safe-area-inset-top, 20px) + 20px) 18px calc(env(safe-area-inset-bottom, 20px) + 16px);
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 .drawer-panel.active {
