@@ -1,21 +1,24 @@
 // js/cliente/cliente-testes.js - Painel Sandbox de Testes HUBy
 import { estadoCliente } from './cliente-estado.js';
 import { notificarCliente } from '../cliente-ui.js';
-import { estadoRecursos, criarOuAtualizarVeiculoMapa } from './cliente-recursos.js';
+import { criarOuAtualizarVeiculoMapa } from './cliente-recursos.js';
 
 let intervalSimulacaoGPS = null;
 
 export function inicializarPainelTestes() {
-  // Cria o botão flutuante discreto de DEV no canto inferior esquerdo
+  document.getElementById('btnDevSandbox')?.remove();
+  document.getElementById('modalDevSandbox')?.remove();
+
+  // Botão flutuante posicionado no topo esquerdo (para não tapar o dock nem o GPS)
   const btnDev = document.createElement('button');
   btnDev.id = 'btnDevSandbox';
   btnDev.innerHTML = '🧪 Testes';
   btnDev.style.cssText = `
     position: fixed;
-    bottom: calc(env(safe-area-inset-bottom, 16px) + 85px);
-    left: 14px;
+    top: calc(env(safe-area-inset-top, 14px) + 68px);
+    right: 16px;
     z-index: 9999;
-    background: rgba(15, 23, 42, 0.9);
+    background: rgba(15, 23, 42, 0.92);
     border: 1.5px solid #38BDF8;
     color: #38BDF8;
     font-weight: 800;
@@ -25,11 +28,11 @@ export function inicializarPainelTestes() {
     cursor: pointer;
     box-shadow: 0 4px 14px rgba(0,0,0,0.6);
     backdrop-filter: blur(8px);
+    touch-action: manipulation;
   `;
 
   document.body.appendChild(btnDev);
 
-  // Modal com as ferramentas de teste
   const modalTestesHTML = `
     <div id="modalDevSandbox" class="modal-backdrop" style="display: none; z-index: 10020;">
       <div class="modal-card modal-wide" style="border-color: #38BDF8; max-width: 320px;">
@@ -39,22 +42,18 @@ export function inicializarPainelTestes() {
         </div>
 
         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
-          <!-- TESTE 1: DESTINO AUTOMÁTICO -->
           <button type="button" id="btnTestarTrajetoFake" style="background: rgba(56, 189, 248, 0.15); border: 1px solid #38BDF8; color: #38BDF8; padding: 10px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">
             📍 1. Simular Rota & Preço
           </button>
 
-          <!-- TESTE 2: MOTORISTA ACEITAR -->
           <button type="button" id="btnTestarAceiteMotorista" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; color: #10B981; padding: 10px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">
             🚗 2. Simular Motorista Aceitando
           </button>
 
-          <!-- TESTE 3: SIMULAR APROVAÇÃO DE PAGAMENTO PIX -->
           <button type="button" id="btnTestarAprovarPix" style="background: rgba(168, 85, 247, 0.15); border: 1px solid #A855F7; color: #C084FC; padding: 10px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">
             💠 3. Forçar Aprovação de Pix
           </button>
 
-          <!-- TESTE 4: CONCLUIR VIAGEM -->
           <button type="button" id="btnTestarFinalizarViagem" style="background: rgba(245, 158, 11, 0.15); border: 1px solid #F59E0B; color: #F59E0B; padding: 10px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">
             🏁 4. Finalizar Corrida & Avaliar
           </button>
@@ -72,26 +71,57 @@ export function inicializarPainelTestes() {
   configurarAcoesSandbox();
 }
 
+function alternarModoVisual(modo) {
+  // modo: 'selecao' | 'corrida_ativa'
+  const blocoResumo = document.getElementById('blocoResumo');
+  const sliderCategorias = document.getElementById('sliderCategorias');
+  const blocoDetalhesEntrega = document.getElementById('blocoDetalhesEntrega');
+  const quickActions = document.querySelector('.dock-quick-actions-row');
+  const badgeNota = document.getElementById('txtNotaMotoristaBadge');
+  const btnPedir = document.getElementById('btnPedirHuby');
+  const painelMotorista = document.getElementById('painelMotoristaAceitou');
+  const cardRadar = document.getElementById('cardStatusViagem');
+
+  if (modo === 'corrida_ativa') {
+    if (blocoResumo) blocoResumo.style.display = 'none';
+    if (sliderCategorias) sliderCategorias.style.display = 'none';
+    if (blocoDetalhesEntrega) blocoDetalhesEntrega.style.display = 'none';
+    if (quickActions) quickActions.style.display = 'none';
+    if (badgeNota) badgeNota.style.display = 'none';
+    if (btnPedir) btnPedir.style.display = 'none';
+    if (cardRadar) cardRadar.style.display = 'none';
+    if (painelMotorista) painelMotorista.style.display = 'block';
+  } else {
+    if (blocoResumo) blocoResumo.style.display = 'flex';
+    if (sliderCategorias) sliderCategorias.style.display = 'grid';
+    if (quickActions) quickActions.style.display = 'flex';
+    if (btnPedir) btnPedir.style.display = 'flex';
+    if (painelMotorista) {
+      painelMotorista.style.display = 'none';
+      painelMotorista.innerHTML = '';
+    }
+  }
+}
+
 function configurarAcoesSandbox() {
   const modal = document.getElementById('modalDevSandbox');
 
-  // 1. Simular rota com valores preenchidos
+  // 1. Simular Rota & Preço
   document.getElementById('btnTestarTrajetoFake')?.addEventListener('click', async () => {
     modal.style.display = 'none';
+    alternarModoVisual('selecao');
 
-    // Coordenadas simuladas de teste (origem e destino próximos)
     const origemFake = estadoCliente.coordsOrigem || [-8.3582, -42.2476];
-    const destinoFake = [origemFake[0] + 0.012, origemFake[1] + 0.008];
+    const destinoFake = [origemFake[0] + 0.010, origemFake[1] + 0.007];
 
     estadoCliente.coordsDestino = destinoFake;
     const txtDestino = document.getElementById('txtDestinoSelecionado');
-    if (txtDestino) txtDestino.textContent = 'Av. Candido Ferraz, 450 (Destino Teste)';
+    if (txtDestino) txtDestino.textContent = 'Av. Cândido Ferraz, 450 (Teste)';
 
     if (estadoCliente.hubyMapa) {
       const rota = await estadoCliente.hubyMapa.calcularRota(origemFake, destinoFake, '#F59E0B', true);
-      estadoCliente.rotaAtual = rota || { preco: '14.50', distancia: '3.2 km', tempo: '7 min' };
+      estadoCliente.rotaAtual = rota || { preco: '14.50' };
 
-      // Atualiza valores nos cards
       const lblCarro = document.getElementById('priceEstCarro');
       const lblMoto = document.getElementById('priceEstMoto');
       const lblEntrega = document.getElementById('priceEstEntrega');
@@ -103,107 +133,92 @@ function configurarAcoesSandbox() {
       if (lblPrincipal) lblPrincipal.textContent = 'R$ 14,50';
     }
 
-    notificarCliente('Rota de teste traçada! Agora você pode clicar em "Confirmar HUBy".', 'sucesso');
+    notificarCliente('Rota de teste traçada com sucesso!', 'sucesso');
   });
 
-  // 2. Simular motorista aceitando a corrida e aproximando no mapa
+  // 2. Simular Motorista Aceitando (Transição limpa)
   document.getElementById('btnTestarAceiteMotorista')?.addEventListener('click', () => {
     modal.style.display = 'none';
+    alternarModoVisual('corrida_ativa');
 
-    // Cria um pedido falso se não tiver um ativo
-    if (!estadoCliente.pedidoAtivoId) {
-      estadoCliente.pedidoAtivoId = 'TESTE-' + Math.floor(Math.random() * 9000 + 1000);
-      localStorage.setItem('huby_pedido_ativo_id', estadoCliente.pedidoAtivoId);
-    }
-
-    // Dispara a interface do motorista aceito
-    const dadosMotoristaFake = {
-      nome: 'Carlos Eduardo (Teste)',
-      telefone: '89999998888',
-      veiculo: 'Renault Kwid',
-      placa: 'HUB-2026',
-      cor: 'Branco',
-      avaliacao: 4.9,
-      foto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80',
-      aceita_dinheiro: true,
-      aceita_pix: true,
-      aceita_cartao: true
-    };
-
-    // Esconde dock de categorias e exibe motorista
-    const sliderCategorias = document.getElementById('sliderCategorias');
-    const blocoResumo = document.getElementById('blocoResumo');
-    const btnPedir = document.getElementById('btnPedirHuby');
     const painel = document.getElementById('painelMotoristaAceitou');
-
-    if (sliderCategorias) sliderCategorias.style.display = 'none';
-    if (blocoResumo) blocoResumo.style.display = 'none';
-    if (btnPedir) btnPedir.style.display = 'none';
-
     if (painel) {
-      painel.style.display = 'block';
       painel.innerHTML = `
-        <div style="text-align: center; margin-bottom: 10px; background: rgba(56, 189, 248, 0.12); border: 1px solid #38BDF8; padding: 10px; border-radius: 12px;">
-          <strong style="color: #38BDF8; font-size: 13px;">🚘 Motorista a caminho (SIMULAÇÃO)</strong>
-          <div style="color: #FFF; font-size: 15px; font-weight: 800;">Chegando em ~3 minutos</div>
+        <div style="text-align: center; margin-bottom: 10px; background: rgba(56, 189, 248, 0.12); border: 1px solid #38BDF8; padding: 10px; border-radius: 14px;">
+          <strong style="color: #38BDF8; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">🚘 Motorista a caminho</strong>
+          <div style="color: #FFF; font-size: 16px; font-weight: 800; margin-top: 2px;">Chegando em ~3 minutos</div>
         </div>
-        <div style="background: rgba(18, 24, 38, 0.98); border: 1px solid rgba(255,255,255,0.1); border-radius: 14px; padding: 12px;">
+
+        <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5);">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div style="display: flex; align-items: center; gap: 10px;">
-              <img src="${dadosMotoristaFake.foto}" style="width: 44px; height: 44px; border-radius: 50%; border: 2px solid #10B981;" />
+              <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" 
+                style="width: 46px; height: 46px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981;" />
               <div>
-                <strong style="color: #FFF; font-size: 14px; display: block;">${dadosMotoristaFake.nome}</strong>
-                <small style="color: #F59E0B; font-weight: 700;">⭐ ${dadosMotoristaFake.avaliacao}</small>
+                <strong style="color: #FFF; font-size: 14px; display: block;">Carlos Eduardo</strong>
+                <small style="color: #F59E0B; font-weight: 700;">⭐ 4.9 • Renault Kwid Branco</small>
               </div>
             </div>
             <div style="text-align: right;">
-              <span style="color: #FFF; font-size: 12px; font-weight: 700; display: block;">${dadosMotoristaFake.veiculo}</span>
-              <span style="background: #FFF; color: #000; font-family: monospace; font-size: 10px; font-weight: 900; padding: 1px 4px; border-radius: 3px;">${dadosMotoristaFake.placa}</span>
+              <span style="background: #FFF; color: #000; font-family: monospace; font-size: 11px; font-weight: 900; padding: 2px 6px; border-radius: 4px;">HUB-2026</span>
             </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px;">
+            <a href="tel:89999998888" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #FFF; font-weight: 800; padding: 8px; border-radius: 10px; text-decoration: none; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 5px;">
+              📞 Ligar
+            </a>
+            <button type="button" id="btnChatSimulacao" style="background: rgba(56,189,248,0.18); border: 1px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 8px; border-radius: 10px; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+              💬 Mensagem
+            </button>
           </div>
         </div>
       `;
+
+      document.getElementById('btnChatSimulacao')?.addEventListener('click', () => {
+        const modalChat = document.getElementById('modalChatCorrida');
+        if (modalChat) modalChat.style.display = 'flex';
+      });
     }
 
-    // Inicia simulação de veículo no mapa
+    // Animação realista do carro a avançar no mapa
     if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
-      let latInicio = (estadoCliente.coordsOrigem ? estadoCliente.coordsOrigem[0] : -8.3582) + 0.005;
-      let lngInicio = (estadoCliente.coordsOrigem ? estadoCliente.coordsOrigem[1] : -42.2476) + 0.005;
+      let lat = (estadoCliente.coordsOrigem ? estadoCliente.coordsOrigem[0] : -8.3582) + 0.006;
+      let lng = (estadoCliente.coordsOrigem ? estadoCliente.coordsOrigem[1] : -42.2476) + 0.005;
 
-      criarOuAtualizarVeiculoMapa(estadoCliente.hubyMapa.map, latInicio, lngInicio, 45, 'carro');
+      criarOuAtualizarVeiculoMapa(estadoCliente.hubyMapa.map, lat, lng, 220, 'carro');
 
       if (intervalSimulacaoGPS) clearInterval(intervalSimulacaoGPS);
       intervalSimulacaoGPS = setInterval(() => {
-        latInicio -= 0.0004;
-        lngInicio -= 0.0004;
-        criarOuAtualizarVeiculoMapa(estadoCliente.hubyMapa.map, latInicio, lngInicio, 225, 'carro');
-      }, 2000);
+        lat -= 0.0003;
+        lng -= 0.00025;
+        criarOuAtualizarVeiculoMapa(estadoCliente.hubyMapa.map, lat, lng, 220, 'carro');
+      }, 1500);
     }
 
-    notificarCliente('Motorista simulado aceitou e está a caminho!', 'sucesso');
+    notificarCliente('Motorista simulado a caminho!', 'sucesso');
   });
 
-  // 3. Forçar aprovação do Pix de teste
+  // 3. Forçar Aprovação de Pix
   document.getElementById('btnTestarAprovarPix')?.addEventListener('click', () => {
     modal.style.display = 'none';
 
-    // Fecha o modal de pagamento e exibe confirmação
     const modalPagamento = document.getElementById('modalPagamento');
     const modalPixCorrida = document.getElementById('modalPixCorridaAtivaCliente');
     const txtStatus = document.getElementById('statusPagamentoPixTexto');
 
     if (txtStatus) {
-      txtStatus.textContent = '✅ Pagamento de Teste Aprovado com Sucesso!';
+      txtStatus.textContent = '✅ Pagamento de Teste Aprovado!';
       txtStatus.style.color = '#10B981';
     }
 
     if (modalPixCorrida) modalPixCorrida.remove();
     setTimeout(() => { if (modalPagamento) modalPagamento.style.display = 'none'; }, 1000);
 
-    notificarCliente('✅ Pix simulado foi liquidado e aprovado!', 'sucesso');
+    notificarCliente('Pix simulado aprovado com sucesso!', 'sucesso');
   });
 
-  // 4. Finalizar viagem e chamar avaliação
+  // 4. Finalizar Corrida & Avaliar
   document.getElementById('btnTestarFinalizarViagem')?.addEventListener('click', () => {
     modal.style.display = 'none';
 
@@ -212,16 +227,20 @@ function configurarAcoesSandbox() {
       intervalSimulacaoGPS = null;
     }
 
-    const painel = document.getElementById('painelMotoristaAceitou');
-    if (painel) {
-      painel.style.display = 'none';
-      painel.innerHTML = '';
+    if (estadoCliente.hubyMapa?.markerDestino && estadoCliente.hubyMapa?.map) {
+      estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.markerDestino);
+      estadoCliente.hubyMapa.markerDestino = null;
     }
+    if (estadoCliente.hubyMapa?.linhaRota && estadoCliente.hubyMapa?.map) {
+      estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.linhaRota);
+      estadoCliente.hubyMapa.linhaRota = null;
+    }
+
+    alternarModoVisual('selecao');
 
     const modalAvaliacao = document.getElementById('modalAvaliacao');
     if (modalAvaliacao) {
       modalAvaliacao.style.display = 'flex';
-      notificarCliente('Viagem concluída! Por favor, avalie a experiência.', 'sucesso');
     }
   });
 }

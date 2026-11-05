@@ -141,27 +141,25 @@ export function atualizarResumoComDesconto() {
   }
 }
 
-// 5. MARCADOR VEICULAR SVG ANIMADO COM ROTAÇÃO SUAVE
+// MARCADOR VEICULAR COM SILHUETA AUTOMÓVEL NÍTIDA
 export function criarOuAtualizarVeiculoMapa(mapaLeaflet, lat, lng, heading = 0, categoria = 'carro') {
   if (!mapaLeaflet) return;
 
   const iconeSVG = categoria === 'moto' ? `
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style="transform: rotate(${heading}deg); transition: transform 0.3s ease;">
-      <circle cx="12" cy="12" r="11" fill="#10B981" stroke="#FFF" stroke-width="2"/>
-      <path d="M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm12 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-7-4l2-3h3l2 3" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>
+    <div style="transform: rotate(${heading}deg); transition: transform 0.4s ease; width: 36px; height: 36px; background: #090D16; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.6);">
+      <span style="font-size: 18px; line-height: 1;">🏍️</span>
+    </div>
   ` : `
-    <svg width="42" height="42" viewBox="0 0 24 24" fill="none" style="transform: rotate(${heading}deg); transition: transform 0.3s ease;">
-      <circle cx="12" cy="12" r="11" fill="#10B981" stroke="#FFF" stroke-width="2"/>
-      <path d="M5 14l1.5-4.5h11L19 14M7 16a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zm10 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z" stroke="#FFF" stroke-width="1.8" stroke-linecap="round"/>
-    </svg>
+    <div style="transform: rotate(${heading}deg); transition: transform 0.4s ease; width: 38px; height: 38px; background: #090D16; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.7);">
+      <span style="font-size: 20px; line-height: 1;">🚗</span>
+    </div>
   `;
 
   const iconePersonalizado = L.divIcon({
     html: iconeSVG,
     className: 'huby-vehicle-marker-wrapper',
-    iconSize: [42, 42],
-    iconAnchor: [21, 21]
+    iconSize: [38, 38],
+    iconAnchor: [19, 19]
   });
 
   if (!estadoRecursos.markerVeiculoAnimado) {
