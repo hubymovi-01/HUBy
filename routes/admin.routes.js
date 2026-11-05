@@ -1,9 +1,9 @@
-// routes/admin.routes.js - Métricas, Frota, DRE dos Sócios e Gestão Master HUBy
+// routes/admin.routes.js - Métricas, Frota, DRE dos Sócios, Saque Automático e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 
-// Middleware flexível: aceita 'admin' e 'administrador'
+// Middleware: aceita 'admin' e 'administrador'
 function verificarAdmin(req, res, next) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase();
   if (role !== 'admin' && role !== 'administrador') {
@@ -70,7 +70,6 @@ export default function adminRoutes(io) {
         filtroPeriodo = sql`AND criado_em >= DATE_TRUNC('month', CURRENT_DATE)`;
       }
 
-      // 1. Consulta corridas concluídas
       const statsFinanceiro = await sql`
         SELECT 
           COUNT(id) AS total_concluidas,
@@ -82,7 +81,6 @@ export default function adminRoutes(io) {
       let totalViagens = Number(statsFinanceiro[0]?.total_concluidas || 0);
       let faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_corridas || 0);
 
-      // 2. Contingência inteligente com base no saldo acumulado da frota
       const saldoMotoristas = await sql`
         SELECT 
           COALESCE(SUM(saldo_carteira), 0) AS repasse_acumulado,
@@ -106,7 +104,6 @@ export default function adminRoutes(io) {
         totalViagens = corridasFrota > 0 ? corridasFrota : 1;
       }
 
-      // 3. Incidentes pendentes
       let incidentesAtivos = 0;
       try {
         const inc = await sql`SELECT COUNT(*) AS total FROM incidentes_seguranca WHERE resolvido = FALSE;`;
@@ -115,7 +112,6 @@ export default function adminRoutes(io) {
         incidentesAtivos = 0;
       }
 
-      // 4. Distribuição de categorias
       const statsCat = await sql`
         SELECT COALESCE(sub_tipo_id, tipo, 'carro') AS cat, COUNT(id) AS qtd
         FROM pedidos
@@ -178,7 +174,6 @@ export default function adminRoutes(io) {
       const dados = relatorio[0];
       const receitaPlataforma = Number(dados.receita_bruta_plataforma || 0);
 
-      // Política de split dos sócios (20% Reserva Operacional, 80% Distribuição líquida igualitária)
       const reservaOperacional = Number((receitaPlataforma * 0.20).toFixed(2));
       const lucroLiquidoSocios = Number((receitaPlataforma - reservaOperacional).toFixed(2));
       const cotaPorSocio = Number((lucroLiquidoSocios / 2).toFixed(2));
@@ -256,8 +251,113 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 4. GESTÃO DE SAQUES PIX (ROTA COM COMPATIBILIDADE TRANSACIONAL ACID)
+  // 4. SAQUE AUTOMÁTICO INSTANTÂNEO PIX & AUDITORIA
   // =========================================================================
+  router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
+    const motoristaId = req.usuario?.id;
+    const { valor, chavePix, tipoChave } = req.body;
+    const valorSaque = Number(valor);
+
+    if (!valorSaque || valorSaque <= 0) {
+      return res.status(400).json({ erro: 'Informe um valor válido para saque.' });
+    }
+    if (!chavePix) {
+      return res.status(400).json({ erro: 'Chave Pix de destino é obrigatória.' });
+    }
+
+    try {
+      let saqueIdCriado = null;
+
+      await sql.begin(async (sqlTx) => {
+        const mot = await sqlTx`
+          SELECT id, nome, saldo_carteira, status_aprovacao 
+          FROM motoristas 
+          WHERE id = ${motoristaId} 
+          FOR UPDATE;
+        `;
+
+        if (mot.length === 0) throw new Error('Motorista não encontrado.');
+        if (mot[0].status_aprovacao !== 'aprovado') throw new Error('Cadastro do condutor não aprovado.');
+        if (Number(mot[0].saldo_carteira) < valorSaque) throw new Error('Saldo insuficiente para realizar este saque.');
+
+        await sqlTx`
+          UPDATE motoristas 
+          SET saldo_carteira = saldo_carteira - ${valorSaque} 
+          WHERE id = ${motoristaId};
+        `;
+
+        const reg = await sqlTx`
+          INSERT INTO saques_motoristas (motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, solicitado_em)
+          VALUES (${motoristaId}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'cpf'}, ${valorSaque}, 'processando', CURRENT_TIMESTAMP)
+          RETURNING id;
+        `;
+        saqueIdCriado = reg[0].id;
+      });
+
+      const accessToken = process.env.MP_ACCESS_TOKEN;
+      if (!accessToken) {
+        throw new Error('Configuração MP_ACCESS_TOKEN ausente nas variáveis de ambiente.');
+      }
+
+      const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+          'X-Idempotency-Key': `saque-${saqueIdCriado}-${Date.now()}`
+        },
+        body: JSON.stringify({
+          transaction_amount: valorSaque,
+          description: `Repasse Automático HUBy #${motoristaId}`,
+          payment_method_id: 'pix',
+          payer: {
+            email: req.usuario?.email || 'motorista@huby.app',
+            identification: {
+              type: tipoChave === 'cpf' ? 'CPF' : 'OUTRO',
+              number: chavePix.replace(/\D/g, '') || '00000000000'
+            }
+          }
+        })
+      });
+
+      const mpData = await mpResponse.json();
+
+      if (!mpResponse.ok) {
+        await sql`
+          UPDATE motoristas SET saldo_carteira = saldo_carteira + ${valorSaque} WHERE id = ${motoristaId};
+        `;
+        await sql`
+          UPDATE saques_motoristas 
+          SET status = 'falha', motivo_recusa = ${mpData.message || 'Recusado pela API Pix'} 
+          WHERE id = ${saqueIdCriado};
+        `;
+        return res.status(400).json({ erro: `Falha na transferência bancária: ${mpData.message || 'Verifique sua chave Pix'}` });
+      }
+
+      await sql`
+        UPDATE saques_motoristas 
+        SET status = 'pago', pago_em = CURRENT_TIMESTAMP 
+        WHERE id = ${saqueIdCriado};
+      `;
+
+      await sql`
+        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+        VALUES (${motoristaId}, 'motorista', 'saque_pix_automatico', ${valorSaque}, ${saqueIdCriado});
+      `;
+
+      res.json({
+        sucesso: true,
+        mensagem: 'Transferência Pix realizada e liquidada com sucesso!',
+        saqueId: saqueIdCriado,
+        valorTransferido: valorSaque
+      });
+
+    } catch (err) {
+      console.error('Erro no saque automático:', err);
+      res.status(500).json({ erro: err.message || 'Erro ao processar saque automático.' });
+    }
+  });
+
   router.get('/saques', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const saques = await sql`
@@ -265,72 +365,14 @@ export default function adminRoutes(io) {
                COALESCE(criado_em, solicitado_em) AS criado_em, pago_em, motivo_recusa
         FROM saques_motoristas
         ORDER BY 
-          CASE WHEN status = 'pendente' THEN 1 ELSE 2 END,
+          CASE WHEN status = 'processando' THEN 1 WHEN status = 'pendente' THEN 2 ELSE 3 END,
           COALESCE(criado_em, solicitado_em) DESC
         LIMIT 50;
       `;
       res.json(saques);
     } catch (err) {
       console.error('Erro ao listar saques:', err);
-      res.status(500).json({ erro: 'Falha ao listar saques.' });
-    }
-  });
-
-  router.put('/saques/:id/processar', autenticarToken, verificarAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { status, motivo } = req.body;
-
-    if (!['pago', 'recusado'].includes(status)) {
-      return res.status(400).json({ erro: 'Status inválido. Escolha pago ou recusado.' });
-    }
-
-    try {
-      await sql.begin(async (sqlTx) => {
-        const saqueReg = await sqlTx`
-          SELECT * FROM saques_motoristas 
-          WHERE id = ${id} 
-          LIMIT 1 
-          FOR UPDATE;
-        `;
-
-        if (saqueReg.length === 0) throw new Error('Saque não localizado.');
-        const saque = saqueReg[0];
-
-        if (saque.status !== 'pendente') {
-          throw new Error('Este pedido de saque já foi finalizado anteriormente.');
-        }
-
-        if (status === 'pago') {
-          await sqlTx`
-            UPDATE saques_motoristas
-            SET status = 'pago', pago_em = CURRENT_TIMESTAMP
-            WHERE id = ${id};
-          `;
-        } else if (status === 'recusado') {
-          // Devolve o saldo com concorrência segura
-          await sqlTx`
-            UPDATE motoristas 
-            SET saldo_carteira = saldo_carteira + ${saque.valor} 
-            WHERE id = ${saque.motorista_id};
-          `;
-
-          await sqlTx`
-            UPDATE saques_motoristas
-            SET status = 'recusado', motivo_recusa = ${motivo || 'Dados bancários inconsistentes'}
-            WHERE id = ${id};
-          `;
-
-          await sqlTx`
-            INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-            VALUES (${saque.motorista_id}, 'motorista', 'estorno_saque_recusado', ${saque.valor}, ${id});
-          `;
-        }
-      });
-
-      res.json({ sucesso: true, mensagem: `Saque marcado como ${status.toUpperCase()}!` });
-    } catch (err) {
-      console.error('Erro ao processar saque:', err);
-      res.status(400).json({ erro: err.message || 'Falha ao processar saque.' });
+      res.status(500).json({ erro: 'Falha ao listar histórico de saques.' });
     }
   });
 
@@ -363,9 +405,9 @@ export default function adminRoutes(io) {
 
       const tarifasPadrao = {
         taxa_plataforma: 15,
-        carro: { base: 5.0, km: 2.5, min: 10.0 },
-        moto: { base: 3.5, km: 1.8, min: 7.0 },
-        entrega: { base: 4.0, km: 2.0, min: 8.0 }
+        carro: { base: 6.0, km: 2.2, min: 0.30 },
+        moto: { base: 4.0, km: 1.4, min: 0.20 },
+        entrega: { base: 5.0, km: 1.8, min: 0.25 }
       };
 
       if (config.length === 0 || !config[0].valor) {
@@ -395,7 +437,7 @@ export default function adminRoutes(io) {
         socket.emit('tarifas_atualizadas', novasTarifas);
       }
 
-      res.json({ sucesso: true, mensagem: 'Tarifas e valores mínimos atualizados com sucesso!' });
+      res.json({ sucesso: true, mensagem: 'Tarifas atualizadas com sucesso no banco de dados!' });
     } catch (err) {
       console.error('Erro ao atualizar tarifas:', err);
       res.status(500).json({ erro: 'Falha ao atualizar tarifas no banco.' });
@@ -403,7 +445,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. GATEWAY DE PAGAMENTO (MERCADO PAGO)
+  // 7. GATEWAY MERCADO PAGO
   // =========================================================================
   router.get('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -417,7 +459,7 @@ export default function adminRoutes(io) {
       }
       res.json(config[0].valor);
     } catch (err) {
-      console.error('Erro ao buscar chaves do gateway:', err);
+      console.error('Erro ao buscar credenciais do gateway:', err);
       res.status(500).json({ erro: 'Falha ao consultar configurações do gateway.' });
     }
   });
@@ -445,8 +487,8 @@ export default function adminRoutes(io) {
 
       res.json({ sucesso: true, mensagem: 'Credenciais do Mercado Pago salvas com sucesso!' });
     } catch (err) {
-      console.error('Erro ao salvar chaves do Mercado Pago:', err);
-      res.status(500).json({ erro: 'Falha ao salvar credenciais do gateway no banco.' });
+      console.error('Erro ao salvar credenciais:', err);
+      res.status(500).json({ erro: 'Falha ao salvar credenciais no banco.' });
     }
   });
 
@@ -581,28 +623,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 10. BROADCAST E COMUNICADOS GLOBAIS
-  // =========================================================================
-  router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
-    try {
-      const { titulo, mensagem, publico } = req.body;
-      const novaNotificacao = await sql`
-        INSERT INTO notificacoes_globais (titulo, mensagem, publico)
-        VALUES (${titulo}, ${mensagem}, ${publico || 'todos'})
-        RETURNING *;
-      `;
-      const socketInstancia = req.io || io;
-      if (socketInstancia) {
-        socketInstancia.emit('alerta_broadcast_geral', { titulo, mensagem, publico: publico || 'todos' });
-      }
-      res.status(201).json({ sucesso: true, notificacao: novaNotificacao[0] });
-    } catch (err) {
-      res.status(500).json({ erro: 'Falha ao enviar notificação.' });
-    }
-  });
-
-  // =========================================================================
-  // 11. RELATÓRIO EXECUTIVO CSV
+  // 10. RELATÓRIO EXECUTIVO CSV
   // =========================================================================
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
