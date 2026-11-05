@@ -1,154 +1,410 @@
-/* css/huby-pro.css - Sistema de Design Moderno & Profissional HUBy */
+/* ==========================================================================
+   HUBY PRO - css/huby-pro.css (PAINEL MASTER CORPORATIVO & ADMIN EXECUTIVO)
+   ========================================================================== */
 
+/* 1. RESET E PADRONIZAÇÃO DE VARIÁVEIS */
 :root {
-  --huby-bg: #0A0E17;
-  --huby-card: rgba(18, 24, 38, 0.88);
-  --huby-card-hover: rgba(26, 34, 53, 0.95);
-  --huby-border: rgba(255, 255, 255, 0.08);
-  --huby-border-glow: rgba(56, 189, 248, 0.25);
-  --huby-emerald: #10B981;
-  --huby-blue: #38BDF8;
-  --huby-purple: #8B5CF6;
-  --huby-amber: #F59E0B;
-  --huby-rose: #EF4444;
-  --huby-text: #F8FAFC;
-  --huby-muted: #94A3B8;
-  --huby-glass-blur: blur(20px);
+  --bg-deep: #090D16;
+  --bg-surface: #0E1420;
+  --bg-card: rgba(255, 255, 255, 0.035);
+  --bg-card-hover: rgba(255, 255, 255, 0.055);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(16, 185, 129, 0.4);
+  
+  --brand-emerald: #10B981;
+  --brand-emerald-dark: #02261C;
+  --brand-cyan: #38BDF8;
+  --brand-purple: #A855F7;
+  --brand-amber: #F59E0B;
+  --brand-rose: #EF4444;
+
+  --text-pure: #F8FAFC;
+  --text-muted: #94A3B8;
+  --text-dim: #64748B;
+
+  --radius-card: 16px;
+  --radius-button: 10px;
+  --shadow-elevation: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --trans-smooth: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ==========================================================================
-   1. TOPO DO MOTORISTA MAIS LIMPO E ORGANIZADO
-   ========================================================================== */
-.top-driver-nav {
-  top: 12px !important;
-  left: 12px !important;
-  right: 12px !important;
-  gap: 8px;
-}
-
-/* Agrupamento dos botões inteligentes em uma pílula fosca */
-.top-driver-nav > div[style*="display: flex; gap: 6px;"] {
-  background: rgba(15, 21, 34, 0.85) !important;
-  backdrop-filter: var(--huby-glass-blur);
-  -webkit-backdrop-filter: var(--huby-glass-blur);
-  padding: 4px 6px;
-  border-radius: 30px;
-  border: 1px solid var(--huby-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-
-.btn-nav-action {
-  background: transparent !important;
-  border: none !important;
-  border-radius: 20px !important;
-  padding: 6px 10px !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  color: var(--huby-muted) !important;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-.btn-nav-action:hover,
-.btn-nav-action.active {
-  background: rgba(255, 255, 255, 0.1) !important;
-  color: #FFF !important;
-}
-
-#btnToggleStatusOnline {
-  transition: all 0.25s ease !important;
-  border-radius: 30px !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* ==========================================================================
-   2. DOCK INFERIOR (PASSAGEIRO & MOTORISTA) ESTILO UBER/99
-   ========================================================================== */
-.driver-dock,
-.dock-reserva-passageiro {
-  background: rgba(13, 18, 30, 0.94) !important;
-  backdrop-filter: var(--huby-glass-blur) !important;
-  -webkit-backdrop-filter: var(--huby-glass-blur) !important;
-  border-top: 1px solid var(--huby-border) !important;
-  border-radius: 28px 28px 0 0 !important;
-  box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.7) !important;
-  padding: 16px 18px 22px !important;
-}
-
-/* Cards com cantos orgânicos e bordas sutis */
-.wallet-card-row,
-.order-card {
-  background: rgba(255, 255, 255, 0.035) !important;
-  border: 1px solid var(--huby-border) !important;
-  border-radius: 18px !important;
-  transition: transform 0.18s ease, border-color 0.18s ease;
-}
-
-.order-card:hover {
-  border-color: rgba(16, 185, 129, 0.4) !important;
-}
-
-/* Botões primários mais expressivos */
-button[style*="background: var(--emerald)"],
-button[id*="btnPassageiroEmbarcou"],
-button[id*="btnConcluirViagemAtiva"],
-.btn-chamar-huby {
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
-  border-radius: 14px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.3px;
-  transition: transform 0.15s ease, filter 0.15s ease;
-}
-
-button:active {
-  transform: scale(0.97) !important;
-}
-
-/* ==========================================================================
-   3. DRAWER LATERAL REFINADO
-   ========================================================================== */
-.driver-drawer,
-.drawer-passageiro {
-  background: rgba(10, 14, 24, 0.95) !important;
-  backdrop-filter: blur(24px) !important;
-  -webkit-backdrop-filter: blur(24px) !important;
-  border-right: 1px solid var(--huby-border) !important;
-}
-
-.drawer-header {
-  background: transparent !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
-  padding: 24px 20px 18px !important;
-}
-
-.drawer-section-card {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.07) !important;
-  border-radius: 16px !important;
-  padding: 14px 16px !important;
-}
-
-/* ==========================================================================
-   4. MODAIS E CAIXAS FLUTUANTES
-   ========================================================================== */
-.modal-box-edit {
-  background: #0F1626 !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 24px !important;
-  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.8) !important;
-}
-
-/* Scrollbars discretas em toda a interface */
+/* 2. SCROLLBAR MODERNA DISCRETA */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--bg-deep);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* 3. CABEÇALHO & BRAND */
+.brand-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+.brand-title .hub-txt {
+  color: var(--text-pure);
+}
+.brand-title .y-txt {
+  color: var(--brand-emerald);
+}
+
+.admin-pill-tag {
+  background: rgba(239, 68, 68, 0.15);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* 4. BOTÕES E CONTROLES */
+.btn-action {
+  background: var(--brand-emerald);
+  color: var(--brand-emerald-dark);
+  border: none;
+  padding: 10px 18px;
+  border-radius: var(--radius-button);
+  font-weight: 800;
+  cursor: pointer;
+  font-size: 13px;
+  transition: var(--trans-smooth);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+  touch-action: manipulation;
+}
+.btn-action:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+.btn-action:active {
+  transform: scale(0.97);
+}
+
+.btn-action.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  color: var(--text-pure);
+  box-shadow: none;
+}
+.btn-action.secondary:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.select-periodo {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-glass);
+  color: var(--text-pure);
+  padding: 9px 14px;
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  transition: var(--trans-smooth);
+}
+.select-periodo:focus {
+  border-color: var(--brand-emerald);
+}
+
+/* 5. CARDS DE MÉTRICAS (KPIs) */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  box-shadow: var(--shadow-elevation);
+  backdrop-filter: blur(12px);
+  transition: var(--trans-smooth);
+}
+.metric-card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+.metric-title {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+.metric-value {
+  font-size: 28px;
+  font-weight: 900;
+  margin-top: 6px;
+  letter-spacing: -0.5px;
+}
+
+/* 6. ABAS DE NAVEGAÇÃO */
+.tabs-nav {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-glass);
+  padding-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  padding: 9px 16px;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: var(--trans-smooth);
+}
+.tab-btn:hover {
+  color: var(--text-pure);
+  background: rgba(255, 255, 255, 0.04);
+}
+.tab-btn.active {
+  background: rgba(16, 185, 129, 0.14);
+  color: var(--brand-emerald);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.tab-pane {
+  display: none;
+}
+.tab-pane.active {
+  display: block;
+  animation: fadeInTab 0.25s ease-out forwards;
+}
+@keyframes fadeInTab {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 7. TABELAS DE DADOS & REGISTROS */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-elevation);
+  -webkit-overflow-scrolling: touch;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+th, td {
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+th {
+  color: var(--text-muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  background: rgba(255, 255, 255, 0.02);
+}
+tr:last-child td {
+  border-bottom: none;
+}
+tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* 8. BADGES DE STATUS */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.badge-pendente { 
+  background: rgba(245, 158, 11, 0.15); 
+  color: var(--brand-amber); 
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.badge-aprovado, .badge-concluido, .badge-pago, .badge-ativo { 
+  background: rgba(16, 185, 129, 0.15); 
+  color: var(--brand-emerald); 
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+.badge-recusado, .badge-cancelado, .badge-inativo { 
+  background: rgba(239, 68, 68, 0.15); 
+  color: var(--brand-rose); 
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.badge-aceito, .badge-andamento { 
+  background: rgba(56, 189, 248, 0.15); 
+  color: var(--brand-cyan); 
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+/* 9. BOTÕES DE TABELA */
+.btn-tbl {
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: none;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--trans-smooth);
+}
+.btn-tbl.app { 
+  background: var(--brand-emerald); 
+  color: var(--brand-emerald-dark); 
+}
+.btn-tbl.rej { 
+  background: rgba(239, 68, 68, 0.18); 
+  color: #F87171; 
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+.btn-tbl.alt { 
+  background: rgba(56, 189, 248, 0.18); 
+  color: var(--brand-cyan); 
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+.btn-tbl:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+/* 10. GRÁFICOS E PAINÉIS */
+.charts-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+.chart-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  padding: 20px;
+  height: 320px;
+  box-shadow: var(--shadow-elevation);
+}
+
+.split-grid {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 20px;
+}
+@media (max-width: 900px) {
+  .split-grid { 
+    grid-template-columns: 1fr; 
+  }
+}
+
+.card-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-glass);
+  border-radius: var(--radius-card);
+  padding: 22px;
+  box-shadow: var(--shadow-elevation);
+}
+
+/* 11. FORMULÁRIOS & CAMPOS */
+.form-group {
+  margin-bottom: 14px;
+}
+.form-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.form-group input, 
+.form-group select, 
+.form-group textarea {
+  width: 100%;
+  background: #060911;
+  border: 1px solid var(--border-glass);
+  padding: 11px 14px;
+  border-radius: 9px;
+  color: var(--text-pure);
+  font-size: 13.5px;
+  outline: none;
+  box-sizing: border-box;
+  transition: var(--trans-smooth);
+}
+.form-group input:focus, 
+.form-group select:focus, 
+.form-group textarea:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+/* 12. MAPA LEAFLET DO RADAR MASTER */
+#mapaRadarContainer {
+  width: 100%;
+  height: 540px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border-glass);
+  z-index: 1;
+  background: #060911;
+}
+
+/* 13. MODAL DE PRÉVIA DE FOTOS & DOCUMENTOS */
+.modal-preview {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(10px);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-preview-box {
+  background: #0E1424;
+  border: 1.5px solid var(--border-glass);
+  border-radius: 18px;
+  max-width: 650px;
+  width: 100%;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+}
+.modal-preview-box img {
+  max-width: 100%;
+  max-height: 65vh;
+  border-radius: 12px;
+  object-fit: contain;
+  border: 1px solid var(--border-glass);
 }
