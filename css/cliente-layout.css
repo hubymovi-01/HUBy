@@ -615,3 +615,119 @@
   background: rgba(16, 185, 129, 0.25);
   transform: scale(0.92);
 }
+/* ==========================================================================
+   NOVA LINHA DE AÇÕES RÁPIDAS NO DOCK (PAGAMENTO, CUPOM E NOTA)
+   ========================================================================== */
+.dock-quick-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: -2px;
+}
+
+.btn-dock-quick-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: #F8FAFC;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.btn-dock-quick-pill:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-dock-quick-pill .arrow-down {
+  font-size: 10px;
+  color: #94A3B8;
+  margin-left: 2px;
+}
+
+.badge-cupom-ativo {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid #10B981;
+  color: #10B981;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  animation: pulseGreen 2s infinite;
+}
+
+.badge-nota-motorista {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38BDF8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: -4px;
+}
+
+/* MODAL DE ESCOLHA DE PAGAMENTO RÁPIDO */
+.opcoes-pagamento-rapido-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.opcao-pagamento-rapido {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.opcao-pagamento-rapido.ativa {
+  border-color: #10B981;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.opcao-pagamento-rapido .op-icon {
+  font-size: 20px;
+}
+
+.opcao-pagamento-rapido .op-text {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.opcao-pagamento-rapido .op-text strong {
+  font-size: 13px;
+  color: #FFF;
+}
+
+.opcao-pagamento-rapido .op-text small {
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+/* MARCADOR DE VEÍCULO ANIMADO */
+.huby-vehicle-marker-wrapper {
+  background: transparent !important;
+  border: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

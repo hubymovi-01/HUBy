@@ -7,6 +7,13 @@ import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdmi
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
 import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
 import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
+import { 
+  configurarSeletorPagamentoRapido, 
+  configurarNotaMotorista, 
+  configurarCupomDesconto, 
+  criarOuAtualizarVeiculoMapa,
+  estadoRecursos 
+} from './cliente/cliente-recursos.js';
 
 let intervalChatCliente = null;
 let intervalChecagemPix = null;
@@ -204,7 +211,7 @@ function configurarLocaisFavoritosMenu() {
   const btnSalvarTexto = document.getElementById('btnSalvarFavTexto');
   const btnMarcarMapa = document.getElementById('btnMarcarFavNoMapa');
 
-  let tipoEditando = null; // 'casa' ou 'trabalho'
+  let tipoEditando = null;
   let labelEditando = '';
 
   function abrirModalEdicao(tipo, label) {
@@ -227,7 +234,6 @@ function configurarLocaisFavoritosMenu() {
 
   btnFecharModal?.addEventListener('click', fecharModalEdicao);
 
-  // Abertura pelo botão Lápis (✏️)
   document.getElementById('btnEditarCasa')?.addEventListener('click', (e) => {
     e.stopPropagation();
     abrirModalEdicao('casa', 'Minha Casa');
@@ -238,7 +244,6 @@ function configurarLocaisFavoritosMenu() {
     abrirModalEdicao('trabalho', 'Meu Trabalho');
   });
 
-  // Salvar Endereço por Texto Digitado
   btnSalvarTexto?.addEventListener('click', async () => {
     const endereco = inputTexto?.value.trim();
     if (!endereco || !tipoEditando) {
@@ -257,7 +262,6 @@ function configurarLocaisFavoritosMenu() {
         localStorage.setItem(`huby_endereco_${tipoEditando}`, endereco);
         localStorage.setItem(`huby_coords_${tipoEditando}`, JSON.stringify(coords));
 
-        // Atualiza legenda no drawer
         const descElem = document.getElementById(tipoEditando === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
         if (descElem) descElem.textContent = endereco;
 
@@ -271,8 +275,7 @@ function configurarLocaisFavoritosMenu() {
     }
   });
 
-  // Salvar Escolhendo Posição Direto no Mapa
-  btnMarcarFavNoMapa?.addEventListener('click', () => {
+  btnMarcarMapa?.addEventListener('click', () => {
     if (!tipoEditando) return;
     const tipoAlvo = tipoEditando;
     const labelAlvo = labelEditando;
@@ -280,7 +283,6 @@ function configurarLocaisFavoritosMenu() {
     fecharModalEdicao();
     notificarCliente(`Toque no mapa para indicar o local de "${labelAlvo}"`, 'info');
 
-    // Escuta um clique único no mapa Leaflet
     if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
       const mapaLeaflet = estadoCliente.hubyMapa.map;
 
@@ -303,7 +305,6 @@ function configurarLocaisFavoritosMenu() {
     }
   });
 
-  // Ação ao Tocar no Corpo do Card (Traçar Rota Direto)
   async function acionarIrParaFavorito(tipo, label) {
     fecharDrawer();
     const enderecoSalvo = localStorage.getItem(`huby_endereco_${tipo}`);
@@ -343,6 +344,7 @@ function configurarLocaisFavoritosMenu() {
     acionarIrParaFavorito('trabalho', 'Meu Trabalho');
   });
 }
+
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -423,11 +425,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Ativação dos controles e favoritos
+  // 3. Ativação dos controles, favoritos e recursos novos
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
   configurarLocaisFavoritosMenu();
+
+  // 3.1. Recursos rápidos: Pagamento, Cupom e Observação
+  configurarSeletorPagamentoRapido();
+  configurarNotaMotorista();
+  configurarCupomDesconto();
 
   // 4. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
@@ -744,6 +751,18 @@ function conectarSocketEPollingCliente() {
     });
 
     socket.on('posicao_motorista', (pos) => {
+      // 1. Atualiza visualmente o marcador animado da moto ou carro do motorista
+      if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && pos.lat && pos.lng) {
+        criarOuAtualizarVeiculoMapa(
+          estadoCliente.hubyMapa.map, 
+          pos.lat, 
+          pos.lng, 
+          pos.heading || 0, 
+          estadoCliente.categoriaSelecionada || 'carro'
+        );
+      }
+
+      // 2. Alerta de proximidade (menos de 200m)
       const coordsEmbarque = estadoCliente.rotaAtual?.origemCoords || estadoCliente.coordsOrigem;
       if (coordsEmbarque && !alertaProximidadeEmitido && pos.lat && pos.lng) {
         const dist = calcularDistanciaMetros(pos.lat, pos.lng, coordsEmbarque[0], coordsEmbarque[1]);

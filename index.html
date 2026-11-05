@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.4.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.5.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
   <!-- BIBLIOTECAS CDN -->
@@ -109,7 +109,7 @@
             <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar endereço da Casa" aria-label="Editar Casa">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa" aria-label="Editar Casa">✏️</button>
       </div>
 
       <!-- Item Trabalho -->
@@ -121,7 +121,7 @@
             <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar endereço do Trabalho" aria-label="Editar Trabalho">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho" aria-label="Editar Trabalho">✏️</button>
       </div>
 
       <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
@@ -190,7 +190,7 @@
     💬
   </button>
 
-  <!-- DOCK INFERIOR -->
+  <!-- DOCK INFERIOR (BOTTOM SHEET EXPANDIDO) -->
   <section class="client-dock-sheet">
     <div class="sheet-drag-handle"></div>
 
@@ -241,6 +241,30 @@
       </div>
     </div>
 
+    <!-- BARRA DE RECURSOS RÁPIDOS: PAGAMENTO, CUPOM E NOTA -->
+    <div class="dock-quick-actions-row">
+      <!-- Seletor Rápido de Pagamento -->
+      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill" aria-label="Forma de Pagamento">
+        <span id="iconFormaPagamento">💵</span>
+        <span id="txtFormaPagamentoSelecionada">Dinheiro</span>
+        <span class="arrow-down">▾</span>
+      </button>
+
+      <!-- Botão de Cupom -->
+      <div style="display: flex; align-items: center; gap: 4px;">
+        <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill">🏷️ Cupom</button>
+        <span id="tagCupomAtivo" class="badge-cupom-ativo" style="display: none;"></span>
+      </div>
+
+      <!-- Botão de Nota para o Motorista -->
+      <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill" title="Adicionar nota">
+        <span>📝 Nota</span>
+      </button>
+    </div>
+
+    <!-- Badge de Nota do Motorista Cadastrada -->
+    <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none;"></div>
+
     <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
       <div class="ride-header">
         <div class="pulse-radar"></div>
@@ -255,6 +279,40 @@
     <!-- BOTÃO PRINCIPAL -->
     <button type="button" id="btnPedirHuby" class="btn-main-action">Chamar HUBy Carro</button>
   </section>
+
+  <!-- MODAL SELETOR RÁPIDO DE FORMA DE PAGAMENTO -->
+  <div id="modalSeletorPagamentoRapido" class="modal-backdrop" style="display: none; z-index: 10006;">
+    <div class="modal-card">
+      <div class="modal-header-row">
+        <h3>Como vai pagar?</h3>
+        <button type="button" id="btnFecharModalPgtoRapido" class="btn-icon-close">✕</button>
+      </div>
+
+      <div class="opcoes-pagamento-rapido-grid">
+        <div class="opcao-pagamento-rapido ativa" data-metodo="dinheiro" data-nome="Dinheiro" data-icone="💵">
+          <span class="op-icon">💵</span>
+          <div class="op-text">
+            <strong>Dinheiro</strong>
+            <small>Pagar ao motorista</small>
+          </div>
+        </div>
+        <div class="opcao-pagamento-rapido" data-metodo="pix" data-nome="Pix" data-icone="💠">
+          <span class="op-icon">💠</span>
+          <div class="op-text">
+            <strong>Pix Oficial</strong>
+            <small>QR Code dinâmico</small>
+          </div>
+        </div>
+        <div class="opcao-pagamento-rapido" data-metodo="cartao" data-nome="Cartão" data-icone="💳">
+          <span class="op-icon">💳</span>
+          <div class="op-text">
+            <strong>Maquininha</strong>
+            <small>Débito ou Crédito</small>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL SEGURANÇA -->
   <div id="modalSeguranca" class="modal-backdrop" style="display: none; z-index: 10000;">
@@ -506,7 +564,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.12.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.13.0"></script>
 </body>
 
 </html>
