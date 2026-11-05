@@ -420,44 +420,102 @@ async function carregarTabelaSaques() {
 }
 
 // ============================================================================
-// 7. GESTÃO DOS SÓCIOS (50% / 50%) - HUBy Diretoria
+// 7. GESTÃO DOS SÓCIOS (50% / 50%) - INTEGRAÇÃO COM BANCO DE DADOS
 // ============================================================================
-function carregarDadosSocios() {
-  // Define valores iniciais caso o localStorage esteja vazio
-  const s1Nome = localStorage.getItem('huby_socio_1_nome') || 'Sócio 1 (50%)';
-  const s1Pix = localStorage.getItem('huby_socio_1_pix') || 'pix1@huby.app.br';
-  const s2Nome = localStorage.getItem('huby_socio_2_nome') || 'Sócio 2 (50%)';
-  const s2Pix = localStorage.getItem('huby_socio_2_pix') || 'pix2@huby.app.br';
+async function carregarDadosSocios() {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/socios/resumo`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
 
-  if (document.getElementById('socio1Nome')) document.getElementById('socio1Nome').textContent = s1Nome;
-  if (document.getElementById('socio1Chave')) document.getElementById('socio1Chave').textContent = `Chave Pix: ${s1Pix}`;
-  if (document.getElementById('socio2Nome')) document.getElementById('socio2Nome').textContent = s2Nome;
-  if (document.getElementById('socio2Chave')) document.getElementById('socio2Chave').textContent = `Chave Pix: ${s2Pix}`;
+    if (data.socios && data.socios.length >= 2) {
+      const s1 = data.socios[0];
+      const s2 = data.socios[1];
+
+      // Sócio 1
+      if (document.getElementById('socio1Nome')) document.getElementById('socio1Nome').textContent = s1.nome;
+      if (document.getElementById('socio1Chave')) document.getElementById('socio1Chave').textContent = `Chave Pix: ${s1.chave_pix || 'Não cadastrada'}`;
+      if (document.getElementById('socio1Saldo')) document.getElementById('socio1Saldo').textContent = `R$ ${s1.saldo_disponivel.toFixed(2).replace('.', ',')}`;
+      if (document.getElementById('socio1TotalSacado')) document.getElementById('socio1TotalSacado').textContent = `Total já retirado: R$ ${s1.total_retirado.toFixed(2).replace('.', ',')}`;
+
+      // Sócio 2
+      if (document.getElementById('socio2Nome')) document.getElementById('socio2Nome').textContent = s2.nome;
+      if (document.getElementById('socio2Chave')) document.getElementById('socio2Chave').textContent = `Chave Pix: ${s2.chave_pix || 'Não cadastrada'}`;
+      if (document.getElementById('socio2Saldo')) document.getElementById('socio2Saldo').textContent = `R$ ${s2.saldo_disponivel.toFixed(2).replace('.', ',')}`;
+      if (document.getElementById('socio2TotalSacado')) document.getElementById('socio2TotalSacado').textContent = `Total já retirado: R$ ${s2.total_retirado.toFixed(2).replace('.', ',')}`;
+    }
+
+    carregarHistoricoRetiradasSocios();
+  } catch (err) {
+    console.warn('Erro ao carregar dados dos sócios:', err);
+  }
 }
 
-// Expõe a função globalmente sem causar erro no parsing
-window.editarDadosSocio = function(numSocio) {
+async function carregarHistoricoRetiradasSocios() {
+  const token = localStorage.getItem('huby_token');
+  const tbody = document.getElementById('tabelaRetiradasSociosBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/socios/historico-retiradas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const historico = await res.json();
+
+    if (historico.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="table-empty-row">Nenhuma retirada registada até ao momento.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = historico.map(h => `
+      <tr>
+        <td><strong>#${h.id}</strong></td>
+        <td>${h.socio_nome}</td>
+        <td style="font-family: monospace;" class="text-blue">${h.chave_pix}</td>
+        <td><strong class="text-primary">R$ ${Number(h.valor).toFixed(2).replace('.', ',')}</strong></td>
+        <td>${new Date(h.criado_em).toLocaleString('pt-BR')}</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.warn('Falha ao carregar histórico de retiradas:', err);
+  }
+}
+
+window.editarDadosSocio = async function(numSocio) {
+  const token = localStorage.getItem('huby_token');
   const elemNome = document.getElementById(`socio${numSocio}Nome`);
   const elemChave = document.getElementById(`socio${numSocio}Chave`);
 
-  const nomeAtual = elemNome ? elemNome.textContent : `Sócio ${numSocio} (50%)`;
-  const chaveAtual = elemChave ? elemChave.textContent.replace('Chave Pix: ', '').trim() : `pix${numSocio}@huby.app.br`;
+  const nomeAtual = elemNome ? elemNome.textContent : `Sócio ${numSocio}`;
+  const chaveAtual = elemChave ? elemChave.textContent.replace('Chave Pix: ', '').trim() : ``;
 
-  // Utiliza prompt simples, que não causará JSON parse error se não houver requisição subsequente
   const novoNome = prompt(`Nome para exibição do Sócio ${numSocio}:`, nomeAtual);
   if (novoNome === null || novoNome.trim() === '') return;
 
   const novaChave = prompt(`Chave Pix oficial de destino para ${novoNome}:`, chaveAtual);
-  if (novaChave === null || novaChave.trim() === '') return;
+  if (novaChave === null) return;
 
-  // Guarda no LocalStorage e atualiza a UI
-  localStorage.setItem(`huby_socio_${numSocio}_nome`, novoNome.trim());
-  localStorage.setItem(`huby_socio_${numSocio}_pix`, novaChave.trim());
+  try {
+    const res = await fetch(`${API_URL}/api/admin/socios/${numSocio}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ nome: novoNome.trim(), chave_pix: novaChave.trim() })
+    });
 
-  if (elemNome) elemNome.textContent = novoNome.trim();
-  if (elemChave) elemChave.textContent = `Chave Pix: ${novaChave.trim()}`;
-
-  alert(`✅ Dados do Sócio ${numSocio} salvos com sucesso!`);
+    if (!res.ok) throw new Error('Falha ao atualizar dados do sócio no banco.');
+    
+    alert(`✅ Dados do Sócio ${numSocio} gravados com sucesso!`);
+    carregarDadosSocios(); // Recarrega os dados visuais
+  } catch (err) {
+    alert(`❌ Erro: ${err.message}`);
+  }
 };
 
 window.solicitarSaqueSocio = async function(numSocio) {
@@ -465,45 +523,44 @@ window.solicitarSaqueSocio = async function(numSocio) {
   const nome = document.getElementById(`socio${numSocio}Nome`)?.textContent || `Sócio ${numSocio}`;
   const chavePix = document.getElementById(`socio${numSocio}Chave`)?.textContent.replace('Chave Pix: ', '').trim();
   const saldoTxt = document.getElementById(`socio${numSocio}Saldo`)?.textContent || 'R$ 0,00';
+  
+  const saldoLimpo = Number(saldoTxt.replace('R$ ', '').replace(',', '.'));
 
-  const valorStr = prompt(`Retirada de lucros para ${nome}\nChave Pix: ${chavePix}\nSaldo Disponível: ${saldoTxt}\n\nInforme o valor do repasse (R$):`, '1.00');
+  const valorStr = prompt(`Retirada de lucros para ${nome}\nChave Pix: ${chavePix}\nSaldo Disponível: ${saldoTxt}\n\nInforme o valor do repasse (R$):`, saldoLimpo.toFixed(2));
   if (!valorStr) return;
 
-  const valor = parseFloat(valorStr.replace(',', '.'));
-  if (isNaN(valor) || valor <= 0) {
-    alert('⚠️ Informe um valor numérico válido.');
-    return;
+  const valorNum = parseFloat(valorStr.replace(',', '.'));
+  if (isNaN(valorNum) || valorNum <= 0) {
+    return alert('⚠️ Informe um valor numérico válido maior que zero.');
+  }
+
+  if (valorNum > saldoLimpo) {
+    return alert('⚠️ Saldo insuficiente para esta retirada.');
+  }
+
+  if (!chavePix || chavePix === 'Não cadastrada') {
+    return alert('⚠️ Configure a Chave Pix do sócio clicando em Editar antes de transferir.');
   }
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/saques/automatico`, {
+    const res = await fetch(`${API_URL}/api/admin/socios/retirada`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`
       },
-      body: JSON.stringify({ valor, chavePix, tipoChave: 'chave' })
+      body: JSON.stringify({ socio_id: numSocio, valor: valorNum })
     });
     
-     if (!res.ok) {
-        let errorMessage = 'Falha ao processar saque do sócio.';
-        try {
-            const data = await res.json();
-            errorMessage = data.erro || errorMessage;
-        } catch (jsonErr) {
-             console.error("Erro ao analisar resposta de erro JSON", jsonErr);
-        }
-        throw new Error(errorMessage);
-    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.erro || 'Falha ao processar retirada.');
 
-    alert(`✅ Saque de R$ ${valor.toFixed(2)} transferido com sucesso para ${nome}!`);
-    await sincronizarTudo();
+    alert(`✅ ${data.mensagem}`);
+    carregarDadosSocios(); // Recarrega os saldos e o histórico na tela
   } catch (err) {
-    console.error(err);
-    alert(`❌ Erro no saque: ${err.message}`);
+    alert(`❌ Erro na retirada: ${err.message}`);
   }
 };
-
 // ============================================================================
 // 8. FUNÇÕES AUXILIARES
 // ============================================================================
