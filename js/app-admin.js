@@ -1,6 +1,6 @@
 // js/app-admin.js - Orquestrador do Painel Administrativo HUBy
 import { API_URL } from './config.js';
-
+import { inicializarRadarMaster } from './admin-radar.js';
 document.addEventListener('DOMContentLoaded', async () => {
   // 1. Verificação de Acesso Admin
   const token = localStorage.getItem('huby_token');
@@ -25,6 +25,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       const target = tab.getAttribute('data-tab');
       const pane = document.getElementById(target);
       if (pane) pane.classList.add('active');
+      if (target === 'tabRadar') {
+        inicializarRadarMaster(token);
+      }
     });
   });
 

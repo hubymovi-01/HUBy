@@ -1,4 +1,4 @@
-// js/admin-radar.js - Radar Master ken Telemetria GPS iti Admin
+// js/admin-radar.js - Radar Master e Telemetria GPS no Admin HUBy
 import { API_URL } from './config.js';
 
 let mapaAdmin = null;
@@ -14,7 +14,7 @@ export function inicializarRadarMaster(token) {
     return;
   }
 
-  // 1. Dalusan ti daan a leaflet instance tapno awan ti duplicate container error
+  // 1. Limpa instância antiga do Leaflet para evitar o erro de container duplicado
   if (!mapaAdmin) {
     if (container._leaflet_id) {
       delete container._leaflet_id;
@@ -28,23 +28,23 @@ export function inicializarRadarMaster(token) {
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors | HUBy Radar'
+        attribution: '&copy; OpenStreetMap | HUBy Radar'
       }).addTo(mapaAdmin);
 
-      // Panagpartuat iti Dynamic Fare Zone babaen ti panang-click iti mapa
+      // Criação de Zona de Tarifa Dinâmica ao clicar no mapa
       mapaAdmin.on('click', async (e) => {
-        const nome = prompt('Nagan ti Dynamic Demand Zone (kas pangarigan: Centro / Piesta / Tudo):');
+        const nome = prompt('Nome da Zona de Demanda Dinâmica (ex: Centro / Evento / Chuva):');
         if (!nome || !nome.trim()) return;
 
-        const multInput = prompt('Dynamic Tariff Multiplier (kas pangarigan: 1.20):', '1.20');
+        const multInput = prompt('Multiplicador de Tarifa Dinâmica (ex: 1.20):', '1.20');
         if (!multInput) return;
         const multiplicador = Number(multInput.replace(',', '.'));
-        if (isNaN(multiplicador) || multiplicador <= 0) return alert('Saan a valido a numero ti multiplier.');
+        if (isNaN(multiplicador) || multiplicador <= 0) return alert('Multiplicador inválido.');
 
-        const raioInput = prompt('Radium iti metro (kas pangarigan: 1500):', '2000');
+        const raioInput = prompt('Raio em metros (ex: 1500):', '2000');
         if (!raioInput) return;
         const raio_metros = Number(raioInput);
-        if (isNaN(raio_metros) || raio_metros <= 0) return alert('Saan a valido ti radium.');
+        if (isNaN(raio_metros) || raio_metros <= 0) return alert('Raio inválido.');
 
         try {
           const res = await fetch(`${API_URL}/api/dinamica`, {
@@ -63,24 +63,24 @@ export function inicializarRadarMaster(token) {
           });
 
           if (res.ok) {
-            alert('Naballigi a napartuat ti Dynamic Zone!');
+            alert('✅ Zona Dinâmica criada com sucesso!');
             carregarZonasDinamicas(token);
           } else {
-            alert('Napaay a mangpartuat iti zona.');
+            alert('❌ Falha ao criar zona.');
           }
         } catch (err) {
-          alert('Adda biddut iti panangiyasping iti server.');
+          alert('Erro ao conectar ao servidor.');
         }
       });
     } catch (e) {
-      console.warn('Biddut iti panangrugi iti mapa ti Leaflet:', e);
+      console.warn('Erro ao inicializar mapa Leaflet:', e);
     }
   }
 
-  // 2. Refresh ken i-adjust ti kadakkel ti canvas
+  // 2. Força o redesenho do mapa (necessário para abas que estavam ocultas)
   setTimeout(() => {
     if (mapaAdmin) mapaAdmin.invalidateSize();
-  }, 400);
+  }, 300);
 
   carregarZonasDinamicas(token);
 }
@@ -109,11 +109,11 @@ export async function carregarZonasDinamicas(token) {
         radius: Number(z.raio_metros) || 2000
       }).addTo(mapaAdmin);
 
-      circulo.bindPopup(`<strong>${z.nome}</strong><br>Dinamiko: ${Number(z.multiplicador).toFixed(2)}x`);
+      circulo.bindPopup(`<strong>${z.nome}</strong><br>Dinâmica: ${Number(z.multiplicador).toFixed(2)}x`);
       camadasZonas.push(circulo);
     });
   } catch (err) {
-    console.warn('Napaay a nagkarga kadagiti zona:', err);
+    console.warn('Falha ao carregar zonas:', err);
   }
 }
 
@@ -134,7 +134,7 @@ export function atualizarPosicaoCondutorNoMapa(dado) {
     marcadoresMotoristas[motoristaId] = L.marker([Number(lat), Number(lng)], { icon: iconDiv }).addTo(mapaAdmin);
   }
 
-  // I-update ti kabilang ti aktibo a tsuper iti UI
+  // Atualiza contador de motoristas online no topo do radar
   const lblOnline = document.getElementById('txtCondutoresOnline');
   if (lblOnline) {
     const total = Object.keys(marcadoresMotoristas).length;
