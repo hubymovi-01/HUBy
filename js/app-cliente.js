@@ -12,12 +12,24 @@ import {
   configurarNotaMotorista, 
   configurarCupomDesconto, 
   criarOuAtualizarVeiculoMapa,
+  atualizarResumoComDesconto,
   estadoRecursos 
 } from './cliente/cliente-recursos.js';
 
 let intervalChatCliente = null;
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
+
+// Sanitização defensiva contra Cross-Site Scripting (XSS)
+function escaparHTML(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 // Cálculo da distância esférica entre dois pontos (metros)
 function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
@@ -29,6 +41,38 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
     Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
     Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Atualizar a prévia de valores nos 3 cards horizontais
+function atualizarValoresCardsPro(precoBase) {
+  const lblCarro = document.getElementById('priceEstCarro');
+  const lblMoto = document.getElementById('priceEstMoto');
+  const lblEntrega = document.getElementById('priceEstEntrega');
+  const lblPrincipal = document.getElementById('txtPrecoEstimado');
+
+  if (!precoBase || precoBase <= 0) {
+    if (lblCarro) lblCarro.textContent = '--';
+    if (lblMoto) lblMoto.textContent = '--';
+    if (lblEntrega) lblEntrega.textContent = '--';
+    if (lblPrincipal) lblPrincipal.textContent = '--';
+    return;
+  }
+
+  const fatorDesconto = estadoRecursos.descontoPercentual > 0 ? (1 - estadoRecursos.descontoPercentual) : 1;
+
+  const valCarro = (precoBase * 1.0 * fatorDesconto).toFixed(2).replace('.', ',');
+  const valMoto = (precoBase * 0.65 * fatorDesconto).toFixed(2).replace('.', ',');
+  const valEntrega = (precoBase * 0.75 * fatorDesconto).toFixed(2).replace('.', ',');
+
+  if (lblCarro) lblCarro.textContent = `R$ ${valCarro}`;
+  if (lblMoto) lblMoto.textContent = `R$ ${valMoto}`;
+  if (lblEntrega) lblEntrega.textContent = `R$ ${valEntrega}`;
+
+  let valAtual = valCarro;
+  if (estadoCliente.categoriaSelecionada === 'moto') valAtual = valMoto;
+  if (estadoCliente.categoriaSelecionada === 'entrega') valAtual = valEntrega;
+
+  if (lblPrincipal) lblPrincipal.textContent = `R$ ${valAtual}`;
 }
 
 // Configuração de paradas intermediárias
@@ -64,8 +108,9 @@ function configurarParadasIntermediariasSemPrompt() {
         if (container) {
           const item = document.createElement('div');
           item.className = 'stop-row';
+          const seguro = escaparHTML(enderecoParada);
           item.innerHTML = `
-            <span>📍 Parada: <strong>${enderecoParada}</strong></span>
+            <span>📍 Parada: <strong>${seguro}</strong></span>
             <button type="button" class="stop-remove-btn" title="Remover parada">✕</button>
           `;
 
@@ -74,6 +119,7 @@ function configurarParadasIntermediariasSemPrompt() {
             if (index > -1) estadoCliente.paradasIntermediarias.splice(index, 1);
             item.remove();
             atualizarResumoValores();
+            if (estadoCliente.rotaAtual?.preco) atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
           });
 
           container.appendChild(item);
@@ -81,28 +127,25 @@ function configurarParadasIntermediariasSemPrompt() {
 
         notificarCliente(`Parada adicionada: ${enderecoParada}`, 'sucesso');
         atualizarResumoValores();
+        if (estadoCliente.rotaAtual?.preco) atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
       }
     });
   });
 }
 
-// Controle de Expansão e Retração da Barra de Pesquisa
+// Controle da Barra de Pesquisa Moderna
 function configurarBarraPesquisaAnimada() {
-  const searchBox = document.querySelector('.search-glass-box');
+  const searchBox = document.querySelector('.modern-search');
   const btnLupa = document.getElementById('btnAcionarPesquisa');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
   const listaResultados = document.getElementById('listaResultadosPesquisa');
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const containerParadas = document.getElementById('containerParadasIntermediarias');
-  const lblPreco = document.getElementById('txtPrecoEstimado');
-  const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
   function abrirBarra() {
-    if (!searchBox?.classList.contains('active')) {
-      searchBox?.classList.add('active');
-      setTimeout(() => inputPesquisa?.focus(), 80);
-    }
+    searchBox?.classList.add('active');
+    setTimeout(() => inputPesquisa?.focus(), 80);
   }
 
   function recolherBarra() {
@@ -128,7 +171,7 @@ function configurarBarraPesquisaAnimada() {
     abrirBarra();
   });
 
-  // AO TOCAR NO X: Limpa tudo e recolhe para círculo
+  // AO TOCAR NO X: Limpa a rota e os valores
   btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -152,11 +195,9 @@ function configurarBarraPesquisaAnimada() {
       }
     }
 
-    if (txtDestino) txtDestino.textContent = 'Toque no mapa para indicar o destino';
+    if (txtDestino) txtDestino.textContent = 'Selecione no mapa ou pesquise';
     if (containerParadas) containerParadas.innerHTML = '';
-    if (lblPreco) lblPreco.textContent = '--';
-    if (lblDistancia) lblDistancia.textContent = '-- km';
-
+    atualizarValoresCardsPro(0);
     atualizarResumoValores();
   });
 
@@ -202,7 +243,7 @@ function configurarAlternanciaSatélite() {
   });
 }
 
-// GESTÃO AVANÇADA DE LOCAIS FAVORITOS (CASA / TRABALHO)
+// Gestão de Locais Favoritos (Casa e Trabalho)
 function configurarLocaisFavoritosMenu() {
   const modalFav = document.getElementById('modalConfigFavorito');
   const btnFecharModal = document.getElementById('btnFecharModalFav');
@@ -268,7 +309,7 @@ function configurarLocaisFavoritosMenu() {
         notificarCliente(`${labelEditando} cadastrado com sucesso!`, 'sucesso');
         fecharModalEdicao();
       } else {
-        notificarCliente('Endereço não localizado no mapa. Detalhe rua, número ou cidade.', 'alerta');
+        notificarCliente('Endereço não localizado no mapa. Detalhe com mais informações.', 'alerta');
       }
     } catch (e) {
       notificarCliente('Falha ao conectar com serviço de busca.', 'erro');
@@ -321,7 +362,7 @@ function configurarLocaisFavoritosMenu() {
     estadoCliente.coordsDestino = coords;
     const txtDestino = document.getElementById('txtDestinoSelecionado');
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
-    const searchBox = document.querySelector('.search-glass-box');
+    const searchBox = document.querySelector('.modern-search');
 
     if (txtDestino) txtDestino.textContent = enderecoSalvo;
     if (inputPesquisa) inputPesquisa.value = enderecoSalvo;
@@ -332,6 +373,7 @@ function configurarLocaisFavoritosMenu() {
       const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
       estadoCliente.rotaAtual = rota;
       atualizarResumoValores();
+      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
     }
     notificarCliente(`Destino: ${label}`, 'sucesso');
   }
@@ -356,13 +398,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
-
-  const lblPrecoInicial = document.getElementById('txtPrecoEstimado');
-  const lblDistanciaInicial = document.getElementById('txtDistanciaEstimada');
-  if (!estadoCliente.coordsDestino) {
-    if (lblPrecoInicial) lblPrecoInicial.textContent = '--';
-    if (lblDistanciaInicial) lblDistanciaInicial.textContent = '-- km';
-  }
+  atualizarValoresCardsPro(0);
 
   // 1. Inicializa o Mapa
   try {
@@ -377,10 +413,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
-      const searchBox = document.querySelector('.search-glass-box');
+      const searchBox = document.querySelector('.modern-search');
       const listaResultados = document.getElementById('listaResultadosPesquisa');
 
-      const textoDestino = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
+      const textoDestino = `Destino (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
 
       if (txtDestino) txtDestino.textContent = textoDestino;
       if (inputPesquisa) inputPesquisa.value = textoDestino;
@@ -391,6 +427,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       atualizarResumoValores();
+      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
     });
 
     setTimeout(() => {
@@ -399,7 +436,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }, 250);
   } catch (err) {
-    console.warn('Aviso na inicialização do mapa:', err);
+    console.warn('Aviso no mapa:', err);
   }
 
   // 2. Pesquisa de locais
@@ -410,7 +447,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
-      const searchBox = document.querySelector('.search-glass-box');
+      const searchBox = document.querySelector('.modern-search');
       const listaResultados = document.getElementById('listaResultadosPesquisa');
 
       if (txtDestino) txtDestino.textContent = nomeCurto;
@@ -422,10 +459,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       atualizarResumoValores();
+      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
     });
   }
 
-  // 3. Ativação dos controles, favoritos e recursos novos
+  // 3. Ativação dos controles e favoritos
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
@@ -448,6 +486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             estadoCliente.hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], estadoCliente.coordsDestino, '#F59E0B', true).then(rota => {
               estadoCliente.rotaAtual = rota;
               atualizarResumoValores();
+              if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
             });
           }
         });
@@ -469,21 +508,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modal) modal.style.display = 'none';
   });
 
-  // 6. Seletor de Categorias
-  const chips = document.querySelectorAll('.category-chip');
-  chips.forEach(chip => {
-    chip.addEventListener('click', () => {
-      chips.forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      estadoCliente.categoriaSelecionada = chip.getAttribute('data-id') || 'carro';
+  // 6. Seletor de Categorias Estilo Uber
+  const cardsPro = document.querySelectorAll('.category-card-pro');
+  cardsPro.forEach(card => {
+    card.addEventListener('click', () => {
+      cardsPro.forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      estadoCliente.categoriaSelecionada = card.getAttribute('data-id') || 'carro';
 
       const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
       if (blocoEntrega) {
         blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
       }
 
-      atualizarBotaoChamar();
-      if (estadoCliente.rotaAtual) atualizarResumoValores();
+      const nomeExibicao = estadoCliente.categoriaSelecionada === 'moto' ? 'Moto' : (estadoCliente.categoriaSelecionada === 'entrega' ? 'Flash' : 'Carro');
+      const btnText = document.querySelector('.pro-btn .btn-text');
+      if (btnText) btnText.textContent = `Confirmar HUBy ${nomeExibicao}`;
+
+      if (estadoCliente.rotaAtual) {
+        atualizarResumoValores();
+        atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
+      }
     });
   });
 
@@ -729,7 +774,11 @@ function exibirModalPixCorridaCliente(pix) {
 }
 
 function conectarSocketEPollingCliente() {
-  const socket = window.io ? window.io(API_URL) : null;
+  const token = localStorage.getItem('huby_token');
+  const socket = window.io ? window.io(API_URL, {
+    auth: { token: token || '' },
+    transports: ['websocket', 'polling']
+  }) : null;
 
   if (socket) {
     socket.on('corrida_aceita', (data) => {
@@ -751,7 +800,6 @@ function conectarSocketEPollingCliente() {
     });
 
     socket.on('posicao_motorista', (pos) => {
-      // 1. Atualiza visualmente o marcador animado da moto ou carro do motorista
       if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && pos.lat && pos.lng) {
         criarOuAtualizarVeiculoMapa(
           estadoCliente.hubyMapa.map, 
@@ -762,7 +810,6 @@ function conectarSocketEPollingCliente() {
         );
       }
 
-      // 2. Alerta de proximidade (menos de 200m)
       const coordsEmbarque = estadoCliente.rotaAtual?.origemCoords || estadoCliente.coordsOrigem;
       if (coordsEmbarque && !alertaProximidadeEmitido && pos.lat && pos.lng) {
         const dist = calcularDistanciaMetros(pos.lat, pos.lng, coordsEmbarque[0], coordsEmbarque[1]);
@@ -851,10 +898,10 @@ function renderizarMotoristaChegando(mot = {}) {
   if (!painel) painel = document.getElementById('cardStatusViagemPassageiro');
   if (!painel) return;
 
-  const nome = mot.nome || 'Carol';
-  const veiculo = mot.veiculo || 'Chevrolet Onix';
-  const placa = (mot.placa || 'ABC1D23').toUpperCase();
-  const cor = mot.cor || 'Prata';
+  const nome = escaparHTML(mot.nome || 'Carol');
+  const veiculo = escaparHTML(mot.veiculo || 'Chevrolet Onix');
+  const placa = escaparHTML((mot.placa || 'ABC1D23').toUpperCase());
+  const cor = escaparHTML(mot.cor || 'Prata');
   const foto = mot.foto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80';
   const nota = Number(mot.avaliacao || 5.0).toFixed(1);
   const telefone = mot.telefone || '';
@@ -1033,10 +1080,12 @@ async function sincronizarChatPassageiro() {
     const meuId = localStorage.getItem('huby_user_id');
     area.innerHTML = msgs.map(m => {
       const souEu = m.remetente_id === meuId;
+      const remetenteLimpo = escaparHTML(m.remetente_nome || 'Mensagem');
+      const mensagemLimpa = escaparHTML(m.mensagem);
       return `
-        <div style="align-self: ${souEu ? 'flex-end' : 'flex-start'}; max-width: 80%; background: ${souEu ? '#10B981' : '#1E293B'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px;">
-          <small style="display:block; font-size:9px; opacity:0.8; margin-bottom:2px;">${m.remetente_nome || 'Mensagem'}</small>
-          ${m.mensagem}
+        <div style="align-self: ${souEu ? 'flex-end' : 'flex-start'}; max-width: 80%; background: ${souEu ? '#10B981' : '#1E293B'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px; word-break: break-word;">
+          <small style="display:block; font-size:9px; opacity:0.8; margin-bottom:2px;">${remetenteLimpo}</small>
+          ${mensagemLimpa}
         </div>
       `;
     }).join('');

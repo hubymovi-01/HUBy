@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES APPLE & FAVICON -->
+  <!-- ÍCONES -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
@@ -27,7 +27,7 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
-  <link rel="stylesheet" href="./css/cliente-layout.css?v=3.5.0">
+  <link rel="stylesheet" href="./css/cliente-layout.css?v=4.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
 
   <!-- BIBLIOTECAS CDN -->
@@ -61,7 +61,7 @@
   <!-- MAPA PRINCIPAL -->
   <div id="mapaCliente"></div>
 
-  <!-- NAVEGAÇÃO SUPERIOR -->
+  <!-- NAVEGAÇÃO SUPERIOR FIXA -->
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
       <span></span><span></span><span></span>
@@ -79,11 +79,17 @@
     </button>
   </header>
 
-  <!-- BARRA DE PESQUISA FLUTUANTE (TOTALMENTE LIMPA) -->
+  <!-- BARRA DE PESQUISA FLUTUANTE MODERNA -->
   <div class="search-floating-wrapper">
-    <div class="search-glass-box">
-      <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">🔍</button>
-      <input type="text" id="inputPesquisaLocal" placeholder="Para onde vamos?" autocomplete="off" />
+    <div class="search-glass-box modern-search">
+      <div class="search-dot-accent"></div>
+      <input type="text" id="inputPesquisaLocal" placeholder="Para onde você quer ir?" autocomplete="off" />
+      <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </button>
       <button type="button" id="btnLimparPesquisa" class="clear-btn" aria-label="Limpar">✕</button>
     </div>
     <ul id="listaResultadosPesquisa" class="search-results-glass" style="display: none;"></ul>
@@ -95,7 +101,7 @@
     <div class="drawer-profile" id="drawerPerfilBox"></div>
 
     <nav class="drawer-nav">
-      <!-- LOCAIS FAVORITOS COM EDIÇÃO E MARCAÇÃO NO MAPA -->
+      <!-- FAVORITOS -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin: 4px 10px 4px;">
         <span style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus Favoritos</span>
       </div>
@@ -126,7 +132,7 @@
 
       <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
 
-      <!-- MENU GERAL COMPLETO DO PASSAGEIRO -->
+      <!-- ITENS DO MENU -->
       <a href="#" id="menuItemViagens" class="drawer-item">
         <span class="d-icon">📋</span>
         <div class="d-info"><strong>Minhas Viagens</strong><small>Histórico e recibos de corridas</small></div>
@@ -161,10 +167,8 @@
   </aside>
 
   <!-- BOTÃO FLUTUANTE DE CAMADA (SATÉLITE / DARK) -->
-  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer"
-    aria-label="Alternar Satélite">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-      stroke-linecap="round" stroke-linejoin="round">
+  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="2 17 12 22 22 17"></polyline>
       <polyline points="2 12 12 17 22 12"></polyline>
@@ -173,8 +177,7 @@
 
   <!-- BOTÃO FLUTUANTE DE GPS -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-      stroke-linecap="round" stroke-linejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
       <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -185,102 +188,150 @@
 
   <!-- BOTÃO FLUTUANTE DE CHAT -->
   <button type="button" id="btnAbrirChat" class="btn-floating-gps"
-    style="display: none !important; bottom: 355px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
+    style="display: none !important; bottom: 380px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
     aria-label="Abrir Chat">
     💬
   </button>
 
-  <!-- DOCK INFERIOR (BOTTOM SHEET EXPANDIDO) -->
-  <section class="client-dock-sheet">
+  <!-- DOCK INFERIOR (BOTTOM SHEET SOFISTICADO) -->
+  <section class="client-dock-sheet pro-dock">
     <div class="sheet-drag-handle"></div>
 
-    <div class="category-slider" id="sliderCategorias">
-      <button type="button" class="category-chip active" data-id="carro">
-        <span class="cat-icon">🚗</span>
-        <span class="cat-label">Carro</span>
-      </button>
-      <button type="button" class="category-chip" data-id="moto">
-        <span class="cat-icon">🏍️</span>
-        <span class="cat-label">Moto</span>
-      </button>
-      <button type="button" class="category-chip" data-id="entrega">
-        <span class="cat-icon">📦</span>
-        <span class="cat-label">Entrega</span>
-      </button>
-    </div>
-
-    <!-- FORMULÁRIO DE ENTREGA -->
-    <div id="blocoDetalhesEntrega" style="display: none;">
-      <div class="entrega-badge">📋 Detalhes da Encomenda</div>
-      <input type="text" id="inputRecebedor" placeholder="Quem vai receber? (Nome e Telefone)" />
-      <select id="selectTipoItem">
-        <option value="" disabled selected>O que você está enviando?</option>
-        <option value="documento">📄 Documentos / Chaves (Envelope)</option>
-        <option value="pequeno">📦 Pacote Pequeno (Até 5kg)</option>
-        <option value="medio">🛍️ Pacote Médio / Compras (Até 15kg)</option>
-        <option value="fragil">🍷 Item Frágil / Bolos</option>
-      </select>
-    </div>
-
-    <!-- RESUMO DO DESTINO E PREÇO -->
-    <div id="blocoResumo" class="trip-summary-card">
-      <div class="route-details">
-        <div class="route-point-indicator"></div>
-        <div class="route-texts">
-          <div class="route-header-row">
-            <span class="route-title">Destino</span>
-            <button type="button" id="btnAddParada" class="btn-add-stop">+ Parada</button>
+    <!-- CABEÇALHO DO PERCURSO EM TIMELINE -->
+    <div id="blocoResumo" class="trip-summary-card-pro">
+      <div class="route-timeline">
+        <div class="timeline-dot pickup"></div>
+        <div class="timeline-line"></div>
+        <div class="timeline-dot dropoff"></div>
+      </div>
+      <div class="route-details-column">
+        <div class="route-row-origin">
+          <span class="route-label">Sua Localização</span>
+          <span class="route-text origin">Local de embarque atual</span>
+        </div>
+        <div class="route-row-dest">
+          <div class="dest-title-group">
+            <span class="route-label">Destino</span>
+            <button type="button" id="btnAddParada" class="btn-add-stop-pill">+ Parada</button>
           </div>
-          <span id="txtDestinoSelecionado" class="route-subtitle">Toque no mapa para indicar o destino</span>
+          <span id="txtDestinoSelecionado" class="route-text dest">Selecione no mapa ou pesquise</span>
           <div id="containerParadasIntermediarias"></div>
         </div>
       </div>
-      <div class="trip-price-block">
-        <span id="txtPrecoEstimado" class="price-val">--</span>
-        <span id="txtDistanciaEstimada" class="eta-val">-- km</span>
+    </div>
+
+    <!-- SELETOR HORIZONTAL DE CATEGORIAS ESTILO UBER BLACK -->
+    <div class="categories-container" id="sliderCategorias">
+      <div class="category-card-pro active" data-id="carro">
+        <div class="cat-left">
+          <span class="cat-badge-eta">3 min</span>
+          <span class="cat-emoji">🚗</span>
+        </div>
+        <div class="cat-center">
+          <div class="cat-name-row">
+            <strong>HUBy Carro</strong>
+            <span class="cat-seats">👤 4</span>
+          </div>
+          <small class="cat-sub">Rápido e confortável</small>
+        </div>
+        <div class="cat-right">
+          <span class="cat-price-est" id="priceEstCarro">--</span>
+        </div>
+      </div>
+
+      <div class="category-card-pro" data-id="moto">
+        <div class="cat-left">
+          <span class="cat-badge-eta">2 min</span>
+          <span class="cat-emoji">🏍️</span>
+        </div>
+        <div class="cat-center">
+          <div class="cat-name-row">
+            <strong>HUBy Moto</strong>
+            <span class="cat-seats">👤 1</span>
+          </div>
+          <small class="cat-sub">Econômico e ágil</small>
+        </div>
+        <div class="cat-right">
+          <span class="cat-price-est" id="priceEstMoto">--</span>
+        </div>
+      </div>
+
+      <div class="category-card-pro" data-id="entrega">
+        <div class="cat-left">
+          <span class="cat-badge-eta">5 min</span>
+          <span class="cat-emoji">📦</span>
+        </div>
+        <div class="cat-center">
+          <div class="cat-name-row">
+            <strong>HUBy Flash</strong>
+            <span class="cat-seats">Pacotes</span>
+          </div>
+          <small class="cat-sub">Envio de mercadorias</small>
+        </div>
+        <div class="cat-right">
+          <span class="cat-price-est" id="priceEstEntrega">--</span>
+        </div>
       </div>
     </div>
 
-    <!-- BARRA DE RECURSOS RÁPIDOS: PAGAMENTO, CUPOM E NOTA -->
-    <div class="dock-quick-actions-row">
-      <!-- Seletor Rápido de Pagamento -->
-      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill" aria-label="Forma de Pagamento">
+    <!-- FORMULÁRIO DE ENTREGA -->
+    <div id="blocoDetalhesEntrega" style="display: none;" class="delivery-details-pro">
+      <div class="delivery-header-title">📋 Especificações da Encomenda</div>
+      <input type="text" id="inputRecebedor" placeholder="Nome e telefone de quem vai receber" />
+      <select id="selectTipoItem">
+        <option value="" disabled selected>O que você vai enviar?</option>
+        <option value="documento">📄 Documentos / Chaves (Envelope)</option>
+        <option value="pequeno">📦 Pacote Pequeno (Até 5kg)</option>
+        <option value="medio">🛍️ Compras / Volumes Médios (Até 15kg)</option>
+        <option value="fragil">🍷 Frágil / Bolos / Delicado</option>
+      </select>
+    </div>
+
+    <!-- LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM E NOTAS -->
+    <div class="dock-quick-actions-row pro-actions">
+      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" aria-label="Forma de Pagamento">
         <span id="iconFormaPagamento">💵</span>
         <span id="txtFormaPagamentoSelecionada">Dinheiro</span>
         <span class="arrow-down">▾</span>
       </button>
 
-      <!-- Botão de Cupom -->
       <div style="display: flex; align-items: center; gap: 4px;">
-        <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill">🏷️ Cupom</button>
+        <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill">
+          <span>🏷️ Cupom</span>
+        </button>
         <span id="tagCupomAtivo" class="badge-cupom-ativo" style="display: none;"></span>
       </div>
 
-      <!-- Botão de Nota para o Motorista -->
-      <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill" title="Adicionar nota">
-        <span>📝 Nota</span>
+      <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" title="Adicionar nota">
+        <span>📝 Observação</span>
       </button>
     </div>
 
-    <!-- Badge de Nota do Motorista Cadastrada -->
+    <!-- NOTA DO MOTORISTA ANEXADA -->
     <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none;"></div>
 
-    <div id="cardStatusViagem" class="active-ride-card" style="display: none;">
+    <!-- RADAR DE BUSCA -->
+    <div id="cardStatusViagem" class="active-ride-card modern-radar" style="display: none;">
       <div class="ride-header">
         <div class="pulse-radar"></div>
-        <h4 id="statusTitulo">Radar Ativo: Procurando motorista...</h4>
+        <div class="radar-texts">
+          <h4 id="statusTitulo">Buscando motoristas parceiros...</h4>
+          <span id="statusDescricao">Conectando aos veículos mais próximos.</span>
+        </div>
       </div>
-      <p id="statusDescricao">O seu pedido foi enviado para os parceiros próximos.</p>
     </div>
 
     <!-- PAINEL MOTORISTA ACEITOU -->
     <div id="painelMotoristaAceitou" style="display: none; width: 100%;"></div>
 
-    <!-- BOTÃO PRINCIPAL -->
-    <button type="button" id="btnPedirHuby" class="btn-main-action">Chamar HUBy Carro</button>
+    <!-- BOTÃO PRINCIPAL COM GRADIENTE E PREÇO EMBUTIDO -->
+    <button type="button" id="btnPedirHuby" class="btn-main-action pro-btn">
+      <span class="btn-text">Confirmar HUBy Carro</span>
+      <span class="btn-price-preview" id="txtPrecoEstimado">--</span>
+    </button>
   </section>
 
-  <!-- MODAL SELETOR RÁPIDO DE FORMA DE PAGAMENTO -->
+  <!-- MODAL SELETOR RÁPIDO DE PAGAMENTO -->
   <div id="modalSeletorPagamentoRapido" class="modal-backdrop" style="display: none; z-index: 10006;">
     <div class="modal-card">
       <div class="modal-header-row">
@@ -293,23 +344,56 @@
           <span class="op-icon">💵</span>
           <div class="op-text">
             <strong>Dinheiro</strong>
-            <small>Pagar ao motorista</small>
+            <small>Pagar direto ao motorista</small>
           </div>
         </div>
         <div class="opcao-pagamento-rapido" data-metodo="pix" data-nome="Pix" data-icone="💠">
           <span class="op-icon">💠</span>
           <div class="op-text">
-            <strong>Pix Oficial</strong>
-            <small>QR Code dinâmico</small>
+            <strong>Pix Dinâmico</strong>
+            <small>QR Code com liquidação automática</small>
           </div>
         </div>
         <div class="opcao-pagamento-rapido" data-metodo="cartao" data-nome="Cartão" data-icone="💳">
           <span class="op-icon">💳</span>
           <div class="op-text">
             <strong>Maquininha</strong>
-            <small>Débito ou Crédito</small>
+            <small>Débito ou Crédito no embarque</small>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE EDIÇÃO DE FAVORITO (TEXTO OU MAPA) -->
+  <div id="modalConfigFavorito" class="modal-backdrop" style="display: none; z-index: 10008;">
+    <div class="modal-card modal-wide">
+      <div class="modal-header-row">
+        <h3 id="tituloModalFav">Definir Local</h3>
+        <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
+      </div>
+      <p style="font-size: 12px; color: #94A3B8; margin-top: -6px; margin-bottom: 14px;">
+        Escolha como prefere definir o seu endereço:
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
+        <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
+          style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
+        
+        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
+          💾 Salvar Endereço Escrito
+        </button>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+          <span style="font-size: 11px; color: #64748B; font-weight: 700;">OU</span>
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+        </div>
+
+        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
+          📍 Marcar Direto no Mapa
+        </button>
       </div>
     </div>
   </div>
@@ -321,13 +405,10 @@
         <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
       <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
-          tempo real.</p>
-        <div
-          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
+        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
-            contato cadastrado</div>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
         </div>
         <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%;">
           <span>📲 Compartilhar Rota no WhatsApp</span>
@@ -354,8 +435,7 @@
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
       <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
-          data-val="4">★</span><span data-val="5">★</span>
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
       </div>
       <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
       <div class="modal-btn-row">
@@ -396,11 +476,9 @@
       </div>
 
       <div id="areaPixMercadoPago" style="display: none;">
-        <div class="mp-qr-container"
-          style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
+        <div class="mp-qr-container" style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
           <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
-          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app
-            do seu banco para pagar</span>
+          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app do seu banco para pagar</span>
         </div>
 
         <div class="pix-charge-box" style="margin-top: 10px;">
@@ -411,8 +489,7 @@
           </div>
         </div>
 
-        <div id="statusPagamentoPixTexto"
-          style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
+        <div id="statusPagamentoPixTexto" style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
           ⏳ Aguardando confirmação do pagamento...
         </div>
       </div>
@@ -422,51 +499,16 @@
   <!-- CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
     <div class="modal-card modal-chat-custom">
-      <div class="modal-header-row"
-        style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
+      <div class="modal-header-row" style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700;">💬 Mensagens da Viagem</h3>
         <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
       </div>
       <div id="chatAreaMensagens" class="chat-area-messages">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
-          pessoais.</div>
+        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
       </div>
       <div class="chat-input-row">
         <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." />
         <button type="button" id="btnEnviarMsgChat">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE EDIÇÃO DE FAVORITO (TEXTO OU MAPA) -->
-  <div id="modalConfigFavorito" class="modal-backdrop" style="display: none; z-index: 10008;">
-    <div class="modal-card modal-wide">
-      <div class="modal-header-row">
-        <h3 id="tituloModalFav">Definir Local</h3>
-        <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
-      </div>
-      <p style="font-size: 12px; color: #94A3B8; margin-top: -6px; margin-bottom: 14px;">
-        Escolha como prefere definir o seu endereço:
-      </p>
-
-      <div style="display: flex; flex-direction: column; gap: 10px;">
-        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
-        <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
-          style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
-        
-        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
-          💾 Salvar Endereço Escrito
-        </button>
-
-        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
-          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-          <span style="font-size: 11px; color: #64748B; font-weight: 700;">OU</span>
-          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-        </div>
-
-        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
-          📍 Marcar Direto no Mapa
-        </button>
       </div>
     </div>
   </div>
@@ -564,7 +606,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.13.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.14.0"></script>
 </body>
 
 </html>

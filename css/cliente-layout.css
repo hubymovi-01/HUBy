@@ -1,5 +1,5 @@
 /* ==========================================================================
-   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS E DOCK)
+   HUBY 2.0 - css/cliente-layout.css (NAVBAR, MAPA, SEARCHBAR, GPS, DOCK E CARTOES)
    ========================================================================== */
 
 :root {
@@ -15,7 +15,7 @@
   --hub-rose: #EF4444;
   --hub-text-pri: #F8FAFC;
   --hub-text-sec: #94A3B8;
-  --hub-blur: blur(24px);
+  --hub-blur: blur(28px);
 }
 
 /* 1. MAPA LEAFLET */
@@ -31,7 +31,7 @@
   filter: brightness(0.85) contrast(1.15) !important;
 }
 
-/* 2. NAVEGAÇÃO SUPERIOR FIXA (SEMPRE ACIMA E COM TOQUE PRIORITÁRIO) */
+/* 2. NAVEGAÇÃO SUPERIOR FIXA */
 .top-nav-bar {
   position: absolute;
   top: calc(env(safe-area-inset-top, 14px) + 8px);
@@ -121,7 +121,7 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA FLUTUANTE LIMPA (SEM ATALHOS) */
+/* 3. BARRA DE PESQUISA SUPERIOR MODERNA */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
@@ -134,82 +134,90 @@
   align-items: flex-start !important;
 }
 
-.search-glass-box {
+.modern-search {
   pointer-events: auto !important;
   position: relative !important;
-  width: 48px !important;
-  height: 48px !important;
-  background: rgba(14, 20, 32, 0.95) !important;
-  backdrop-filter: blur(24px) !important;
-  -webkit-backdrop-filter: blur(24px) !important;
-  border: 1.5px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 50px !important;
+  width: 100% !important;
+  height: 52px !important;
+  background: rgba(14, 20, 32, 0.92) !important;
+  backdrop-filter: blur(28px) !important;
+  -webkit-backdrop-filter: blur(28px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 18px !important;
+  padding: 0 14px !important;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6) !important;
   display: flex !important;
   align-items: center !important;
-  padding: 0 !important;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.6) !important;
+  gap: 10px !important;
   cursor: pointer !important;
   overflow: hidden !important;
   touch-action: manipulation !important;
-  transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.25s ease,
-              box-shadow 0.25s ease !important;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+.modern-search.active {
+  border-color: rgba(56, 189, 248, 0.6) !important;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8) !important;
+}
+
+.search-dot-accent {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--hub-emerald);
+  box-shadow: 0 0 10px var(--hub-emerald);
+  flex-shrink: 0;
+}
+
+.modern-search input {
+  display: block !important;
+  flex: 1 !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  color: #FFF !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px;
+}
+
+.modern-search input::placeholder {
+  color: #94A3B8;
 }
 
 .search-icon {
-  width: 48px !important;
-  height: 48px !important;
-  min-width: 48px !important;
+  width: 32px !important;
+  height: 32px !important;
   background: transparent !important;
   border: none !important;
   outline: none !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  font-size: 20px !important;
+  color: #94A3B8 !important;
   cursor: pointer !important;
-  color: #FFF !important;
-  pointer-events: auto !important;
-  z-index: 5 !important;
   padding: 0 !important;
-  margin: 0 !important;
-}
-
-.search-glass-box input {
-  display: none;
-  flex: 1 !important;
-  width: 100% !important;
-  background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  color: #F8FAFC !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  padding: 0 10px 0 2px !important;
-}
-
-.search-glass-box input::placeholder {
-  color: #94A3B8;
 }
 
 .clear-btn {
   display: none;
-  width: 32px !important;
-  height: 32px !important;
-  min-width: 32px !important;
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
   background: rgba(255, 255, 255, 0.1) !important;
   border: none !important;
   border-radius: 50% !important;
   color: #FFF !important;
-  font-size: 14px !important;
+  font-size: 13px !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
   outline: none !important;
-  margin-right: 8px !important;
-  pointer-events: auto !important;
-  z-index: 6 !important;
   touch-action: manipulation !important;
+}
+
+.modern-search.active .clear-btn {
+  display: flex !important;
 }
 
 .clear-btn:active {
@@ -217,27 +225,12 @@
   color: #EF4444 !important;
 }
 
-/* Estado Expandido */
-.search-glass-box.active {
-  width: 100% !important;
-  border-color: rgba(56, 189, 248, 0.6) !important;
-  box-shadow: 0 14px 35px rgba(0, 0, 0, 0.8) !important;
-}
-
-.search-glass-box.active input {
-  display: block !important;
-}
-
-.search-glass-box.active .clear-btn {
-  display: flex !important;
-}
-
 .search-results-glass {
   pointer-events: auto !important;
   width: 100% !important;
   background: rgba(14, 20, 32, 0.96) !important;
-  backdrop-filter: blur(24px) !important;
-  -webkit-backdrop-filter: blur(24px) !important;
+  backdrop-filter: blur(28px) !important;
+  -webkit-backdrop-filter: blur(28px) !important;
   border: 1px solid rgba(255, 255, 255, 0.08) !important;
   border-radius: 18px !important;
   margin-top: 8px !important;
@@ -264,7 +257,7 @@
 /* 4. BOTÕES FLUTUANTES (CAMADA SATÉLITE E GPS) */
 .btn-floating-gps {
   position: absolute !important;
-  bottom: calc(295px + env(safe-area-inset-bottom, 16px)) !important;
+  bottom: calc(340px + env(safe-area-inset-bottom, 16px)) !important;
   right: 18px !important;
   width: 46px !important;
   height: 46px !important;
@@ -290,7 +283,7 @@
 }
 
 .btn-floating-layer {
-  bottom: calc(350px + env(safe-area-inset-bottom, 16px)) !important;
+  bottom: calc(395px + env(safe-area-inset-bottom, 16px)) !important;
   border-color: rgba(56, 189, 248, 0.5) !important;
   color: #38BDF8 !important;
 }
@@ -301,23 +294,23 @@
   box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
 }
 
-/* 5. DOCK INFERIOR (BOTTOM SHEET) */
-.client-dock-sheet {
+/* 5. DOCK INFERIOR (BOTTOM SHEET PRO) */
+.pro-dock {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 100;
-  background: var(--hub-surface) !important;
-  backdrop-filter: var(--hub-blur) !important;
-  -webkit-backdrop-filter: var(--hub-blur) !important;
-  border-top: 1px solid var(--hub-border) !important;
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.98) 0%, rgba(9, 13, 22, 1) 100%) !important;
+  backdrop-filter: blur(32px) !important;
+  -webkit-backdrop-filter: blur(32px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 28px 28px 0 0 !important;
-  padding: 10px 18px calc(env(safe-area-inset-bottom, 16px) + 16px) !important;
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.75) !important;
+  box-shadow: 0 -16px 50px rgba(0, 0, 0, 0.85) !important;
+  padding: 12px 18px calc(env(safe-area-inset-bottom, 16px) + 12px) !important;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 12px !important;
 }
 
 .sheet-drag-handle {
@@ -325,166 +318,104 @@
   height: 4px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 999px;
-  margin: 0 auto 4px auto;
+  margin: 0 auto 2px auto;
 }
 
-/* 6. CATEGORIAS */
-.category-slider {
-  display: grid !important;
-  grid-template-columns: repeat(3, 1fr) !important;
-  gap: 8px !important;
-  width: 100%;
-}
-
-.category-chip {
-  background: var(--hub-card-bg) !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 14px !important;
-  padding: 10px 6px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 4px !important;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-.category-chip .cat-icon {
-  font-size: 22px !important;
-  line-height: 1;
-}
-
-.category-chip .cat-label {
-  font-size: 11px !important;
-  font-weight: 800 !important;
-  color: var(--hub-text-sec) !important;
-  letter-spacing: 0.3px;
-}
-
-.category-chip.active {
-  background: var(--hub-emerald-subtle) !important;
-  border-color: var(--hub-emerald) !important;
-  box-shadow: 0 4px 16px var(--hub-emerald-glow) !important;
-}
-
-.category-chip.active .cat-label {
-  color: var(--hub-emerald) !important;
-}
-
-/* 7. DETALHES DE ENCOMENDA */
-#blocoDetalhesEntrega {
-  background: var(--hub-card-bg) !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 14px !important;
-  padding: 12px !important;
-  margin-bottom: 4px !important;
-  animation: slideFadeDown 0.2s ease-out;
-}
-
-@keyframes slideFadeDown {
-  from { opacity: 0; transform: translateY(-6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.entrega-badge {
-  font-size: 11px;
-  color: #10B981;
-  font-weight: 800;
-  text-transform: uppercase;
-  margin-bottom: 10px;
-  letter-spacing: 0.5px;
-}
-
-#blocoDetalhesEntrega input,
-#blocoDetalhesEntrega select {
-  width: 100%;
-  box-sizing: border-box;
-  background: #070B12 !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 10px !important;
-  padding: 10px 12px !important;
-  color: #FFF !important;
-  font-size: 13px !important;
-  font-weight: 600;
-  outline: none;
-  margin-bottom: 8px;
-}
-
-/* 8. RESUMO DA ROTA E PREÇO */
-.trip-summary-card {
-  background: var(--hub-card-bg) !important;
-  border: 1px solid var(--hub-border) !important;
-  border-radius: 16px !important;
-  padding: 12px 14px !important;
-  display: flex !important;
-  justify-content: space-between !important;
-  align-items: center !important;
-  gap: 12px !important;
-}
-
-.route-details {
+/* 6. RESUMO DO PERCURSO EM TIMELINE */
+.trip-summary-card-pro {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 12px 14px;
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  flex: 1;
-  min-width: 0;
+  gap: 12px;
+  align-items: stretch;
 }
 
-.route-point-indicator {
-  width: 9px;
-  height: 9px;
-  background: var(--hub-emerald);
-  border-radius: 50%;
-  box-shadow: 0 0 8px var(--hub-emerald);
-  margin-top: 5px;
+.route-timeline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0;
+  width: 14px;
   flex-shrink: 0;
 }
 
-.route-texts {
+.timeline-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.timeline-dot.pickup {
+  background: #38BDF8;
+  box-shadow: 0 0 8px #38BDF8;
+}
+
+.timeline-dot.dropoff {
+  background: var(--hub-emerald);
+  box-shadow: 0 0 8px var(--hub-emerald);
+}
+
+.timeline-line {
+  flex: 1;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 3px 0;
+}
+
+.route-details-column {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  flex: 1;
+  justify-content: space-between;
+  gap: 6px;
   min-width: 0;
 }
 
-.route-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2px;
-}
-
-.route-title {
+.route-label {
   font-size: 10px;
   font-weight: 800;
   text-transform: uppercase;
-  color: var(--hub-text-sec);
+  color: #64748B;
   letter-spacing: 0.5px;
+  display: block;
 }
 
-.route-subtitle {
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  color: var(--hub-text-pri) !important;
+.route-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #E2E8F0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   display: block;
 }
 
-.btn-add-stop {
-  background: rgba(56, 189, 248, 0.12) !important;
-  border: 1px solid rgba(56, 189, 248, 0.35) !important;
-  color: var(--hub-blue) !important;
-  border-radius: 12px !important;
-  font-size: 10px !important;
-  font-weight: 800 !important;
-  padding: 2px 8px !important;
+.route-text.dest {
+  color: #FFFFFF;
+  font-weight: 700;
+}
+
+.dest-title-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-add-stop-pill {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: var(--hub-blue);
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
   cursor: pointer;
 }
 
-.btn-add-stop:active {
+.btn-add-stop-pill:active {
   transform: scale(0.95);
 }
 
@@ -501,50 +432,228 @@
   border: 1px solid rgba(56, 189, 248, 0.2);
 }
 
-.trip-price-block {
+/* 7. CARTÕES DE MODALIDADE (ESTILO UBER BLACK) */
+.categories-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 195px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.category-card-pro {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  touch-action: manipulation;
+}
+
+.category-card-pro:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.category-card-pro.active {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: var(--hub-emerald);
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.2);
+}
+
+.cat-left {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 44px;
+}
+
+.cat-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.cat-badge-eta {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: var(--hub-emerald);
+  background: rgba(16, 185, 129, 0.15);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.cat-center {
+  flex: 1;
+  padding: 0 12px;
+  min-width: 0;
+}
+
+.cat-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cat-name-row strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: #FFFFFF;
+}
+
+.cat-seats {
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 600;
+}
+
+.cat-sub {
+  font-size: 11px;
+  color: #94A3B8;
+  display: block;
+}
+
+.cat-right {
   text-align: right;
   flex-shrink: 0;
-  padding-left: 6px;
 }
 
-.trip-price-block .price-val {
-  display: block;
-  font-size: 20px !important;
-  font-weight: 900 !important;
-  color: var(--hub-emerald) !important;
-  line-height: 1.1;
+.cat-price-est {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--hub-emerald);
 }
 
-.trip-price-block .eta-val {
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  color: var(--hub-text-sec) !important;
-  margin-top: 2px;
-  display: block;
+/* 8. FORMULÁRIO DE ENCOMENDA */
+.delivery-details-pro {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+  animation: slideFadeDown 0.2s ease-out;
 }
 
-/* 9. BOTÃO DE CONFIRMAR */
-.btn-main-action {
+.delivery-header-title {
+  font-size: 11px;
+  color: var(--hub-emerald);
+  font-weight: 800;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+  letter-spacing: 0.5px;
+}
+
+.delivery-details-pro input,
+.delivery-details-pro select {
   width: 100%;
-  background: var(--hub-emerald) !important;
-  color: #02261C !important;
-  border: none !important;
-  border-radius: 16px !important;
-  padding: 14px !important;
-  font-size: 15px !important;
-  font-weight: 900 !important;
-  letter-spacing: 0.3px;
+  box-sizing: border-box;
+  background: #070B12 !important;
+  border: 1px solid var(--hub-border) !important;
+  border-radius: 10px !important;
+  padding: 10px 12px !important;
+  color: #FFF !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  outline: none;
+  margin-bottom: 8px;
+}
+
+/* 9. LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM E NOTA */
+.dock-quick-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.btn-dock-quick-pill {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 999px;
+  padding: 8px 14px !important;
+  color: #F8FAFC;
+  font-size: 12.5px !important;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 5px;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.32) !important;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.btn-dock-quick-pill:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.btn-dock-quick-pill .arrow-down {
+  font-size: 10px;
+  color: #94A3B8;
+  margin-left: 2px;
+}
+
+.badge-cupom-ativo {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid var(--hub-emerald);
+  color: var(--hub-emerald);
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.badge-nota-motorista {
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38BDF8;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 10. BOTÃO DE CONFIRMAR COM PREÇO EMBUTIDO */
+.pro-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+  color: #01241A !important;
+  border: none !important;
+  border-radius: 18px !important;
+  padding: 15px 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.35) !important;
   transition: transform 0.15s ease;
 }
 
-.btn-main-action:active {
+.pro-btn:active {
   transform: scale(0.98);
 }
-/* ==========================================================================
-   CARDS DE FAVORITOS COM BOTÃO DE EDIÇÃO NO DRAWER
-   ========================================================================== */
+
+.pro-btn .btn-text {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: -0.2px;
+}
+
+.pro-btn .btn-price-preview {
+  font-size: 17px;
+  font-weight: 900;
+  background: rgba(0, 0, 0, 0.12);
+  padding: 4px 10px;
+  border-radius: 10px;
+}
+
+/* 11. CARDS DE FAVORITOS NO DRAWER */
 .drawer-fav-card {
   display: flex;
   align-items: center;
@@ -615,70 +724,8 @@
   background: rgba(16, 185, 129, 0.25);
   transform: scale(0.92);
 }
-/* ==========================================================================
-   NOVA LINHA DE AÇÕES RÁPIDAS NO DOCK (PAGAMENTO, CUPOM E NOTA)
-   ========================================================================== */
-.dock-quick-actions-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: -2px;
-}
 
-.btn-dock-quick-pill {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  padding: 7px 12px;
-  color: #F8FAFC;
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  touch-action: manipulation;
-}
-
-.btn-dock-quick-pill:active {
-  transform: scale(0.95);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.btn-dock-quick-pill .arrow-down {
-  font-size: 10px;
-  color: #94A3B8;
-  margin-left: 2px;
-}
-
-.badge-cupom-ativo {
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid #10B981;
-  color: #10B981;
-  font-size: 10.5px;
-  font-weight: 800;
-  padding: 3px 8px;
-  border-radius: 6px;
-  animation: pulseGreen 2s infinite;
-}
-
-.badge-nota-motorista {
-  background: rgba(56, 189, 248, 0.1);
-  border: 1px solid rgba(56, 189, 248, 0.3);
-  color: #38BDF8;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 5px 10px;
-  border-radius: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: -4px;
-}
-
-/* MODAL DE ESCOLHA DE PAGAMENTO RÁPIDO */
+/* 12. SELETOR RÁPIDO DE FORMAS DE PAGAMENTO */
 .opcoes-pagamento-rapido-grid {
   display: flex;
   flex-direction: column;
@@ -699,7 +746,7 @@
 }
 
 .opcao-pagamento-rapido.ativa {
-  border-color: #10B981;
+  border-color: var(--hub-emerald);
   background: rgba(16, 185, 129, 0.08);
 }
 
@@ -723,7 +770,7 @@
   color: #94A3B8;
 }
 
-/* MARCADOR DE VEÍCULO ANIMADO */
+/* 13. MARCADOR DE VEÍCULO ANIMADO */
 .huby-vehicle-marker-wrapper {
   background: transparent !important;
   border: none !important;
