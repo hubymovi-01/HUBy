@@ -94,46 +94,40 @@
   <aside id="drawerMenu" class="drawer-panel">
     <div class="drawer-profile" id="drawerPerfilBox"></div>
 
-    <nav class="drawer-nav">
-      <!-- LOCAIS FAVORITOS DENTRO DO MENU ONDE DEVEM ESTAR -->
-      <div style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; margin: 4px 10px; letter-spacing: 0.5px;">Favoritos</div>
-      <a href="#" id="menuItemCasa" class="drawer-item">
+    <!-- LOCAIS FAVORITOS COM EDIÇÃO E MARCAÇÃO NO MAPA -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin: 8px 12px 4px;">
+      <span
+        style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus
+        Favoritos</span>
+    </div>
+
+    <!-- Item Casa -->
+    <div class="drawer-fav-card">
+      <div class="fav-main-action" id="actionIrCasa">
         <span class="d-icon">🏠</span>
-        <div class="d-info"><strong id="txtMenuCasaTitulo">Minha Casa</strong><small id="txtMenuCasaDesc">Definir endereço residencial</small></div>
-      </a>
-      <a href="#" id="menuItemTrabalho" class="drawer-item">
+        <div class="d-info">
+          <strong>Minha Casa</strong>
+          <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
+        </div>
+      </div>
+      <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar endereço da Casa"
+        aria-label="Editar Casa">✏️</button>
+    </div>
+
+    <!-- Item Trabalho -->
+    <div class="drawer-fav-card">
+      <div class="fav-main-action" id="actionIrTrabalho">
         <span class="d-icon">🏢</span>
-        <div class="d-info"><strong id="txtMenuTrabalhoTitulo">Meu Trabalho</strong><small id="txtMenuTrabalhoDesc">Definir endereço comercial</small></div>
-      </a>
+        <div class="d-info">
+          <strong>Meu Trabalho</strong>
+          <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
+        </div>
+      </div>
+      <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar endereço do Trabalho"
+        aria-label="Editar Trabalho">✏️</button>
+    </div>
 
-      <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 6px 10px;"></div>
-
-      <a href="#" id="menuItemViagens" class="drawer-item">
-        <span class="d-icon">📋</span>
-        <div class="d-info"><strong>Minhas Viagens</strong><small>Histórico e recibos de corridas</small></div>
-      </a>
-      <a href="#" id="menuItemPagamentos" class="drawer-item">
-        <span class="d-icon">💳</span>
-        <div class="d-info"><strong>Formas de Pagamento</strong><small>Pix, Cartão e Dinheiro</small></div>
-      </a>
-      <a href="#" id="menuItemSeguranca" class="drawer-item">
-        <span class="d-icon">🛡️</span>
-        <div class="d-info"><strong>Contato de Segurança</strong><small>Compartilhar trajeto e emergência</small></div>
-      </a>
-      <a href="./motorista.html" class="drawer-item highlight-driver">
-        <span class="d-icon">🚘</span>
-        <div class="d-info"><strong>Painel do Motorista</strong><small>Aceder ao modo parceiro</small></div>
-      </a>
-      <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
-        style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 6px;">
-        <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
-      </a>
-      <a href="./perfil.html" class="drawer-item">
-        <span class="d-icon">👤</span>
-        <div class="d-info"><strong>Meu Perfil</strong><small>Editar foto e dados</small></div>
-      </a>
-    </nav>
+    <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
     <div class="drawer-footer">
       <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Entrar ou Cadastrar</button>
       <span class="version-tag">HUBy v2.0 • 2026</span>
@@ -141,8 +135,10 @@
   </aside>
 
   <!-- BOTÃO FLUTUANTE DE CAMADA (SATÉLITE / DARK) -->
-  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer"
+    aria-label="Alternar Satélite">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="2 17 12 22 22 17"></polyline>
       <polyline points="2 12 12 17 22 12"></polyline>
@@ -241,10 +237,13 @@
         <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
       <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
-        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
+          tempo real.</p>
+        <div
+          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
+            contato cadastrado</div>
         </div>
         <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%;">
           <span>📲 Compartilhar Rota no WhatsApp</span>
@@ -271,7 +270,8 @@
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
       <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
+          data-val="4">★</span><span data-val="5">★</span>
       </div>
       <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
       <div class="modal-btn-row">
@@ -312,9 +312,11 @@
       </div>
 
       <div id="areaPixMercadoPago" style="display: none;">
-        <div class="mp-qr-container" style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
+        <div class="mp-qr-container"
+          style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
           <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
-          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app do seu banco para pagar</span>
+          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app
+            do seu banco para pagar</span>
         </div>
 
         <div class="pix-charge-box" style="margin-top: 10px;">
@@ -325,7 +327,8 @@
           </div>
         </div>
 
-        <div id="statusPagamentoPixTexto" style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
+        <div id="statusPagamentoPixTexto"
+          style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
           ⏳ Aguardando confirmação do pagamento...
         </div>
       </div>
@@ -335,12 +338,14 @@
   <!-- CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
     <div class="modal-card modal-chat-custom">
-      <div class="modal-header-row" style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
+      <div class="modal-header-row"
+        style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700;">💬 Mensagens da Viagem</h3>
         <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
       </div>
       <div id="chatAreaMensagens" class="chat-area-messages">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
+        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
+          pessoais.</div>
       </div>
       <div class="chat-input-row">
         <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." />
@@ -439,6 +444,38 @@
     document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
     document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
   </script>
+  <!-- MODAL DE EDIÇÃO DE FAVORITO (TEXTO OU MAPA) -->
+  <div id="modalConfigFavorito" class="modal-backdrop" style="display: none; z-index: 10008;">
+    <div class="modal-card modal-wide">
+      <div class="modal-header-row">
+        <h3 id="tituloModalFav">Definir Local</h3>
+        <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
+      </div>
+      <p style="font-size: 12px; color: #94A3B8; margin-top: -6px; margin-bottom: 14px;">
+        Escolha como prefere definir o seu endereço:
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
+        <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
+          style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
+        
+        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
+          💾 Salvar Endereço Escrito
+        </button>
+
+        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+          <span style="font-size: 11px; color: #64748B; font-weight: 700;">OU</span>
+          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
+        </div>
+
+        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
+          📍 Marcar Direto no Mapa
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ORQUESTRADOR CENTRAL -->
   <script type="module" src="./js/app-cliente.js?v=9.11.0"></script>

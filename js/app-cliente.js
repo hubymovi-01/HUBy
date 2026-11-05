@@ -19,8 +19,8 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   const dLat = (lat2 - lat1) * rad;
   const dLon = (lon2 - lon1) * rad;
   const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
-            Math.sin(dLon / 2) ** 2;
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+    Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -195,58 +195,126 @@ function configurarAlternanciaSatélite() {
   });
 }
 
-// Configuração de Locais Favoritos (Gerenciados no Menu Lateral com Endereço Real)
+// GESTÃO AVANÇADA DE LOCAIS FAVORITOS (CASA / TRABALHO)
 function configurarLocaisFavoritosMenu() {
-  const itemCasa = document.getElementById('menuItemCasa');
-  const itemTrabalho = document.getElementById('menuItemTrabalho');
+  const modalFav = document.getElementById('modalConfigFavorito');
+  const btnFecharModal = document.getElementById('btnFecharModalFav');
+  const tituloModal = document.getElementById('tituloModalFav');
+  const inputTexto = document.getElementById('inputEnderecoFavTexto');
+  const btnSalvarTexto = document.getElementById('btnSalvarFavTexto');
+  const btnMarcarMapa = document.getElementById('btnMarcarFavNoMapa');
 
-  async function acionarFavorito(tipo, label) {
+  let tipoEditando = null; // 'casa' ou 'trabalho'
+  let labelEditando = '';
+
+  function abrirModalEdicao(tipo, label) {
     fecharDrawer();
+    tipoEditando = tipo;
+    labelEditando = label;
 
-    const enderecoSalvo = localStorage.getItem(`huby_endereco_${tipo}`);
-    const coordsSalvas = localStorage.getItem(`huby_coords_${tipo}`);
+    if (tituloModal) tituloModal.textContent = `Configurar ${label}`;
+    if (inputTexto) {
+      inputTexto.value = localStorage.getItem(`huby_endereco_${tipo}`) || '';
+      setTimeout(() => inputTexto.focus(), 100);
+    }
+    if (modalFav) modalFav.style.display = 'flex';
+  }
 
-    // Se o usuário ainda não cadastrou o local, abre o prompt para digitar o endereço real
-    if (!enderecoSalvo || !coordsSalvas) {
-      abrirPromptParada({
-        titulo: `Cadastrar ${label}`,
-        placeholder: 'Digite rua, número e cidade...',
-        onConfirmar: async (enderecoDigitado) => {
-          if (!enderecoDigitado || !enderecoDigitado.trim()) return;
+  function fecharModalEdicao() {
+    if (modalFav) modalFav.style.display = 'none';
+    tipoEditando = null;
+  }
 
-          notificarCliente(`Buscando localização de "${enderecoDigitado}"...`, 'info');
+  btnFecharModal?.addEventListener('click', fecharModalEdicao);
 
-          try {
-            const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(enderecoDigitado)}&limit=1`);
-            const dados = await resp.json();
+  // Abertura pelo botão Lápis (✏️)
+  document.getElementById('btnEditarCasa')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    abrirModalEdicao('casa', 'Minha Casa');
+  });
 
-            if (dados && dados.length > 0) {
-              const coords = [parseFloat(dados[0].lat), parseFloat(dados[0].lon)];
-              localStorage.setItem(`huby_endereco_${tipo}`, enderecoDigitado);
-              localStorage.setItem(`huby_coords_${tipo}`, JSON.stringify(coords));
+  document.getElementById('btnEditarTrabalho')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    abrirModalEdicao('trabalho', 'Meu Trabalho');
+  });
 
-              // Atualiza o subtítulo no menu lateral
-              const descElem = document.getElementById(tipo === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
-              if (descElem) descElem.textContent = enderecoDigitado;
-
-              notificarCliente(`${label} configurado com sucesso!`, 'sucesso');
-              tracarRotaFavorito(enderecoDigitado, coords);
-            } else {
-              notificarCliente('Endereço não localizado no mapa. Tente ser mais específico.', 'alerta');
-            }
-          } catch (e) {
-            notificarCliente('Erro ao conectar com serviço de mapas.', 'erro');
-          }
-        }
-      });
+  // Salvar Endereço por Texto Digitado
+  btnSalvarTexto?.addEventListener('click', async () => {
+    const endereco = inputTexto?.value.trim();
+    if (!endereco || !tipoEditando) {
+      notificarCliente('Digite um endereço antes de salvar.', 'alerta');
       return;
     }
 
-    // Se já foi cadastrado pelo usuário, traça a rota diretamente
-    tracarRotaFavorito(enderecoSalvo, JSON.parse(coordsSalvas));
-  }
+    notificarCliente('Localizando endereço no mapa...', 'info');
 
-  async function tracarRotaFavorito(nomeLocal, coords) {
+    try {
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`);
+      const dados = await resp.json();
+
+      if (dados && dados.length > 0) {
+        const coords = [parseFloat(dados[0].lat), parseFloat(dados[0].lon)];
+        localStorage.setItem(`huby_endereco_${tipoEditando}`, endereco);
+        localStorage.setItem(`huby_coords_${tipoEditando}`, JSON.stringify(coords));
+
+        // Atualiza legenda no drawer
+        const descElem = document.getElementById(tipoEditando === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
+        if (descElem) descElem.textContent = endereco;
+
+        notificarCliente(`${labelEditando} cadastrado com sucesso!`, 'sucesso');
+        fecharModalEdicao();
+      } else {
+        notificarCliente('Endereço não localizado no mapa. Detalhe rua, número ou cidade.', 'alerta');
+      }
+    } catch (e) {
+      notificarCliente('Falha ao conectar com serviço de busca.', 'erro');
+    }
+  });
+
+  // Salvar Escolhendo Posição Direto no Mapa
+  btnMarcarFavNoMapa?.addEventListener('click', () => {
+    if (!tipoEditando) return;
+    const tipoAlvo = tipoEditando;
+    const labelAlvo = labelEditando;
+
+    fecharModalEdicao();
+    notificarCliente(`Toque no mapa para indicar o local de "${labelAlvo}"`, 'info');
+
+    // Escuta um clique único no mapa Leaflet
+    if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
+      const mapaLeaflet = estadoCliente.hubyMapa.map;
+
+      function onToqueMapa(e) {
+        mapaLeaflet.off('click', onToqueMapa);
+        const { lat, lng } = e.latlng;
+        const coords = [lat, lng];
+        const nomeFormatado = `${labelAlvo} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+        localStorage.setItem(`huby_endereco_${tipoAlvo}`, nomeFormatado);
+        localStorage.setItem(`huby_coords_${tipoAlvo}`, JSON.stringify(coords));
+
+        const descElem = document.getElementById(tipoAlvo === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
+        if (descElem) descElem.textContent = nomeFormatado;
+
+        notificarCliente(`Localização de "${labelAlvo}" salva com sucesso!`, 'sucesso');
+      }
+
+      mapaLeaflet.once('click', onToqueMapa);
+    }
+  });
+
+  // Ação ao Tocar no Corpo do Card (Traçar Rota Direto)
+  async function acionarIrParaFavorito(tipo, label) {
+    fecharDrawer();
+    const enderecoSalvo = localStorage.getItem(`huby_endereco_${tipo}`);
+    const coordsSalvas = localStorage.getItem(`huby_coords_${tipo}`);
+
+    if (!enderecoSalvo || !coordsSalvas) {
+      abrirModalEdicao(tipo, label);
+      return;
+    }
+
+    const coords = JSON.parse(coordsSalvas);
     if (estadoCliente.pedidoAtivoId) return;
 
     estadoCliente.coordsDestino = coords;
@@ -254,8 +322,8 @@ function configurarLocaisFavoritosMenu() {
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
     const searchBox = document.querySelector('.search-glass-box');
 
-    if (txtDestino) txtDestino.textContent = nomeLocal;
-    if (inputPesquisa) inputPesquisa.value = nomeLocal;
+    if (txtDestino) txtDestino.textContent = enderecoSalvo;
+    if (inputPesquisa) inputPesquisa.value = enderecoSalvo;
     if (searchBox) searchBox.classList.add('active');
 
     if (estadoCliente.hubyMapa) {
@@ -264,20 +332,17 @@ function configurarLocaisFavoritosMenu() {
       estadoCliente.rotaAtual = rota;
       atualizarResumoValores();
     }
-    notificarCliente(`Destino definido: ${nomeLocal}`, 'sucesso');
+    notificarCliente(`Destino: ${label}`, 'sucesso');
   }
 
-  itemCasa?.addEventListener('click', (e) => {
-    e.preventDefault();
-    acionarFavorito('casa', 'Minha Casa');
+  document.getElementById('actionIrCasa')?.addEventListener('click', () => {
+    acionarIrParaFavorito('casa', 'Minha Casa');
   });
 
-  itemTrabalho?.addEventListener('click', (e) => {
-    e.preventDefault();
-    acionarFavorito('trabalho', 'Meu Trabalho');
+  document.getElementById('actionIrTrabalho')?.addEventListener('click', () => {
+    acionarIrParaFavorito('trabalho', 'Meu Trabalho');
   });
 }
-
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -312,7 +377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
       const searchBox = document.querySelector('.search-glass-box');
       const listaResultados = document.getElementById('listaResultadosPesquisa');
-      
+
       const textoDestino = `Destino no mapa (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
 
       if (txtDestino) txtDestino.textContent = textoDestino;
@@ -354,7 +419,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         listaResultados.style.display = 'none';
       }
 
-      atualizarResumoValores(); 
+      atualizarResumoValores();
     });
   }
 
@@ -368,7 +433,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
-      e.preventDefault(); 
+      e.preventDefault();
       e.stopPropagation();
       if (estadoCliente.hubyMapa) {
         estadoCliente.hubyMapa.obterGPS((posicaoReal) => {
@@ -404,7 +469,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       chips.forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       estadoCliente.categoriaSelecionada = chip.getAttribute('data-id') || 'carro';
-      
+
       const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
       if (blocoEntrega) {
         blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
@@ -601,7 +666,7 @@ function iniciarMonitoramentoPix(txid, valor) {
           if (modalPagamento) modalPagamento.style.display = 'none';
         }, 2200);
       }
-    } catch (e) {}
+    } catch (e) { }
   }, 3000);
 }
 
