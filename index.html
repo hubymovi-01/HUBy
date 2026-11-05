@@ -85,7 +85,8 @@
       <div class="search-dot-accent"></div>
       <input type="text" id="inputPesquisaLocal" placeholder="Para onde você quer ir?" autocomplete="off" />
       <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
@@ -103,7 +104,9 @@
     <nav class="drawer-nav">
       <!-- FAVORITOS -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin: 4px 10px 4px;">
-        <span style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus Favoritos</span>
+        <span
+          style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus
+          Favoritos</span>
       </div>
 
       <!-- Item Casa -->
@@ -115,7 +118,8 @@
             <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa" aria-label="Editar Casa">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa"
+          aria-label="Editar Casa">✏️</button>
       </div>
 
       <!-- Item Trabalho -->
@@ -127,7 +131,8 @@
             <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho" aria-label="Editar Trabalho">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho"
+          aria-label="Editar Trabalho">✏️</button>
       </div>
 
       <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
@@ -152,7 +157,8 @@
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
         style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 4px;">
         <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
+            financeiro</small></div>
       </a>
       <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
@@ -167,8 +173,10 @@
   </aside>
 
   <!-- BOTÃO FLUTUANTE DE CAMADA (SATÉLITE / DARK) -->
-  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer"
+    aria-label="Alternar Satélite">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="2 17 12 22 22 17"></polyline>
       <polyline points="2 12 12 17 22 12"></polyline>
@@ -177,7 +185,8 @@
 
   <!-- BOTÃO FLUTUANTE DE GPS -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+      stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
       <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -220,11 +229,10 @@
       </div>
     </div>
 
-    <!-- SELETOR HORIZONTAL DE 3 COLUNAS -->
+    <!-- SELETOR HORIZONTAL DE 3 COLUNAS (SEM MINUTOS) -->
     <div class="categories-container" id="sliderCategorias">
       <div class="category-card-pro active" data-id="carro">
         <div class="cat-left">
-          <span class="cat-badge-eta">3 min</span>
           <span class="cat-emoji">🚗</span>
         </div>
         <div class="cat-center">
@@ -239,7 +247,6 @@
 
       <div class="category-card-pro" data-id="moto">
         <div class="cat-left">
-          <span class="cat-badge-eta">2 min</span>
           <span class="cat-emoji">🏍️</span>
         </div>
         <div class="cat-center">
@@ -254,7 +261,6 @@
 
       <div class="category-card-pro" data-id="entrega">
         <div class="cat-left">
-          <span class="cat-badge-eta">5 min</span>
           <span class="cat-emoji">📦</span>
         </div>
         <div class="cat-center">
@@ -267,7 +273,6 @@
         </div>
       </div>
     </div>
-
     <!-- FORMULÁRIO DE ENTREGA -->
     <div id="blocoDetalhesEntrega" style="display: none;" class="delivery-details-pro">
       <div class="delivery-header-title">📋 Especificações da Encomenda</div>
@@ -283,7 +288,8 @@
 
     <!-- LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM E NOTAS -->
     <div class="dock-quick-actions-row pro-actions">
-      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" aria-label="Forma de Pagamento">
+      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill"
+        aria-label="Forma de Pagamento">
         <span id="iconFormaPagamento">💵</span>
         <span id="txtFormaPagamentoSelecionada">Dinheiro</span>
         <span class="arrow-down">▾</span>
@@ -296,7 +302,8 @@
         <span id="tagCupomAtivo" class="badge-cupom-ativo" style="display: none;"></span>
       </div>
 
-      <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" title="Adicionar nota">
+      <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill"
+        title="Adicionar nota">
         <span>📝 Observação</span>
       </button>
     </div>
@@ -371,10 +378,11 @@
       </p>
 
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
+        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar
+          Endereço</label>
         <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
           style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
-        
+
         <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
           💾 Salvar Endereço Escrito
         </button>
@@ -385,7 +393,8 @@
           <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
         </div>
 
-        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
+        <button type="button" id="btnMarcarFavNoMapa"
+          style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
           📍 Marcar Direto no Mapa
         </button>
       </div>
@@ -399,10 +408,13 @@
         <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
       </div>
       <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em tempo real.</p>
-        <div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
+        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
+          tempo real.</p>
+        <div
+          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
           <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum contato cadastrado</div>
+          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
+            contato cadastrado</div>
         </div>
         <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%;">
           <span>📲 Compartilhar Rota no WhatsApp</span>
@@ -429,7 +441,8 @@
       <h3>Como correu a sua viagem?</h3>
       <p>Classifique o atendimento do condutor parceiro:</p>
       <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span data-val="4">★</span><span data-val="5">★</span>
+        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
+          data-val="4">★</span><span data-val="5">★</span>
       </div>
       <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
       <div class="modal-btn-row">
@@ -470,9 +483,11 @@
       </div>
 
       <div id="areaPixMercadoPago" style="display: none;">
-        <div class="mp-qr-container" style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
+        <div class="mp-qr-container"
+          style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
           <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
-          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app do seu banco para pagar</span>
+          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app
+            do seu banco para pagar</span>
         </div>
 
         <div class="pix-charge-box" style="margin-top: 10px;">
@@ -483,7 +498,8 @@
           </div>
         </div>
 
-        <div id="statusPagamentoPixTexto" style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
+        <div id="statusPagamentoPixTexto"
+          style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
           ⏳ Aguardando confirmação do pagamento...
         </div>
       </div>
@@ -493,12 +509,14 @@
   <!-- CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
     <div class="modal-card modal-chat-custom">
-      <div class="modal-header-row" style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
+      <div class="modal-header-row"
+        style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700;">💬 Mensagens da Viagem</h3>
         <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
       </div>
       <div id="chatAreaMensagens" class="chat-area-messages">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>
+        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
+          pessoais.</div>
       </div>
       <div class="chat-input-row">
         <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." />
