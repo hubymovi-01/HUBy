@@ -7,6 +7,7 @@ import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdmi
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
 import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
 import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
+import { inicializarPainelTestes } from './cliente/cliente-testes.js';
 import { 
   configurarSeletorPagamentoRapido, 
   configurarNotaMotorista, 
@@ -394,6 +395,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     setTimeout(() => {
       if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
     }, 400);
+    // Ativa botão flutuante de testes e simulação
+  inicializarPainelTestes();
   }
 
   await sincronizarTarifasServidor();
