@@ -4,6 +4,7 @@ import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
+// Middleware de Autenticação
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader ? (authHeader.split(' ')[1] || authHeader) : req.query.token;
@@ -18,6 +19,17 @@ export function autenticarToken(req, res, next) {
     return res.status(401).json({ erro: 'Sessão expirada ou token inválido.' });
   }
 }
+
+// Inicialização segura de colunas na tabela de pedidos
+async function inicializarColunasPedidos() {
+  try {
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(50);`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_label VARCHAR(100);`;
+  } catch (e) {
+    console.warn('Aviso: Colunas de pedidos já existem ou falha ao criá-las:', e.message);
+  }
+}
+inicializarColunasPedidos();
 
 export default function pedidosRouter(io) {
   const router = express.Router();
@@ -780,7 +792,7 @@ export default function pedidosRouter(io) {
       const usuarioId = req.usuario.id;
 
       const mot = await sql`
-        SELECT id, is_online FROM motoristas 
+        SELECT id, status_online FROM motoristas 
         WHERE id::text = ${String(usuarioId)}::text 
            OR usuario_id::text = ${String(usuarioId)}::text
         LIMIT 1;
@@ -788,10 +800,10 @@ export default function pedidosRouter(io) {
 
       let novoStatus = true;
       if (mot.length > 0) {
-        novoStatus = !mot[0].is_online;
+        novoStatus = !mot[0].status_online;
         await sql`
           UPDATE motoristas 
-          SET is_online = ${novoStatus} 
+          SET status_online = ${novoStatus} 
           WHERE id::text = ${String(mot[0].id)}::text;
         `;
       }
