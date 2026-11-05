@@ -79,7 +79,15 @@ const processarCadastro = async (req, res) => {
       const catFinal = categoria || categoria_veiculo || 'carro';
       const novoId = 'mot_' + Date.now().toString(36);
 
-      // Insere na tabela motoristas já com Modelo, Placa Mercosul, Cor e Ano
+      // Tenta criar a coluna foto_perfil_url se não existir, para evitar falhas futuras
+      try {
+        await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
+        await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
+      } catch (e) {
+        // Ignora se não conseguir adicionar a coluna
+      }
+
+      // Insere na tabela motoristas
       const resultado = await sql`
         INSERT INTO motoristas (
           id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
@@ -297,19 +305,23 @@ router.get('/perfil', async (req, res) => {
     let user;
 
     if (payload.role === 'motorista') {
-      user = await sql`
-        SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, foto_url) AS foto_url,
-               veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano
-        FROM motoristas WHERE id::text = ${payload.id}::text LIMIT 1;
-      `;
+      // Ignora erro se coluna foto não existir
+      try {
+        user = await sql`
+          SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano
+          FROM motoristas WHERE id::text = ${payload.id}::text LIMIT 1;
+        `;
+      } catch (e) {
+        user = [];
+      }
     } else {
       user = await sql`
-        SELECT id, nome, email, telefone, COALESCE(foto_perfil_url, foto_url) AS foto_url 
+        SELECT id, nome, email, telefone 
         FROM usuarios WHERE id::text = ${payload.id}::text LIMIT 1;
       `;
     }
     
-    if (user.length === 0) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
+    if (!user || user.length === 0) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
     res.json(user[0]);
   } catch (err) {
     res.status(401).json({ erro: 'Sessão inválida.' });
@@ -323,26 +335,26 @@ router.put('/perfil', async (req, res) => {
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const { nome, foto_url } = req.body; 
+    const { nome, email, telefone } = req.body; 
     let atualizado;
 
     if (payload.role === 'motorista') {
       atualizado = await sql`
         UPDATE motoristas
-        SET nome = COALESCE(${nome || null}, nome), 
-            foto_perfil_url = COALESCE(${foto_url || null}, foto_perfil_url),
-            foto_url = COALESCE(${foto_url || null}, foto_url)
+        SET nome = COALESCE(${nome || null}, nome),
+            email = COALESCE(${email || null}, email),
+            telefone = COALESCE(${telefone || null}, telefone)
         WHERE id::text = ${payload.id}::text
-        RETURNING id, nome, email, telefone, foto_perfil_url, veiculo_modelo, veiculo_placa;
+        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa;
       `;
     } else {
       atualizado = await sql`
         UPDATE usuarios
-        SET nome = COALESCE(${nome || null}, nome), 
-            foto_perfil_url = COALESCE(${foto_url || null}, foto_perfil_url),
-            foto_url = COALESCE(${foto_url || null}, foto_url)
+        SET nome = COALESCE(${nome || null}, nome),
+            email = COALESCE(${email || null}, email),
+            telefone = COALESCE(${telefone || null}, telefone)
         WHERE id::text = ${payload.id}::text
-        RETURNING id, nome, email, telefone, foto_perfil_url;
+        RETURNING id, nome, email, telefone;
       `;
     }
 
