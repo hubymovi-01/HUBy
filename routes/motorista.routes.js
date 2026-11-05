@@ -137,7 +137,7 @@ const handlerObterPerfil = async (req, res) => {
       LIMIT 1;
     `;
 
-    // 2. Se não encontrou vínculo direto, puxa o motorista que tem saldo no banco (ex: Carol) e vincula
+    // 2. Se não encontrou vínculo direto, puxa o motorista com maior saldo
     if (mot.length === 0) {
       mot = await sql`
         SELECT 
@@ -235,7 +235,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       RETURNING *;
     `;
 
-    // Se ainda não existia o registro vinculado, atualiza o motorista de maior saldo
     if (mot.length === 0) {
       mot = await sql`
         UPDATE motoristas
@@ -270,7 +269,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
   }
 });
 
-// Atalho para atualizar chave Pix direto do drawer
 router.put('/chave-pix', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
@@ -297,7 +295,6 @@ router.get('/extrato', autenticarToken, async (req, res) => {
   try {
     const usuarioId = req.usuario.id;
 
-    // Identifica o ID real da tabela motoristas
     const mot = await sql`
       SELECT id FROM motoristas 
       WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
@@ -314,6 +311,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
       LIMIT 15;
     `;
 
+    // Removido o filtro rígido de nome (carol) para funcionar com qualquer conta
     const corridas = await sql`
       SELECT 
         id, valor_total, 
@@ -322,8 +320,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
       FROM pedidos
       WHERE status = 'concluido'
         AND (motorista_id::text = ${motoristaIdReal}::text 
-             OR motorista_id::text = ${usuarioId}::text
-             OR motorista_nome ILIKE 'carol%')
+             OR motorista_id::text = ${usuarioId}::text)
       ORDER BY criado_em DESC
       LIMIT 20;
     `;
@@ -349,15 +346,16 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
     `;
     const motoristaIdReal = mot[0]?.id || usuarioId;
 
+    // Filtra pelo dia correto evitando conflitos de fuso horário (UTC vs Local)
     const corridasHoje = await sql`
       SELECT 
         COUNT(*)::int AS total_corridas,
         COALESCE(SUM(valor_total * 0.85), 0) AS ganhos_liquidos
       FROM pedidos
       WHERE status = 'concluido'
+        AND DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') = DATE(NOW() AT TIME ZONE 'America/Sao_Paulo')
         AND (motorista_id::text = ${motoristaIdReal}::text 
-             OR motorista_id::text = ${usuarioId}::text
-             OR motorista_nome ILIKE 'carol%');
+             OR motorista_id::text = ${usuarioId}::text);
     `;
 
     const dados = corridasHoje[0] || { total_corridas: 0, ganhos_liquidos: 0 };
