@@ -1,12 +1,14 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { sql } from './db.js';
+import { sql, JWT_SECRET } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
-import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter from './routes/pedidos.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
@@ -15,71 +17,122 @@ import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
 
-dotenv.config();
-
 const app = express();
 const port = process.env.PORT || 3000;
 const server = createServer(app);
+const EM_PRODUCAO = process.env.NODE_ENV === 'production';
+
+// O Render fica atrás de um proxy: necessário para o limite de tentativas ver o IP real
+app.set('trust proxy', 1);
+
+// Aceita router pronto ou função "fábrica" que devolve o router
+const montar = (modulo, ...args) => (modulo && modulo.stack ? modulo : modulo(...args));
 
 // ============================================================================
-// 1. CONFIGURAÇÃO UNIFICADA E ROBUSTA DE CORS (HTTP + SOCKET.IO)
+// 1. CORS (HTTP + SOCKET.IO) - só origens permitidas
 // ============================================================================
-const origensPermitidas = [
+const origensPermitidas = new Set([
   'https://hubymovi-01.github.io',
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5500',
-  'http://localhost:8080'
-];
+  ...(process.env.ORIGENS_PERMITIDAS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  ...(EM_PRODUCAO
+    ? []
+    : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5500', 'http://localhost:8080'])
+]);
 
 const checarOrigem = (origin, callback) => {
-  if (!origin || origensPermitidas.includes(origin) || origin.endsWith('.github.io')) {
-    callback(null, true);
-  } else {
-    callback(null, true);
-  }
+  // Sem origin = app instalado, Mercado Pago (webhook), ferramentas de teste
+  if (!origin || origensPermitidas.has(origin)) return callback(null, true);
+  return callback(null, false);
 };
 
-const io = new Server(server, {
-  cors: {
-    origin: checarOrigem,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-    credentials: true
+const opcoesCors = {
+  origin: checarOrigem,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+  credentials: true
+};
+
+// ============================================================================
+// 2. SOCKET.IO
+// ============================================================================
+const io = new Server(server, { cors: opcoesCors });
+
+// Token é opcional (o rastreio público não tem login). Token inválido = visitante.
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (token) {
+    try {
+      socket.data.usuario = jwt.verify(String(token), JWT_SECRET);
+    } catch (e) {
+      socket.data.usuario = null;
+    }
   }
+  next();
 });
 
 io.on('connection', (socket) => {
-  console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
-  socket.on('disconnect', () => {
-    console.log(`Utilizador desconectado do radar: ${socket.id}`);
+  const u = socket.data.usuario;
+  if (u) {
+    socket.join(`usuario:${u.id}`);
+    if (u.motoristaId) socket.join(`usuario:${u.motoristaId}`);
+    socket.join(`papel:${String(u.role || '').toLowerCase()}`);
+  }
+
+  // Quem acompanha uma corrida entra só na sala dela
+  socket.on('acompanhar_corrida', (pedidoId) => {
+    if (typeof pedidoId === 'string' && pedidoId.length > 0 && pedidoId.length <= 64) {
+      socket.join(`corrida:${pedidoId}`);
+    }
   });
 });
 
-// Injeta Socket.IO nas requisições
+app.set('io', io);
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// Middleware oficial do pacote CORS
-app.use(cors({
-  origin: checarOrigem,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-  credentials: true
+// ============================================================================
+// 3. SEGURANÇA E PARSERS
+// ============================================================================
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(cors(opcoesCors));
+app.options('*', cors(opcoesCors));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Limite geral por IP
+app.use('/api', rateLimit({
+  windowMs: 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { erro: 'Muitas requisições. Aguarde um instante.' }
 }));
 
-app.options('*', cors());
+// Limite rígido para login e cadastro (barra tentativa em massa)
+const limitadorLogin = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { erro: 'Muitas tentativas. Tente novamente em alguns minutos.' }
+});
+app.use(
+  [
+    '/api/auth/login',
+    '/api/auth/login-motorista',
+    '/api/auth/cadastro',
+    '/api/usuarios/login',
+    '/api/usuarios/login-motorista',
+    '/api/usuarios/cadastro'
+  ],
+  limitadorLogin
+);
 
 // ============================================================================
-// 2. PARSERS DE DADOS (BASE64 E JSON GRANDES)
-// ============================================================================
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
-// ============================================================================
-// 3. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
+// 4. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
 // ============================================================================
 async function inicializarBanco() {
   try {
@@ -262,7 +315,7 @@ async function inicializarBanco() {
       );
     `;
 
-    // Garante colunas adicionais de apoio
+    // Colunas adicionais de apoio
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -287,13 +340,12 @@ async function inicializarBanco() {
 inicializarBanco();
 
 // ============================================================================
-// 4. ROTAS BASE E STATUS
+// 5. ROTAS BASE E STATUS
 // ============================================================================
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.0.4',
-    banco: 'Neon PostgreSQL'
+    versao: '2.1.0'
   });
 });
 
@@ -307,32 +359,32 @@ app.get('/api/config/tarifas', (req, res) => {
 });
 
 // ============================================================================
-// 5. REGISTRO DE ROTAS MODULARES
+// 6. REGISTRO DE ROTAS MODULARES
 // ============================================================================
 app.use('/api/auth', authRoutes);
-app.use('/api/usuarios', usuariosRouter || authRoutes);
-app.use('/api/pedidos', pedidosRouter(io));
-app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
+// Compatibilidade: as telas antigas ainda chamam /api/usuarios/... (agora usa o login seguro com bcrypt)
+app.use('/api/usuarios', authRoutes);
+app.use('/api/pedidos', montar(pedidosRouter, io));
+app.use('/api/admin', montar(adminRoutes, io));
 app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
-app.use('/api/socios', sociosRoutes);
+app.use('/api/socios', montar(sociosRoutes));
 app.use('/api/marketplace', marketplaceRouter);
 
 // ============================================================================
-// 6. TRATAMENTO GLOBAL DE ERROS
+// 7. TRATAMENTO GLOBAL DE ERROS
 // ============================================================================
 app.use((err, req, res, next) => {
   console.error('Erro interno do servidor:', err);
-  res.status(err.status || 500).json({
-    erro: true,
-    mensagem: err.message || 'Erro interno no servidor'
-  });
+  const status = err.status || 500;
+  const msg = status >= 500 ? 'Erro interno no servidor.' : err.message;
+  res.status(status).json({ erro: msg, mensagem: msg });
 });
 
 // ============================================================================
-// 7. INICIALIZAÇÃO DO SERVIDOR
+// 8. INICIALIZAÇÃO DO SERVIDOR
 // ============================================================================
 server.listen(port, () => {
   console.log(`Servidor HUBy ativo na porta ${port}`);
