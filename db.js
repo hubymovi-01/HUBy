@@ -7,30 +7,49 @@ dotenv.config();
 
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
+// ============================================================================
+// BANCO DE DADOS
+// ============================================================================
 if (!process.env.DATABASE_URL) {
-  console.warn('⚠️ AVISO: DATABASE_URL não definida nas variáveis de ambiente.');
+  // Sem banco o sistema não funciona: melhor parar com uma mensagem clara
+  console.error('❌ ERRO: DATABASE_URL não definida nas variáveis de ambiente.');
+  process.exit(1);
 }
 
 export const sql = neon(process.env.DATABASE_URL);
 
-// JWT_SECRET: sem chave fixa no código.
-let segredo = process.env.JWT_SECRET;
-if (!segredo || segredo.length < 32) {
-  if (EM_PRODUCAO) {
-    throw new Error('JWT_SECRET ausente ou curta (mínimo 32 caracteres). Defina no Render.');
+// ============================================================================
+// CHAVE SECRETA DO LOGIN (JWT)
+// Nunca escreva a chave aqui no código. Ela vem só das variáveis de ambiente.
+// ============================================================================
+function obterJwtSecret() {
+  const segredo = process.env.JWT_SECRET;
+
+  if (segredo && segredo.length >= 32) {
+    return segredo;
   }
-  segredo = crypto.randomBytes(48).toString('hex');
-  console.warn('⚠️ JWT_SECRET não definida: usando chave temporária (só para desenvolvimento).');
+
+  if (EM_PRODUCAO) {
+    // Em produção, sem uma chave forte o servidor não sobe
+    console.error('❌ ERRO: JWT_SECRET ausente ou curta (mínimo 32 caracteres) em produção.');
+    process.exit(1);
+  }
+
+  // Só em desenvolvimento: chave aleatória temporária (os logins caem ao reiniciar)
+  console.warn('⚠️ AVISO: JWT_SECRET não definida. Usando chave temporária de desenvolvimento.');
+  return crypto.randomBytes(48).toString('hex');
 }
-export const JWT_SECRET = segredo;
 
-// Inicialização segura de suporte a colunas e tabelas essenciais
+export const JWT_SECRET = obterJwtSecret();
+
+// ============================================================================
+// ESTRUTURA BASE (colunas de apoio)
+// ============================================================================
 async function inicializarEstruturaBase() {
-  if (!process.env.DATABASE_URL) return;
-
   try {
+    // 1. Garante colunas de suporte do motorista (veículo, destino e pausas)
     await sql`
-      ALTER TABLE motoristas 
+      ALTER TABLE motoristas
         ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC,
         ADD COLUMN IF NOT EXISTS destino_casa_lng NUMERIC,
         ADD COLUMN IF NOT EXISTS destino_casa_ativo BOOLEAN DEFAULT FALSE,
@@ -41,8 +60,9 @@ async function inicializarEstruturaBase() {
         ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;
     `;
 
+    // 2. Garante coluna de horário de embarque na tabela de pedidos
     await sql`
-      ALTER TABLE pedidos 
+      ALTER TABLE pedidos
         ADD COLUMN IF NOT EXISTS embarque_em TIMESTAMP;
     `;
 
