@@ -186,8 +186,9 @@
       localStorage.setItem('huby_user_name', data.usuario.nome);
       localStorage.setItem('huby_user_id', data.usuario.id);
 
-      if (data.usuario.motoristaId) {
-        localStorage.setItem('huby_motorista_id', data.usuario.motoristaId);
+      // CORREÇÃO AQUI
+      if (data.usuario.role === 'motorista') {
+        localStorage.setItem('huby_motorista_id', data.usuario.motoristaId || data.usuario.id);
       }
 
       exibirAlerta('Login efetuado com sucesso!', 'success');
