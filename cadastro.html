@@ -1,13 +1,21 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Criar Conta • HUBy</title>
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
   <style>
-    .upload-group { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .upload-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
     .upload-box {
       border: 2px dashed rgba(16, 185, 129, 0.4);
       background: rgba(16, 185, 129, 0.05);
@@ -19,10 +27,19 @@
       font-size: 13px;
       font-weight: 700;
     }
-    .upload-box.has-file { border-style: solid; background: rgba(16, 185, 129, 0.15); color: #FFF; }
-    .file-input { display: none; }
+
+    .upload-box.has-file {
+      border-style: solid;
+      background: rgba(16, 185, 129, 0.15);
+      color: #FFF;
+    }
+
+    .file-input {
+      display: none;
+    }
   </style>
 </head>
+
 <body class="auth-body">
 
   <div class="auth-ambient-glow"></div>
@@ -68,9 +85,11 @@
         </div>
 
         <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
-        <div id="blocoMotorista" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
-          <h4 style="margin-bottom: 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do Veículo e CNH</h4>
-          
+        <div id="blocoMotorista"
+          style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
+          <h4 style="margin-bottom: 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do
+            Veículo e CNH</h4>
+
           <div class="input-group">
             <label>Nº da CNH (11 dígitos)</label>
             <input type="tel" id="cadCNH" placeholder="Digite os 11 dígitos da CNH" maxlength="11">
@@ -78,7 +97,8 @@
 
           <div class="input-group">
             <label>Categoria do Veículo</label>
-            <select id="cadCategoriaVeiculo" style="width: 100%; padding: 12px; background: #090D16; border: 1px solid rgba(255,255,255,0.08); color: #FFF; border-radius: 10px;">
+            <select id="cadCategoriaVeiculo"
+              style="width: 100%; padding: 12px; background: #090D16; border: 1px solid rgba(255,255,255,0.08); color: #FFF; border-radius: 10px;">
               <option value="carro">Carro Padrão</option>
               <option value="moto">Moto Passageiro</option>
               <option value="flash_moto">Flash (Entregas)</option>
@@ -176,7 +196,7 @@
     inputCpf.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
       if (v.length > 11) v = v.slice(0, 11);
-      
+
       if (v.length > 9) {
         v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
       } else if (v.length > 6) {
@@ -247,7 +267,7 @@
     document.getElementById('formCadastroHuby').addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
-      
+
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
         email: document.getElementById('cadEmail').value.trim(),
@@ -294,9 +314,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        
+
         const data = await resp.json();
-        
+
         if (resp.status === 409 || !resp.ok) {
           throw new Error(data.erro || 'Este e-mail ou CPF já está registado.');
         }
@@ -304,7 +324,7 @@
         localStorage.setItem('huby_token', data.token);
         localStorage.setItem('huby_user_role', data.usuario.role);
         localStorage.setItem('huby_user_name', data.usuario.nome);
-        
+
         exibirAlerta('Conta criada com sucesso!', 'success');
         setTimeout(() => {
           window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
@@ -348,4 +368,5 @@
     }
   </script>
 </body>
+
 </html>
