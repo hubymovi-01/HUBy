@@ -157,8 +157,10 @@ export async function submeterPedido() {
       body: JSON.stringify(payload)
     });
 
-    if (!resp.ok) throw new Error('Falha ao registar pedido na base de dados.');
-    const dadosResposta = await resp.json();
+    const dadosResposta = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      throw new Error(dadosResposta.erro || 'Falha ao registar pedido na base de dados.');
+    }
 
     if (dadosResposta.desconto > 0) {
       alert(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`);
@@ -479,7 +481,7 @@ export function resetarPainelCliente() {
 
   if (txtDestino) txtDestino.textContent = 'Toque no mapa para indicar o destino';
   if (txtDist) txtDist.textContent = '-- km';
-  if (txtPreco) txtPreco.textContent = '--'; // ← CORRIGIDO: Retorna ao traço (--), nunca R$ 10,00
+  if (txtPreco) txtPreco.textContent = '--';
 
   if (btn) {
     btn.disabled = false;
