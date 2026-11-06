@@ -186,7 +186,7 @@
       localStorage.setItem('huby_user_name', data.usuario.nome);
       localStorage.setItem('huby_user_id', data.usuario.id);
 
-      // CORREÇÃO AQUI
+      // CORREÇÃO APLICADA: Grava o ID corretamente para saques e corridas
       if (data.usuario.role === 'motorista') {
         localStorage.setItem('huby_motorista_id', data.usuario.motoristaId || data.usuario.id);
       }

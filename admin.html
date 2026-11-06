@@ -68,7 +68,6 @@
     <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
     <button type="button" class="tab-btn" data-tab="tabSocios">🤝 Divisão Sócios</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
-    <button type="button" class="tab-btn" data-tab="tabMarketplace">🛍️ Loja & Clube HUBy</button>
     <button type="button" class="tab-btn" data-tab="tabZonas">🛡️ Zonas de Risco</button>
     <button type="button" class="tab-btn" data-tab="tabCupons">🎟️ Cupons & Descontos</button>
     <button type="button" class="tab-btn" data-tab="tabSeguranca">🚨 Incidentes & SOS</button>
@@ -77,6 +76,8 @@
     <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Condutores</button>
     <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Viagens</button>
     <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Tarifas & Gateway</button>
+    <!-- NOVA ABA ADICIONADA -->
+    <button type="button" class="tab-btn" data-tab="tabMarketplace">🛍️ Loja & Clube</button>
   </nav>
 
   <!-- ABA 1: MÉTRICAS E GRÁFICOS -->
@@ -492,7 +493,35 @@
         </form>
       </div>
 
-      <!-- ABA 12: LOJA / MARKETPLACE PARCEIRO -->
+      <!-- CREDENCIAIS GATEWAY MERCADO PAGO -->
+      <div class="card-panel">
+        <h3 class="panel-blue-title">💳 Gateway de Pagamento (Mercado Pago)</h3>
+        <p class="panel-subtitle">
+          Insira suas credenciais de produção para geração de Pix real e liquidação bancária instantânea.
+        </p>
+        <form id="formMercadoPagoConfig">
+          <div class="form-group">
+            <label>Access Token de Produção</label>
+            <input type="password" id="mpAccessToken" placeholder="APP_USR-0000000000000000-..." required>
+          </div>
+          <div class="form-group">
+            <label>Chave Pública (Public Key)</label>
+            <input type="text" id="mpPublicKey" placeholder="APP_USR-xxxx-xxxx...">
+          </div>
+          <div class="form-group">
+            <label>Taxa Estimada do Gateway (%)</label>
+            <input type="number" step="0.01" id="mpTaxaPercentual" value="0.99" placeholder="0.99">
+          </div>
+          <button type="submit" class="btn-action btn-blue-full">
+            Salvar Chaves Mercado Pago
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ABA 12: LOJA / MARKETPLACE PARCEIRO (NOVA) -->
   <section id="tabMarketplace" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -560,34 +589,6 @@
           </tbody>
         </table>
       </div>
-    </div>
-  </section>
-
-      <!-- CREDENCIAIS GATEWAY MERCADO PAGO -->
-      <div class="card-panel">
-        <h3 class="panel-blue-title">💳 Gateway de Pagamento (Mercado Pago)</h3>
-        <p class="panel-subtitle">
-          Insira suas credenciais de produção para geração de Pix real e liquidação bancária instantânea.
-        </p>
-        <form id="formMercadoPagoConfig">
-          <div class="form-group">
-            <label>Access Token de Produção</label>
-            <input type="password" id="mpAccessToken" placeholder="APP_USR-0000000000000000-..." required>
-          </div>
-          <div class="form-group">
-            <label>Chave Pública (Public Key)</label>
-            <input type="text" id="mpPublicKey" placeholder="APP_USR-xxxx-xxxx...">
-          </div>
-          <div class="form-group">
-            <label>Taxa Estimada do Gateway (%)</label>
-            <input type="number" step="0.01" id="mpTaxaPercentual" value="0.99" placeholder="0.99">
-          </div>
-          <button type="submit" class="btn-action btn-blue-full">
-            Salvar Chaves Mercado Pago
-          </button>
-        </form>
-      </div>
-
     </div>
   </section>
 
