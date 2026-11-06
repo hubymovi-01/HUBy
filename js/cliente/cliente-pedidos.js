@@ -1,4 +1,4 @@
-// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Carteira Pré-Paga e Radar
+// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Carteira Pré-Paga e Radar HUBy
 import { API_URL, calcularPreco, MULTIPLICADOR_PICO, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
@@ -10,11 +10,16 @@ export function atualizarBotaoChamar(resumo = null) {
   if (!btn || estadoCliente.pedidoAtivoId) return;
 
   const labels = {
-    carro: 'Chamar HUBy Carro',
-    moto: 'Chamar HUBy Moto',
-    entrega: 'Solicitar Entrega'
+    carro: 'Confirmar HUBy Carro',
+    moto: 'Confirmar HUBy Moto',
+    entrega: 'Confirmar HUBy Flash'
   };
-  btn.textContent = labels[estadoCliente.categoriaSelecionada] || 'Chamar HUBy';
+  const spanText = btn.querySelector('.btn-text');
+  if (spanText) {
+    spanText.textContent = labels[estadoCliente.categoriaSelecionada] || 'Confirmar HUBy';
+  } else {
+    btn.textContent = labels[estadoCliente.categoriaSelecionada] || 'Confirmar HUBy';
+  }
 }
 
 export function atualizarResumoValores() {
@@ -37,7 +42,6 @@ export function atualizarResumoValores() {
     distanciaKm = Number(estadoCliente.distanciaTotalComParadas);
   }
 
-  // Tarifas base por modalidade
   const categoria = estadoCliente.categoriaSelecionada || 'carro';
   let precoBase = 7.00;
   let valorKm = 2.00;
@@ -50,7 +54,6 @@ export function atualizarResumoValores() {
     valorKm = 1.60;
   }
 
-  // Se a rota já calculou o preço direto do OSRM/Servidor, utiliza-o; senão, calcula por km
   let precoFinal = 0;
   if (estadoCliente.rotaAtual.preco && Number(estadoCliente.rotaAtual.preco) > 0) {
     precoFinal = Number(estadoCliente.rotaAtual.preco);
@@ -76,8 +79,16 @@ export function atualizarResumoValores() {
 }
 
 export async function submeterPedido() {
+  const token = localStorage.getItem('huby_token');
+  
+  if (!token || token === 'null' || token === 'undefined') {
+    alert('Sua sessão expirou ou você não está conectado. Faça login para chamar.');
+    window.location.replace('./login.html?perfil=cliente');
+    return;
+  }
+
   if (!estadoCliente.rotaAtual || !estadoCliente.coordsDestino) {
-    alert('Por favor, indique o destino da viagem.');
+    alert('Por favor, indique o destino da viagem no mapa ou pesquise.');
     return;
   }
 
@@ -89,108 +100,123 @@ export async function submeterPedido() {
     }
   }
 
-  const token = localStorage.getItem('huby_token');
   const clienteId = localStorage.getItem('huby_user_id');
-  const novoId = 'ped_' + Date.now().toString(36);
+  const novoId = 'ped_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
-  const kmTotal = estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm;
-  const duracaoTotal = estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin;
+  const kmTotal = Number(estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm || 1.5);
+  const duracaoTotal = Number(estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin || 5);
   const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada, kmTotal);
+  const precoDefinitivo = estadoCliente.precoFinalCalculado || precoInfo.valorTotal;
   const cupomCodigo = document.getElementById('inputCupomDesconto')?.value.trim().toUpperCase() || null;
 
-  let metodoPgto = 'pix_app';
-  const saldoDisponivel = Number(estadoCliente.saldoCarteiraCliente || 0);
+  // Extração estrita de coordenadas numéricas
+  const coordsOrigemArr = estadoCliente.hubyMapa?.coordsOrigem || [-8.3582, -42.2476];
+  const coordsDestinoArr = estadoCliente.coordsDestino;
 
-  if (saldoDisponivel >= precoInfo.valorTotal) {
-    const usarSaldo = confirm(
-      `Você possui R$ ${saldoDisponivel.toFixed(2).replace('.', ',')} de saldo na Carteira HUBy.\n` +
-      `Deseja pagar essa corrida de ${precoInfo.formatado} diretamente com seu saldo pré-pago?`
-    );
-    if (usarSaldo) {
-      metodoPgto = 'saldo_carteira';
-    }
+  const latOrigNum = parseFloat(coordsOrigemArr[0]);
+  const lngOrigNum = parseFloat(coordsOrigemArr[1]);
+  const latDestNum = parseFloat(coordsDestinoArr[0]);
+  const lngDestNum = parseFloat(coordsDestinoArr[1]);
+
+  let metodoPgto = 'dinheiro';
+  const metodoRapido = document.querySelector('.opcao-pagamento-rapido.ativa')?.getAttribute('data-metodo');
+  if (metodoRapido) {
+    metodoPgto = metodoRapido;
   }
 
-  const latOrig = estadoCliente.hubyMapa?.coordsOrigem ? estadoCliente.hubyMapa.coordsOrigem[0].toFixed(4) : '-8.3580';
-  const lngOrig = estadoCliente.hubyMapa?.coordsOrigem ? estadoCliente.hubyMapa.coordsOrigem[1].toFixed(4) : '-42.2460';
-  
   const txtDestino = document.getElementById('txtDestinoSelecionado');
-  let nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${estadoCliente.coordsDestino[0].toFixed(4)}, ${estadoCliente.coordsDestino[1].toFixed(4)})`;
+  let nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${latDestNum.toFixed(4)}, ${lngDestNum.toFixed(4)})`;
 
   if (estadoCliente.categoriaSelecionada === 'entrega') {
     const recebedor = document.getElementById('inputRecebedor')?.value || 'Não informado';
     const tipoItemEl = document.getElementById('selectTipoItem');
-    const tipoItem = tipoItemEl && tipoItemEl.value !== "" ? tipoItemEl.options[tipoItemEl.selectedIndex].text : 'Encomenda genérica';
+    const tipoItem = tipoItemEl && tipoItemEl.value !== "" ? tipoItemEl.options[tipoItemEl.selectedIndex].text : 'Encomenda';
     nomeDestino += ` | 📦 Recebedor: ${recebedor} | 🏷️ ${tipoItem}`;
   }
 
+  const notaMotorista = document.getElementById('txtNotaMotoristaBadge')?.textContent || '';
+
+  // Payload universal: atende os dois padrões de colunas do backend/DB
   const payload = {
     id: novoId,
     clienteId: clienteId || null,
-    tipo: estadoCliente.categoriaSelecionada,
-    subTipoId: estadoCliente.categoriaSelecionada,
-    subTipoLabel: precoInfo.categoria,
-    origem: `Partida (${latOrig}, ${lngOrig})`,
+    cliente_id: clienteId || null,
+    tipo: estadoCliente.categoriaSelecionada || 'carro',
+    sub_tipo_id: estadoCliente.categoriaSelecionada || 'carro',
+    sub_tipo_label: precoInfo.categoria || 'HUBy Carro',
+    origem_endereco: `Partida (${latOrigNum.toFixed(4)}, ${lngOrigNum.toFixed(4)})`,
+    destino_endereco: nomeDestino,
+    origem: `Partida (${latOrigNum.toFixed(4)}, ${lngOrigNum.toFixed(4)})`,
     destino: nomeDestino,
-    coordsOrigem: estadoCliente.hubyMapa.coordsOrigem,
-    coordsDestino: estadoCliente.coordsDestino,
+    origem_lat: latOrigNum,
+    origem_lng: lngOrigNum,
+    destino_lat: latDestNum,
+    destino_lng: lngDestNum,
+    coordsOrigem: [latOrigNum, lngOrigNum],
+    coordsDestino: [latDestNum, lngDestNum],
+    distancia_km: kmTotal,
+    duracao_min: duracaoTotal,
     distanciaKm: kmTotal,
     duracaoMin: duracaoTotal,
-    valorTotal: precoInfo.valorTotal,
+    valor_total: precoDefinitivo,
+    valorTotal: precoDefinitivo,
+    metodo_pagamento: metodoPgto,
     metodoPgto: metodoPgto,
-    cupomCodigo,
-    paradas: estadoCliente.paradas || []
+    cupomCodigo: cupomCodigo,
+    observacao: notaMotorista,
+    paradas: estadoCliente.paradasIntermediarias || []
   };
 
   const btn = document.getElementById('btnPedirHuby');
 
   try {
-    btn.disabled = true;
-    btn.textContent = 'A solicitar condutor...';
+    if (btn) {
+      btn.disabled = true;
+      const span = btn.querySelector('.btn-text');
+      if (span) span.textContent = 'A solicitar condutor...';
+      else btn.textContent = 'A solicitar condutor...';
+    }
 
     const resp = await fetch(`${API_URL}/api/pedidos`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(payload)
     });
 
     const dadosResposta = await resp.json().catch(() => ({}));
+
     if (!resp.ok) {
-      throw new Error(dadosResposta.erro || 'Falha ao registar pedido na base de dados.');
+      if (resp.status === 401) {
+        localStorage.removeItem('huby_token');
+        throw new Error('Sessão expirada. Faça login novamente.');
+      }
+      throw new Error(dadosResposta.erro || 'Falha ao registrar pedido.');
     }
 
     if (dadosResposta.desconto > 0) {
       alert(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`);
     }
 
-    if (metodoPgto === 'saldo_carteira' && token) {
-      try {
-        await fetch(`${API_URL}/api/carteira/debito-corrida`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ pedidoId: novoId, valor: precoInfo.valorTotal })
-        });
-        await carregarSaldoCarteiraCliente();
-      } catch (errDebito) {
-        console.warn('Falha no registro de débito da carteira:', errDebito);
-      }
-    }
-
     estadoCliente.pedidoAtivoId = novoId;
     localStorage.setItem('huby_pedido_ativo_id', novoId);
+
     mostrarAguardandoMotorista();
     conectarSocketCliente(novoId);
     iniciarPollingStatus();
+
   } catch (err) {
     alert(err.message);
-    btn.disabled = false;
-    atualizarBotaoChamar();
+    if (err.message.includes('Sessão expirada')) {
+      window.location.replace('./login.html?perfil=cliente');
+      return;
+    }
+    if (btn) {
+      btn.disabled = false;
+      atualizarBotaoChamar();
+    }
   }
 }
 
@@ -211,25 +237,31 @@ export function mostrarAguardandoMotorista() {
 
   if (btn) {
     btn.disabled = false;
-    btn.textContent = 'Cancelar Chamada';
+    const spanText = btn.querySelector('.btn-text');
+    if (spanText) spanText.textContent = 'Cancelar Chamada';
+    else btn.textContent = 'Cancelar Chamada';
     btn.style.background = '#ef4444';
   }
 }
 
 function conectarSocketCliente(pedidoId) {
-  const socket = window.io ? window.io(API_URL) : null;
+  const token = localStorage.getItem('huby_token');
+  const socket = window.io ? window.io(API_URL, {
+    auth: { token: token || '' }
+  }) : null;
+
   if (!socket) return;
 
   socket.on('corrida_aceita', (data) => {
-    if (data.pedidoId === pedidoId || data.pedidoId === estadoCliente.pedidoAtivoId) {
-      sonsHUBy.tocarSucessoAceite();
+    if (String(data.pedidoId) === String(pedidoId) || String(data.pedidoId) === String(estadoCliente.pedidoAtivoId)) {
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
       atualizarInterfaceMotoristaAceitou({
         id: data.pedidoId,
         status: 'a_caminho',
-        motorista_nome: data.motorista?.nome || 'Carol',
-        motorista_veiculo: data.motorista?.veiculo || 'Onix',
-        motorista_placa: data.motorista?.placa || 'ABC1D23',
-        veiculo_cor: data.motorista?.cor || 'Prata',
+        motorista_nome: data.motorista?.nome || 'Motorista Parceiro',
+        motorista_veiculo: data.motorista?.veiculo || 'Veículo',
+        motorista_placa: data.motorista?.placa || 'HUBy',
+        veiculo_cor: data.motorista?.cor || 'Padrão',
         motorista_foto: data.motorista?.foto,
         motorista_avaliacao: data.motorista?.avaliacao,
         motorista_telefone: data.motorista?.telefone
@@ -238,8 +270,8 @@ function conectarSocketCliente(pedidoId) {
   });
 
   socket.on('passageiro_a_bordo', (data) => {
-    if (data.pedidoId === pedidoId || data.pedidoId === estadoCliente.pedidoAtivoId) {
-      sonsHUBy.tocarSucessoAceite();
+    if (String(data.pedidoId) === String(pedidoId) || String(data.pedidoId) === String(estadoCliente.pedidoAtivoId)) {
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
       const txtStatus = document.querySelector('#boxCronometroChegada div:first-child');
       if (txtStatus) txtStatus.textContent = '🚀 Viagem em andamento';
       const txtMin = document.getElementById('txtMinutosChegada');
@@ -248,9 +280,9 @@ function conectarSocketCliente(pedidoId) {
   });
 
   socket.on('corrida_finalizada', (data) => {
-    if (data.pedidoId === pedidoId || data.pedidoId === estadoCliente.pedidoAtivoId) {
+    if (String(data.pedidoId) === String(pedidoId) || String(data.pedidoId) === String(estadoCliente.pedidoAtivoId)) {
       if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
-      sonsHUBy.tocarMetaBatida();
+      if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
       estadoCliente.corridaParaAvaliarId = pedidoId;
       resetarPainelCliente();
       const modal = document.getElementById('modalAvaliacao');
@@ -261,19 +293,24 @@ function conectarSocketCliente(pedidoId) {
 
 export function iniciarPollingStatus() {
   if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
+  const token = localStorage.getItem('huby_token');
 
   estadoCliente.intervalPolling = setInterval(async () => {
     if (!estadoCliente.pedidoAtivoId) return;
 
     try {
-      const resp = await fetch(`${API_URL}/api/pedidos/${estadoCliente.pedidoAtivoId}/status`);
+      const resp = await fetch(`${API_URL}/api/pedidos/${estadoCliente.pedidoAtivoId}/status`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
       if (!resp.ok) return;
 
       const pedido = await resp.json();
 
       if (pedido.status === 'a_caminho' || pedido.status === 'em_andamento' || pedido.status === 'aceito' || pedido.status === 'em_viagem') {
         if (!estadoCliente.motoristaAceitouTocado) {
-          sonsHUBy.tocarSucessoAceite();
+          if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
           estadoCliente.motoristaAceitouTocado = true;
         }
 
@@ -291,7 +328,7 @@ export function iniciarPollingStatus() {
 
       } else if (pedido.status === 'concluido') {
         clearInterval(estadoCliente.intervalPolling);
-        sonsHUBy.tocarMetaBatida();
+        if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
         
         estadoCliente.corridaParaAvaliarId = estadoCliente.pedidoAtivoId;
         resetarPainelCliente();
@@ -330,12 +367,12 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
   painelMotorista.style.display = 'block';
 
   const foto = pedido.motorista_foto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80';
-  const nome = pedido.motorista_nome || 'Carol';
+  const nome = pedido.motorista_nome || 'Motorista Parceiro';
   const nota = Number(pedido.motorista_avaliacao || 5.0).toFixed(1);
   const totalViagens = pedido.motorista_corridas || 0;
-  const modelo = pedido.motorista_veiculo || 'Chevrolet Onix';
-  const cor = pedido.veiculo_cor ? `Cor: ${pedido.veiculo_cor}` : 'Cor: Prata';
-  const placa = (pedido.motorista_placa || 'ABC1D23').toUpperCase();
+  const modelo = pedido.motorista_veiculo || 'Veículo';
+  const cor = pedido.veiculo_cor ? `Cor: ${pedido.veiculo_cor}` : 'Cor: Padrão';
+  const placa = (pedido.motorista_placa || 'HUBy').toUpperCase();
   const telefone = pedido.motorista_telefone || '';
 
   const tituloStatus = (pedido.status === 'em_viagem') 
