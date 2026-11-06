@@ -127,7 +127,7 @@
   top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
   left: 16px !important;
   right: 16px !important;
-  z-index: 1000 !important; /* Garante que fica por cima do mapa */
+  z-index: 1000 !important;
   pointer-events: none !important;
   display: flex !important;
   flex-direction: column !important;
@@ -221,7 +221,6 @@
   color: #EF4444 !important;
 }
 
-/* LISTA DE RESULTADOS */
 .search-results-glass {
   pointer-events: auto !important;
   width: 100% !important;
