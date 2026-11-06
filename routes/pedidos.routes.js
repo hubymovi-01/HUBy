@@ -2,6 +2,7 @@
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
 // Middleware de Autenticação
@@ -31,25 +32,82 @@ async function inicializarColunasPedidos() {
 }
 inicializarColunasPedidos();
 
+
+// ============================================================================
+// AUXILIARES DE SEGURANÇA E VALIDAÇÃO
+// ============================================================================
+function ehAdminToken(usuario) {
+  const role = String(usuario?.role || usuario?.funcao || '').toLowerCase();
+  return role === 'admin' || role === 'administrador';
+}
+
+function ehMotoristaToken(usuario) {
+  return String(usuario?.role || '').toLowerCase() === 'motorista';
+}
+
+// Distância em linha reta (km) entre dois pontos. A rota real nunca é menor que isso.
+function distanciaRetaKm(lat1, lng1, lat2, lng2) {
+  const rad = (g) => (g * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLng = rad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function obterTarifasPlataforma() {
+  const padrao = {
+    carro: { base: 6.0, km: 2.2 },
+    moto: { base: 4.0, km: 1.4 },
+    entrega: { base: 5.0, km: 1.8 }
+  };
+  try {
+    const cfg = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+    return cfg[0]?.valor || padrao;
+  } catch (e) {
+    return padrao;
+  }
+}
+
+// Menor valor aceitável para a distância medida pelo servidor (com folga de 50%).
+// Barra preços absurdos (ex.: R$ 0,50 numa viagem de 20 km) sem depender da fórmula exata do app.
+function valorMinimoPlausivel(tarifas, distKm) {
+  const opcoes = ['carro', 'moto', 'entrega']
+    .map((k) => tarifas?.[k])
+    .filter((t) => t && Number.isFinite(Number(t.base)) && Number.isFinite(Number(t.km)));
+  if (!opcoes.length) return 0;
+  const menor = Math.min(...opcoes.map((t) => Number(t.base) + Number(t.km) * distKm));
+  return menor * 0.5;
+}
+
 export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
   // 1. CRIAR PEDIDO COM SUPORTE A CUPOM, MÚLTIPLAS PARADAS E SEGURANÇA
   // =========================================================================
-  router.post('/', async (req, res) => {
+  router.post('/', autenticarToken, async (req, res) => {
+    let cupomReservadoId = null;
     try {
       const {
-        id, clienteId, tipo, subTipoId, subTipoLabel,
+        id, tipo, subTipoId, subTipoLabel,
         origem, destino, coordsOrigem, coordsDestino,
         paradas,
         distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto,
         cupomCodigo
       } = req.body;
 
-      if (!id || !valorTotal || !origem || !destino) {
+      // O passageiro é sempre quem está logado (não vem do corpo da requisição)
+      const clienteId = String(req.usuario.id);
+
+      if (!valorTotal || !origem || !destino) {
         return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
       }
+
+      // Código da corrida: usa o do app se for válido, senão o servidor cria um aleatório
+      const idPedido = (typeof id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(id))
+        ? id
+        : 'ped_' + crypto.randomBytes(8).toString('hex');
 
       const formatarNum = (val) => Number(String(val).replace(',', '.')) || 0;
       let vTotal = formatarNum(valorTotal);
@@ -57,16 +115,36 @@ export default function pedidosRouter(io) {
       const dKm = formatarNum(distanciaKm);
       const dMin = formatarNum(duracaoMin);
 
-      const origLat = coordsOrigem && coordsOrigem[0] ? Number(coordsOrigem[0]) : null;
-      const origLng = coordsOrigem && coordsOrigem[1] ? Number(coordsOrigem[1]) : null;
-      const destLat = coordsDestino && coordsDestino[0] ? Number(coordsDestino[0]) : null;
-      const destLng = coordsDestino && coordsDestino[1] ? Number(coordsDestino[1]) : null;
+      const origLat = Number(coordsOrigem?.[0]);
+      const origLng = Number(coordsOrigem?.[1]);
+      const destLat = Number(coordsDestino?.[0]);
+      const destLng = Number(coordsDestino?.[1]);
 
+      const coordsOk = [origLat, origLng, destLat, destLng].every(Number.isFinite)
+        && Math.abs(origLat) <= 90 && Math.abs(destLat) <= 90
+        && Math.abs(origLng) <= 180 && Math.abs(destLng) <= 180;
+
+      if (!coordsOk) {
+        return res.status(400).json({ erro: 'Defina a origem e o destino no mapa.' });
+      }
+
+      if (vTotal <= 0 || vTotal > 2000) {
+        return res.status(400).json({ erro: 'Valor da corrida inválido.' });
+      }
+
+      // O servidor confere o preço com a distância que ele mesmo mede
+      const distServidor = distanciaRetaKm(origLat, origLng, destLat, destLng);
+      const tarifas = await obterTarifasPlataforma();
+      if (vTotal < valorMinimoPlausivel(tarifas, distServidor)) {
+        return res.status(400).json({ erro: 'Valor da corrida inconsistente. Atualize o app e tente novamente.' });
+      }
+
+      // Cupom: reserva o uso de forma atômica (não passa do limite mesmo com pedidos simultâneos)
       let descontoAplicado = 0;
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
         const cupons = await sql`
-          SELECT id, tipo, valor, limite_usos, usos_atuais, expira_em, ativo
+          SELECT id, tipo, valor, expira_em
           FROM cupons_desconto
           WHERE codigo = ${codigoFormatado} AND ativo = TRUE
           LIMIT 1;
@@ -74,29 +152,32 @@ export default function pedidosRouter(io) {
 
         if (cupons.length > 0) {
           const cupom = cupons[0];
-          const agora = new Date();
-          const expirado = cupom.expira_em && new Date(cupom.expira_em) < agora;
-          const esgotado = cupom.limite_usos && cupom.usos_atuais >= cupom.limite_usos;
+          const expirado = cupom.expira_em && new Date(cupom.expira_em) < new Date();
 
-          if (!expirado && !esgotado) {
-            if (cupom.tipo === 'porcentagem') {
-              descontoAplicado = Number(((vTotal * Number(cupom.valor)) / 100).toFixed(2));
-            } else {
-              descontoAplicado = Number(cupom.valor);
-            }
+          if (!expirado) {
+            const desconto = cupom.tipo === 'porcentagem'
+              ? Number(((vTotal * Math.min(Number(cupom.valor), 100)) / 100).toFixed(2))
+              : Number(cupom.valor);
 
-            vTotal = Math.max(0.50, vTotal - descontoAplicado);
-
-            await sql`
+            const reservado = await sql`
               UPDATE cupons_desconto
               SET usos_atuais = usos_atuais + 1
-              WHERE id = ${cupom.id};
+              WHERE id = ${cupom.id}
+                AND ativo = TRUE
+                AND (COALESCE(limite_usos, 0) = 0 OR usos_atuais < limite_usos)
+              RETURNING id;
             `;
+
+            if (reservado.length > 0) {
+              cupomReservadoId = cupom.id;
+              descontoAplicado = desconto;
+              vTotal = Math.max(0.50, Number((vTotal - desconto).toFixed(2)));
+            }
           }
         }
       }
 
-      await sql`
+      const inserido = await sql`
         INSERT INTO pedidos (
           id, cliente_id, tipo, sub_tipo_id, sub_tipo_label,
           origem_endereco, destino_endereco,
@@ -104,21 +185,37 @@ export default function pedidosRouter(io) {
           distancia_km, duracao_min, valor_total, valor_adicionais,
           metodo_pgto, status
         ) VALUES (
-          ${id}, ${clienteId || null}, ${tipo || 'carro'}, ${subTipoId || null}, ${subTipoLabel || 'Carro Padrão'},
-          ${origem}, ${destino},
+          ${idPedido}, ${clienteId}, ${tipo || 'carro'}, ${subTipoId || null}, ${subTipoLabel || 'Carro Padrão'},
+          ${String(origem).slice(0, 300)}, ${String(destino).slice(0, 300)},
           ${origLat}, ${origLng}, ${destLat}, ${destLng},
           ${dKm}, ${dMin}, ${vTotal}, ${vAdic},
           ${metodoPgto || 'pix_app'}, 'pendente'
         )
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id;
       `;
 
+      if (!inserido.length) {
+        if (cupomReservadoId) {
+          await sql`UPDATE cupons_desconto SET usos_atuais = GREATEST(usos_atuais - 1, 0) WHERE id = ${cupomReservadoId};`;
+        }
+        return res.status(409).json({ erro: 'Já existe uma corrida com este código.' });
+      }
+
       io.emit('nova_chamada', {
-        id, clienteId, tipo, subTipoLabel, origem, destino, distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal, paradas
+        id: idPedido, clienteId, tipo, subTipoLabel, origem, destino,
+        distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal, paradas
       });
 
-      res.status(201).json({ sucesso: true, id, valorFinal: vTotal, desconto: descontoAplicado });
+      res.status(201).json({ sucesso: true, id: idPedido, valorFinal: vTotal, desconto: descontoAplicado });
     } catch (error) {
       console.error('⚠️ ERRO AO GRAVAR PEDIDO:', error.message);
+      // Se falhou depois de reservar o cupom, devolve o uso
+      if (cupomReservadoId) {
+        try {
+          await sql`UPDATE cupons_desconto SET usos_atuais = GREATEST(usos_atuais - 1, 0) WHERE id = ${cupomReservadoId};`;
+        } catch (e) { /* segue */ }
+      }
       res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados.' });
     }
   });
@@ -150,8 +247,11 @@ export default function pedidosRouter(io) {
   // =========================================================================
   // 3. CONSULTA DE CHAMADAS PENDENTES
   // =========================================================================
-  router.get('/pendentes', async (req, res) => {
+  router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
+      if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
+        return res.status(403).json({ erro: 'Acesso restrito a motoristas parceiros.' });
+      }
       const { categoria } = req.query;
       let pedidos;
       if (categoria === 'moto') {
@@ -220,12 +320,12 @@ export default function pedidosRouter(io) {
   // =========================================================================
   // 6. STATUS DA VIAGEM
   // =========================================================================
-  router.get('/:id/status', async (req, res) => {
+  router.get('/:id/status', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const pedidos = await sql`
         SELECT 
-          p.id, p.status, p.valor_total, p.distancia_km, p.duracao_min,
+          p.id, p.status, p.cliente_id, p.valor_total, p.distancia_km, p.duracao_min,
           p.origem_endereco, p.destino_endereco,
           p.origem_lat, p.origem_lng, p.destino_lat, p.destino_lng,
           p.motorista_id, 
@@ -248,7 +348,16 @@ export default function pedidosRouter(io) {
       `;
 
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Chamada não localizada.' });
-      res.json(pedidos[0]);
+
+      const ped = pedidos[0];
+      const meusIds = [req.usuario.id, req.usuario.motoristaId].filter(Boolean).map(String);
+      const permitido = ehAdminToken(req.usuario)
+        || meusIds.includes(String(ped.cliente_id))
+        || meusIds.includes(String(ped.motorista_id));
+
+      if (!permitido) return res.status(404).json({ erro: 'Chamada não localizada.' });
+
+      res.json(ped);
     } catch (err) {
       console.error('Erro ao consultar status:', err);
       res.status(500).json({ erro: 'Falha ao consultar estado da chamada.' });

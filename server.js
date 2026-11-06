@@ -1,14 +1,13 @@
-import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
-import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import { sql, JWT_SECRET } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
+import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter from './routes/pedidos.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
@@ -17,122 +16,143 @@ import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
 
+dotenv.config();
+
 const app = express();
 const port = process.env.PORT || 3000;
 const server = createServer(app);
+
+// ============================================================================
+// 1. SEGURANÇA BÁSICA, CORS (HTTP + SOCKET.IO) E LIMITADOR DE TENTATIVAS
+// ============================================================================
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
-// O Render fica atrás de um proxy: necessário para o limite de tentativas ver o IP real
-app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.set('trust proxy', 1); // O Render coloca um proxy na frente do servidor
 
-// Aceita router pronto ou função "fábrica" que devolve o router
-const montar = (modulo, ...args) => (modulo && modulo.stack ? modulo : modulo(...args));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
+  next();
+});
 
-// ============================================================================
-// 1. CORS (HTTP + SOCKET.IO) - só origens permitidas
-// ============================================================================
+// Sites que podem usar a API. Para adicionar um domínio próprio, use a variável
+// de ambiente ALLOWED_ORIGINS (separe vários com vírgula).
 const origensPermitidas = new Set([
   'https://hubymovi-01.github.io',
-  ...(process.env.ORIGENS_PERMITIDAS || '').split(',').map((s) => s.trim()).filter(Boolean),
-  ...(EM_PRODUCAO
-    ? []
-    : ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5500', 'http://localhost:8080'])
+  ...(process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean),
+  ...(EM_PRODUCAO ? [] : [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5500',
+    'http://localhost:8080'
+  ])
 ]);
 
 const checarOrigem = (origin, callback) => {
-  // Sem origin = app instalado, Mercado Pago (webhook), ferramentas de teste
+  // Sem "origin" = app nativo, Postman ou servidor: segue normalmente
   if (!origin || origensPermitidas.has(origin)) return callback(null, true);
+  console.warn(`CORS: origem bloqueada: ${origin}`);
   return callback(null, false);
 };
 
-const opcoesCors = {
+const corsOpcoes = {
   origin: checarOrigem,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
   credentials: true
 };
 
-// ============================================================================
-// 2. SOCKET.IO
-// ============================================================================
-const io = new Server(server, { cors: opcoesCors });
+const io = new Server(server, { cors: corsOpcoes });
+app.set('io', io);
 
-// Token é opcional (o rastreio público não tem login). Token inválido = visitante.
+// Login do Socket.IO: se o app enviar o token, ele é validado.
+// Para EXIGIR login em todas as conexões, defina SOCKET_EXIGE_LOGIN=true
+// (os apps precisam conectar com io(API_URL, { auth: { token } })).
+const SOCKET_EXIGE_LOGIN = process.env.SOCKET_EXIGE_LOGIN === 'true';
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+
   if (token) {
     try {
       socket.data.usuario = jwt.verify(String(token), JWT_SECRET);
-    } catch (e) {
-      socket.data.usuario = null;
+    } catch (err) {
+      return next(new Error('Sessão inválida.'));
     }
+  } else if (SOCKET_EXIGE_LOGIN) {
+    return next(new Error('Login necessário.'));
   }
+
   next();
 });
 
 io.on('connection', (socket) => {
-  const u = socket.data.usuario;
-  if (u) {
-    socket.join(`usuario:${u.id}`);
-    if (u.motoristaId) socket.join(`usuario:${u.motoristaId}`);
-    socket.join(`papel:${String(u.role || '').toLowerCase()}`);
-  }
-
-  // Quem acompanha uma corrida entra só na sala dela
-  socket.on('acompanhar_corrida', (pedidoId) => {
-    if (typeof pedidoId === 'string' && pedidoId.length > 0 && pedidoId.length <= 64) {
-      socket.join(`corrida:${pedidoId}`);
-    }
+  console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
+  socket.on('disconnect', () => {
+    console.log(`Utilizador desconectado do radar: ${socket.id}`);
   });
 });
 
-app.set('io', io);
+// Injeta Socket.IO nas requisições
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
 
-// ============================================================================
-// 3. SEGURANÇA E PARSERS
-// ============================================================================
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors(opcoesCors));
-app.options('*', cors(opcoesCors));
+app.use(cors(corsOpcoes));
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Limitador simples de tentativas por IP (sem precisar instalar nada)
+function criarLimitador({ janelaMs, max, mensagem }) {
+  const acessos = new Map();
 
-// Limite geral por IP
-app.use('/api', rateLimit({
-  windowMs: 60 * 1000,
-  limit: 300,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { erro: 'Muitas requisições. Aguarde um instante.' }
-}));
+  setInterval(() => {
+    const agora = Date.now();
+    for (const [chave, reg] of acessos) {
+      if (reg.reinicia <= agora) acessos.delete(chave);
+    }
+  }, janelaMs).unref();
 
-// Limite rígido para login e cadastro (barra tentativa em massa)
-const limitadorLogin = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { erro: 'Muitas tentativas. Tente novamente em alguns minutos.' }
+  return (req, res, next) => {
+    if (req.method !== 'POST') return next();
+
+    const agora = Date.now();
+    let reg = acessos.get(req.ip);
+    if (!reg || reg.reinicia <= agora) {
+      reg = { n: 0, reinicia: agora + janelaMs };
+      acessos.set(req.ip, reg);
+    }
+
+    reg.n += 1;
+    if (reg.n > max) {
+      res.setHeader('Retry-After', Math.ceil((reg.reinicia - agora) / 1000));
+      return res.status(429).json({ erro: mensagem });
+    }
+    next();
+  };
+}
+
+const limitarLogin = criarLimitador({
+  janelaMs: 15 * 60 * 1000,
+  max: 20,
+  mensagem: 'Muitas tentativas de login. Tente novamente em alguns minutos.'
 });
-app.use(
-  [
-    '/api/auth/login',
-    '/api/auth/login-motorista',
-    '/api/auth/cadastro',
-    '/api/usuarios/login',
-    '/api/usuarios/login-motorista',
-    '/api/usuarios/cadastro'
-  ],
-  limitadorLogin
-);
+
+const limitarCadastro = criarLimitador({
+  janelaMs: 60 * 60 * 1000,
+  max: 10,
+  mensagem: 'Muitos cadastros feitos deste dispositivo. Tente novamente mais tarde.'
+});
 
 // ============================================================================
-// 4. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
+// 2. PARSERS DE DADOS (JSON E FOTOS EM BASE64)
+// ============================================================================
+app.use(express.json({ limit: '8mb' }));
+app.use(express.urlencoded({ limit: '8mb', extended: true }));
+
+// ============================================================================
+// 3. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
 // ============================================================================
 async function inicializarBanco() {
   try {
@@ -315,7 +335,7 @@ async function inicializarBanco() {
       );
     `;
 
-    // Colunas adicionais de apoio
+    // Garante colunas adicionais de apoio
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -340,51 +360,74 @@ async function inicializarBanco() {
 inicializarBanco();
 
 // ============================================================================
-// 5. ROTAS BASE E STATUS
+// 4. ROTAS BASE E STATUS
 // ============================================================================
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.1.0'
+    versao: '2.0.4',
+    banco: 'Neon PostgreSQL'
   });
 });
 
-app.get('/api/config/tarifas', (req, res) => {
-  res.json({
+app.get('/api/config/tarifas', async (req, res) => {
+  const padrao = {
     taxa_plataforma: 15,
-    km_carro: 2.5,
-    km_moto: 1.8,
-    km_entrega: 2.0
+    carro: { base: 6.0, km: 2.2, min: 0.30 },
+    moto: { base: 4.0, km: 1.4, min: 0.20 },
+    entrega: { base: 5.0, km: 1.8, min: 0.25 }
+  };
+
+  let tarifas = padrao;
+  try {
+    const cfg = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+    if (cfg[0]?.valor) tarifas = cfg[0].valor;
+  } catch (err) {
+    console.warn('Tarifas: usando valores padrão.', err.message);
+  }
+
+  // Mantém as chaves antigas (km_carro...) para não quebrar telas já publicadas
+  res.json({
+    ...tarifas,
+    taxa_plataforma: tarifas.taxa_plataforma ?? 15,
+    km_carro: tarifas.carro?.km,
+    km_moto: tarifas.moto?.km,
+    km_entrega: tarifas.entrega?.km,
+    tarifas
   });
 });
 
 // ============================================================================
-// 6. REGISTRO DE ROTAS MODULARES
+// 5. REGISTRO DE ROTAS MODULARES
 // ============================================================================
+app.use(['/api/auth/login', '/api/auth/login-motorista', '/api/usuarios/login', '/api/usuarios/login-motorista'], limitarLogin);
+app.use(['/api/auth/cadastro', '/api/usuarios/registo'], limitarCadastro);
+
 app.use('/api/auth', authRoutes);
-// Compatibilidade: as telas antigas ainda chamam /api/usuarios/... (agora usa o login seguro com bcrypt)
-app.use('/api/usuarios', authRoutes);
-app.use('/api/pedidos', montar(pedidosRouter, io));
-app.use('/api/admin', montar(adminRoutes, io));
+app.use('/api/usuarios', usuariosRouter || authRoutes);
+app.use('/api/pedidos', pedidosRouter(io));
+app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
 app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
-app.use('/api/socios', montar(sociosRoutes));
+app.use('/api/socios', sociosRoutes);
 app.use('/api/marketplace', marketplaceRouter);
 
 // ============================================================================
-// 7. TRATAMENTO GLOBAL DE ERROS
+// 6. TRATAMENTO GLOBAL DE ERROS
 // ============================================================================
 app.use((err, req, res, next) => {
   console.error('Erro interno do servidor:', err);
   const status = err.status || 500;
-  const msg = status >= 500 ? 'Erro interno no servidor.' : err.message;
-  res.status(status).json({ erro: msg, mensagem: msg });
+  res.status(status).json({
+    erro: true,
+    mensagem: status >= 500 ? 'Erro interno no servidor' : err.message
+  });
 });
 
 // ============================================================================
-// 8. INICIALIZAÇÃO DO SERVIDOR
+// 7. INICIALIZAÇÃO DO SERVIDOR
 // ============================================================================
 server.listen(port, () => {
   console.log(`Servidor HUBy ativo na porta ${port}`);
