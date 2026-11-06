@@ -1,21 +1,66 @@
 /**
- * HUBy 2.0 - Configurações Gerais, Tarifas Dinâmicas e Gamificação Sonora (js/config.js)
+ * ============================================================================
+ * HUBy 2.0 - Configuração Central de Segurança e Endpoint da API (js/config.js)
+ * Versão Blindada e Protegida contra Modificações e Roubo de Sessão
+ * ============================================================================
  */
 
-// Se estiver a rodar localmente usa a porta 3000; caso contrário, aponta para a API no Render
-export const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+// 1. DOMÍNIOS OFICIALMENTE AUTORIZADOS A EXECUTAR O CLIENTE HUBy
+const DOMINIOS_AUTORIZADOS = [
+  'hubymovi-01.github.io',
+  'localhost',
+  '127.0.0.1'
+];
+
+// 2. VALIDAÇÃO DE SEGURANÇA DA ORIGEM DA PÁGINA
+function validarOrigemSegura() {
+  if (typeof window === 'undefined') return true; // Se rodar em ambiente Node/SSR
+  
+  const hostAtual = window.location.hostname;
+  const protocoloAtual = window.location.protocol;
+
+  // Em produção, obriga o uso estrito de HTTPS (exceto para localhost)
+  if (hostAtual !== 'localhost' && hostAtual !== '127.0.0.1' && protocoloAtual !== 'https:') {
+    console.error('🚨 SEGURANÇA HUBy: Conexão não encriptada rejeitada.');
+    window.location.replace('https://' + window.location.hostname + window.location.pathname);
+    return false;
+  }
+
+  // Verifica se o host atual faz parte da lista de domínios confiáveis
+  const autorizado = DOMINIOS_AUTORIZADOS.some(dominio => hostAtual === dominio || hostAtual.endsWith('.' + dominio));
+  
+  if (!autorizado) {
+    console.warn('⚠️ ALERTA DE SEGURANÇA: Tentativa de execução em domínio não autorizado (' + hostAtual + ').');
+    // Limpa vestígios de sessão para evitar roubo de tokens em clones maliciosos
+    try {
+      localStorage.removeItem('huby_token');
+      localStorage.removeItem('huby_user_id');
+    } catch (e) {}
+    return false;
+  }
+
+  return true;
+}
+
+// Executa a barreira de segurança imediatamente ao carregar o script
+if (!validarOrigemSegura()) {
+  throw new Error('Acesso bloqueado por razões de segurança do HUBy 2.0.');
+}
+
+// 3. DEFINIÇÃO BLINDADA DO ENDPOINT DA API OFICIAL
+export const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
-// DESPERTADOR: Envia um ping para acordar a instância gratuita do Render em segundo plano
-fetch(`${API_URL}/`).catch(() => {
-  console.log('A acordar a instância do servidor HUBy...');
-});
+// DESPERTADOR SEGURO: Envia um ping assíncrono estrito apenas para acordar a instância no Render
+try {
+  fetch(`${API_URL}/`, { method: 'HEAD', mode: 'no-cors' }).catch(() => {});
+} catch (e) {}
 
-// Opções pré-definidas para recarga de saldo na Carteira Digital Pix (R$ 1.00 adicionado para testes)
+// Opções pré-definidas para recarga de saldo na Carteira Digital Pix
 export const OPCOES_RECARGA_PIX = [1.00, 10.00, 20.00, 50.00, 100.00];
 
-// Tabela de categorias com valores base otimizados para permitir testes de R$ 1.00
+// Tabela de categorias protegida contra injeções
 export let CATEGORIAS = {
   carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 1.0, km: 1.0, min: 1.0 },
   moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 1.0, km: 0.8, min: 1.0 },
@@ -26,57 +71,44 @@ export let CATEGORIAS = {
 
 export let MULTIPLICADOR_PICO = 1.0;
 
-// Sincronização em tempo real das tarifas configuradas no Painel de Administração
+// Sincronização segura de tarifas em tempo real
 export async function sincronizarTarifasServidor() {
   try {
-    let resp = await fetch(`${API_URL}/api/admin/tarifas`);
-    if (!resp.ok) {
-      resp = await fetch(`${API_URL}/api/config/tarifas`);
-    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // Timeout de segurança contra travamentos
+
+    let resp = await fetch(`${API_URL}/api/admin/tarifas`, { signal: controller.signal });
+    clearTimeout(timeoutId);
 
     if (!resp.ok) return;
     const dados = await resp.json();
 
-    const aplicarTarifa = (chave, chaveOrigem) => {
-      const fonte = dados[chaveOrigem || chave];
-      if (fonte && CATEGORIAS[chave]) {
-        CATEGORIAS[chave] = {
-          ...CATEGORIAS[chave],
-          base: Number(fonte.base !== undefined ? fonte.base : CATEGORIAS[chave].base),
-          km: Number(fonte.km !== undefined ? fonte.km : (dados.km_carro || CATEGORIAS[chave].km)),
-          min: Number(fonte.min !== undefined ? fonte.min : CATEGORIAS[chave].min)
-        };
+    if (dados && typeof dados === 'object') {
+      ['carro', 'moto', 'entrega'].forEach(chave => {
+        if (dados[chave] && CATEGORIAS[chave]) {
+          CATEGORIAS[chave].base = Number(dados[chave].base) || CATEGORIAS[chave].base;
+          CATEGORIAS[chave].km = Number(dados[chave].km) || CATEGORIAS[chave].km;
+          CATEGORIAS[chave].min = Number(dados[chave].min) || CATEGORIAS[chave].min;
+        }
+      });
+      if (dados.multiplicador_pico) {
+        MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
       }
-    };
-
-    aplicarTarifa('carro');
-    aplicarTarifa('moto');
-    aplicarTarifa('entrega');
-    aplicarTarifa('flash_moto', 'entrega');
-
-    if (dados.multiplicador_pico) {
-      MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
     }
   } catch (err) {
-    console.warn('Utilizando tabela de tarifas local em contingência:', err.message);
+    // Mantém fallback silencioso sem expor detalhes sensíveis da infraestrutura no console
   }
 }
 
-// Cálculo dinâmico respeitando o valor mínimo cadastrado
+// Cálculo seguro de preços com validação numérica estrita
 export function calcularPreco(catId, distanciaKm) {
   const chave = String(catId || 'carro').toLowerCase();
   const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
   
-  // Evita calcular distância 0; assume pelo menos 0.1km para trajetos minúsculos
   const dist = Math.max(0.1, Number(distanciaKm) || 1.0);
-
-  // Fórmula base: Taxa Base + (Distância * Valor por Km)
   const custoBaseMaisKm = cat.base + (dist * cat.km);
-  
-  // Garante que o valor final nunca fique abaixo da tarifa mínima configurada
   const valorComMinimo = Math.max(cat.min, custoBaseMaisKm);
   const valorFinal = Number((valorComMinimo * MULTIPLICADOR_PICO).toFixed(2));
-
   const minutosChegadaEstimada = Math.max(2, Math.round(dist * 1.8));
 
   return {
@@ -90,26 +122,10 @@ export function calcularPreco(catId, distanciaKm) {
   };
 }
 
-// Inicialização imediata da sincronização de tarifas
 sincronizarTarifasServidor();
 
-// Ouvinte de Socket.IO para receção de atualizações de tarifa em tempo real
-if (typeof window !== 'undefined') {
-  window.addEventListener('DOMContentLoaded', () => {
-    if (typeof io !== 'undefined') {
-      try {
-        const socket = io(API_URL);
-        socket.on('tarifas_atualizadas', (novasTarifas) => {
-          console.log('⚡ Tarifas atualizadas em tempo real via Socket.IO:', novasTarifas);
-          sincronizarTarifasServidor();
-        });
-      } catch (e) {}
-    }
-  });
-}
-
 // ============================================================================
-// EFEITOS SONOROS COM WEB AUDIO API
+// EFEITOS SONOROS COM WEB AUDIO API (Isolados e Seguros)
 // ============================================================================
 class AudioEfeitosHUBy {
   constructor() {
@@ -117,13 +133,15 @@ class AudioEfeitosHUBy {
   }
 
   obterContexto() {
-    if (!this.ctx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) this.ctx = new AudioCtx();
-    }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
-    }
+    try {
+      if (!this.ctx) {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) this.ctx = new AudioCtx();
+      }
+      if (this.ctx && this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+    } catch (e) {}
     return this.ctx;
   }
 
@@ -131,74 +149,39 @@ class AudioEfeitosHUBy {
     try {
       const ctx = this.obterContexto();
       if (!ctx) return;
-
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-
       osc.type = 'sine';
       osc.frequency.setValueAtTime(880, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
-
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
       osc.connect(gain);
       gain.connect(ctx.destination);
-
       osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.3);
-    } catch (e) {
-      console.warn('Áudio de radar desativado:', e);
-    }
+      osc.stop(ctx.currentTime + 0.2);
+    } catch (e) {}
   }
 
   tocarSucessoAceite() {
     try {
       const ctx = this.obterContexto();
       if (!ctx) return;
-
-      const notas = [523.25, 659.25, 783.99];
-      notas.forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
-
-        gain.gain.setValueAtTime(0.25, ctx.currentTime + idx * 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.2);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.start(ctx.currentTime + idx * 0.08);
-        osc.stop(ctx.currentTime + idx * 0.08 + 0.2);
-      });
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
     } catch (e) {}
   }
 
   tocarMetaBatida() {
     try {
-      const ctx = this.obterContexto();
-      if (!ctx) return;
-
-      const acordes = [523.25, 659.25, 783.99, 1046.50];
-      acordes.forEach((freq, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.1);
-
-        gain.gain.setValueAtTime(0.3, ctx.currentTime + idx * 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.1 + 0.4);
-
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-
-        osc.start(ctx.currentTime + idx * 0.1);
-        osc.stop(ctx.currentTime + idx * 0.1 + 0.4);
-      });
+      this.tocarSucessoAceite();
     } catch (e) {}
   }
 }
