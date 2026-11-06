@@ -121,43 +121,42 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA SUPERIOR MODERNA */
+/* 3. BARRA DE PESQUISA SUPERIOR MODERNA (Integrada) */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
   left: 16px !important;
   right: 16px !important;
-  z-index: 450 !important;
+  z-index: 1000 !important; /* Garante que fica por cima do mapa */
   pointer-events: none !important;
   display: flex !important;
   flex-direction: column !important;
-  align-items: flex-start !important;
+  gap: 8px !important;
 }
 
-.modern-search {
+.search-glass-box.modern-search {
   pointer-events: auto !important;
   position: relative !important;
   width: 100% !important;
   height: 52px !important;
-  background: rgba(14, 20, 32, 0.92) !important;
-  backdrop-filter: blur(28px) !important;
-  -webkit-backdrop-filter: blur(28px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  border-radius: 18px !important;
-  padding: 0 14px !important;
-  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.6) !important;
   display: flex !important;
   align-items: center !important;
-  gap: 10px !important;
-  cursor: pointer !important;
-  overflow: hidden !important;
+  background: rgba(15, 23, 42, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  padding: 12px 16px !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+  transition: all 0.3s ease !important;
+  cursor: text !important;
   touch-action: manipulation !important;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
 }
 
-.modern-search.active {
-  border-color: rgba(56, 189, 248, 0.6) !important;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8) !important;
+.search-glass-box.modern-search:focus-within,
+.search-glass-box.modern-search.active {
+  border-color: var(--hub-emerald) !important;
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.2) !important;
 }
 
 .search-dot-accent {
@@ -167,6 +166,18 @@
   background: var(--hub-emerald);
   box-shadow: 0 0 10px var(--hub-emerald);
   flex-shrink: 0;
+  margin-right: 10px;
+}
+
+.search-icon {
+  font-size: 18px !important;
+  color: #94A3B8 !important;
+  background: transparent !important;
+  border: none !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
 }
 
 .modern-search input {
@@ -176,43 +187,28 @@
   border: none !important;
   outline: none !important;
   color: #FFF !important;
-  font-size: 14px !important;
-  font-weight: 600 !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
   letter-spacing: -0.2px;
 }
 
 .modern-search input::placeholder {
-  color: #94A3B8;
-}
-
-.search-icon {
-  width: 32px !important;
-  height: 32px !important;
-  background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: #94A3B8 !important;
-  cursor: pointer !important;
-  padding: 0 !important;
+  color: #64748B !important;
 }
 
 .clear-btn {
   display: none;
-  width: 28px !important;
-  height: 28px !important;
-  min-width: 28px !important;
   background: rgba(255, 255, 255, 0.1) !important;
   border: none !important;
-  border-radius: 50% !important;
   color: #FFF !important;
-  font-size: 13px !important;
+  border-radius: 50% !important;
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
-  outline: none !important;
+  font-size: 10px !important;
   touch-action: manipulation !important;
 }
 
@@ -225,33 +221,73 @@
   color: #EF4444 !important;
 }
 
+/* LISTA DE RESULTADOS */
 .search-results-glass {
   pointer-events: auto !important;
   width: 100% !important;
-  background: rgba(14, 20, 32, 0.96) !important;
-  backdrop-filter: blur(28px) !important;
-  -webkit-backdrop-filter: blur(28px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 18px !important;
-  margin-top: 8px !important;
+  background: rgba(15, 23, 42, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
   padding: 8px 0 !important;
+  margin: 0 !important;
   list-style: none !important;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.75) !important;
-  max-height: 220px !important;
+  max-height: 250px !important;
   overflow-y: auto !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+  animation: slideDown 0.3s ease forwards !important;
 }
 
-.search-results-glass li {
-  padding: 11px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #F8FAFC;
-  cursor: pointer;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+.search-result-item {
+  display: flex !important;
+  align-items: center !important;
+  padding: 12px 16px !important;
+  cursor: pointer !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  transition: background 0.2s ease !important;
 }
 
-.search-results-glass li:last-child {
-  border-bottom: none;
+.search-result-item:last-child {
+  border-bottom: none !important;
+}
+
+.search-result-item:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.result-icon {
+  font-size: 18px !important;
+  margin-right: 12px !important;
+  background: rgba(16, 185, 129, 0.2) !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  flex-shrink: 0 !important;
+}
+
+.result-text {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.result-text strong {
+  color: #FFF !important;
+  font-size: 15px !important;
+}
+
+.result-text small {
+  color: #94A3B8 !important;
+  font-size: 12px !important;
+  margin-top: 2px !important;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* 4. DOCK INFERIOR COMPACTO (ALTURA CALIBRADA) */
@@ -369,7 +405,7 @@
   cursor: pointer;
 }
 
-/* 6. CARROSSEL HORIZONTAL DE CATEGORIAS (SEM AS TAGS DE MINUTOS) */
+/* 6. CARROSSEL HORIZONTAL DE CATEGORIAS */
 .categories-container {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
