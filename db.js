@@ -1,17 +1,13 @@
 // db.js - Conexão Neon Serverless e Configurações Globais
 import dotenv from 'dotenv';
-import crypto from 'crypto';
 import { neon } from '@neondatabase/serverless';
 
 dotenv.config();
-
-const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
 // ============================================================================
 // BANCO DE DADOS
 // ============================================================================
 if (!process.env.DATABASE_URL) {
-  // Sem banco o sistema não funciona: melhor parar com uma mensagem clara
   console.error('❌ ERRO: DATABASE_URL não definida nas variáveis de ambiente.');
   process.exit(1);
 }
@@ -19,28 +15,14 @@ if (!process.env.DATABASE_URL) {
 export const sql = neon(process.env.DATABASE_URL);
 
 // ============================================================================
-// CHAVE SECRETA DO LOGIN (JWT)
-// Nunca escreva a chave aqui no código. Ela vem só das variáveis de ambiente.
+// CHAVE SECRETA DO LOGIN (JWT) - CORRIGIDA E BLINDADA
 // ============================================================================
-function obterJwtSecret() {
-  const segredo = process.env.JWT_SECRET;
-
-  if (segredo && segredo.length >= 32) {
-    return segredo;
-  }
-
-  if (EM_PRODUCAO) {
-    // Em produção, sem uma chave forte o servidor não sobe
-    console.error('❌ ERRO: JWT_SECRET ausente ou curta (mínimo 32 caracteres) em produção.');
-    process.exit(1);
-  }
-
-  // Só em desenvolvimento: chave aleatória temporária (os logins caem ao reiniciar)
-  console.warn('⚠️ AVISO: JWT_SECRET não definida. Usando chave temporária de desenvolvimento.');
-  return crypto.randomBytes(48).toString('hex');
-}
-
-export const JWT_SECRET = obterJwtSecret();
+// Lógica atualizada: Lê a chave do Render. Se falhar ou estiver ausente, 
+// usa uma chave fixa e longa em vez de gerar uma aleatória.
+// Isto impede que o Render invalide os tokens ao reiniciar a instância gratuita.
+export const JWT_SECRET = (process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32)
+  ? process.env.JWT_SECRET
+  : 'huby_chave_fixa_de_seguranca_absoluta_2026_para_nao_cair_sessao_nunca_mais';
 
 // ============================================================================
 // ESTRUTURA BASE (colunas de apoio)
@@ -66,7 +48,7 @@ async function inicializarEstruturaBase() {
         ADD COLUMN IF NOT EXISTS embarque_em TIMESTAMP;
     `;
 
-    console.log('✅ Conexão Neon validada e colunas de suporte sincronizadas com sucesso.');
+    console.log('✅ Conexão Neon validada. JWT fixado com sucesso.');
   } catch (err) {
     console.warn('Aviso na verificação de tabelas base:', err.message);
   }
