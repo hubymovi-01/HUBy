@@ -1,7 +1,7 @@
 // js/motorista/motorista-mapa.js
 import { API_URL, sonsHUBy } from '../config.js';
 import { estado } from './motorista-estado.js';
-import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-viagem.js';
+import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-corrida.js';
 import { notificar } from './motorista-alertas.js';
 
 export function inicializarSocket() {
