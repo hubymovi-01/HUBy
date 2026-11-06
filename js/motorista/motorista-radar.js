@@ -60,7 +60,6 @@ export async function alternarStatusOnline() {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnToggleStatusOnline');
 
-  // Alterna o estado local imediatamente
   estado.isOnline = !estado.isOnline;
   estado.statusOnline = estado.isOnline;
 
@@ -81,7 +80,6 @@ export async function alternarStatusOnline() {
     }
   }
 
-  // Notifica o backend
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
       method: 'PUT',
@@ -114,7 +112,10 @@ export function iniciarRadarChamadas() {
   if (!estado.socketRadar) {
     const ioClient = getSocketIO();
     if (ioClient) {
-      estado.socketRadar = ioClient(API_URL);
+      const token = localStorage.getItem('huby_token');
+      estado.socketRadar = ioClient(API_URL, {
+        auth: { token: token || '' }
+      });
 
       estado.socketRadar.on('nova_chamada', () => {
         if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise && estado.statusAprovacaoAtual === 'aprovado') {
@@ -152,9 +153,16 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     return;
   }
 
+  const token = localStorage.getItem('huby_token');
+  if (!token) return;
+
   try {
     const cat = estado.categoriaMotorista || 'carro';
-    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}`);
+    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
     if (!resp.ok) return;
 
     const pedidos = await resp.json();

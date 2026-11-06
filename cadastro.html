@@ -291,8 +291,6 @@
         payload.veiculo_placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
         payload.veiculo_cor = document.getElementById('cadCor').value.trim();
         payload.veiculo_ano = document.getElementById('cadAno').value.trim();
-
-        // CORREÇÃO: Envia nulo para a base de dados se a foto não for tirada
         payload.doc_cnh_url = cnhBase64 || null;
         payload.doc_crlv_url = crlvBase64 || null;
 
@@ -321,9 +319,11 @@
           throw new Error(data.erro || 'Este e-mail ou CPF já está registado.');
         }
 
-        localStorage.setItem('huby_token', data.token);
-        localStorage.setItem('huby_user_role', data.usuario.role);
-        localStorage.setItem('huby_user_name', data.usuario.nome);
+        if (data.token) {
+          localStorage.setItem('huby_token', data.token);
+          localStorage.setItem('huby_user_role', data.usuario?.role || roleAtual);
+          localStorage.setItem('huby_user_name', data.usuario?.nome || payload.nome);
+        }
 
         exibirAlerta('Conta criada com sucesso!', 'success');
         setTimeout(() => {

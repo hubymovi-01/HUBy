@@ -55,7 +55,7 @@
         </button>
       </form>
 
-      <!-- FORMULÁRIO 2: LOGIN DE MOTORISTA (Sem senha, usa CNH e Placa) -->
+      <!-- FORMULÁRIO 2: LOGIN DE MOTORISTA (COM SENHA AJUSTADA) -->
       <form id="formLoginMotorista" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail de Registo</label>
@@ -70,6 +70,11 @@
         <div class="input-group">
           <label>Placa do Veículo</label>
           <input type="text" id="loginPlaca" placeholder="ABC1D23" style="text-transform: uppercase;" maxlength="7" required>
+        </div>
+
+        <div class="input-group">
+          <label>Palavra-passe</label>
+          <input type="password" id="loginSenhaMot" placeholder="••••••••" required>
         </div>
 
         <button type="submit" id="btnSubmeterMotorista" class="btn-primary-action" style="margin-top: 20px;">
@@ -87,7 +92,6 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    // Capturar perfil da URL ou do storage
     const urlParams = new URLSearchParams(window.location.search);
     const perfil = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
 
@@ -126,10 +130,10 @@
       btnSub.querySelector('span').textContent = 'A entrar...';
 
       try {
-        const resp = await fetch(`${API_URL}/api/usuarios/login`, {
+        const resp = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identificador, senha })
+          body: JSON.stringify({ identificador, senha, perfilDesejado: 'cliente' })
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.erro || 'Credenciais inválidas.');
@@ -142,7 +146,7 @@
       }
     });
 
-    // Login Motorista (Sem Senha: Email + CNH + Placa)
+    // Login Motorista
     formMotorista.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
@@ -150,22 +154,25 @@
       const email = document.getElementById('loginEmailMot').value.trim();
       const cnh = document.getElementById('loginCNH').value.trim();
       const placa = document.getElementById('loginPlaca').value.trim().toUpperCase();
+      const senha = document.getElementById('loginSenhaMot').value;
 
-      if (!email || !cnh || !placa) return exibirAlerta('Preencha E-mail, CNH e Placa.', 'error');
+      if (!email || !cnh || !placa || !senha) {
+        return exibirAlerta('Preencha E-mail, CNH, Placa e Palavra-passe.', 'error');
+      }
 
       const btnSub = document.getElementById('btnSubmeterMotorista');
       btnSub.disabled = true;
       btnSub.querySelector('span').textContent = 'A verificar dados...';
 
       try {
-        const resp = await fetch(`${API_URL}/api/usuarios/login-motorista`, {
+        const resp = await fetch(`${API_URL}/api/auth/login-motorista`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, cnh, veiculo_placa: placa })
+          body: JSON.stringify({ email, cnh, veiculo_placa: placa, senha })
         });
         
         const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Dados do veículo ou e-mail não encontrados.');
+        if (!resp.ok) throw new Error(data.erro || 'Dados do veículo ou credenciais não encontrados.');
 
         guardarSessaoERedirecionar(data, './motorista.html');
       } catch (err) {
@@ -186,7 +193,6 @@
       localStorage.setItem('huby_user_name', data.usuario.nome);
       localStorage.setItem('huby_user_id', data.usuario.id);
 
-      // CORREÇÃO APLICADA: Grava o ID corretamente para saques e corridas
       if (data.usuario.role === 'motorista') {
         localStorage.setItem('huby_motorista_id', data.usuario.motoristaId || data.usuario.id);
       }
@@ -198,6 +204,7 @@
     function exibirAlerta(msg, tipo) {
       if (!alertaBox) return;
       alertaBox.textContent = msg;
+      alertaBox.className = `auth-alert ${tipo}`;
       alertaBox.style.display = 'block';
       alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
       alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
