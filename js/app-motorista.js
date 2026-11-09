@@ -1,5 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
+ * Versão Estabilizada de Produção com Validação de Sessão
  */
 
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
@@ -10,6 +11,25 @@ import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
+
+// Barreira de autenticação antes de carregar o ecossistema do motorista
+function validarAutenticacaoMotorista() {
+  const token = localStorage.getItem('huby_token');
+  const role = localStorage.getItem('huby_user_role');
+
+  if (!token || token === 'null' || token === 'undefined') {
+    window.location.replace('./login.html?perfil=motorista');
+    return false;
+  }
+
+  // Garante que passageiros não operem inadvertidamente no painel parceiro
+  if (role && role !== 'motorista' && role !== 'admin') {
+    window.location.replace('./login.html?perfil=motorista');
+    return false;
+  }
+
+  return true;
+}
 
 function registrarEventosUI() {
   // Alternar Online / Offline
@@ -44,6 +64,8 @@ function registrarEventosUI() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  if (!validarAutenticacaoMotorista()) return;
+
   inicializarSocket();
   inicializarMapa();
   registrarEventosUI();
