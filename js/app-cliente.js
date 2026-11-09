@@ -1,4 +1,4 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Produção Oficial)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Produção Estabilizada)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
@@ -171,7 +171,6 @@ function configurarBarraPesquisaAnimada() {
     abrirBarra();
   });
 
-  // AO TOCAR NO X: Limpa a rota e os valores
   btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -463,7 +462,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Ativação dos controles e favoritos
+  // 3. Ativação dos controlos e favoritos
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
@@ -551,7 +550,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarFluxoPagamentoMercadoPago();
   configurarChatPassageiro();
 
-  // 9. Conexão Socket
+  // 9. Conexão Socket e Polling Estabilizado
   conectarSocketEPollingCliente();
 
   if ('serviceWorker' in navigator) {
@@ -848,13 +847,31 @@ function conectarSocketEPollingCliente() {
     });
   }
 
+  // Polling blindado com token e descarte automático de corridas canceladas/antigas
   if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
   estadoCliente.intervalPolling = setInterval(async () => {
     const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
     if (!pedidoId) return;
 
+    const tokenAtual = localStorage.getItem('huby_token');
+
     try {
-      const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status`);
+      const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status`, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(tokenAtual ? { 'Authorization': `Bearer ${tokenAtual}` } : {})
+        }
+      });
+
+      // Se não autorizado (401) ou não encontrado (404), descarta a chamada pendente
+      if (res.status === 401 || res.status === 404) {
+        clearInterval(estadoCliente.intervalPolling);
+        estadoCliente.intervalPolling = null;
+        localStorage.removeItem('huby_pedido_ativo_id');
+        estadoCliente.pedidoAtivoId = null;
+        return;
+      }
+
       if (!res.ok) return;
       const p = await res.json();
 
@@ -876,6 +893,11 @@ function conectarSocketEPollingCliente() {
       } else if (p.status === 'concluido') {
         document.getElementById('modalPixCorridaAtivaCliente')?.remove();
         finalizarViagemCliente({ pedidoId });
+      } else if (p.status === 'cancelado') {
+        clearInterval(estadoCliente.intervalPolling);
+        estadoCliente.intervalPolling = null;
+        localStorage.removeItem('huby_pedido_ativo_id');
+        estadoCliente.pedidoAtivoId = null;
       }
     } catch (e) { }
   }, 3500);
