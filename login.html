@@ -38,7 +38,7 @@
 
       <div id="alertaLoginBox" class="auth-alert" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 14px; font-size: 13px;"></div>
 
-      <!-- FORMULÁRIO 1: LOGIN DE PASSAGEIRO -->
+      <!-- FORMULÁRIO 1: LOGIN DE PASSAGEIRO / ADMIN -->
       <form id="formLoginCliente" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail ou Telemóvel</label>
@@ -51,11 +51,11 @@
         </div>
 
         <button type="submit" id="btnSubmeterCliente" class="btn-primary-action">
-          <span>Entrar como Passageiro</span>
+          <span>Entrar na Plataforma</span>
         </button>
       </form>
 
-      <!-- FORMULÁRIO 2: LOGIN DE MOTORISTA (COM SENHA AJUSTADA) -->
+      <!-- FORMULÁRIO 2: LOGIN DE MOTORISTA -->
       <form id="formLoginMotorista" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail de Registo</label>
@@ -111,12 +111,12 @@
       linkCriarConta.href = './cadastro.html?perfil=motorista';
     } else {
       formCliente.style.display = 'block';
-      txtSubtitulo.textContent = 'Entre na sua conta de Passageiro';
-      badgeLogin.textContent = '👤 Passageiro';
+      txtSubtitulo.textContent = 'Entre na sua conta para continuar';
+      badgeLogin.textContent = '👤 Utilizador';
       linkCriarConta.href = './cadastro.html?perfil=cliente';
     }
 
-    // Login Passageiro
+    // Login Passageiro / Administrador
     formCliente.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
@@ -142,7 +142,7 @@
       } catch (err) {
         exibirAlerta(err.message, 'error');
         btnSub.disabled = false;
-        btnSub.querySelector('span').textContent = 'Entrar como Passageiro';
+        btnSub.querySelector('span').textContent = 'Entrar na Plataforma';
       }
     });
 
@@ -187,17 +187,22 @@
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11);
     });
 
+    // Gestão de Sessão: Trata tanto a coluna 'funcao' quanto 'role' da base de dados Neon
     function guardarSessaoERedirecionar(data, urlDestino) {
       localStorage.setItem('huby_token', data.token);
-      localStorage.setItem('huby_user_role', data.usuario.role || 'cliente');
-      localStorage.setItem('huby_user_name', data.usuario.nome);
-      localStorage.setItem('huby_user_id', data.usuario.id);
 
-      if (data.usuario.role === 'motorista') {
-        localStorage.setItem('huby_motorista_id', data.usuario.motoristaId || data.usuario.id);
+      const papelBruto = data.usuario?.funcao || data.usuario?.role || 'cliente';
+      const papelNormalizado = String(papelBruto).trim().toLowerCase();
+
+      localStorage.setItem('huby_user_role', papelNormalizado);
+      localStorage.setItem('huby_user_name', data.usuario?.nome || 'Utilizador');
+      localStorage.setItem('huby_user_id', data.usuario?.id);
+
+      if (papelNormalizado === 'motorista') {
+        localStorage.setItem('huby_motorista_id', data.usuario?.motoristaId || data.usuario?.id);
       }
 
-      exibirAlerta('Login efetuado com sucesso!', 'success');
+      exibirAlerta('Sessão iniciada com sucesso!', 'success');
       setTimeout(() => window.location.replace(urlDestino), 600);
     }
 
