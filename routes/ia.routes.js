@@ -5,7 +5,6 @@ import { autenticarToken } from './pedidos.routes.js';
 
 const router = express.Router();
 
-// A chave é lida com segurança das variáveis do Render, nunca escrita aqui
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 router.post('/localizar-referencia', autenticarToken, async (req, res) => {
@@ -23,12 +22,13 @@ router.post('/localizar-referencia', autenticarToken, async (req, res) => {
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
-      Atue como um geocodificador especialista na cidade de ${cidadeBase}.
-      O passageiro digitou a seguinte referência: "${referencia}".
+      Atue como um geocodificador especialista na região de ${cidadeBase} e arredores no Piauí.
+      O passageiro disse ou digitou a seguinte referência de destino: "${referencia}".
+      Pode ser um endereço local, um estabelecimento, um bairro OU uma cidade vizinha (como Simplício Mendes, etc.).
       Identifique o local exato ou mais provável e devolva APENAS um JSON válido.
       Não adicione formatação markdown, nem texto extra, apenas o JSON puro com esta estrutura:
       {
-        "nome_curto": "Nome do Local (Ex: Praça Matriz)",
+        "nome_curto": "Nome do Local ou Cidade (Ex: Simplício Mendes, PI)",
         "lat": latitude_em_numero,
         "lng": longitude_em_numero
       }
