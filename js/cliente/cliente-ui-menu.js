@@ -4,9 +4,6 @@ import { estadoCliente } from './cliente-estado.js';
 
 let intervalPollingPix = null;
 
-// ============================================================================
-// 1. CARREGAMENTO E ATUALIZAÇÃO DO SALDO DO CLIENTE
-// ============================================================================
 export async function carregarSaldoCarteiraCliente() {
   const token = localStorage.getItem('huby_token');
   if (!token) return;
@@ -29,44 +26,42 @@ export async function carregarSaldoCarteiraCliente() {
   }
 }
 
-// ============================================================================
-// 2. CONTROLE DE ACESSO DO PAINEL ADMIN NO MENU
-// ============================================================================
+// CONTROLE DE ACESSO AO PAINEL ADMIN NO MENU
 export function verificarAcessoAdminMenu() {
-  const token = localStorage.getItem('huby_token');
   const btnAdmin = document.getElementById('menuItemAdmin');
-  
   if (!btnAdmin) return;
+
+  const token = localStorage.getItem('huby_token');
   if (!token) {
-    btnAdmin.style.display = 'none';
+    btnAdmin.style.setProperty('display', 'none', 'important');
     return;
   }
 
+  let ehAdmin = false;
+
+  // 1. Checa pelo localStorage
+  const roleLocal = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
+  if (roleLocal === 'admin' || roleLocal === 'administrador') {
+    ehAdmin = true;
+  }
+
+  // 2. Checa pelo payload do token JWT
   try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-
-    const payloadUser = JSON.parse(jsonPayload);
-    const roleServidor = String(payloadUser.role || payloadUser.tipo || '').toLowerCase();
-
-    if (roleServidor) localStorage.setItem('huby_user_role', roleServidor);
-
-    if (roleServidor === 'admin' || roleServidor === 'administrador') {
-      btnAdmin.style.display = 'flex';
-    } else {
-      btnAdmin.style.display = 'none';
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const roleJwt = String(payload.role || payload.funcao || payload['função'] || '').toLowerCase().trim();
+    if (roleJwt === 'admin' || roleJwt === 'administrador') {
+      ehAdmin = true;
+      localStorage.setItem('huby_user_role', 'admin');
     }
-  } catch (e) {
-    btnAdmin.style.display = 'none';
+  } catch (e) {}
+
+  if (ehAdmin) {
+    btnAdmin.style.setProperty('display', 'flex', 'important');
+  } else {
+    btnAdmin.style.setProperty('display', 'none', 'important');
   }
 }
 
-// ============================================================================
-// 3. MENU LATERAL (DRAWER)
-// ============================================================================
 export function configurarDrawerMenu() {
   const btnMenu = document.getElementById('btnAbrirMenu');
   const backdrop = document.getElementById('menuBackdrop');
@@ -96,16 +91,14 @@ export function configurarDrawerMenu() {
       btnAuth.textContent = 'Sair da Conta';
       btnAuth.classList.add('btn-sair');
       btnAuth.onclick = () => {
-        if (confirm('Deseja realmente sair da sua conta?')) {
-          localStorage.clear();
-          window.location.reload();
-        }
+        localStorage.clear();
+        window.location.replace('./login.html');
       };
     } else {
       perfilBox.innerHTML = `
         <div style="padding: 16px;">
           <h4 class="profile-guest-title" style="margin: 0 0 6px 0; color: #FFF;">Bem-vindo ao HUBy</h4>
-          <p class="profile-guest-sub" style="margin: 0; color: #94A3B8; font-size: 13px;">Entre para pedir viagens mais rápido e usar sua carteira digital.</p>
+          <p class="profile-guest-sub" style="margin: 0; color: #94A3B8; font-size: 13px;">Entre para pedir viagens mais rápido.</p>
         </div>
       `;
       btnAuth.textContent = 'Entrar ou Cadastrar';
@@ -136,9 +129,6 @@ export function fecharDrawer() {
   document.getElementById('menuBackdrop')?.classList.remove('active');
 }
 
-// ============================================================================
-// 4. MODAL DE PAGAMENTO & RECARGA PIX DINÂMICA
-// ============================================================================
 export function configurarModalCarteiraPix() {
   const modal = document.getElementById('modalPagamento');
   const btnMenuPagamento = document.getElementById('menuItemPagamentos');
@@ -172,13 +162,11 @@ function renderizarPainelRecargaPix() {
       <button type="button" id="btnFecharPagamentoInterno" class="btn-icon-close" style="background: transparent; border: none; color: #94A3B8; font-size: 20px; cursor: pointer;">✕</button>
     </div>
 
-    <!-- BOX DE SALDO ATUAL -->
     <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 78, 59, 0.25) 100%); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 12px; padding: 14px; margin-bottom: 16px; text-align: center;">
       <span style="font-size: 12px; color: #94A3B8; font-weight: 700; text-transform: uppercase;">Saldo Disponível</span>
       <h2 style="font-size: 26px; color: #10B981; margin: 4px 0 0 0; font-weight: 900;">R$ ${saldoFormatado}</h2>
     </div>
 
-    <!-- BOTÕES DE RECARGA RÁPIDA -->
     <span style="font-size: 12px; color: #E2E8F0; font-weight: 700;">Adicionar saldo via Pix Dinâmico:</span>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 14px 0;">
       ${OPCOES_RECARGA_PIX.map(val => `
@@ -188,7 +176,6 @@ function renderizarPainelRecargaPix() {
       `).join('')}
     </div>
 
-    <!-- ÁREA DE DETALHES DO PIX GERADO -->
     <div id="areaPixGerado" style="display: none; background: rgba(0,0,0,0.3); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 14px; text-align: center; margin-top: 10px;">
       <span style="font-size: 12px; color: #38BDF8; font-weight: 800;">Aponte o app do seu banco ou copie o código:</span>
       <div style="display: flex; justify-content: center; margin: 12px 0;">
@@ -199,7 +186,6 @@ function renderizarPainelRecargaPix() {
 
       <div style="display: flex; gap: 8px;">
         <button type="button" id="btnCopiarCopiaCola" style="flex: 1; background: #38BDF8; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer;">📋 Copiar Código</button>
-        <button type="button" id="btnSimularPagamentoPix" style="flex: 1; background: #10B981; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer;">✓ Já Paguei</button>
       </div>
       <div id="txtStatusAguardandoPix" style="font-size: 11px; color: #F59E0B; margin-top: 8px;">⏳ Aguardando confirmação do banco...</div>
     </div>
@@ -227,11 +213,10 @@ async function gerarCobrancaPixCliente(valor) {
   const imgQr = document.getElementById('imgPixQrCode');
   const inputCopia = document.getElementById('inputPixCopiaCola');
   const btnCopiar = document.getElementById('btnCopiarCopiaCola');
-  const btnSimular = document.getElementById('btnSimularPagamentoPix');
   const txtStatus = document.getElementById('txtStatusAguardandoPix');
 
   try {
-    if (txtStatus) txtStatus.textContent = 'Gerando cobrança Pix segura...';
+    if (txtStatus) txtStatus.textContent = 'Gerando cobrança Pix...';
     if (areaPix) areaPix.style.display = 'block';
 
     const resp = await fetch(`${API_URL}/api/carteira/pix/gerar`, {
@@ -256,12 +241,6 @@ async function gerarCobrancaPixCliente(valor) {
       alert('Código Pix Copia e Cola copiado com sucesso!');
     };
 
-    btnSimular.onclick = async () => {
-      btnSimular.disabled = true;
-      btnSimular.textContent = 'Verificando...';
-      await liquidarPixSimulado(dados.txid);
-    };
-
     if (intervalPollingPix) clearInterval(intervalPollingPix);
     intervalPollingPix = setInterval(async () => {
       try {
@@ -271,57 +250,23 @@ async function gerarCobrancaPixCliente(valor) {
         if (resChecagem.ok) {
           const statusDados = await resChecagem.json();
           if (statusDados.status === 'pago') {
-            concluirSucessoPix(statusDados.valor);
+            clearInterval(intervalPollingPix);
+            intervalPollingPix = null;
+            sonsHUBy.tocarSucessoAceite();
+            alert('🎉 Pagamento confirmado!');
+            carregarSaldoCarteiraCliente();
+            renderizarPainelRecargaPix();
           }
         }
       } catch (e) {}
     }, 4000);
 
   } catch (err) {
-    alert('Erro ao gerar recarga Pix. Tente novamente.');
+    alert('Erro ao gerar Pix.');
     if (areaPix) areaPix.style.display = 'none';
   }
 }
 
-async function liquidarPixSimulado(txid) {
-  const token = localStorage.getItem('huby_token');
-  try {
-    const resp = await fetch(`${API_URL}/api/carteira/pix/simular-pagamento`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({ txid })
-    });
-
-    const res = await resp.json();
-    if (res.sucesso) {
-      concluirSucessoPix();
-    } else {
-      alert(res.erro || 'Falha ao confirmar pagamento.');
-    }
-  } catch (err) {
-    alert('Erro de conexão ao simular confirmação.');
-  }
-}
-
-function concluirSucessoPix() {
-  if (intervalPollingPix) {
-    clearInterval(intervalPollingPix);
-    intervalPollingPix = null;
-  }
-
-  sonsHUBy.tocarSucessoAceite();
-
-  alert('🎉 Pagamento Pix confirmado! Seu saldo foi atualizado.');
-  carregarSaldoCarteiraCliente();
-  renderizarPainelRecargaPix();
-}
-
-// ============================================================================
-// 5. HISTÓRICO DE CORRIDAS DO PASSAGEIRO
-// ============================================================================
 export async function carregarEExibirHistoricoModal() {
   const token = localStorage.getItem('huby_token');
   const modal = document.getElementById('modalHistorico');
@@ -349,7 +294,6 @@ export async function carregarEExibirHistoricoModal() {
     }
 
     container.innerHTML = viagens.map(v => {
-      // Rótulos e cores amigáveis para os status
       let statusFormatado = 'Pendente';
       let statusCor = '#F59E0B';
 

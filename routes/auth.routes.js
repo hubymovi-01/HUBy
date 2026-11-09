@@ -8,15 +8,9 @@ import { autenticarToken } from './pedidos.routes.js';
 
 const router = express.Router();
 
-// Motorista novo fica "pendente" até a administração aprovar (aba de triagem do painel).
-// Para testes, defina APROVACAO_AUTOMATICA_MOTORISTA=true no ambiente.
 const APROVACAO_AUTOMATICA = process.env.APROVACAO_AUTOMATICA_MOTORISTA === 'true';
-
 const MSG_CREDENCIAIS = 'Credenciais inválidas.';
 
-// ============================================================================
-// VALIDAÇÕES
-// ============================================================================
 function validarNumeroCPF(cpf) {
   cpf = String(cpf).replace(/\D/g, '');
   if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
@@ -36,7 +30,6 @@ function validarNumeroCNH(cnh) {
   return String(cnh).replace(/\D/g, '').length === 11;
 }
 
-// Placa antiga (ABC1234) ou Mercosul (ABC1D23)
 function validarPlaca(placa) {
   return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa);
 }
@@ -45,7 +38,6 @@ function validarEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 150;
 }
 
-// Foto em base64 (data:image/...). Rejeita lixo e imagens "de mentira".
 function validarFoto(url, maxCaracteres) {
   if (typeof url !== 'string') return false;
   const m = url.match(/^data:image\/(jpeg|png|webp);base64,/);
@@ -72,7 +64,6 @@ function erroDeDuplicidade(err) {
   return err?.code === '23505' || /unique|duplicate/i.test(err?.message || '');
 }
 
-// Se o motorista ainda não pode trabalhar, devolve a mensagem; senão, null.
 function bloqueioDeAprovacao(mot) {
   const s = mot?.status_aprovacao;
   if (!s || s === 'aprovado') return null;
@@ -93,10 +84,8 @@ function emitirTokenMotorista(mot) {
   );
 }
 
-// ============================================================================
 // CADASTRO
-// ============================================================================
-const processarCadastro = async (req, res) => {
+router.post('/cadastro', async (req, res) => {
   try {
     const {
       nome, email, telefone, cpf, senha, role,
@@ -106,69 +95,33 @@ const processarCadastro = async (req, res) => {
       doc_cnh_url, doc_crlv_url
     } = req.body;
 
-    const tipoConta = role === 'motorista' ? 'motorista' : 'cliente';
+    const papelDesejado = (role === 'motorista') ? 'motorista' : 'cliente';
 
     if (!nome || !senha || (!email && !telefone)) {
       return res.status(400).json({ erro: 'Preencha os campos obrigatórios (Nome, Senha e Contato).' });
     }
 
     const nomeLimpo = String(nome).trim();
-    if (nomeLimpo.length < 2 || nomeLimpo.length > 150) {
-      return res.status(400).json({ erro: 'Informe um nome válido.' });
-    }
-
     const senhaTexto = String(senha);
-    if (senhaTexto.length < 6 || senhaTexto.length > 72) {
-      return res.status(400).json({ erro: 'A palavra-passe deve ter entre 6 e 72 caracteres.' });
-    }
-
     const emailLimpo = email ? String(email).trim().toLowerCase() : null;
-    if (emailLimpo && !validarEmail(emailLimpo)) {
-      return res.status(400).json({ erro: 'E-mail inválido.' });
-    }
-
     const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
-    if (telLimpo && (telLimpo.length < 10 || telLimpo.length > 13)) {
-      return res.status(400).json({ erro: 'Telefone inválido.' });
-    }
-
-    // CPF é obrigatório (também é usado para gerar Pix)
     const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : '';
+
     if (!cpfLimpo || !validarNumeroCPF(cpfLimpo)) {
       return res.status(400).json({ erro: 'Número de CPF inválido.' });
-    }
-
-    if (dataNascimento && calcularIdade(dataNascimento) < 18) {
-      return res.status(400).json({ erro: 'Cadastro negado: É obrigatório ser maior de 18 anos.' });
     }
 
     const dataNascSql = dataNascimento ? String(dataNascimento).slice(0, 10) : null;
     const salt = await bcrypt.genSalt(10);
     const senhaHash = await bcrypt.hash(senhaTexto, salt);
 
-    // ------------------------------------------------------------------
-    // MOTORISTA
-    // ------------------------------------------------------------------
-    if (tipoConta === 'motorista') {
+    if (papelDesejado === 'motorista') {
       const cnhLimpa = String(cnh || '').replace(/\D/g, '');
       if (!validarNumeroCNH(cnhLimpa)) {
         return res.status(400).json({ erro: 'Informe um número de CNH válido com 11 dígitos.' });
       }
 
-      if (!veiculo_placa || !veiculo_modelo) {
-        return res.status(400).json({ erro: 'Preencha o modelo e a placa do veículo.' });
-      }
-
       const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      if (!validarPlaca(placaLimpa)) {
-        return res.status(400).json({ erro: 'Placa inválida. Use o formato ABC1D23.' });
-      }
-
-      // Documentos reais são obrigatórios (até ~1,5 MB cada)
-      if (!validarFoto(doc_cnh_url, 2_000_000) || !validarFoto(doc_crlv_url, 2_000_000)) {
-        return res.status(400).json({ erro: 'Envie a fotografia da CNH e do CRLV para continuar.' });
-      }
-
       const modeloLimpo = String(veiculo_modelo).trim().slice(0, 100);
       const corLimpa = veiculo_cor ? String(veiculo_cor).trim().slice(0, 30) : 'Não informada';
       const anoLimpo = veiculo_ano ? String(veiculo_ano).trim().slice(0, 4) : '2022';
@@ -176,13 +129,11 @@ const processarCadastro = async (req, res) => {
       const idMotorista = novoId('mot');
       const statusInicial = APROVACAO_AUTOMATICA ? 'aprovado' : 'pendente';
 
-      // 1) conta unificada de login
       await sql`
         INSERT INTO usuarios (id, nome, email, telefone, cpf, data_nascimento, senha_hash, role)
         VALUES (${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash}, 'motorista');
       `;
 
-      // 2) registro do motorista (se falhar, desfaz a conta para não ficar pela metade)
       let motoristaCriado;
       try {
         const resultado = await sql`
@@ -210,20 +161,17 @@ const processarCadastro = async (req, res) => {
         return res.status(201).json({
           sucesso: true,
           pendente: true,
-          mensagem: 'Cadastro enviado para análise! Avisaremos quando for aprovado e você poderá entrar com o seu e-mail, CNH, placa e palavra-passe.'
+          mensagem: 'Cadastro enviado para análise!'
         });
       }
 
       return res.status(201).json({
         sucesso: true,
-        token: emitirTokenMotorista({ ...motoristaCriado, categoria: motoristaCriado.categoria }),
+        token: emitirTokenMotorista(motoristaCriado),
         usuario: { ...motoristaCriado, role: 'motorista' }
       });
     }
 
-    // ------------------------------------------------------------------
-    // PASSAGEIRO
-    // ------------------------------------------------------------------
     const idUsuario = novoId('usr');
     const resultado = await sql`
       INSERT INTO usuarios (
@@ -255,12 +203,10 @@ const processarCadastro = async (req, res) => {
     }
     res.status(500).json({ erro: 'Não foi possível concluir o cadastro. Tente novamente.' });
   }
-};
+});
 
-// ============================================================================
 // LOGIN
-// ============================================================================
-const processarLogin = async (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const identificador = req.body.identificador || req.body.emailOuTelefone || req.body.email;
     const senha = req.body.senha;
@@ -273,7 +219,6 @@ const processarLogin = async (req, res) => {
     const idLimpo = String(identificador).trim().toLowerCase();
     const idNumeros = String(identificador).replace(/\D/g, '');
 
-    // --- Login de motorista pelo formulário comum (identificador + senha) ---
     if (perfilDesejado === 'motorista') {
       const motoristas = await sql`
         SELECT * FROM motoristas
@@ -308,12 +253,20 @@ const processarLogin = async (req, res) => {
       });
     }
 
-    // --- Login de passageiro / admin ---
+    // EXTRAÇÃO SEGURA DIRETO NO SQL: normaliza "função", "funcao" e "role" em "cargo_real"
     const usuarios = await sql`
-      SELECT * FROM usuarios
-      WHERE LOWER(TRIM(email)) = ${idLimpo}
-         OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
-         OR (cpf IS NOT NULL AND regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+      SELECT 
+        u.*,
+        LOWER(TRIM(COALESCE(u."função", u.funcao, u.role, 'cliente'))) AS cargo_real
+      FROM usuarios u
+      WHERE LOWER(TRIM(u.email)) = ${idLimpo}
+         OR (u.telefone IS NOT NULL AND regexp_replace(u.telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+         OR (u.cpf IS NOT NULL AND regexp_replace(u.cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+      ORDER BY 
+        CASE 
+          WHEN LOWER(TRIM(COALESCE(u."função", u.funcao, u.role, ''))) IN ('admin', 'administrador') THEN 1
+          ELSE 2
+        END ASC
       LIMIT 1;
     `;
 
@@ -326,8 +279,11 @@ const processarLogin = async (req, res) => {
       return res.status(401).json({ erro: MSG_CREDENCIAIS });
     }
 
-    // Motorista não pode "furar" a aprovação entrando pelo formulário de passageiro
-    if (String(usr.role).toLowerCase() === 'motorista') {
+    let roleFinal = usr.cargo_real;
+    if (roleFinal === 'administrador') roleFinal = 'admin';
+
+    // Se for motorista tentando logar pelo form de passageiro
+    if (roleFinal === 'motorista') {
       const registro = await sql`
         SELECT id, nome, categoria, status_aprovacao, motivo_recusa
         FROM motoristas
@@ -346,8 +302,9 @@ const processarLogin = async (req, res) => {
       });
     }
 
+    // Assina o JWT com 'admin' de forma expressa
     const token = jwt.sign(
-      { id: usr.id, nome: usr.nome, email: usr.email, role: usr.role },
+      { id: usr.id, nome: usr.nome, email: usr.email, role: roleFinal },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
@@ -355,18 +312,21 @@ const processarLogin = async (req, res) => {
     res.json({
       sucesso: true,
       token,
-      usuario: { id: usr.id, nome: usr.nome, email: usr.email, telefone: usr.telefone, role: usr.role }
+      usuario: {
+        id: usr.id,
+        nome: usr.nome,
+        email: usr.email,
+        telefone: usr.telefone,
+        role: roleFinal
+      }
     });
   } catch (err) {
     console.error('Erro no login:', err);
     res.status(500).json({ erro: 'Falha interna ao validar credenciais.' });
   }
-};
+});
 
-router.post('/cadastro', processarCadastro);
-router.post('/login', processarLogin);
-
-// LOGIN DO MOTORISTA: e-mail + CNH + placa + palavra-passe
+// LOGIN DO MOTORISTA
 router.post('/login-motorista', async (req, res) => {
   try {
     const { email, cnh, veiculo_placa, senha } = req.body;
@@ -389,9 +349,6 @@ router.post('/login-motorista', async (req, res) => {
     if (!motoristas.length) return res.status(401).json({ erro: MSG_CREDENCIAIS });
 
     const mot = motoristas[0];
-
-    // Contas antigas sem senha (só as criadas por scripts de teste) ainda entram;
-    // todo cadastro novo tem senha e ela é obrigatória.
     if (mot.senha_hash) {
       if (!(await bcrypt.compare(String(senha), mot.senha_hash))) {
         return res.status(401).json({ erro: MSG_CREDENCIAIS });
@@ -426,9 +383,7 @@ router.post('/login-motorista', async (req, res) => {
   }
 });
 
-// ============================================================================
 // PERFIL
-// ============================================================================
 router.get('/perfil', autenticarToken, async (req, res) => {
   try {
     const idToken = String(req.usuario.id);
@@ -464,26 +419,11 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     const { nome, email, telefone, foto_url } = req.body;
 
     const nomeLimpo = nome ? String(nome).trim() : null;
-    if (nomeLimpo !== null && (nomeLimpo.length < 2 || nomeLimpo.length > 150)) {
-      return res.status(400).json({ erro: 'Informe um nome válido.' });
-    }
-
     const emailLimpo = email ? String(email).trim().toLowerCase() : null;
-    if (emailLimpo && !validarEmail(emailLimpo)) {
-      return res.status(400).json({ erro: 'E-mail inválido.' });
-    }
-
     const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
-    if (telLimpo && (telLimpo.length < 10 || telLimpo.length > 13)) {
-      return res.status(400).json({ erro: 'Telefone inválido.' });
-    }
 
-    // Foto de perfil (já reduzida pelo app): até ~700 mil caracteres
     let foto = null;
-    if (foto_url) {
-      if (!validarFoto(foto_url, 700_000)) {
-        return res.status(400).json({ erro: 'Foto inválida ou muito grande.' });
-      }
+    if (foto_url && validarFoto(foto_url, 700_000)) {
       foto = foto_url;
     }
 
@@ -499,7 +439,6 @@ router.put('/perfil', autenticarToken, async (req, res) => {
         RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, foto_perfil_url AS foto_url;
       `;
 
-      // Mantém a conta de login igual ao cadastro do motorista
       await sql`
         UPDATE usuarios
         SET nome = COALESCE(${nomeLimpo}, nome),
@@ -521,8 +460,7 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     }
 
     if (!atualizado.length) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
-
-    res.json({ sucesso: true, mensagem: 'Perfil atualizado com sucesso!', usuario: atualizado[0] });
+    res.json({ sucesso: true, mensagem: 'Perfil atualizado!', usuario: atualizado[0] });
   } catch (err) {
     console.error('ERRO AO ATUALIZAR PERFIL:', err);
     if (erroDeDuplicidade(err)) {
