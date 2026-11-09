@@ -161,7 +161,7 @@
     </nav>
 
     <div class="drawer-footer">
-      <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Entrar ou Cadastrar</button>
+      <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Sair ou Mudar de Conta</button>
       <span class="version-tag">HUBy v2.0 • 2026</span>
     </div>
   </aside>
@@ -170,8 +170,8 @@
   <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-      <polyline points="2 17 12 22 22 17"></polyline>
-      <polyline points="2 12 12 17 22 12"></polyline>
+      <polyline points="12 17 12 22 22 17"></polyline>
+      <polyline points="12 12 12 17 22 12"></polyline>
     </svg>
   </button>
 
@@ -544,11 +544,27 @@
       window.open(link, '_blank');
     });
 
+    // VERIFICAÇÃO AUTOMÁTICA E ROBUSTA DE ADMIN (Lê role do storage e validação pelo token)
     function checarAdminInstantaneo() {
       const token = localStorage.getItem('huby_token');
-      const role = localStorage.getItem('huby_user_role');
+      const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
       const btnAdmin = document.getElementById('menuItemAdmin');
-      if (btnAdmin && token && (role === 'admin' || role === 'administrador')) {
+
+      let ehAdmin = role === 'admin' || role === 'administrador';
+
+      // Inspeção de segurança suplementar no payload do token JWT
+      if (!ehAdmin && token && token.includes('.')) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          const cargoToken = String(payload.role || payload.funcao || payload['função'] || '').toLowerCase().trim();
+          if (cargoToken === 'admin' || cargoToken === 'administrador') {
+            ehAdmin = true;
+            localStorage.setItem('huby_user_role', 'admin');
+          }
+        } catch (e) {}
+      }
+
+      if (btnAdmin && token && ehAdmin) {
         btnAdmin.style.display = 'flex';
       }
     }
@@ -556,10 +572,25 @@
     checarAdminInstantaneo();
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
 
+    // Botão de Sair / Limpar sessão
+    document.getElementById('btnAcaoConta')?.addEventListener('click', () => {
+      localStorage.removeItem('huby_token');
+      localStorage.removeItem('huby_user_role');
+      localStorage.removeItem('huby_user_name');
+      localStorage.removeItem('huby_user_id');
+      localStorage.removeItem('huby_pedido_ativo_id');
+      window.location.replace('./login.html');
+    });
+
     function atualizarMenuLateral() {
       const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
       const fotoLocal = localStorage.getItem('huby_user_foto');
+      const roleLocal = String(localStorage.getItem('huby_user_role') || '').toLowerCase();
       const drawerBox = document.getElementById('drawerPerfilBox');
+
+      const badgeTexto = (roleLocal === 'admin' || roleLocal === 'administrador')
+        ? 'Administrador Master'
+        : (roleLocal === 'motorista' ? 'Motorista Parceiro' : 'Conta verificada');
 
       if (drawerBox) {
         let avatarHTML = '';
@@ -574,7 +605,7 @@
             ${avatarHTML}
             <div style="display: flex; flex-direction: column;">
               <span style="font-size: 17px; font-weight: 800; color: #FFF; letter-spacing: -0.3px;">${nomeLocal}</span>
-              <span style="font-size: 12px; color: #94A3B8; font-weight: 600;">Conta verificada</span>
+              <span style="font-size: 12px; color: ${roleLocal === 'admin' ? '#F87171' : '#94A3B8'}; font-weight: 600;">${badgeTexto}</span>
             </div>
           </div>
         `;
@@ -592,8 +623,14 @@
       }
     }
 
-    document.addEventListener('DOMContentLoaded', atualizarMenuLateral);
-    document.getElementById('btnAbrirMenu')?.addEventListener('click', atualizarMenuLateral);
+    document.addEventListener('DOMContentLoaded', () => {
+      checarAdminInstantaneo();
+      atualizarMenuLateral();
+    });
+    document.getElementById('btnAbrirMenu')?.addEventListener('click', () => {
+      checarAdminInstantaneo();
+      atualizarMenuLateral();
+    });
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
