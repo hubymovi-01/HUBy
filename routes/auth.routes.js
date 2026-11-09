@@ -1,4 +1,4 @@
-// routes/auth.routes.js - Cadastro, Login e Perfil HUBy
+// routes/auth.routes.js - Cadastro, Login e Perfil HUBy (Padronizado)
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -64,6 +64,12 @@ function erroDeDuplicidade(err) {
   return err?.code === '23505' || /unique|duplicate/i.test(err?.message || '');
 }
 
+function extrairRoleLimpa(usr) {
+  const bruto = String(usr?.role || usr?.['função'] || usr?.funcao || 'cliente').trim().toLowerCase();
+  if (bruto === 'administrador') return 'admin';
+  return bruto;
+}
+
 function bloqueioDeAprovacao(mot) {
   const s = mot?.status_aprovacao;
   if (!s || s === 'aprovado') return null;
@@ -95,7 +101,7 @@ router.post('/cadastro', async (req, res) => {
       doc_cnh_url, doc_crlv_url
     } = req.body;
 
-    const papelDesejado = (role === 'motorista') ? 'motorista' : 'cliente';
+    const papelDesejado = role === 'motorista' ? 'motorista' : 'cliente';
 
     if (!nome || !senha || (!email && !telefone)) {
       return res.status(400).json({ erro: 'Preencha os campos obrigatórios (Nome, Senha e Contato).' });
@@ -253,19 +259,16 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // EXTRAÇÃO SEGURA DIRETO NO SQL: normaliza "função", "funcao" e "role" em "cargo_real"
+    // Prioriza contas de administrador quando houver múltiplos registros
     const usuarios = await sql`
-      SELECT 
-        u.*,
-        LOWER(TRIM(COALESCE(u."função", u.funcao, u.role, 'cliente'))) AS cargo_real
-      FROM usuarios u
-      WHERE LOWER(TRIM(u.email)) = ${idLimpo}
-         OR (u.telefone IS NOT NULL AND regexp_replace(u.telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
-         OR (u.cpf IS NOT NULL AND regexp_replace(u.cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+      SELECT * FROM usuarios
+      WHERE LOWER(TRIM(email)) = ${idLimpo}
+         OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+         OR (cpf IS NOT NULL AND regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
       ORDER BY 
         CASE 
-          WHEN LOWER(TRIM(COALESCE(u."função", u.funcao, u.role, ''))) IN ('admin', 'administrador') THEN 1
-          ELSE 2
+          WHEN LOWER(TRIM(COALESCE(role, ''))) IN ('admin', 'administrador') THEN 1
+          ELSE 2 
         END ASC
       LIMIT 1;
     `;
@@ -279,10 +282,8 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ erro: MSG_CREDENCIAIS });
     }
 
-    let roleFinal = usr.cargo_real;
-    if (roleFinal === 'administrador') roleFinal = 'admin';
+    const roleFinal = extrairRoleLimpa(usr);
 
-    // Se for motorista tentando logar pelo form de passageiro
     if (roleFinal === 'motorista') {
       const registro = await sql`
         SELECT id, nome, categoria, status_aprovacao, motivo_recusa
@@ -302,7 +303,6 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Assina o JWT com 'admin' de forma expressa
     const token = jwt.sign(
       { id: usr.id, nome: usr.nome, email: usr.email, role: roleFinal },
       JWT_SECRET,
@@ -370,10 +370,6 @@ router.post('/login-motorista', async (req, res) => {
         telefone: mot.telefone,
         role: 'motorista',
         veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`,
-        veiculo_modelo: mot.veiculo_modelo,
-        veiculo_placa: mot.veiculo_placa,
-        veiculo_cor: mot.veiculo_cor,
-        veiculo_ano: mot.veiculo_ano,
         saldo: mot.saldo_carteira
       }
     });
