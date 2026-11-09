@@ -133,7 +133,7 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
-// Controle da Barra de Pesquisa Moderna
+// Controle da Barra de Pesquisa Moderna com Visibilidade Dinâmica do Botão Limpar
 function configurarBarraPesquisaAnimada() {
   const searchBox = document.querySelector('.modern-search');
   const btnLupa = document.getElementById('btnAcionarPesquisa');
@@ -143,9 +143,16 @@ function configurarBarraPesquisaAnimada() {
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const containerParadas = document.getElementById('containerParadasIntermediarias');
 
+  function atualizarVisibilidadeLimpar() {
+    if (btnLimpar) {
+      btnLimpar.style.display = inputPesquisa?.value.trim() ? 'flex' : 'none';
+    }
+  }
+
   function abrirBarra() {
     searchBox?.classList.add('active');
     setTimeout(() => inputPesquisa?.focus(), 80);
+    atualizarVisibilidadeLimpar();
   }
 
   function recolherBarra() {
@@ -158,7 +165,10 @@ function configurarBarraPesquisaAnimada() {
       listaResultados.innerHTML = '';
       listaResultados.style.display = 'none';
     }
+    atualizarVisibilidadeLimpar();
   }
+
+  inputPesquisa?.addEventListener('input', atualizarVisibilidadeLimpar);
 
   btnLupa?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -368,7 +378,9 @@ function configurarLocaisFavoritosMenu() {
     if (searchBox) searchBox.classList.add('active');
 
     if (estadoCliente.hubyMapa) {
-      const origem = estadoCliente.coordsOrigem || [-8.3582, -42.2476];
+      const origem = estadoCliente.coordsOrigem || 
+                     (estadoCliente.hubyMapa.posicaoAtual ? [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng] : null) || 
+                     [-8.3582, -42.2476];
       const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
       estadoCliente.rotaAtual = rota;
       atualizarResumoValores();
@@ -413,12 +425,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
       const searchBox = document.querySelector('.modern-search');
+      const btnLimpar = document.getElementById('btnLimparPesquisa');
       const listaResultados = document.getElementById('listaResultadosPesquisa');
 
       const textoDestino = `Destino (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
 
       if (txtDestino) txtDestino.textContent = textoDestino;
-      if (inputPesquisa) inputPesquisa.value = textoDestino;
+      if (inputPesquisa) {
+        inputPesquisa.value = textoDestino;
+        if (btnLimpar) btnLimpar.style.display = 'flex';
+      }
       if (searchBox) searchBox.classList.add('active');
       if (listaResultados) {
         listaResultados.innerHTML = '';
@@ -427,6 +443,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       atualizarResumoValores();
       if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+    });
+
+    // Centraliza e armazena o GPS real logo na inicialização
+    estadoCliente.hubyMapa.obterGPS?.((pos) => {
+      if (pos && pos.lat && pos.lng) {
+        estadoCliente.coordsOrigem = [pos.lat, pos.lng];
+      }
     });
 
     setTimeout(() => {
@@ -446,11 +469,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
+      const btnLimpar = document.getElementById('btnLimparPesquisa');
       const searchBox = document.querySelector('.modern-search');
       const listaResultados = document.getElementById('listaResultadosPesquisa');
 
       if (txtDestino) txtDestino.textContent = nomeCurto;
-      if (inputPesquisa) inputPesquisa.value = nomeCurto;
+      if (inputPesquisa) {
+        inputPesquisa.value = nomeCurto;
+        if (btnLimpar) btnLimpar.style.display = 'flex';
+      }
       if (searchBox) searchBox.classList.add('active');
       if (listaResultados) {
         listaResultados.innerHTML = '';
@@ -473,8 +500,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 3.2. Escuta Inteligência Artificial (Voz/Gemini)
-  // 3.2. Escuta Inteligência Artificial (Voz/Gemini)
+  // 3.2. Escuta Inteligência Artificial (Voz/Gemini) - Rota calibrada no GPS real
   document.addEventListener('huby_local_selecionado_ia', async (e) => {
     const { nome, lat, lng } = e.detail;
     const coords = [parseFloat(lat), parseFloat(lng)];
@@ -483,6 +509,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const txtDestino = document.getElementById('txtDestinoSelecionado');
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
+    const btnLimpar = document.getElementById('btnLimparPesquisa');
     const searchBox = document.querySelector('.modern-search');
 
     if (txtDestino) {
@@ -491,17 +518,51 @@ document.addEventListener('DOMContentLoaded', async () => {
       txtDestino.style.fontWeight = '800';
     }
 
-    if (inputPesquisa) inputPesquisa.value = nome;
+    if (inputPesquisa) {
+      inputPesquisa.value = nome;
+      if (btnLimpar) btnLimpar.style.display = 'flex';
+    }
     if (searchBox) searchBox.classList.add('active');
 
     if (estadoCliente.hubyMapa) {
-      const origem = estadoCliente.coordsOrigem || [-8.3582, -42.2476];
-      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#38BDF8', true);
-      estadoCliente.rotaAtual = rota;
+      // 1. Tenta pegar a posição onde o círculo verde do GPS está marcado
+      let origem = estadoCliente.coordsOrigem;
 
-      atualizarResumoValores();
-      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
-      notificarCliente(`Destino IA: ${nome}`, 'sucesso');
+      if (!origem && estadoCliente.hubyMapa.posicaoAtual) {
+        origem = [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng];
+      }
+
+      if (!origem && estadoCliente.hubyMapa.userMarker) {
+        const markerPos = estadoCliente.hubyMapa.userMarker.getLatLng();
+        origem = [markerPos.lat, markerPos.lng];
+      }
+
+      // Função interna para traçar a rota a partir do ponto verificado
+      const aplicarRotaNoMapa = async (pontoOrigem) => {
+        estadoCliente.coordsOrigem = pontoOrigem;
+        const rota = await estadoCliente.hubyMapa.calcularRota(pontoOrigem, coords, '#38BDF8', true);
+        estadoCliente.rotaAtual = rota;
+
+        atualizarResumoValores();
+        if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+        notificarCliente(`Destino IA: ${nome}`, 'sucesso');
+      };
+
+      // Se a localização atual já estiver carregada, calcula imediatamente
+      if (origem && origem[0] && origem[1]) {
+        await aplicarRotaNoMapa(origem);
+      } else {
+        // Se ainda não estava guardada, solicita o GPS na hora
+        notificarCliente('Identificando sua localização atual...', 'info');
+        estadoCliente.hubyMapa.obterGPS(async (pos) => {
+          if (pos && pos.lat && pos.lng) {
+            await aplicarRotaNoMapa([pos.lat, pos.lng]);
+          } else {
+            // Último caso: centro de São João do Piauí
+            await aplicarRotaNoMapa([-8.3582, -42.2476]);
+          }
+        });
+      }
     }
   });
 
@@ -513,6 +574,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.stopPropagation();
       if (estadoCliente.hubyMapa) {
         estadoCliente.hubyMapa.obterGPS((posicaoReal) => {
+          if (posicaoReal && posicaoReal.lat && posicaoReal.lng) {
+            estadoCliente.coordsOrigem = [posicaoReal.lat, posicaoReal.lng];
+          }
           if (estadoCliente.coordsDestino) {
             estadoCliente.hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], estadoCliente.coordsDestino, '#F59E0B', true).then(rota => {
               estadoCliente.rotaAtual = rota;
@@ -895,7 +959,6 @@ function conectarSocketEPollingCliente() {
         }
       });
 
-      // Se não autorizado (401) ou não encontrado (404), descarta a chamada pendente
       if (res.status === 401 || res.status === 404) {
         clearInterval(estadoCliente.intervalPolling);
         estadoCliente.intervalPolling = null;

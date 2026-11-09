@@ -121,7 +121,7 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA SUPERIOR MODERNA (Integrada) */
+/* 3. BARRA DE PESQUISA SUPERIOR MODERNA (Elegante & Espaçada) */
 .search-floating-wrapper {
   position: absolute !important;
   top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
@@ -138,17 +138,18 @@
   pointer-events: auto !important;
   position: relative !important;
   width: 100% !important;
-  height: 52px !important;
+  min-height: 52px !important;
   display: flex !important;
   align-items: center !important;
-  background: rgba(15, 23, 42, 0.85) !important;
-  backdrop-filter: blur(12px) !important;
-  -webkit-backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  gap: 10px !important;
+  background: rgba(15, 23, 42, 0.88) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 16px !important;
-  padding: 12px 16px !important;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
-  transition: all 0.3s ease !important;
+  padding: 6px 12px 6px 14px !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
+  transition: all 0.25s ease !important;
   cursor: text !important;
   touch-action: manipulation !important;
 }
@@ -156,7 +157,7 @@
 .search-glass-box.modern-search:focus-within,
 .search-glass-box.modern-search.active {
   border-color: var(--hub-emerald) !important;
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.2) !important;
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.22) !important;
 }
 
 .search-dot-accent {
@@ -166,41 +167,65 @@
   background: var(--hub-emerald);
   box-shadow: 0 0 10px var(--hub-emerald);
   flex-shrink: 0;
-  margin-right: 10px;
-}
-
-.search-icon {
-  font-size: 18px !important;
-  color: #94A3B8 !important;
-  background: transparent !important;
-  border: none !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 0 !important;
 }
 
 .modern-search input {
   display: block !important;
   flex: 1 !important;
+  min-width: 0 !important;
   background: transparent !important;
   border: none !important;
   outline: none !important;
   color: #FFF !important;
-  font-size: 16px !important;
+  font-size: 15px !important;
   font-weight: 500 !important;
   letter-spacing: -0.2px;
+  padding: 8px 4px !important;
 }
 
 .modern-search input::placeholder {
   color: #64748B !important;
+  font-size: 14px !important;
+}
+
+/* Agrupamento e botões de ação da barra */
+.search-icon {
+  background: transparent !important;
+  border: none !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  border-radius: 10px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  color: #94A3B8 !important;
+  transition: background 0.15s ease, transform 0.1s ease !important;
+  touch-action: manipulation !important;
+  padding: 0 !important;
+}
+
+.search-icon:active {
+  transform: scale(0.92) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+#btnBuscaIA.search-icon {
+  color: var(--hub-blue) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+  border: 1px solid rgba(56, 189, 248, 0.25) !important;
+}
+
+#btnBuscaIA.search-icon:active {
+  background: rgba(56, 189, 248, 0.2) !important;
 }
 
 .clear-btn {
   display: none;
-  background: rgba(255, 255, 255, 0.1) !important;
-  border: none !important;
-  color: #FFF !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #94A3B8 !important;
   border-radius: 50% !important;
   width: 24px !important;
   height: 24px !important;
@@ -208,16 +233,14 @@
   align-items: center !important;
   justify-content: center !important;
   cursor: pointer !important;
-  font-size: 10px !important;
+  font-size: 11px !important;
+  margin-left: 2px !important;
+  transition: all 0.15s ease !important;
   touch-action: manipulation !important;
 }
 
-.modern-search.active .clear-btn {
-  display: flex !important;
-}
-
 .clear-btn:active {
-  background: rgba(239, 68, 68, 0.35) !important;
+  background: rgba(239, 68, 68, 0.3) !important;
   color: #EF4444 !important;
 }
 
@@ -289,7 +312,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* 4. DOCK INFERIOR COMPACTO (ALTURA CALIBRADA) */
+/* 4. DOCK INFERIOR COMPACTO */
 .pro-dock {
   position: absolute;
   bottom: 0;
