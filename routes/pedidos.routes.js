@@ -1,16 +1,18 @@
-// routes/pedidos.routes.js
+// routes/pedidos.routes.js - Gestão Completa de Pedidos HUBy
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 
-// Middleware de Autenticação
+// Middleware de Autenticação Blindado
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader ? (authHeader.split(' ')[1] || authHeader) : req.query.token;
 
-  if (!token) return res.status(401).json({ erro: 'Acesso negado: token não fornecido.' });
+  if (!token || token === 'null' || token === 'undefined') {
+    return res.status(401).json({ erro: 'Acesso negado: token não fornecido.' });
+  }
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -21,17 +23,20 @@ export function autenticarToken(req, res, next) {
   }
 }
 
-// Inicialização segura de colunas na tabela de pedidos
+// Inicialização segura de todas as colunas de suporte na tabela pedidos
 async function inicializarColunasPedidos() {
   try {
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(50);`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pgto VARCHAR(50);`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_id VARCHAR(50);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_label VARCHAR(100);`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_adicionais NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS paradas JSONB DEFAULT '[]'::jsonb;`;
   } catch (e) {
-    console.warn('Aviso: Colunas de pedidos já existem ou falha ao criá-las:', e.message);
+    console.warn('Aviso: Verificação de colunas de pedidos:', e.message);
   }
 }
 inicializarColunasPedidos();
-
 
 // ============================================================================
 // AUXILIARES DE SEGURANÇA E VALIDAÇÃO
@@ -45,7 +50,6 @@ function ehMotoristaToken(usuario) {
   return String(usuario?.role || '').toLowerCase() === 'motorista';
 }
 
-// Distância em linha reta (km) entre dois pontos. A rota real nunca é menor que isso.
 function distanciaRetaKm(lat1, lng1, lat2, lng2) {
   const rad = (g) => (g * Math.PI) / 180;
   const dLat = rad(lat2 - lat1);
@@ -69,56 +73,60 @@ async function obterTarifasPlataforma() {
   }
 }
 
-// Menor valor aceitável para a distância medida pelo servidor (com folga de 50%).
-// Barra preços absurdos (ex.: R$ 0,50 numa viagem de 20 km) sem depender da fórmula exata do app.
 function valorMinimoPlausivel(tarifas, distKm) {
   const opcoes = ['carro', 'moto', 'entrega']
     .map((k) => tarifas?.[k])
     .filter((t) => t && Number.isFinite(Number(t.base)) && Number.isFinite(Number(t.km)));
   if (!opcoes.length) return 0;
   const menor = Math.min(...opcoes.map((t) => Number(t.base) + Number(t.km) * distKm));
-  return menor * 0.5;
+  return menor * 0.4;
 }
 
 export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO COM SUPORTE A CUPOM, MÚLTIPLAS PARADAS E SEGURANÇA
+  // 1. CRIAR PEDIDO (AJUSTADO E BLINDADO CONTRA ERRO 500)
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
     try {
       const {
-        id, tipo, subTipoId, subTipoLabel,
-        origem, destino, coordsOrigem, coordsDestino,
+        id, tipo, subTipoId, sub_tipo_id, subTipoLabel, sub_tipo_label,
+        origem, destino, origem_endereco, destino_endereco,
+        coordsOrigem, coordsDestino, origem_lat, origem_lng, destino_lat, destino_lng,
         paradas,
-        distanciaKm, duracaoMin, valorTotal, valorAdicionais, metodoPgto,
+        distanciaKm, distancia_km, duracaoMin, duracao_min,
+        valorTotal, valor_total, valorAdicionais, valor_adicionais,
+        metodoPgto, metodo_pagamento, forma_pagamento,
         cupomCodigo
       } = req.body;
 
-      // O passageiro é sempre quem está logado (não vem do corpo da requisição)
       const clienteId = String(req.usuario.id);
 
-      if (!valorTotal || !origem || !destino) {
+      const endOrigem = origem_endereco || origem;
+      const endDestino = destino_endereco || destino;
+      const vTotalRecebido = valor_total !== undefined ? valor_total : valorTotal;
+
+      if (!vTotalRecebido || !endOrigem || !endDestino) {
         return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
       }
 
-      // Código da corrida: usa o do app se for válido, senão o servidor cria um aleatório
       const idPedido = (typeof id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(id))
         ? id
         : 'ped_' + crypto.randomBytes(8).toString('hex');
 
       const formatarNum = (val) => Number(String(val).replace(',', '.')) || 0;
-      let vTotal = formatarNum(valorTotal);
-      const vAdic = formatarNum(valorAdicionais);
-      const dKm = formatarNum(distanciaKm);
-      const dMin = formatarNum(duracaoMin);
+      let vTotal = formatarNum(vTotalRecebido);
+      const vAdic = formatarNum(valor_adicionais !== undefined ? valor_adicionais : valorAdicionais);
+      const dKm = formatarNum(distancia_km !== undefined ? distancia_km : distanciaKm);
+      const dMin = formatarNum(duracao_min !== undefined ? duracao_min : duracaoMin);
 
-      const origLat = Number(coordsOrigem?.[0]);
-      const origLng = Number(coordsOrigem?.[1]);
-      const destLat = Number(coordsDestino?.[0]);
-      const destLng = Number(coordsDestino?.[1]);
+      // Resolução flexível de coordenadas
+      const origLat = Number(origem_lat !== undefined ? origem_lat : coordsOrigem?.[0]);
+      const origLng = Number(origem_lng !== undefined ? origem_lng : coordsOrigem?.[1]);
+      const destLat = Number(destino_lat !== undefined ? destino_lat : coordsDestino?.[0]);
+      const destLng = Number(destino_lng !== undefined ? destino_lng : coordsDestino?.[1]);
 
       const coordsOk = [origLat, origLng, destLat, destLng].every(Number.isFinite)
         && Math.abs(origLat) <= 90 && Math.abs(destLat) <= 90
@@ -128,18 +136,18 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Defina a origem e o destino no mapa.' });
       }
 
-      if (vTotal <= 0 || vTotal > 2000) {
+      if (vTotal <= 0 || vTotal > 3000) {
         return res.status(400).json({ erro: 'Valor da corrida inválido.' });
       }
 
-      // O servidor confere o preço com a distância que ele mesmo mede
+      // Validação de tarifa mínima plausível
       const distServidor = distanciaRetaKm(origLat, origLng, destLat, destLng);
       const tarifas = await obterTarifasPlataforma();
       if (vTotal < valorMinimoPlausivel(tarifas, distServidor)) {
         return res.status(400).json({ erro: 'Valor da corrida inconsistente. Atualize o app e tente novamente.' });
       }
 
-      // Cupom: reserva o uso de forma atômica (não passa do limite mesmo com pedidos simultâneos)
+      // Tratamento do Cupom
       let descontoAplicado = 0;
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
@@ -177,19 +185,27 @@ export default function pedidosRouter(io) {
         }
       }
 
+      const formaPagamentoFinal = forma_pagamento || metodo_pagamento || metodoPgto || 'dinheiro';
+      const subTipoLabelFinal = sub_tipo_label || subTipoLabel || 'HUBy Carro';
+      const subTipoIdFinal = sub_tipo_id || subTipoId || tipo || 'carro';
+
+      // Validação de existência do cliente no banco antes da inserção
+      const usuarioExiste = await sql`SELECT id FROM usuarios WHERE id::text = ${clienteId}::text LIMIT 1;`;
+      const idClienteFinal = usuarioExiste.length > 0 ? usuarioExiste[0].id : null;
+
       const inserido = await sql`
         INSERT INTO pedidos (
           id, cliente_id, tipo, sub_tipo_id, sub_tipo_label,
           origem_endereco, destino_endereco,
           origem_lat, origem_lng, destino_lat, destino_lng,
           distancia_km, duracao_min, valor_total, valor_adicionais,
-          metodo_pgto, status
+          forma_pagamento, metodo_pgto, status
         ) VALUES (
-          ${idPedido}, ${clienteId}, ${tipo || 'carro'}, ${subTipoId || null}, ${subTipoLabel || 'Carro Padrão'},
-          ${String(origem).slice(0, 300)}, ${String(destino).slice(0, 300)},
+          ${idPedido}, ${idClienteFinal}, ${tipo || 'carro'}, ${subTipoIdFinal}, ${subTipoLabelFinal},
+          ${String(endOrigem).slice(0, 300)}, ${String(endDestino).slice(0, 300)},
           ${origLat}, ${origLng}, ${destLat}, ${destLng},
           ${dKm}, ${dMin}, ${vTotal}, ${vAdic},
-          ${metodoPgto || 'pix_app'}, 'pendente'
+          ${formaPagamentoFinal}, ${formaPagamentoFinal}, 'pendente'
         )
         ON CONFLICT (id) DO NOTHING
         RETURNING id;
@@ -202,21 +218,36 @@ export default function pedidosRouter(io) {
         return res.status(409).json({ erro: 'Já existe uma corrida com este código.' });
       }
 
-      io.emit('nova_chamada', {
-        id: idPedido, clienteId, tipo, subTipoLabel, origem, destino,
-        distanciaKm: dKm, duracaoMin: dMin, valorTotal: vTotal, paradas
+      if (io) {
+        io.emit('nova_chamada', {
+          id: idPedido,
+          clienteId: idClienteFinal,
+          tipo: tipo || 'carro',
+          subTipoLabel: subTipoLabelFinal,
+          origem: endOrigem,
+          destino: endDestino,
+          distanciaKm: dKm,
+          duracaoMin: dMin,
+          valorTotal: vTotal,
+          paradas: paradas || []
+        });
+      }
+
+      return res.status(201).json({
+        sucesso: true,
+        id: idPedido,
+        valorFinal: vTotal,
+        desconto: descontoAplicado
       });
 
-      res.status(201).json({ sucesso: true, id: idPedido, valorFinal: vTotal, desconto: descontoAplicado });
     } catch (error) {
-      console.error('⚠️ ERRO AO GRAVAR PEDIDO:', error.message);
-      // Se falhou depois de reservar o cupom, devolve o uso
+      console.error('⚠️ ERRO AO GRAVAR PEDIDO NO BANCO:', error);
       if (cupomReservadoId) {
         try {
           await sql`UPDATE cupons_desconto SET usos_atuais = GREATEST(usos_atuais - 1, 0) WHERE id = ${cupomReservadoId};`;
-        } catch (e) { /* segue */ }
+        } catch (e) { }
       }
-      res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados.' });
+      return res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados: ' + error.message });
     }
   });
 
@@ -230,13 +261,15 @@ export default function pedidosRouter(io) {
 
       if (!lat || !lng) return res.status(400).json({ erro: 'Coordenadas incompletas.' });
 
-      io.emit('posicao_motorista', {
-        motoristaId,
-        lat: Number(lat),
-        lng: Number(lng),
-        emCorrida: !!emCorrida,
-        atualizadoEm: new Date().toISOString()
-      });
+      if (io) {
+        io.emit('posicao_motorista', {
+          motoristaId,
+          lat: Number(lat),
+          lng: Number(lng),
+          emCorrida: !!emCorrida,
+          atualizadoEm: new Date().toISOString()
+        });
+      }
 
       res.json({ sucesso: true });
     } catch (err) {
@@ -365,7 +398,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7. ACEITAR VIAGEM (COM TRAVA DE SALDO DEVEDOR NA CARTEIRA)
+  // 7. ACEITAR VIAGEM
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
@@ -405,7 +438,6 @@ export default function pedidosRouter(io) {
 
       const mot = motoristas[0];
 
-      // Bloqueio financeiro: impede o aceite se o saldo devedor exceder -R$ 50,00
       const saldoAtual = Number(mot.saldo_carteira || 0);
       if (saldoAtual <= -50) {
         return res.status(403).json({
@@ -449,23 +481,25 @@ export default function pedidosRouter(io) {
         aceita_pix: mot.aceita_pix
       };
 
-      io.emit('corrida_aceita', {
-        pedidoId: id,
-        status: 'a_caminho',
-        motorista: {
-          id: mot.id,
-          nome: mot.nome,
-          telefone: mot.telefone,
-          veiculo: mot.veiculo_modelo || 'Onix',
-          placa: mot.veiculo_placa || 'ABC1D23',
-          cor: mot.veiculo_cor || 'Prata',
-          foto: mot.foto_perfil_url,
-          avaliacao: mot.avaliacao_media,
-          aceita_dinheiro: mot.aceita_dinheiro,
-          aceita_cartao: mot.aceita_cartao,
-          aceita_pix: mot.aceita_pix
-        }
-      });
+      if (io) {
+        io.emit('corrida_aceita', {
+          pedidoId: id,
+          status: 'a_caminho',
+          motorista: {
+            id: mot.id,
+            nome: mot.nome,
+            telefone: mot.telefone,
+            veiculo: mot.veiculo_modelo || 'Onix',
+            placa: mot.veiculo_placa || 'ABC1D23',
+            cor: mot.veiculo_cor || 'Prata',
+            foto: mot.foto_perfil_url,
+            avaliacao: mot.avaliacao_media,
+            aceita_dinheiro: mot.aceita_dinheiro,
+            aceita_cartao: mot.aceita_cartao,
+            aceita_pix: mot.aceita_pix
+          }
+        });
+      }
 
       res.json({ sucesso: true, pedido: payloadResposta });
     } catch (err) {
@@ -475,38 +509,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7.1 CONFIRMAR EMBARQUE (PASSAGEIRO A BORDO -> EM VIAGEM AO DESTINO)
-  // =========================================================================
-  router.put('/:id/embarque', autenticarToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      const atualizado = await sql`
-        UPDATE pedidos
-        SET status = 'em_viagem'
-        WHERE id::text = ${id}::text
-        RETURNING *;
-      `;
-
-      if (atualizado.length === 0) {
-        return res.status(404).json({ erro: 'Pedido não localizado.' });
-      }
-
-      io.emit('passageiro_a_bordo', {
-        pedidoId: id,
-        status: 'em_viagem',
-        mensagem: 'Passageiro a bordo! Em viagem rumo ao destino.'
-      });
-
-      res.json({ sucesso: true, mensagem: 'Embarque confirmado!', pedido: atualizado[0] });
-    } catch (err) {
-      console.error('Erro ao confirmar embarque:', err);
-      res.status(500).json({ erro: 'Falha ao registrar embarque do passageiro.' });
-    }
-  });
-
-  // =========================================================================
-  // 8. CONCLUIR VIAGEM (REPASSE E FINALIZAÇÃO PADRÃO)
+  // 8. CONCLUIR VIAGEM
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -559,11 +562,13 @@ export default function pedidosRouter(io) {
         RETURNING saldo_carteira, total_corridas;
       `;
 
-      io.emit('corrida_finalizada', {
-        pedidoId: id,
-        status: 'concluido',
-        valorFinal: valorBruto
-      });
+      if (io) {
+        io.emit('corrida_finalizada', {
+          pedidoId: id,
+          status: 'concluido',
+          valorFinal: valorBruto
+        });
+      }
 
       res.json({
         sucesso: true,
@@ -579,151 +584,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8.1 FINALIZAÇÃO COM ESCOLHA DO MÉTODO (DINHEIRO, CARTÃO OU PIX MERCADO PAGO)
-  // =========================================================================
-  router.post('/:id/finalizar-liquidacao', autenticarToken, async (req, res) => {
-    const { id } = req.params;
-    const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
-
-    try {
-      const pedidos = await sql`
-        SELECT * FROM pedidos 
-        WHERE id::text = ${String(id)}::text 
-        LIMIT 1;
-      `;
-
-      if (pedidos.length === 0) {
-        return res.status(404).json({ erro: 'Corrida não encontrada.' });
-      }
-
-      const pedido = pedidos[0];
-      const valorTotal = Number(pedido.valor_total || 0);
-
-      let taxaPorcentagem = 15;
-      try {
-        const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-        if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
-          taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
-        }
-      } catch (e) { }
-
-      const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
-      const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
-
-      // -----------------------------------------------------------------------
-      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA (SEM sql.begin)
-      // -----------------------------------------------------------------------
-      if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
-        await sql`
-          UPDATE pedidos
-          SET status = 'concluido', 
-              forma_pagamento = ${forma_pagamento}, 
-              concluido_em = CURRENT_TIMESTAMP
-          WHERE id::text = ${String(id)}::text;
-        `;
-
-        if (motoristaIdAlvo) {
-          await sql`
-            UPDATE motoristas
-            SET saldo_carteira = COALESCE(saldo_carteira, 0) - ${taxaPlataforma},
-                total_corridas = COALESCE(total_corridas, 0) + 1
-            WHERE id::text = ${String(motoristaIdAlvo)}::text 
-               OR usuario_id::text = ${String(motoristaIdAlvo)}::text;
-          `;
-
-          try {
-            await sql`
-              INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-              VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
-            `;
-          } catch (eTrans) {
-            // Não bloqueia se a tabela de extrato não existir
-          }
-        }
-
-        if (io) {
-          io.emit(`corrida_finalizada_${id}`, {
-            sucesso: true,
-            forma_pagamento,
-            valorTotal,
-            mensagem: 'Viagem finalizada e acertada com o motorista!'
-          });
-          io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
-        }
-
-        return res.json({ sucesso: true, status: 'concluido', forma_pagamento });
-      }
-
-      // -----------------------------------------------------------------------
-      // CENÁRIO B: PIX OFICIAL DO MERCADO PAGO NA TELA
-      // -----------------------------------------------------------------------
-      if (forma_pagamento === 'pix_mp') {
-        const configGateway = await sql`
-          SELECT valor FROM configuracoes_plataforma 
-          WHERE chave = 'gateway_mercadopago' 
-          LIMIT 1;
-        `;
-
-        const accessToken = configGateway[0]?.valor?.access_token;
-        if (!accessToken) {
-          return res.status(400).json({ erro: 'Credenciais do Mercado Pago não configuradas no painel master.' });
-        }
-
-        const client = new MercadoPagoConfig({ accessToken });
-        const payment = new Payment(client);
-
-        const dadosCobranca = {
-          transaction_amount: valorTotal,
-          description: `HUBy - Corrida #${id}`,
-          payment_method_id: 'pix',
-          payer: {
-            email: 'passageiro@huby.app',
-            first_name: pedido.passageiro_nome || 'Passageiro',
-            last_name: 'HUBy'
-          }
-        };
-
-        const respostaMP = await payment.create({ body: dadosCobranca });
-        const pixData = respostaMP.point_of_interaction?.transaction_data;
-
-        if (!pixData) {
-          return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
-        }
-
-        try {
-          await sql`
-            INSERT INTO cobrancas_pix (transacao_id, pedido_id, valor, status, qr_code, qr_code_base64)
-            VALUES (${String(respostaMP.id)}, ${String(id)}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code_base64})
-            ON CONFLICT (transacao_id) DO NOTHING;
-          `;
-        } catch (ePix) {
-          console.warn('Aviso cobrancas_pix:', ePix.message);
-        }
-
-        const payloadPix = {
-          pedido_id: id,
-          transacao_id: respostaMP.id,
-          valor: valorTotal,
-          qr_code: pixData.qr_code,
-          qr_code_base64: pixData.qr_code_base64
-        };
-
-        if (io) {
-          io.emit(`exibir_pix_corrida_${id}`, payloadPix);
-        }
-
-        return res.json({ sucesso: true, status: 'aguardando_pix', pix: payloadPix });
-      }
-
-      return res.status(400).json({ erro: 'Forma de pagamento não suportada.' });
-    } catch (err) {
-      console.error('Erro detalhado ao liquidar corrida:', err);
-      res.status(500).json({ erro: err.message || 'Erro interno ao processar encerramento da corrida.' });
-    }
-  });
-
-  // =========================================================================
-  // 9. CANCELAR VIAGEM COM DETECÇÃO ANTIFRAUDE
+  // 9. CANCELAR VIAGEM
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
@@ -737,7 +598,9 @@ export default function pedidosRouter(io) {
       const canceladoPor = pedido.cliente_id === usuarioId ? 'cliente' : (pedido.motorista_id === usuarioId ? 'motorista' : 'admin');
       const atualizado = await sql`UPDATE pedidos SET status = 'cancelado', motivo_cancelamento = ${motivo || 'Cancelado'}, cancelado_por = ${canceladoPor} WHERE id::text = ${id}::text RETURNING *;`;
 
-      io.emit('corrida_cancelada', { pedidoId: id });
+      if (io) {
+        io.emit('corrida_cancelada', { pedidoId: id });
+      }
 
       res.json({ sucesso: true, mensagem: 'Chamada cancelada.', pedido: atualizado[0] });
     } catch (err) {
@@ -746,113 +609,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 10. CENTRAL DE INCIDENTES / BOTÃO DE PÂNICO SOS
-  // =========================================================================
-  router.post('/:id/sos', autenticarToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { lat, lng, relato } = req.body;
-      const usuarioId = req.usuario.id;
-
-      const alerta = await sql`
-        INSERT INTO incidentes_seguranca (pedido_id, usuario_id, tipo_alerta, descricao)
-        VALUES (${id}, ${usuarioId}, 'sos', ${relato || `EMERGÊNCIA ACIONADA! Coords: ${lat || '---'}, ${lng || '---'}`})
-        RETURNING *;
-      `;
-
-      io.emit('alerta_sos_admin', {
-        incidenteId: alerta[0].id,
-        pedidoId: id,
-        usuarioId,
-        coords: [lat, lng],
-        momento: new Date().toISOString()
-      });
-
-      res.status(201).json({ sucesso: true, mensagem: 'Alerta SOS registrado e equipe notificada!' });
-    } catch (err) {
-      res.status(500).json({ erro: 'Falha ao acionar alerta de segurança.' });
-    }
-  });
-
-  // =========================================================================
-  // 11. AVALIAÇÕES COM NOTA E COMENTÁRIOS
-  // =========================================================================
-  router.post('/:id/avaliar', autenticarToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { nota, comentario, etiquetas } = req.body;
-      const clienteId = req.usuario.id;
-
-      const notaNum = parseInt(nota, 10);
-      if (!notaNum || notaNum < 1 || notaNum > 5) {
-        return res.status(400).json({ erro: 'A nota deve ser entre 1 e 5.' });
-      }
-
-      const pedidos = await sql`SELECT id, motorista_id, status FROM pedidos WHERE id::text = ${id}::text LIMIT 1;`;
-      if (pedidos.length === 0 || pedidos[0].status !== 'concluido') {
-        return res.status(400).json({ erro: 'Apenas corridas concluídas podem ser avaliadas.' });
-      }
-
-      const motoristaId = pedidos[0].motorista_id;
-      const etiquetasStr = Array.isArray(etiquetas) ? etiquetas.join(', ') : (etiquetas || '');
-      const comentarioCompleto = etiquetasStr ? `${comentario || ''} [Tags: ${etiquetasStr}]`.trim() : (comentario || null);
-
-      await sql`
-        INSERT INTO avaliacoes (pedido_id, cliente_id, motorista_id, nota, comentario)
-        VALUES (${id}, ${clienteId}, ${motoristaId}, ${notaNum}, ${comentarioCompleto});
-      `;
-
-      if (motoristaId) {
-        const stats = await sql`
-          SELECT AVG(nota)::numeric(3,2) AS media, COUNT(*)::int AS total
-          FROM avaliacoes WHERE motorista_id::text = ${motoristaId}::text;
-        `;
-        await sql`
-          UPDATE motoristas
-          SET avaliacao_media = ${stats[0].media}, total_corridas = COALESCE(total_corridas, 0)
-          WHERE id::text = ${motoristaId}::text;
-        `;
-      }
-
-      res.json({ sucesso: true, mensagem: 'Avaliação registrada com sucesso!' });
-    } catch (err) {
-      console.error('Erro ao avaliar corrida:', err);
-      res.status(500).json({ erro: 'Falha ao processar avaliação.' });
-    }
-  });
-
-  // =========================================================================
-  // 12. CHAT INTERNO DA CORRIDA
-  // =========================================================================
-  router.post('/:id/chat', autenticarToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { mensagem } = req.body;
-      const remetenteId = req.usuario.id;
-      const remetenteNome = req.usuario.nome;
-
-      if (!mensagem) return res.status(400).json({ erro: 'A mensagem não pode estar vazia.' });
-
-      await sql`INSERT INTO mensagens_chat (pedido_id, remetente_id, remetente_nome, mensagem) VALUES (${id}, ${remetenteId}, ${remetenteNome}, ${mensagem})`;
-      io.emit('nova_mensagem', { pedido_id: id });
-      res.json({ sucesso: true });
-    } catch (err) {
-      res.status(500).json({ erro: 'Falha ao processar o envio.' });
-    }
-  });
-
-  router.get('/:id/chat', autenticarToken, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const mensagens = await sql`SELECT remetente_id, remetente_nome, mensagem, enviado_em FROM mensagens_chat WHERE pedido_id::text = ${id}::text ORDER BY enviado_em ASC`;
-      res.json(mensagens);
-    } catch (err) {
-      res.status(500).json({ erro: 'Falha ao sincronizar mensagens.' });
-    }
-  });
-
-  // =========================================================================
-  // 13. PREFERÊNCIAS DE PAGAMENTO DO MOTORISTA (SALVAR E CONSULTAR)
+  // 10. PREFERÊNCIAS DE PAGAMENTO DO MOTORISTA
   // =========================================================================
   router.put('/motoristas/preferencias-pagamento', autenticarToken, async (req, res) => {
     try {
@@ -894,7 +651,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 14. ALTERNAR STATUS ONLINE / OFFLINE DO MOTORISTA
+  // 11. ALTERNAR STATUS ONLINE / OFFLINE DO MOTORISTA
   // =========================================================================
   router.put('/motoristas/meu-status-online', autenticarToken, async (req, res) => {
     try {
@@ -925,63 +682,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 15. ATUALIZAR DADOS CADASTRAIS, FOTO E CHAVE PIX DO MOTORISTA
-  // =========================================================================
-  router.put('/motoristas/perfil/atualizar', autenticarToken, async (req, res) => {
-    try {
-      const usuarioId = req.usuario.id;
-      const { nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, foto_base64, chave_pix_padrao } = req.body;
-
-      if (chave_pix_padrao) {
-        await sql`
-          UPDATE motoristas
-          SET chave_pix_padrao = ${chave_pix_padrao}
-          WHERE id::text = ${String(usuarioId)}::text 
-             OR usuario_id::text = ${String(usuarioId)}::text;
-        `;
-        return res.json({ sucesso: true, mensagem: 'Chave Pix padrão salva com sucesso!' });
-      }
-
-      if (!nome) {
-        return res.status(400).json({ erro: 'O nome completo é obrigatório.' });
-      }
-
-      if (foto_base64) {
-        await sql`
-          UPDATE motoristas
-          SET nome = ${nome},
-              telefone = ${telefone || ''},
-              veiculo_modelo = ${veiculo_modelo || 'Onix'},
-              veiculo_placa = ${veiculo_placa ? veiculo_placa.toUpperCase() : 'ABC1D23'},
-              veiculo_cor = ${veiculo_cor || 'Prata'},
-              veiculo_ano = ${veiculo_ano ? Number(veiculo_ano) : 2023},
-              foto_perfil_url = ${foto_base64}
-          WHERE id::text = ${String(usuarioId)}::text 
-             OR usuario_id::text = ${String(usuarioId)}::text;
-        `;
-      } else {
-        await sql`
-          UPDATE motoristas
-          SET nome = ${nome},
-              telefone = ${telefone || ''},
-              veiculo_modelo = ${veiculo_modelo || 'Onix'},
-              veiculo_placa = ${veiculo_placa ? veiculo_placa.toUpperCase() : 'ABC1D23'},
-              veiculo_cor = ${veiculo_cor || 'Prata'},
-              veiculo_ano = ${veiculo_ano ? Number(veiculo_ano) : 2023}
-          WHERE id::text = ${String(usuarioId)}::text 
-             OR usuario_id::text = ${String(usuarioId)}::text;
-        `;
-      }
-
-      return res.json({ sucesso: true, mensagem: 'Perfil atualizado com sucesso!' });
-    } catch (err) {
-      console.error('Erro ao atualizar dados do motorista:', err);
-      return res.status(500).json({ erro: 'Erro interno ao gravar dados.' });
-    }
-  });
-
-  // =========================================================================
-  // 16. CONSULTAR PERFIL DO CONDUTOR
+  // 12. CONSULTAR PERFIL DO CONDUTOR
   // =========================================================================
   router.get('/motoristas/perfil', autenticarToken, async (req, res) => {
     try {
