@@ -22,10 +22,10 @@ router.post('/localizar-referencia', async (req, res) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Configura o modelo com fallback
+    // Configura o modelo com saída JSON explícita
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-1.5-flash',
-      generationConfig: { responseMimeType: "application/json" }
+      generationConfig: { responseMimeType: 'application/json' }
     });
 
     const prompt = `
