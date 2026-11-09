@@ -8,7 +8,7 @@ router.post('/localizar-referencia', async (req, res) => {
   try {
     const { referencia, cidadeBase = 'São João do Piauí, Piauí' } = req.body;
 
-    console.log('🤖 [IA] Pedido recebido para referência:', referencia);
+    console.log('🤖 [IA] Pedido recebido para:', referencia);
 
     if (!referencia) {
       return res.status(400).json({ erro: 'Por favor, informe o ponto de referência.' });
@@ -16,33 +16,42 @@ router.post('/localizar-referencia', async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      console.error('❌ [IA] GEMINI_API_KEY não definida nas variáveis de ambiente do Render.');
+      console.error('❌ [IA] GEMINI_API_KEY em falta no Render.');
       return res.status(500).json({ erro: 'Chave GEMINI_API_KEY ausente no servidor.' });
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    
+    // Configura o modelo com fallback
+    const model = genAI.getGenerativeModel({ 
+      model: 'gemini-1.5-flash',
+      generationConfig: { responseMimeType: "application/json" }
+    });
 
     const prompt = `
-      Atue como um geocodificador especialista na região de ${cidadeBase} e arredores no estado do Piauí.
-      O passageiro indicou o seguinte destino: "${referencia}".
-      Pode ser uma rua, estabelecimento, praça, bairro ou cidade vizinha (como Simplício Mendes, São Raimundo Nonato, etc.).
-      Identifique as coordenadas mais prováveis e devolva RIGOROSAMENTE apenas um JSON válido, sem blocos de código Markdown nem texto explicativo:
+      Você é um assistente de geolocalização no Piauí, Brasil.
+      Região de referência: ${cidadeBase}.
+      Destino solicitado pelo passageiro: "${referencia}".
+
+      Retorne APENAS um objeto JSON com as coordenadas aproximadas:
       {
         "nome_curto": "Nome do Local ou Cidade, PI",
-        "lat": latitude_numero,
-        "lng": longitude_numero
+        "lat": -8.3582,
+        "lng": -42.2476
       }
     `;
 
     const result = await model.generateContent(prompt);
     const respostaTexto = result.response.text();
-    console.log('🤖 [IA] Resposta bruta Gemini:', respostaTexto);
+    console.log('🤖 [IA] Resposta pura:', respostaTexto);
 
-    const textoLimpo = respostaTexto.replace(/```json/gi, '').replace(/```/g, '').trim();
-    const dadosGeolocalizacao = JSON.parse(textoLimpo);
+    // Extrai o bloco JSON com expressão regular caso venha texto adicional
+    const match = respostaTexto.match(/\{[\s\S]*\}/);
+    if (!match) {
+      throw new Error('Formato JSON não encontrado na resposta da IA');
+    }
 
-    console.log('✅ [IA] Coordenadas calculadas:', dadosGeolocalizacao);
+    const dadosGeolocalizacao = JSON.parse(match[0]);
 
     return res.json({
       sucesso: true,
@@ -50,9 +59,9 @@ router.post('/localizar-referencia', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('❌ [IA] Erro detalhado no processamento:', err.message || err);
+    console.error('❌ [IA] Falha no processamento:', err.message || err);
     return res.status(500).json({ 
-      erro: 'Não foi possível encontrar a localização com essa referência.',
+      erro: 'Não foi possível identificar a localização.',
       detalhe: err.message
     });
   }
