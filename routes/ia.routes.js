@@ -22,20 +22,20 @@ router.post('/localizar-referencia', async (req, res) => {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     
-    // Configura o modelo com saída JSON explícita
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-1.5-flash',
       generationConfig: { responseMimeType: 'application/json' }
     });
 
     const prompt = `
-      Você é um assistente de geolocalização no Piauí, Brasil.
-      Região de referência: ${cidadeBase}.
-      Destino solicitado pelo passageiro: "${referencia}".
+      Você é um assistente especialista em geolocalização no estado do Piauí, Brasil.
+      Cidade base operacional: ${cidadeBase}.
+      Destino falado/digitado pelo passageiro: "${referencia}".
 
-      Retorne APENAS um objeto JSON com as coordenadas aproximadas:
+      Identifique o local exato ou a cidade informada (ex: Simplício Mendes, Teresina, São Raimundo Nonato, bairros ou praças locais).
+      Retorne RIGOROSAMENTE apenas um JSON no formato:
       {
-        "nome_curto": "Nome do Local ou Cidade, PI",
+        "nome_curto": "Nome Claro do Local, Cidade - PI",
         "lat": -8.3582,
         "lng": -42.2476
       }
@@ -43,15 +43,23 @@ router.post('/localizar-referencia', async (req, res) => {
 
     const result = await model.generateContent(prompt);
     const respostaTexto = result.response.text();
-    console.log('🤖 [IA] Resposta pura:', respostaTexto);
+    console.log('🤖 [IA] Resposta bruta Gemini:', respostaTexto);
 
-    // Extrai o bloco JSON com expressão regular caso venha texto adicional
-    const match = respostaTexto.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw new Error('Formato JSON não encontrado na resposta da IA');
+    let dadosGeolocalizacao;
+    try {
+      dadosGeolocalizacao = JSON.parse(respostaTexto);
+    } catch (e) {
+      const match = respostaTexto.match(/\{[\s\S]*\}/);
+      if (!match) throw new Error('Formato JSON não encontrado na resposta da IA');
+      dadosGeolocalizacao = JSON.parse(match[0]);
     }
 
-    const dadosGeolocalizacao = JSON.parse(match[0]);
+    dadosGeolocalizacao.lat = parseFloat(dadosGeolocalizacao.lat);
+    dadosGeolocalizacao.lng = parseFloat(dadosGeolocalizacao.lng);
+
+    if (isNaN(dadosGeolocalizacao.lat) || isNaN(dadosGeolocalizacao.lng)) {
+      throw new Error('Coordenadas retornadas inválidas.');
+    }
 
     return res.json({
       sucesso: true,

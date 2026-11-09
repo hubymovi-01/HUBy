@@ -7,13 +7,13 @@ import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdmi
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
 import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
 import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
-import { 
-  configurarSeletorPagamentoRapido, 
-  configurarNotaMotorista, 
-  configurarCupomDesconto, 
+import {
+  configurarSeletorPagamentoRapido,
+  configurarNotaMotorista,
+  configurarCupomDesconto,
   criarOuAtualizarVeiculoMapa,
   atualizarResumoComDesconto,
-  estadoRecursos 
+  estadoRecursos
 } from './cliente/cliente-recursos.js';
 
 let intervalChatCliente = null;
@@ -474,32 +474,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarCupomDesconto();
 
   // 3.2. Escuta Inteligência Artificial (Voz/Gemini)
+  // 3.2. Escuta Inteligência Artificial (Voz/Gemini)
   document.addEventListener('huby_local_selecionado_ia', async (e) => {
     const { nome, lat, lng } = e.detail;
-    const coords = [lat, lng];
-    
+    const coords = [parseFloat(lat), parseFloat(lng)];
+
     estadoCliente.coordsDestino = coords;
-    
+
     const txtDestino = document.getElementById('txtDestinoSelecionado');
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
     const searchBox = document.querySelector('.modern-search');
-    
+
     if (txtDestino) {
       txtDestino.textContent = nome;
       txtDestino.style.color = '#38BDF8';
       txtDestino.style.fontWeight = '800';
     }
-    
+
     if (inputPesquisa) inputPesquisa.value = nome;
     if (searchBox) searchBox.classList.add('active');
 
     if (estadoCliente.hubyMapa) {
       const origem = estadoCliente.coordsOrigem || [-8.3582, -42.2476];
-      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
+      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#38BDF8', true);
       estadoCliente.rotaAtual = rota;
-      
+
       atualizarResumoValores();
       if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+      notificarCliente(`Destino IA: ${nome}`, 'sucesso');
     }
   });
 
@@ -831,10 +833,10 @@ function conectarSocketEPollingCliente() {
     socket.on('posicao_motorista', (pos) => {
       if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && pos.lat && pos.lng) {
         criarOuAtualizarVeiculoMapa(
-          estadoCliente.hubyMapa.map, 
-          pos.lat, 
-          pos.lng, 
-          pos.heading || 0, 
+          estadoCliente.hubyMapa.map,
+          pos.lat,
+          pos.lng,
+          pos.heading || 0,
           estadoCliente.categoriaSelecionada || 'carro'
         );
       }

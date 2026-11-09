@@ -1,4 +1,4 @@
-// js/cliente-ia.js - Módulo Isolado de Inteligência Artificial para o Passageiro
+// js/cliente-ia.js - Módulo de Inteligência Artificial para o Passageiro
 import { API_URL } from './config.js';
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -24,20 +24,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnIA.addEventListener('click', (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    
     if (gravando) {
       recognition.stop();
       return;
     }
+
     try {
       recognition.start();
     } catch (err) {
-      console.warn('Erro ao iniciar gravação de voz:', err);
+      console.warn('Erro ao iniciar reconhecimento de voz:', err);
     }
   });
 
   recognition.onstart = () => {
     gravando = true;
-    inputPesquisa.placeholder = "A escutar... Pode falar!";
+    inputPesquisa.placeholder = "Escutando... Fale o seu destino!";
     btnIA.style.color = '#EF4444';
   };
 
@@ -51,11 +54,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const textoFalado = event.results[0][0].transcript;
     inputPesquisa.value = textoFalado;
     
-    btnIA.innerHTML = '<span style="font-size:12px;">🧠</span>';
+    btnIA.innerHTML = '<span style="font-size:14px; animation: pulse 1s infinite;">🧠</span>';
 
     try {
       const urlDestino = `${API_URL}/api/ia/localizar-referencia`;
-      console.log('📡 A enviar para IA:', urlDestino, textoFalado);
+      console.log('📡 [IA Frontend] Enviando áudio transcrito:', textoFalado);
 
       const res = await fetch(urlDestino, {
         method: 'POST',
@@ -69,43 +72,43 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const data = await res.json();
-      console.log('📥 Resposta do servidor IA:', data);
+      console.log('📥 [IA Frontend] Resposta:', data);
 
-      if (res.ok && data.resultado && data.resultado.lat) {
+      if (res.ok && data.resultado && !isNaN(data.resultado.lat)) {
+        const nomeDestino = data.resultado.nome_curto || textoFalado;
+        const lat = parseFloat(data.resultado.lat);
+        const lng = parseFloat(data.resultado.lng);
+
+        // Dispara o evento direto para o mapa no app-cliente.js
+        const evt = new CustomEvent('huby_local_selecionado_ia', {
+          detail: { nome: nomeDestino, lat, lng }
+        });
+        document.dispatchEvent(evt);
+
+        // Exibe o card visual de confirmação na lista
         const listaFake = document.getElementById('listaResultadosPesquisa');
         if (listaFake) {
           listaFake.style.display = 'block';
           listaFake.innerHTML = `
-            <li class="result-item ia-result" style="border: 2px solid #38BDF8; background: rgba(56,189,248,0.1); cursor: pointer; padding: 10px; border-radius: 8px;">
-              <div class="icon" style="background:#38BDF8; color:#000; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">🧠</div>
-              <div class="details" style="margin-left: 8px;">
-                <strong>${data.resultado.nome_curto || 'Local Encontrado (IA)'}</strong>
-                <small style="display:block; color:#94A3B8;">Localização identificada pelo Gemini</small>
+            <li class="result-item ia-result" style="border: 2px solid #38BDF8; background: rgba(56,189,248,0.15); cursor: pointer; padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+              <div style="background:#38BDF8; color:#000; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; font-weight: bold;">🧠</div>
+              <div style="flex: 1;">
+                <strong style="color: #FFF; font-size: 14px; display: block;">${nomeDestino}</strong>
+                <small style="color: #38BDF8; font-size: 11px; font-weight: 600;">Destino traçado com Inteligência Artificial</small>
               </div>
             </li>
           `;
 
-          const li = listaFake.querySelector('.ia-result');
-          li.onclick = () => {
-            const evt = new CustomEvent('huby_local_selecionado_ia', {
-              detail: {
-                nome: data.resultado.nome_curto,
-                lat: data.resultado.lat,
-                lng: data.resultado.lng
-              }
-            });
-            document.dispatchEvent(evt);
-            
+          setTimeout(() => {
             listaFake.style.display = 'none';
-            inputPesquisa.value = data.resultado.nome_curto;
-          };
+          }, 3500);
         }
       } else {
-        alert(data.erro || data.detalhe || 'A IA não conseguiu decifrar este local.');
+        alert(data.erro || data.detalhe || 'A IA não conseguiu decifrar este local. Tente falar novamente.');
       }
     } catch (err) {
-      console.error('Erro de rede/fetch:', err);
-      alert('Erro de ligação com a IA.');
+      console.error('Erro ao conectar com a IA:', err);
+      alert('Falha na comunicação com o servidor de IA.');
     } finally {
       btnIA.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
