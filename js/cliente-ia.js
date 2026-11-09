@@ -1,5 +1,5 @@
 // js/cliente-ia.js - Módulo Isolado de Inteligência Artificial para o Passageiro
-import { API_URL } from './config.js'; // Ajuste o caminho do config se necessário
+import { API_URL } from './config.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const btnIA = document.getElementById('btnBuscaIA');
@@ -7,7 +7,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   if (!btnIA || !inputPesquisa) return;
 
-  // Verifica se o navegador suporta reconhecimento de voz
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   
   if (!SpeechRecognition) {
@@ -17,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const recognition = new SpeechRecognition();
-  recognition.lang = 'pt-BR'; // Configurado para Português do Brasil
+  recognition.lang = 'pt-BR';
   recognition.continuous = false;
   recognition.interimResults = false;
 
@@ -25,12 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnIA.addEventListener('click', (e) => {
     e.preventDefault();
-    
     if (gravando) {
       recognition.stop();
       return;
     }
-
     try {
       recognition.start();
     } catch (err) {
@@ -38,27 +35,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Eventos Visuais de Gravação
   recognition.onstart = () => {
     gravando = true;
     inputPesquisa.placeholder = "Escutando... Pode falar!";
-    btnIA.style.color = '#EF4444'; // Fica vermelho enquanto escuta
-    btnIA.classList.add('pulse-anim'); // Opcional: crie uma classe de CSS para pulsar
+    btnIA.style.color = '#EF4444';
   };
 
   recognition.onend = () => {
     gravando = false;
     inputPesquisa.placeholder = "Para onde você quer ir?";
     btnIA.style.color = '#38BDF8';
-    btnIA.classList.remove('pulse-anim');
   };
 
-  // Quando a voz for convertida em texto, enviamos para a IA do Gemini
   recognition.onresult = async (event) => {
     const textoFalado = event.results[0][0].transcript;
-    inputPesquisa.value = textoFalado; // Preenche o campo de texto com o que o utilizador falou
+    inputPesquisa.value = textoFalado;
     
-    // Mostra indicador de processamento IA
     btnIA.innerHTML = '<span style="font-size:12px;">🧠</span>';
 
     try {
@@ -72,14 +64,13 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         body: JSON.stringify({ 
           referencia: textoFalado,
-          cidadeBase: 'São João do Piauí, Piauí' // Configure a cidade de teste aqui
+          cidadeBase: 'São João do Piauí, Piauí'
         })
       });
 
       const data = await res.json();
 
       if (res.ok && data.resultado && data.resultado.lat) {
-        // Se a IA achar as coordenadas, simulamos um clique na lista de pesquisa do HUBy
         const listaFake = document.getElementById('listaResultadosPesquisa');
         if (listaFake) {
           listaFake.style.display = 'block';
@@ -95,7 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
           const li = listaFake.querySelector('.ia-result');
           li.onclick = () => {
-            // Emite um evento customizado que o ficheiro app-cliente.js pode apanhar para marcar no mapa
             const evt = new CustomEvent('huby_local_selecionado_ia', {
               detail: {
                 nome: data.resultado.nome_curto,
@@ -115,7 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       alert('Erro de conexão com a IA.');
     } finally {
-      // Restaura o ícone do microfone
       btnIA.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
