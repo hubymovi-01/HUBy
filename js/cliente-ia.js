@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   recognition.onstart = () => {
     gravando = true;
-    inputPesquisa.placeholder = "Escutando... Pode falar!";
+    inputPesquisa.placeholder = "A escutar... Pode falar!";
     btnIA.style.color = '#EF4444';
   };
 
@@ -54,13 +54,13 @@ document.addEventListener('DOMContentLoaded', () => {
     btnIA.innerHTML = '<span style="font-size:12px;">🧠</span>';
 
     try {
-      const token = localStorage.getItem('huby_token');
-      
-      const res = await fetch(`${API_URL}/api/ia/localizar-referencia`, {
+      const urlDestino = `${API_URL}/api/ia/localizar-referencia`;
+      console.log('📡 A enviar para IA:', urlDestino, textoFalado);
+
+      const res = await fetch(urlDestino, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
           referencia: textoFalado,
@@ -69,17 +69,18 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const data = await res.json();
+      console.log('📥 Resposta do servidor IA:', data);
 
       if (res.ok && data.resultado && data.resultado.lat) {
         const listaFake = document.getElementById('listaResultadosPesquisa');
         if (listaFake) {
           listaFake.style.display = 'block';
           listaFake.innerHTML = `
-            <li class="result-item ia-result" style="border: 2px solid #38BDF8; background: rgba(56,189,248,0.1);">
-              <div class="icon" style="background:#38BDF8; color:#000;">🧠</div>
-              <div class="details">
+            <li class="result-item ia-result" style="border: 2px solid #38BDF8; background: rgba(56,189,248,0.1); cursor: pointer; padding: 10px; border-radius: 8px;">
+              <div class="icon" style="background:#38BDF8; color:#000; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">🧠</div>
+              <div class="details" style="margin-left: 8px;">
                 <strong>${data.resultado.nome_curto || 'Local Encontrado (IA)'}</strong>
-                <small>Localização encontrada pela inteligência do aplicativo</small>
+                <small style="display:block; color:#94A3B8;">Localização identificada pelo Gemini</small>
               </div>
             </li>
           `;
@@ -100,10 +101,11 @@ document.addEventListener('DOMContentLoaded', () => {
           };
         }
       } else {
-        alert(data.erro || 'A IA não conseguiu decifrar este local. Tente falar novamente.');
+        alert(data.erro || data.detalhe || 'A IA não conseguiu decifrar este local.');
       }
     } catch (err) {
-      alert('Erro de conexão com a IA.');
+      console.error('Erro de rede/fetch:', err);
+      alert('Erro de ligação com a IA.');
     } finally {
       btnIA.innerHTML = `
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
