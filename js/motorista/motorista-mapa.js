@@ -4,6 +4,8 @@ import { estado } from './motorista-estado.js';
 import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-corrida.js';
 import { notificar } from './motorista-alertas.js';
 
+let watchId = null;
+
 export function inicializarSocket() {
   if (typeof io !== 'undefined') {
     estado.socket = io(API_URL);
@@ -56,26 +58,66 @@ export function inicializarMapa() {
       if (estado.mapa) estado.mapa.invalidateSize();
     }, 300);
 
-    if ('geolocation' in navigator) {
-      navigator.geolocation.watchPosition((pos) => {
-        const { latitude, longitude } = pos.coords;
-        estado.coords = [latitude, longitude];
-        if (estado.mapa && estado.markerVeiculo) {
-          estado.markerVeiculo.setLatLng([latitude, longitude]);
-        }
-        const pedidoId = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
-        if (estado.socket && pedidoId) {
-          estado.socket.emit('posicao_motorista', {
-            pedidoId,
-            lat: latitude,
-            lng: longitude
-          });
-        }
-      }, null, { enableHighAccuracy: true });
-    }
+    // Ativa o rastreio contínuo e preciso
+    iniciarRastreamentoGPSContinuo();
+
   } catch (err) {
     console.error('Erro ao iniciar mapa do motorista:', err);
   }
+}
+
+export function iniciarRastreamentoGPSContinuo() {
+  if (!('geolocation' in navigator)) {
+    console.warn('Geolocalização não suportada pelo navegador.');
+    return;
+  }
+
+  // Limpa qualquer rastreio anterior para evitar duplicação
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+  }
+
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const heading = pos.coords.heading || 0;
+
+      // 1. Atualiza o estado central
+      estado.coords = [lat, lng];
+
+      // 2. Move o marcador do carro na tela do motorista
+      if (estado.markerVeiculo) {
+        estado.markerVeiculo.setLatLng([lat, lng]);
+      }
+
+      const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
+
+      // 3. Centraliza a câmera de forma suave (se estiver em corrida)
+      if (estado.mapa && corridaAtiva) {
+        estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
+      }
+
+      // 4. Transmite a posição ao servidor para o passageiro ver o carro a mover-se
+      if (estado.socket) {
+        estado.socket.emit('posicao_motorista', {
+          motoristaId: estado.motoristaId,
+          lat: lat,
+          lng: lng,
+          heading: heading,
+          emCorrida: !!corridaAtiva
+        });
+      }
+    },
+    (err) => {
+      console.warn('Aviso de GPS:', err.message);
+    },
+    {
+      enableHighAccuracy: true, // Força uso do GPS real (satélite) e não apenas IP ou Wi-Fi
+      maximumAge: 1000,         // Aceita dados com no máximo 1 segundo de atraso
+      timeout: 15000            // Tempo máximo de espera pela leitura
+    }
+  );
 }
 
 export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
