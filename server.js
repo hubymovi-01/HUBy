@@ -15,6 +15,7 @@ import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
+import iaRoutes from './routes/ia.routes.js'; // 🤖 IA: Importação da nova rota
 
 dotenv.config();
 
@@ -413,6 +414,7 @@ app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 app.use('/api/socios', sociosRoutes);
 app.use('/api/marketplace', marketplaceRouter);
+app.use('/api/ia', iaRoutes); // 🤖 IA: Registo da Rota na API
 
 // ============================================================================
 // 6. TRATAMENTO GLOBAL DE ERROS
