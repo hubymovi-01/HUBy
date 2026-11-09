@@ -1,2 +1,19 @@
-.env.local.env
-node_modules
+# Dependências
+node_modules/
+
+# Ficheiros de Ambiente e Chaves (Segurança Máxima)
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+
+# Logs de erro do NPM
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Ficheiros de Sistema (OS)
+.DS_Store
+Thumbs.db

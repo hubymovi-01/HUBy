@@ -473,6 +473,36 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
+  // 3.2. Escuta Inteligência Artificial (Voz/Gemini)
+  document.addEventListener('huby_local_selecionado_ia', async (e) => {
+    const { nome, lat, lng } = e.detail;
+    const coords = [lat, lng];
+    
+    estadoCliente.coordsDestino = coords;
+    
+    const txtDestino = document.getElementById('txtDestinoSelecionado');
+    const inputPesquisa = document.getElementById('inputPesquisaLocal');
+    const searchBox = document.querySelector('.modern-search');
+    
+    if (txtDestino) {
+      txtDestino.textContent = nome;
+      txtDestino.style.color = '#38BDF8';
+      txtDestino.style.fontWeight = '800';
+    }
+    
+    if (inputPesquisa) inputPesquisa.value = nome;
+    if (searchBox) searchBox.classList.add('active');
+
+    if (estadoCliente.hubyMapa) {
+      const origem = estadoCliente.coordsOrigem || [-8.3582, -42.2476];
+      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
+      estadoCliente.rotaAtual = rota;
+      
+      atualizarResumoValores();
+      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+    }
+  });
+
   // 4. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
