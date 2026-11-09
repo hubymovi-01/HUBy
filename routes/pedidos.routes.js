@@ -509,7 +509,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM
+  // 8. CONCLUIR VIAGEM (PADRÃO)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -580,6 +580,151 @@ export default function pedidosRouter(io) {
     } catch (err) {
       console.error('Erro ao concluir corrida:', err);
       res.status(500).json({ erro: 'Falha interna ao processar valores.' });
+    }
+  });
+
+  // =========================================================================
+  // 8.1 FINALIZAÇÃO COM ESCOLHA DO MÉTODO (DINHEIRO, MAQUININHA OU PIX)
+  // =========================================================================
+  router.post('/:id/finalizar-liquidacao', autenticarToken, async (req, res) => {
+    const { id } = req.params;
+    const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
+
+    try {
+      const pedidos = await sql`
+        SELECT * FROM pedidos 
+        WHERE id::text = ${String(id)}::text 
+        LIMIT 1;
+      `;
+
+      if (pedidos.length === 0) {
+        return res.status(404).json({ erro: 'Corrida não encontrada.' });
+      }
+
+      const pedido = pedidos[0];
+      const valorTotal = Number(pedido.valor_total || 0);
+
+      // Lê a comissão da plataforma cadastrada no painel (padrão 15%)
+      let taxaPorcentagem = 15;
+      try {
+        const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
+        if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
+          taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
+        }
+      } catch (e) { }
+
+      const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
+      const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
+
+      // -----------------------------------------------------------------------
+      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA DO MOTORISTA
+      // -----------------------------------------------------------------------
+      if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
+        await sql`
+          UPDATE pedidos
+          SET status = 'concluido', 
+              forma_pagamento = ${forma_pagamento}, 
+              concluido_em = CURRENT_TIMESTAMP
+          WHERE id::text = ${String(id)}::text;
+        `;
+
+        if (motoristaIdAlvo) {
+          await sql`
+            UPDATE motoristas
+            SET saldo_carteira = COALESCE(saldo_carteira, 0) - ${taxaPlataforma},
+                total_corridas = COALESCE(total_corridas, 0) + 1
+            WHERE id::text = ${String(motoristaIdAlvo)}::text 
+               OR usuario_id::text = ${String(motoristaIdAlvo)}::text;
+          `;
+
+          try {
+            await sql`
+              INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+              VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
+            `;
+          } catch (eTrans) { }
+        }
+
+        if (io) {
+          io.emit(`corrida_finalizada_${id}`, {
+            sucesso: true,
+            forma_pagamento,
+            valorTotal,
+            mensagem: 'Viagem finalizada e acertada com o motorista!'
+          });
+          io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
+        }
+
+        return res.json({ sucesso: true, status: 'concluido', forma_pagamento });
+      }
+
+      // -----------------------------------------------------------------------
+      // CENÁRIO B: PIX OFICIAL DO MERCADO PAGO NA TELA
+      // -----------------------------------------------------------------------
+      if (forma_pagamento === 'pix_mp') {
+        let accessToken = process.env.MP_ACCESS_TOKEN;
+
+        if (!accessToken) {
+          const configGateway = await sql`
+            SELECT valor FROM configuracoes_plataforma 
+            WHERE chave = 'gateway_mercadopago' 
+            LIMIT 1;
+          `;
+          accessToken = configGateway[0]?.valor?.access_token;
+        }
+
+        if (!accessToken) {
+          return res.status(400).json({ erro: 'Credenciais do Mercado Pago não configuradas no sistema.' });
+        }
+
+        const client = new MercadoPagoConfig({ accessToken });
+        const payment = new Payment(client);
+
+        const dadosCobranca = {
+          transaction_amount: valorTotal,
+          description: `HUBy - Corrida #${id}`,
+          payment_method_id: 'pix',
+          payer: {
+            email: 'passageiro@huby.app',
+            first_name: pedido.motorista_nome || 'Passageiro',
+            last_name: 'HUBy'
+          }
+        };
+
+        const respostaMP = await payment.create({ body: dadosCobranca });
+        const pixData = respostaMP.point_of_interaction?.transaction_data;
+
+        if (!pixData) {
+          return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
+        }
+
+        try {
+          await sql`
+            INSERT INTO cobrancas_pix (transacao_id, pedido_id, valor, status, qr_code, qr_code_base64)
+            VALUES (${String(respostaMP.id)}, ${String(id)}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code_base64})
+            ON CONFLICT (transacao_id) DO NOTHING;
+          `;
+        } catch (ePix) { }
+
+        const payloadPix = {
+          pedido_id: id,
+          transacao_id: respostaMP.id,
+          valor: valorTotal,
+          qr_code: pixData.qr_code,
+          qr_code_base64: pixData.qr_code_base64
+        };
+
+        if (io) {
+          io.emit(`exibir_pix_corrida_${id}`, payloadPix);
+        }
+
+        return res.json({ sucesso: true, status: 'aguardando_pix', pix: payloadPix });
+      }
+
+      return res.status(400).json({ erro: 'Forma de pagamento não suportada.' });
+    } catch (err) {
+      console.error('Erro detalhado ao liquidar corrida:', err);
+      res.status(500).json({ erro: err.message || 'Erro interno ao processar encerramento da corrida.' });
     }
   });
 
