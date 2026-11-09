@@ -54,11 +54,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const textoFalado = event.results[0][0].transcript;
     inputPesquisa.value = textoFalado;
     
-    btnIA.innerHTML = '<span style="font-size:14px; animation: pulse 1s infinite;">🧠</span>';
+    btnIA.innerHTML = '<span style="font-size:14px;">🧠</span>';
 
     try {
       const urlDestino = `${API_URL}/api/ia/localizar-referencia`;
-      console.log('📡 [IA Frontend] Enviando áudio transcrito:', textoFalado);
+      console.log('📡 [IA Frontend] Enviando comando de voz:', textoFalado);
 
       const res = await fetch(urlDestino, {
         method: 'POST',
@@ -72,39 +72,41 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       const data = await res.json();
-      console.log('📥 [IA Frontend] Resposta:', data);
+      console.log('📥 [IA Frontend] Resposta do backend:', data);
 
       if (res.ok && data.resultado && !isNaN(data.resultado.lat)) {
         const nomeDestino = data.resultado.nome_curto || textoFalado;
         const lat = parseFloat(data.resultado.lat);
         const lng = parseFloat(data.resultado.lng);
 
-        // Dispara o evento direto para o mapa no app-cliente.js
+        inputPesquisa.value = nomeDestino;
+
+        // Dispara o evento que o app-cliente.js escuta para desenhar a rota e calcular preço
         const evt = new CustomEvent('huby_local_selecionado_ia', {
           detail: { nome: nomeDestino, lat, lng }
         });
         document.dispatchEvent(evt);
 
-        // Exibe o card visual de confirmação na lista
+        // Exibe feedback visual breve na lista de pesquisa
         const listaFake = document.getElementById('listaResultadosPesquisa');
         if (listaFake) {
           listaFake.style.display = 'block';
           listaFake.innerHTML = `
-            <li class="result-item ia-result" style="border: 2px solid #38BDF8; background: rgba(56,189,248,0.15); cursor: pointer; padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
-              <div style="background:#38BDF8; color:#000; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; font-weight: bold;">🧠</div>
+            <li class="result-item ia-result" style="border: 2px solid #38BDF8; background: rgba(56,189,248,0.18); padding: 12px; border-radius: 10px; display: flex; align-items: center; gap: 10px;">
+              <div style="background:#38BDF8; color:#000; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 50%; font-size: 14px; font-weight: 900;">🧠</div>
               <div style="flex: 1;">
                 <strong style="color: #FFF; font-size: 14px; display: block;">${nomeDestino}</strong>
-                <small style="color: #38BDF8; font-size: 11px; font-weight: 600;">Destino traçado com Inteligência Artificial</small>
+                <small style="color: #38BDF8; font-size: 11px; font-weight: 700;">Localizado com Inteligência Artificial</small>
               </div>
             </li>
           `;
 
           setTimeout(() => {
             listaFake.style.display = 'none';
-          }, 3500);
+          }, 3000);
         }
       } else {
-        alert(data.erro || data.detalhe || 'A IA não conseguiu decifrar este local. Tente falar novamente.');
+        alert(data.erro || 'Não foi possível encontrar este local. Tente falar novamente.');
       }
     } catch (err) {
       console.error('Erro ao conectar com a IA:', err);

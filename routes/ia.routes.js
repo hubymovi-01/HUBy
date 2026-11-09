@@ -1,98 +1,127 @@
-// routes/ia.routes.js - Geocodificação Robusta via Gemini REST API
+// routes/ia.routes.js - Geocodificação Robusta com Tratamento Inteligente de Comandos de Voz
 import express from 'express';
 
 const router = express.Router();
+
+// Função auxiliar para consultar o serviço geográfico com coordenadas reais
+async function geocodificarFallback(termo, cidadeBase) {
+  try {
+    const termosLimpos = termo
+      .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para)\s+/i, '')
+      .trim();
+
+    const buscas = [
+      `${termosLimpos}, ${cidadeBase}`,
+      `${termosLimpos}, Piauí, Brasil`,
+      `${termosLimpos}, Brasil`
+    ];
+
+    for (const query of buscas) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'HUBy-Mobility/2.0' } });
+      if (res.ok) {
+        const dados = await res.json();
+        if (dados && dados.length > 0) {
+          return {
+            nome_curto: dados[0].display_name.split(',')[0] + ', PI',
+            lat: parseFloat(dados[0].lat),
+            lng: parseFloat(dados[0].lon)
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Falha no fallback geográfico:', err.message);
+  }
+  return null;
+}
 
 router.post('/localizar-referencia', async (req, res) => {
   try {
     const { referencia, cidadeBase = 'São João do Piauí, Piauí' } = req.body;
 
-    console.log('🤖 [IA] Pedido recebido para:', referencia);
+    console.log('🤖 [IA] Comando de voz recebido:', referencia);
 
     if (!referencia || !referencia.trim()) {
-      return res.status(400).json({ erro: 'Por favor, informe o ponto de referência.' });
+      return res.status(400).json({ erro: 'Por favor, informe o ponto de referência ou destino.' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    let dadosGeolocalizacao = null;
+    let resultadoFinal = null;
 
-    // 1. Tentativa via Gemini API (REST nativo sem depender de versão de SDK)
+    // 1. Tentar resolver e limpar com Gemini (via REST direta para evitar conflitos de SDK)
     if (apiKey) {
       try {
-        const prompt = `Atue como um geocodificador no Piauí, Brasil. 
-Região de referência: ${cidadeBase}.
-Destino do passageiro: "${referencia}".
-Retorne APENAS um JSON no formato exato:
-{"nome_curto": "Nome do Local, PI", "lat": -8.3582, "lng": -42.2476}`;
+        const prompt = `
+Você é um assistente de GPS e geolocalização no Piauí, Brasil.
+Região base: ${cidadeBase}.
+O passageiro falou o seguinte comando de voz: "${referencia}".
+
+Sua tarefa:
+1. Extraia apenas o DESTINO pretendido (remova frases como "quero ir para", "me leva", "vamos até", etc.).
+2. Identifique o município ou ponto de interesse real no estado do Piauí (ex: Simplício Mendes, Teresina, São João do Piauí, João Costa, praça, bairro, etc.).
+3. Devolva RIGOROSAMENTE apenas um JSON no formato:
+{
+  "nome_curto": "Nome Limpo do Local ou Cidade, PI",
+  "lat": -8.3582,
+  "lng": -42.2476
+}
+`;
 
         const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-        const respostaGemini = await fetch(urlGemini, {
+        const respGemini = await fetch(urlGemini, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
+              temperature: 0.1,
               responseMimeType: 'application/json'
             }
           })
         });
 
-        if (respostaGemini.ok) {
-          const geminiJson = await respostaGemini.json();
-          const texto = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (texto) {
-            const parsed = JSON.parse(texto.trim());
+        if (respGemini.ok) {
+          const json = await respGemini.json();
+          const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (rawText) {
+            const limpo = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+            const parsed = JSON.parse(limpo);
             const lat = parseFloat(parsed.lat);
             const lng = parseFloat(parsed.lng);
             if (!isNaN(lat) && !isNaN(lng)) {
-              dadosGeolocalizacao = {
+              resultadoFinal = {
                 nome_curto: parsed.nome_curto || referencia,
                 lat,
                 lng
               };
+              console.log('✅ [IA Gemini] Sucesso:', resultadoFinal);
             }
           }
         } else {
-          console.warn('⚠️ [IA] Erro na resposta da API Gemini:', await respostaGemini.text());
+          console.warn('⚠️ [IA Gemini] Erro na API:', await respGemini.text());
         }
       } catch (errGemini) {
-        console.warn('⚠️ [IA] Falha na consulta Gemini, aplicando fallback:', errGemini.message);
+        console.warn('⚠️ [IA Gemini] Exceção no processamento do modelo:', errGemini.message);
       }
     }
 
-    // 2. Fallback de Geocodificação Direta (Garante que nunca falhe caso a IA hesite)
-    if (!dadosGeolocalizacao) {
-      console.log('🌐 [IA] Executando busca geográfica de contingência para:', referencia);
-      const queryBusca = encodeURIComponent(`${referencia}, Piauí, Brasil`);
-      const urlGeo = `https://nominatim.openstreetmap.org/search?format=json&q=${queryBusca}&limit=1`;
-
-      const respGeo = await fetch(urlGeo, {
-        headers: { 'User-Agent': 'HUBy-App/2.0' }
-      });
-
-      if (respGeo.ok) {
-        const resultados = await respGeo.json();
-        if (resultados && resultados.length > 0) {
-          dadosGeolocalizacao = {
-            nome_curto: resultados[0].display_name.split(',')[0] + ', PI',
-            lat: parseFloat(resultados[0].lat),
-            lng: parseFloat(resultados[0].lon)
-          };
-        }
-      }
+    // 2. Se a IA falhou, aplicar fallback geográfico imediato
+    if (!resultadoFinal) {
+      console.log('🔄 [IA] Acionando geocodificação direta para garantir o destino...');
+      resultadoFinal = await geocodificarFallback(referencia, cidadeBase);
     }
 
-    if (!dadosGeolocalizacao) {
+    if (!resultadoFinal) {
       return res.status(404).json({
-        erro: 'Não foi possível identificar as coordenadas deste local. Tente detalhar um pouco mais.'
+        erro: 'Não conseguimos localizar esse destino. Diga o nome da cidade, praça ou rua.'
       });
     }
 
-    console.log('✅ [IA] Sucesso:', dadosGeolocalizacao);
     return res.json({
       sucesso: true,
-      resultado: dadosGeolocalizacao
+      resultado: resultadoFinal
     });
 
   } catch (err) {
