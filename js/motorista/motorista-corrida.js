@@ -6,6 +6,8 @@ import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
 import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motorista-rotas.js';
 
+let processandoPagamento = false;
+
 // ============================================================================
 // 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR
 // ============================================================================
@@ -83,12 +85,16 @@ export async function preVisualizarRotaPedido(dados) {
 // ============================================================================
 export async function aceitarCorrida(dados) {
   try {
+    const token = localStorage.getItem('huby_token');
     const res = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
       method: 'PUT',
-      headers: obterHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({
-        motoristaId: estado.motoristaId,
-        motoristaNome: estado.motoristaNome || 'Carol'
+        motoristaId: estado.motoristaId || localStorage.getItem('huby_motorista_id'),
+        motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Carol'
       })
     });
 
@@ -130,7 +136,6 @@ async function iniciarFaseBuscarPassageiro(dados) {
     await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
   }
 
-  // Ativa monitoramento de desvio em direção ao passageiro
   iniciarMonitoramentoDesvios(coordsOrigem);
 
   const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
@@ -179,9 +184,13 @@ async function iniciarFaseBuscarPassageiro(dados) {
 // ============================================================================
 export async function confirmarEmbarqueEIrAoDestino(dados) {
   try {
+    const token = localStorage.getItem('huby_token');
     await fetch(`${API_URL}/api/pedidos/${dados.id}/embarque`, {
       method: 'PUT',
-      headers: obterHeaders()
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
     });
   } catch (e) { }
 
@@ -199,7 +208,6 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
     await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
   }
 
-  // Atualiza o monitoramento de desvios em direção ao destino final
   iniciarMonitoramentoDesvios(coordsDestino);
 
   const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
@@ -250,7 +258,7 @@ export function abrirModalOpcoesPagamento(dados) {
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
   const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
 
-  const valorTotal = Number(dados.preco || 0);
+  const valorTotal = Number(dados.preco || dados.valorTotal || 0);
   if (lblValor) {
     lblValor.textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
   }
@@ -281,29 +289,47 @@ export function abrirModalOpcoesPagamento(dados) {
 }
 
 export async function processarLiquidacao(pedidoId, formaPagamento) {
+  if (processandoPagamento) return;
+  processandoPagamento = true;
+
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
+  const token = localStorage.getItem('huby_token');
 
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`, {
       method: 'POST',
-      headers: obterHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      },
       body: JSON.stringify({ forma_pagamento: formaPagamento })
     });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro || 'Falha ao processar encerramento.');
+    const textoResposta = await res.text();
+    let data;
+    try {
+      data = JSON.parse(textoResposta);
+    } catch (eJson) {
+      throw new Error('O servidor respondeu com um formato inesperado. Aguarde alguns segundos e tente novamente.');
+    }
+
+    if (!res.ok) {
+      throw new Error(data.erro || `Falha na liquidação (Código HTTP: ${res.status})`);
+    }
 
     if (modal) modal.style.display = 'none';
 
     if (formaPagamento === 'pix_mp') {
       exibirQrCodePixMotorista(data.pix);
     } else {
-      alert('✅ Corrida encerrada com sucesso! A taxa da plataforma (15%) foi descontada da sua carteira.');
+      alert('✅ Corrida encerrada com sucesso! A taxa da plataforma (15%) foi debitada da sua carteira.');
       if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
       concluirLimpezaPosCorrida();
     }
   } catch (err) {
     alert(err.message);
+  } finally {
+    processandoPagamento = false;
   }
 }
 
