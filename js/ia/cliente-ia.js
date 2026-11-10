@@ -1,12 +1,16 @@
 // js/ia/cliente-ia.js - Controlador Principal de Voz e IA do Passageiro
 import { API_URL } from '../config.js';
 import { vozUI } from './voz-ui.js';
+import { configurarIAFlash, processarComandoFlashIA } from './flash-ia.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const btnIA = document.getElementById('btnBuscaIA');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
 
   if (!btnIA || !inputPesquisa) return;
+
+  // Inicializa o ouvinte de eventos do formulário Flash
+  configurarIAFlash();
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -59,6 +63,12 @@ document.addEventListener('DOMContentLoaded', () => {
     inputPesquisa.value = textoFalado;
 
     btnIA.innerHTML = '<span style="font-size:14px;">🧠</span>';
+
+    // Se a categoria selecionada for Flash (entrega), extrai recebedor e pacote em segundo plano
+    const cardFlash = document.querySelector('.category-card-pro[data-id="entrega"]');
+    if (cardFlash && cardFlash.classList.contains('active')) {
+      processarComandoFlashIA(textoFalado);
+    }
 
     try {
       const urlDestino = `${API_URL}/api/ia/localizar-referencia`;
