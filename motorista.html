@@ -210,6 +210,24 @@
         </div>
       </div>
 
+      <!-- COPILOTO POR VOZ (PALAVRA-CHAVE PESSOAL) -->
+      <div class="drawer-section-card">
+        <h4>🎙️ Código de Voz do Copiloto</h4>
+        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 10px;">
+          Defina o seu código ou palavra-chave para ativar o copiloto por voz sem tocar na tela:
+        </p>
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <input type="text" id="drawerInputCodigoVoz" placeholder="Ex: Zank, Falcão, Águia"
+            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 8px; padding: 8px 10px; color: #38BDF8; font-weight: 800; font-size: 12px; outline: none;">
+          <button type="button" id="btnSalvarCodigoVoz"
+            style="background: #10B981; border: none; border-radius: 8px; color: #02261C; font-weight: 900; font-size: 11px; padding: 0 12px; cursor: pointer;">Salvar</button>
+        </div>
+        <button type="button" id="btnTestarCodigoVoz"
+          style="width: 100%; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); color: #38BDF8; padding: 8px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🔊 Testar Resposta por Voz
+        </button>
+      </div>
+
       <!-- EXTRATO & GANHOS -->
       <div class="drawer-section-card">
         <h4>
@@ -517,7 +535,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=10.4.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=10.5.0"></script>
 </body>
 
 </html>

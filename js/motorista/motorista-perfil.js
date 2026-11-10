@@ -1,6 +1,8 @@
 // js/motorista/motorista-perfil.js
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
+import { notificar } from '../util/alertas-huby.js';
+import { obterCodigoAtivacaoMotorista, definirCodigoAtivacaoMotorista, falarTexto } from '../ia/motorista-ia.js';
 
 let fotoBase64Temporaria = null;
 
@@ -71,6 +73,12 @@ export async function carregarPerfil() {
       inputPixDrawer.value = m.chave_pix_padrao;
     }
 
+    // Inicializa o campo do código de ativação por voz
+    const inputCodigoVoz = document.getElementById('drawerInputCodigoVoz');
+    if (inputCodigoVoz) {
+      inputCodigoVoz.value = obterCodigoAtivacaoMotorista();
+    }
+
     sincronizarExtratoDiario();
   } catch (e) {
     console.warn('Erro ao carregar perfil do condutor:', e);
@@ -129,7 +137,7 @@ export function configurarEdicaoPerfil() {
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('A imagem selecionada é muito pesada (máx 5MB).');
+      notificar('A imagem selecionada é muito pesada (máx 5MB).', 'alerta');
       return;
     }
 
@@ -150,7 +158,7 @@ export function configurarEdicaoPerfil() {
     const veiculo_ano = document.getElementById('editCarroAno')?.value?.trim();
 
     if (!nome) {
-      alert('O nome completo é obrigatório.');
+      notificar('O nome completo é obrigatório.', 'alerta');
       return;
     }
 
@@ -180,11 +188,11 @@ export function configurarEdicaoPerfil() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'Erro ao salvar alterações do perfil.');
 
-      alert('✅ Dados do condutor atualizados com sucesso!');
+      notificar('Dados do condutor atualizados com sucesso!', 'sucesso');
       fecharModal();
       carregarPerfil();
     } catch (err) {
-      alert(err.message);
+      notificar(err.message, 'erro');
     } finally {
       btnSalvar.disabled = false;
       btnSalvar.textContent = 'Salvar Alterações';
@@ -195,7 +203,7 @@ export function configurarEdicaoPerfil() {
   btnSalvarPix?.addEventListener('click', async () => {
     const chave = document.getElementById('drawerInputChavePix')?.value?.trim();
     if (!chave) {
-      alert('Informe uma chave Pix válida.');
+      notificar('Informe uma chave Pix válida.', 'alerta');
       return;
     }
 
@@ -210,9 +218,9 @@ export function configurarEdicaoPerfil() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'Falha ao salvar chave Pix.');
-      alert('✅ Chave Pix padrão salva com sucesso!');
+      notificar('Chave Pix padrão salva com sucesso!', 'sucesso');
     } catch (err) {
-      alert(err.message);
+      notificar(err.message, 'erro');
     } finally {
       btnSalvarPix.disabled = false;
       btnSalvarPix.textContent = 'Salvar';
@@ -234,7 +242,7 @@ export function configurarSalvarPreferenciasPagto() {
     const aceita_pix = !!chkPix?.checked;
 
     if (!aceita_dinheiro && !aceita_cartao && !aceita_pix) {
-      alert('Selecione pelo menos uma forma de pagamento para trabalhar.');
+      notificar('Selecione pelo menos uma forma de pagamento para trabalhar.', 'alerta');
       return;
     }
 
@@ -255,13 +263,41 @@ export function configurarSalvarPreferenciasPagto() {
       estado.aceitaCartao = aceita_cartao;
       estado.aceitaPix = aceita_pix;
 
-      alert('✅ Preferências de pagamento salvas com sucesso!');
+      notificar('Preferências de pagamento salvas com sucesso!', 'sucesso');
     } catch (err) {
-      alert(err.message);
+      notificar(err.message, 'erro');
     } finally {
       btn.disabled = false;
       btn.textContent = 'Salvar Preferências';
     }
+  });
+}
+
+// Configuração e teste do Código Pessoal de Ativação por Voz (Copiloto)
+export function configurarCodigoVozCopiloto() {
+  const inputCodigo = document.getElementById('drawerInputCodigoVoz');
+  const btnSalvarCodigo = document.getElementById('btnSalvarCodigoVoz');
+  const btnTestarVoz = document.getElementById('btnTestarCodigoVoz');
+
+  if (inputCodigo) {
+    inputCodigo.value = obterCodigoAtivacaoMotorista();
+  }
+
+  btnSalvarCodigo?.addEventListener('click', () => {
+    const novoCodigo = inputCodigo?.value?.trim();
+    if (!novoCodigo) {
+      notificar('Digite uma palavra ou código de ativação válido.', 'alerta');
+      return;
+    }
+
+    definirCodigoAtivacaoMotorista(novoCodigo);
+    notificar(`Código de ativação definido para: "${novoCodigo}"`, 'sucesso');
+  });
+
+  btnTestarVoz?.addEventListener('click', () => {
+    const cod = obterCodigoAtivacaoMotorista();
+    falarTexto(`Copiloto pronto. Ao falar ${cod}, estou às suas ordens.`);
+    notificar(`Ouvindo código: "${cod}"`, 'info', 2500);
   });
 }
 
