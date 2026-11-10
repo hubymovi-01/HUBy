@@ -15,7 +15,7 @@ import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
-import iaRoutes from './routes/ia.routes.js'; // 🤖 IA: Importação da nova rota
+import iaRoutes from './routes/ia.routes.js'; // 🤖 IA: Rota do assistente e pesquisa inteligente
 
 dotenv.config();
 
@@ -29,7 +29,7 @@ const server = createServer(app);
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
 app.disable('x-powered-by');
-app.set('trust proxy', 1); // O Render coloca um proxy na frente do servidor
+app.set('trust proxy', 1); // Proxy reverso ativo em ambiente de alojamento (Render)
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -96,7 +96,7 @@ io.on('connection', (socket) => {
   });
 });
 
-// Injeta Socket.IO nas requisições
+// Injeta Socket.IO nas requisições HTTP
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -196,6 +196,7 @@ async function inicializarBanco() {
         doc_crlv_url TEXT,
         foto_perfil_url TEXT,
         chave_pix_padrao TEXT,
+        codigo_voz TEXT DEFAULT 'Zank',
         avaliacao_media NUMERIC(3,2) DEFAULT 5.00,
         total_avaliacoes INT DEFAULT 0,
         total_corridas INT DEFAULT 0,
@@ -335,11 +336,13 @@ async function inicializarBanco() {
       );
     `;
 
+    // Atualizações incrementais com garantia de integridade da base de dados existente
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS codigo_voz TEXT DEFAULT 'Zank';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS total_corridas INT DEFAULT 0;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS em_pausa BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS pausa_ate TIMESTAMP;`;
@@ -396,7 +399,7 @@ app.get('/api/config/tarifas', async (req, res) => {
 });
 
 // ============================================================================
-// 5. REGISTRO DE ROTAS MODULARES
+// 5. REGISTO DE ROTAS MODULARES
 // ============================================================================
 app.use(['/api/auth/login', '/api/auth/login-motorista', '/api/usuarios/login', '/api/usuarios/login-motorista'], limitarLogin);
 app.use(['/api/auth/cadastro', '/api/usuarios/registo'], limitarCadastro);
