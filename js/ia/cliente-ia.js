@@ -1,146 +1,136 @@
-// js/ia/cliente-ia.js - Controlador Principal de Voz e IA HUBy (Nacional)
+// js/ia/cliente-ia.js - Assistente Vocal e Busca Inteligente por IA HUBy
 import { API_URL } from '../config.js';
-import { vozUI } from './voz-ui.js';
-import { configurarIAFlash, processarComandoFlashIA } from './flash-ia.js';
+import { notificar } from '../util/alertas-huby.js';
 
-document.addEventListener('DOMContentLoaded', () => {
-  const btnIA = document.getElementById('btnBuscaIA');
+let recognition = null;
+let escutaEmAndamento = false;
+
+// Obtém coordenadas locais aproximadas do passageiro para âncora de busca
+function obterCoordenadasUsuario() {
+  const latSalva = localStorage.getItem('huby_user_lat') || localStorage.getItem('huby_origem_lat');
+  const lngSalva = localStorage.getItem('huby_user_lng') || localStorage.getItem('huby_origem_lng');
+
+  if (latSalva && lngSalva) {
+    return { userLat: parseFloat(latSalva), userLng: parseFloat(lngSalva) };
+  }
+  return { userLat: null, userLng: null };
+}
+
+// Inicializa o reconhecimento de voz do passageiro
+export function inicializarVozPassageiro() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btnBuscaIA = document.getElementById('btnBuscaIA');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
 
-  if (!btnIA || !inputPesquisa) return;
-
-  // Inicializa o módulo HUBy Flash (encomendas)
-  configurarIAFlash();
-
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!btnBuscaIA) return;
 
   if (!SpeechRecognition) {
-    console.warn('Reconhecimento de voz não suportado neste navegador/dispositivo.');
-    btnIA.style.display = 'none';
+    btnBuscaIA.addEventListener('click', () => {
+      notificar('O seu navegador não suporta pesquisa por voz. Digite o endereço.', 'alerta');
+      inputPesquisa?.focus();
+    });
     return;
   }
 
-  const recognition = new SpeechRecognition();
+  recognition = new SpeechRecognition();
   recognition.lang = 'pt-BR';
   recognition.continuous = false;
   recognition.interimResults = false;
 
-  let gravando = false;
-
-  function iniciarGravacao() {
-    if (gravando) {
-      recognition.stop();
-      return;
-    }
-    try {
-      recognition.start();
-    } catch (err) {
-      console.warn('Erro ao iniciar reconhecimento de voz:', err);
-    }
-  }
-
-  btnIA.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    iniciarGravacao();
-  });
-
   recognition.onstart = () => {
-    gravando = true;
-    inputPesquisa.placeholder = 'A escutar... Fale o seu destino!';
-    vozUI.tocarBipInicio();
-    vozUI.ativarPulsoGravando();
+    escutaEmAndamento = true;
+    btnBuscaIA.style.color = '#EF4444';
+    btnBuscaIA.style.transform = 'scale(1.2)';
+    btnBuscaIA.style.transition = 'transform 0.2s ease, color 0.2s ease';
+    notificar('A ouvir destino... Diga para onde deseja ir.', 'info', 3000);
   };
 
   recognition.onend = () => {
-    gravando = false;
-    inputPesquisa.placeholder = 'Para onde você quer ir?';
-    vozUI.desativarPulso();
+    escutaEmAndamento = false;
+    btnBuscaIA.style.color = '#38BDF8';
+    btnBuscaIA.style.transform = 'scale(1)';
   };
 
-  recognition.onresult = async (event) => {
-    const textoFalado = event.results[0][0].transcript;
-    inputPesquisa.value = textoFalado;
-
-    btnIA.innerHTML = '<span style="font-size:14px;">🧠</span>';
-
-    // Se a aba selecionada for HUBy Flash (entrega), extrai recebedor e tipo em paralelo
-    const cardFlash = document.querySelector('.category-card-pro[data-id="entrega"]');
-    if (cardFlash && cardFlash.classList.contains('active')) {
-      processarComandoFlashIA(textoFalado);
+  recognition.onerror = (ev) => {
+    escutaEmAndamento = false;
+    btnBuscaIA.style.color = '#38BDF8';
+    btnBuscaIA.style.transform = 'scale(1)';
+    if (ev.error !== 'no-speech') {
+      notificar('Não foi possível identificar o áudio. Tente novamente.', 'alerta');
     }
+  };
 
-    try {
-      // Captura o GPS atual do utilizador para âncora de proximidade
-      let userLat = null;
-      let userLng = null;
+  recognition.onresult = async (ev) => {
+    const transcricao = ev.results[0][0].transcript;
+    if (!transcricao || !transcricao.trim()) return;
 
-      if (window.estadoCliente && window.estadoCliente.coordsOrigem) {
-        userLat = window.estadoCliente.coordsOrigem[0];
-        userLng = window.estadoCliente.coordsOrigem[1];
+    if (inputPesquisa) inputPesquisa.value = transcricao;
+    notificar(`A pesquisar destino: "${transcricao}"`, 'info', 2500);
+
+    await consultarDestinoIA(transcricao);
+  };
+
+  btnBuscaIA.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (escutaEmAndamento) {
+      recognition.stop();
+    } else {
+      try {
+        recognition.start();
+      } catch (err) {
+        recognition.stop();
       }
+    }
+  });
+}
 
-      // Normaliza a URL base para evitar barras duplas e garantir /api/ia/localizar-referencia
-      const baseUrl = API_URL.replace(/\/+$/, '');
-      const urlDestino = `${baseUrl}/api/ia/localizar-referencia`;
+// Envia a fala para o backend (ia.routes.js -> /api/ia/localizar-referencia)
+async function consultarDestinoIA(frase) {
+  const { userLat, userLng } = obterCoordenadasUsuario();
+  const token = localStorage.getItem('huby_token');
 
-      console.log('📡 [IA Frontend] Enviando comando com âncora geográfica:', {
-        url: urlDestino,
-        referencia: textoFalado,
+  try {
+    const resp = await fetch(`${API_URL}/api/ia/localizar-referencia`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        referencia: frase,
         userLat,
         userLng
-      });
+      })
+    });
 
-      const res = await fetch(urlDestino, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          referencia: textoFalado,
-          userLat,
-          userLng
-        })
-      });
+    const data = await resp.json();
 
-      const data = await res.json();
-      console.log('📥 [IA Frontend] Resposta recebida:', data);
-
-      if (res.ok && data.resultado && !isNaN(data.resultado.lat)) {
-        const nomeDestino = data.resultado.nome_curto || textoFalado;
-        const lat = parseFloat(data.resultado.lat);
-        const lng = parseFloat(data.resultado.lng);
-
-        inputPesquisa.value = nomeDestino;
-
-        // Som de confirmação imediato
-        vozUI.tocarSucesso();
-
-        // Dispara o evento que o app-cliente.js escuta para desenhar o trajeto no Leaflet
-        const evt = new CustomEvent('huby_local_selecionado_ia', {
-          detail: { nome: nomeDestino, lat, lng }
-        });
-        document.dispatchEvent(evt);
-
-        // Exibe a etiqueta de retentativa rápida
-        vozUI.exibirBadgeRetentativa(() => {
-          iniciarGravacao();
-        });
-      } else {
-        alert(data.erro || 'Não foi possível encontrar este local. Tente falar novamente.');
-      }
-    } catch (err) {
-      console.error('Erro na chamada de IA:', err);
-      alert('Falha na comunicação com o servidor de IA.');
-    } finally {
-      btnIA.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          <line x1="12" y1="19" x2="12" y2="23"></line>
-          <line x1="8" y1="23" x2="16" y2="23"></line>
-        </svg>
-      `;
+    if (!resp.ok || !data.sucesso || !data.resultado) {
+      throw new Error(data.erro || 'Localização não identificada.');
     }
-  };
-});
+
+    const { nome_curto, lat, lng } = data.resultado;
+
+    // Dispara o evento captado pelo app-cliente.js para traçar a rota e abrir as categorias
+    window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', {
+      detail: {
+        nome: nome_curto,
+        lat: Number(lat),
+        lng: Number(lng),
+        origem: 'ia_voz'
+      }
+    }));
+
+    notificar(`Destino traçado: ${nome_curto}`, 'sucesso');
+  } catch (err) {
+    console.warn('Erro na rota IA:', err);
+    notificar(err.message || 'Não conseguimos identificar o local. Digite manualmente.', 'alerta');
+  }
+}
+
+// Inicialização automática
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', inicializarVozPassageiro);
+} else {
+  inicializarVozPassageiro();
+}
