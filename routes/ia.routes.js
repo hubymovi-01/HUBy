@@ -12,7 +12,6 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
     .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
     .trim();
 
-  // 1. Primeira tentativa: Busca contextualizada com estado/país
   const tentativas = [
     termoLimpo,
     `${termoLimpo}, Piauí, Brasil`,
@@ -158,3 +157,103 @@ Instruções:
     });
   }
 });
+
+// Rota de Extração Inteligente de Encomendas HUBy Flash (Nacional)
+router.post('/flash-extrair', async (req, res) => {
+  try {
+    const { texto } = req.body || {};
+    if (!texto || !String(texto).trim()) {
+      return res.status(200).json({ sucesso: false, erro: 'Texto de instrução não fornecido.' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(200).json({
+        sucesso: true,
+        resultado: {
+          recebedor: 'A informar',
+          tipoItem: 'pequeno',
+          observacao: texto
+        }
+      });
+    }
+
+    const prompt = `Extraia dados da ordem de entrega no Brasil: "${texto}".
+Retorne APENAS um JSON:
+{
+  "recebedor": "Nome e telefone",
+  "tipoItem": "documento" | "pequeno" | "medio" | "fragil",
+  "observacao": "Instrução curta ou null"
+}`;
+
+    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const resp = await fetch(urlGemini, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+
+    if (resp.ok) {
+      const data = await resp.json().catch(() => null);
+      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (txt) {
+        return res.json({ sucesso: true, resultado: JSON.parse(txt.trim()) });
+      }
+    }
+
+    return res.status(200).json({
+      sucesso: true,
+      resultado: {
+        recebedor: 'A informar',
+        tipoItem: 'pequeno',
+        observacao: texto
+      }
+    });
+  } catch (err) {
+    return res.status(200).json({ sucesso: false, erro: err.message });
+  }
+});
+
+// Rota de Smart Replies Contextuais para o Motorista
+router.post('/motorista-respostas', async (req, res) => {
+  const fallback = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
+  try {
+    const { mensagem } = req.body || {};
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || !mensagem) {
+      return res.json({ sucesso: true, sugestoes: fallback });
+    }
+
+    const prompt = `Gere exatamente 3 sugestões curtas de resposta no trânsito para o motorista à mensagem: "${mensagem}".
+Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
+
+    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const resp = await fetch(urlGemini, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+
+    if (resp.ok) {
+      const data = await resp.json().catch(() => null);
+      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (txt) {
+        const parsed = JSON.parse(txt.trim());
+        if (Array.isArray(parsed.sugestoes)) {
+          return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
+        }
+      }
+    }
+    return res.json({ sucesso: true, sugestoes: fallback });
+  } catch (err) {
+    return res.json({ sucesso: true, sugestoes: fallback });
+  }
+});
+
+export default router;
