@@ -5,7 +5,7 @@ import { autenticarToken } from './pedidos.routes.js';
 
 const router = express.Router();
 
-// Garante colunas de suporte para pausa e rota inteligente
+// Garante colunas de suporte para pausa, rota inteligente e código de voz
 async function garantirColunasSuporte() {
   try {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;
@@ -16,6 +16,7 @@ async function garantirColunasSuporte() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS codigo_voz TEXT DEFAULT 'Zank';`;
   } catch (e) {
     console.warn('Aviso ao sincronizar colunas de suporte do motorista:', e.message);
   }
@@ -115,21 +116,21 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
 });
 
 // =========================================================================
-// 4. CONSULTA DE PERFIL (VINCULAÇÃO INTELIGENTE COM A CONTA ATIVA)
+// 4. CONSULTA DE PERFIL (COM CÓDIGO PESSOAL DE VOZ)
 // =========================================================================
 const handlerObterPerfil = async (req, res) => {
   try {
     const usuarioId = req.usuario?.id || '';
     const emailUsuario = req.usuario?.email || '';
 
-    // 1. Tenta buscar o motorista vinculado ao usuário autenticado
     let mot = await sql`
       SELECT 
         id, usuario_id, nome, email, telefone, categoria,
         saldo_carteira, status_aprovacao, foto_perfil_url,
         avaliacao_media, total_corridas,
         veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-        chave_pix_padrao, em_pausa, pausa_ate, destino_casa_ativo
+        chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
+        em_pausa, pausa_ate, destino_casa_ativo
       FROM motoristas
       WHERE id::text = ${usuarioId}::text 
          OR usuario_id::text = ${usuarioId}::text 
@@ -137,7 +138,6 @@ const handlerObterPerfil = async (req, res) => {
       LIMIT 1;
     `;
 
-    // 2. Se não encontrou vínculo direto, puxa o motorista com maior saldo
     if (mot.length === 0) {
       mot = await sql`
         SELECT 
@@ -145,13 +145,13 @@ const handlerObterPerfil = async (req, res) => {
           saldo_carteira, status_aprovacao, foto_perfil_url,
           avaliacao_media, total_corridas,
           veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-          chave_pix_padrao, em_pausa, pausa_ate, destino_casa_ativo
+          chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
+          em_pausa, pausa_ate, destino_casa_ativo
         FROM motoristas
         ORDER BY saldo_carteira DESC, criado_em ASC
         LIMIT 1;
       `;
 
-      // Vincula este registro ao usuário autenticado atual
       if (mot.length > 0 && usuarioId) {
         await sql`
           UPDATE motoristas 
@@ -180,6 +180,7 @@ const handlerObterPerfil = async (req, res) => {
         veiculo_cor: m.veiculo_cor || 'Prata',
         veiculo_ano: m.veiculo_ano || '2023',
         chave_pix_padrao: m.chave_pix_padrao || '',
+        codigo_voz: m.codigo_voz || 'Zank',
         em_pausa: !!m.em_pausa,
         pausa_ate: m.pausa_ate,
         destino_casa_ativo: !!m.destino_casa_ativo
@@ -204,19 +205,20 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     const usuarioId = req.usuario.id;
     const emailUsuario = req.usuario.email || '';
     const {
-      nome, telefone, foto_perfil_url,
+      nome, telefone, foto_perfil_url, foto_base64,
       veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-      chave_pix_padrao
+      chave_pix_padrao, codigo_voz
     } = req.body;
 
     const fNome = (nome && nome.trim()) ? nome.trim() : null;
     const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
-    const fFoto = (foto_perfil_url && foto_perfil_url.trim()) ? foto_perfil_url.trim() : null;
+    const fFoto = (foto_base64 && foto_base64.trim()) ? foto_base64.trim() : ((foto_perfil_url && foto_perfil_url.trim()) ? foto_perfil_url.trim() : null);
     const fMod = (veiculo_modelo && veiculo_modelo.trim()) ? veiculo_modelo.trim() : null;
     const fPlaca = (veiculo_placa && veiculo_placa.trim()) ? veiculo_placa.trim().toUpperCase() : null;
     const fCor = (veiculo_cor && veiculo_cor.trim()) ? veiculo_cor.trim() : null;
-    const fAno = (veiculo_ano && veiculo_ano.trim()) ? veiculo_ano.trim() : null;
+    const fAno = (veiculo_ano && String(veiculo_ano).trim()) ? String(veiculo_ano).trim() : null;
     const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
+    const fCodVoz = (codigo_voz && codigo_voz.trim()) ? codigo_voz.trim() : null;
 
     let mot = await sql`
       UPDATE motoristas
@@ -228,7 +230,8 @@ router.put('/perfil', autenticarToken, async (req, res) => {
         veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
         veiculo_cor = COALESCE(${fCor}, veiculo_cor),
         veiculo_ano = COALESCE(${fAno}, veiculo_ano),
-        chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao)
+        chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
+        codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
       WHERE id::text = ${usuarioId}::text 
          OR usuario_id::text = ${usuarioId}::text 
          OR (email = ${emailUsuario} AND ${emailUsuario} != '')
@@ -247,7 +250,8 @@ router.put('/perfil', autenticarToken, async (req, res) => {
           veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
           veiculo_cor = COALESCE(${fCor}, veiculo_cor),
           veiculo_ano = COALESCE(${fAno}, veiculo_ano),
-          chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao)
+          chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
+          codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
         WHERE id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1)
         RETURNING *;
       `;
@@ -311,7 +315,6 @@ router.get('/extrato', autenticarToken, async (req, res) => {
       LIMIT 15;
     `;
 
-    // Removido o filtro rígido de nome (carol) para funcionar com qualquer conta
     const corridas = await sql`
       SELECT 
         id, valor_total, 
@@ -346,7 +349,6 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
     `;
     const motoristaIdReal = mot[0]?.id || usuarioId;
 
-    // Filtra pelo dia correto evitando conflitos de fuso horário (UTC vs Local)
     const corridasHoje = await sql`
       SELECT 
         COUNT(*)::int AS total_corridas,

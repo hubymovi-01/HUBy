@@ -86,7 +86,7 @@ export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO (AJUSTADO E BLINDADO CONTRA ERRO 500)
+  // 1. CRIAR PEDIDO
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
@@ -122,7 +122,6 @@ export default function pedidosRouter(io) {
       const dKm = formatarNum(distancia_km !== undefined ? distancia_km : distanciaKm);
       const dMin = formatarNum(duracao_min !== undefined ? duracao_min : duracaoMin);
 
-      // Resolução flexível de coordenadas
       const origLat = Number(origem_lat !== undefined ? origem_lat : coordsOrigem?.[0]);
       const origLng = Number(origem_lng !== undefined ? origem_lng : coordsOrigem?.[1]);
       const destLat = Number(destino_lat !== undefined ? destino_lat : coordsDestino?.[0]);
@@ -140,14 +139,12 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Valor da corrida inválido.' });
       }
 
-      // Validação de tarifa mínima plausível
       const distServidor = distanciaRetaKm(origLat, origLng, destLat, destLng);
       const tarifas = await obterTarifasPlataforma();
       if (vTotal < valorMinimoPlausivel(tarifas, distServidor)) {
         return res.status(400).json({ erro: 'Valor da corrida inconsistente. Atualize o app e tente novamente.' });
       }
 
-      // Tratamento do Cupom
       let descontoAplicado = 0;
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
@@ -189,7 +186,6 @@ export default function pedidosRouter(io) {
       const subTipoLabelFinal = sub_tipo_label || subTipoLabel || 'HUBy Carro';
       const subTipoIdFinal = sub_tipo_id || subTipoId || tipo || 'carro';
 
-      // Validação de existência do cliente no banco antes da inserção
       const usuarioExiste = await sql`SELECT id FROM usuarios WHERE id::text = ${clienteId}::text LIMIT 1;`;
       const idClienteFinal = usuarioExiste.length > 0 ? usuarioExiste[0].id : null;
 
@@ -286,7 +282,6 @@ export default function pedidosRouter(io) {
         return res.status(403).json({ erro: 'Acesso restrito a motoristas parceiros.' });
       }
 
-      // Validação estrita: se for motorista e estiver offline no banco, não entrega corridas
       if (ehMotoristaToken(req.usuario)) {
         const mot = await sql`
           SELECT status_online FROM motoristas 
@@ -834,7 +829,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 12. CONSULTAR PERFIL DO CONDUTOR
+  // 12. CONSULTAR PERFIL DO CONDUTOR (COM CÓDIGO DE VOZ)
   // =========================================================================
   router.get('/motoristas/perfil', autenticarToken, async (req, res) => {
     try {
@@ -844,6 +839,7 @@ export default function pedidosRouter(io) {
       let motoristas = await sql`
         SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
                foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+               COALESCE(codigo_voz, 'Zank') AS codigo_voz,
                COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
                COALESCE(aceita_cartao, true) AS aceita_cartao,
                COALESCE(aceita_pix, true) AS aceita_pix
@@ -858,6 +854,7 @@ export default function pedidosRouter(io) {
         motoristas = await sql`
           SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
                  foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+                 COALESCE(codigo_voz, 'Zank') AS codigo_voz,
                  COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
                  COALESCE(aceita_cartao, true) AS aceita_cartao,
                  COALESCE(aceita_pix, true) AS aceita_pix
@@ -875,6 +872,73 @@ export default function pedidosRouter(io) {
     } catch (err) {
       console.error('Erro ao obter perfil do motorista:', err);
       return res.status(500).json({ erro: 'Falha ao carregar perfil.' });
+    }
+  });
+
+  // =========================================================================
+  // 13. ATUALIZAR PERFIL DO MOTORISTA (PERSISTÊNCIA DO CÓDIGO DE VOZ)
+  // =========================================================================
+  router.put('/motoristas/perfil/atualizar', autenticarToken, async (req, res) => {
+    try {
+      const usuarioId = req.usuario.id;
+      const emailUsuario = req.usuario.email || '';
+      const {
+        nome, telefone, foto_base64,
+        veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+        chave_pix_padrao, codigo_voz
+      } = req.body;
+
+      const fNome = (nome && nome.trim()) ? nome.trim() : null;
+      const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
+      const fFoto = (foto_base64 && foto_base64.trim()) ? foto_base64.trim() : null;
+      const fMod = (veiculo_modelo && veiculo_modelo.trim()) ? veiculo_modelo.trim() : null;
+      const fPlaca = (veiculo_placa && veiculo_placa.trim()) ? veiculo_placa.trim().toUpperCase() : null;
+      const fCor = (veiculo_cor && veiculo_cor.trim()) ? veiculo_cor.trim() : null;
+      const fAno = (veiculo_ano && String(veiculo_ano).trim()) ? String(veiculo_ano).trim() : null;
+      const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
+      const fCodVoz = (codigo_voz && codigo_voz.trim()) ? codigo_voz.trim() : null;
+
+      let mot = await sql`
+        UPDATE motoristas
+        SET 
+          nome = COALESCE(${fNome}, nome),
+          telefone = COALESCE(${fTel}, telefone),
+          foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
+          veiculo_modelo = COALESCE(${fMod}, veiculo_modelo),
+          veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
+          veiculo_cor = COALESCE(${fCor}, veiculo_cor),
+          veiculo_ano = COALESCE(${fAno}, veiculo_ano),
+          chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
+          codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
+        WHERE id::text = ${String(usuarioId)}::text 
+           OR usuario_id::text = ${String(usuarioId)}::text 
+           OR (email = ${emailUsuario} AND ${emailUsuario} != '')
+        RETURNING *;
+      `;
+
+      if (mot.length === 0) {
+        mot = await sql`
+          UPDATE motoristas
+          SET 
+            usuario_id = ${usuarioId},
+            nome = COALESCE(${fNome}, nome),
+            telefone = COALESCE(${fTel}, telefone),
+            foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
+            veiculo_modelo = COALESCE(${fMod}, veiculo_modelo),
+            veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
+            veiculo_cor = COALESCE(${fCor}, veiculo_cor),
+            veiculo_ano = COALESCE(${fAno}, veiculo_ano),
+            chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
+            codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
+          WHERE id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1)
+          RETURNING *;
+        `;
+      }
+
+      return res.json({ sucesso: true, motorista: mot[0] || {} });
+    } catch (err) {
+      console.error('Erro ao atualizar dados do motorista:', err);
+      return res.status(500).json({ erro: err.message || 'Falha ao salvar dados do perfil.' });
     }
   });
 
