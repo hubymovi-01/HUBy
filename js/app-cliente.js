@@ -1,4 +1,4 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Produção Estabilizada)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Interface Limpa e Alertas Elegantes)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
@@ -6,7 +6,8 @@ import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
 import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
-import { notificarCliente, abrirPromptParada } from './cliente-ui.js';
+import { notificar, confirmarAcao } from './util/alertas-huby.js';
+import { abrirPromptParada } from './cliente-ui.js';
 import {
   configurarSeletorPagamentoRapido,
   configurarNotaMotorista,
@@ -43,7 +44,41 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Atualizar a prévia de valores nos 3 cards horizontais
+// ============================================================================
+// CONTROLE DE INTERFACE: MODO COTAÇÃO vs MODO VIAGEM ATIVA
+// ============================================================================
+export function alternarModoVisualViagemAtiva(emViagem = false) {
+  const elementosParaEsconder = [
+    document.getElementById('sliderCategorias'),
+    document.getElementById('cardsCategorias'),
+    document.getElementById('blocoResumo'),
+    document.getElementById('blocoDetalhesEntrega'),
+    document.getElementById('cardStatusViagem'),
+    document.getElementById('btnPedirHuby'),
+    document.getElementById('containerParadasIntermediarias'),
+    document.getElementById('btnAddParada'),
+    document.querySelector('.modern-search'),
+    document.querySelector('.quick-features-bar')
+  ];
+
+  elementosParaEsconder.forEach(el => {
+    if (el) {
+      el.style.display = emViagem ? 'none' : '';
+    }
+  });
+
+  const cardsPro = document.querySelectorAll('.category-card-pro');
+  cardsPro.forEach(c => {
+    c.style.display = emViagem ? 'none' : '';
+  });
+
+  const painelAtivo = document.getElementById('painelMotoristaAceitou') || document.getElementById('cardStatusViagemPassageiro');
+  if (painelAtivo) {
+    painelAtivo.style.display = emViagem ? 'block' : 'none';
+  }
+}
+
+// Atualizar a prévia de valores nos cards horizontais
 function atualizarValoresCardsPro(precoBase) {
   const lblCarro = document.getElementById('priceEstCarro');
   const lblMoto = document.getElementById('priceEstMoto');
@@ -82,12 +117,12 @@ function configurarParadasIntermediariasSemPrompt() {
 
   btnAdd?.addEventListener('click', () => {
     if (!estadoCliente.coordsDestino) {
-      notificarCliente('Selecione primeiro o destino final no mapa.', 'alerta');
+      notificar('Selecione primeiro o destino final no mapa.', 'alerta');
       return;
     }
 
     if (estadoCliente.paradasIntermediarias && estadoCliente.paradasIntermediarias.length >= 2) {
-      notificarCliente('Limite máximo de 2 paradas intermediárias atingido.', 'alerta');
+      notificar('Limite máximo de 2 paradas intermediárias atingido.', 'alerta');
       return;
     }
 
@@ -125,7 +160,7 @@ function configurarParadasIntermediariasSemPrompt() {
           container.appendChild(item);
         }
 
-        notificarCliente(`Parada adicionada: ${enderecoParada}`, 'sucesso');
+        notificar(`Parada adicionada: ${enderecoParada}`, 'sucesso');
         atualizarResumoValores();
         if (estadoCliente.rotaAtual?.preco) atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
       }
@@ -241,13 +276,13 @@ function configurarAlternanciaSatélite() {
         });
       }
       layerSatelite.addTo(map);
-      notificarCliente('🛰️ Visão Satélite Ativada', 'info');
+      notificar('🛰️ Visão Satélite Ativada', 'info');
     } else {
       btnCamada.classList.remove('modo-satelite');
       if (layerSatelite && map.hasLayer(layerSatelite)) {
         map.removeLayer(layerSatelite);
       }
-      notificarCliente('🗺️ Mapa Noturno Ativado', 'info');
+      notificar('🗺️ Mapa Noturno Ativado', 'info');
     }
   });
 }
@@ -297,11 +332,11 @@ function configurarLocaisFavoritosMenu() {
   btnSalvarTexto?.addEventListener('click', async () => {
     const endereco = inputTexto?.value.trim();
     if (!endereco || !tipoEditando) {
-      notificarCliente('Digite um endereço antes de salvar.', 'alerta');
+      notificar('Digite um endereço antes de salvar.', 'alerta');
       return;
     }
 
-    notificarCliente('Localizando endereço no mapa...', 'info');
+    notificar('Localizando endereço no mapa...', 'info');
 
     try {
       const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`);
@@ -315,13 +350,13 @@ function configurarLocaisFavoritosMenu() {
         const descElem = document.getElementById(tipoEditando === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
         if (descElem) descElem.textContent = endereco;
 
-        notificarCliente(`${labelEditando} cadastrado com sucesso!`, 'sucesso');
+        notificar(`${labelEditando} cadastrado com sucesso!`, 'sucesso');
         fecharModalEdicao();
       } else {
-        notificarCliente('Endereço não localizado no mapa. Detalhe com mais informações.', 'alerta');
+        notificar('Endereço não localizado no mapa. Detalhe com mais informações.', 'alerta');
       }
     } catch (e) {
-      notificarCliente('Falha ao conectar com serviço de busca.', 'erro');
+      notificar('Falha ao conectar com serviço de busca.', 'erro');
     }
   });
 
@@ -331,7 +366,7 @@ function configurarLocaisFavoritosMenu() {
     const labelAlvo = labelEditando;
 
     fecharModalEdicao();
-    notificarCliente(`Toque no mapa para indicar o local de "${labelAlvo}"`, 'info');
+    notificar(`Toque no mapa para indicar o local de "${labelAlvo}"`, 'info');
 
     if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
       const mapaLeaflet = estadoCliente.hubyMapa.map;
@@ -348,7 +383,7 @@ function configurarLocaisFavoritosMenu() {
         const descElem = document.getElementById(tipoAlvo === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
         if (descElem) descElem.textContent = nomeFormatado;
 
-        notificarCliente(`Localização de "${labelAlvo}" salva com sucesso!`, 'sucesso');
+        notificar(`Localização de "${labelAlvo}" salva com sucesso!`, 'sucesso');
       }
 
       mapaLeaflet.once('click', onToqueMapa);
@@ -386,7 +421,7 @@ function configurarLocaisFavoritosMenu() {
       atualizarResumoValores();
       if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
     }
-    notificarCliente(`Destino: ${label}`, 'sucesso');
+    notificar(`Destino: ${label}`, 'sucesso');
   }
 
   document.getElementById('actionIrCasa')?.addEventListener('click', () => {
@@ -489,7 +524,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 3. Ativação dos controlos e favoritos
+  // 3. Ativação dos controles
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
@@ -500,7 +535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 3.2. Escuta Inteligência Artificial (Voz/Gemini) - Rota calibrada no GPS real
+  // 3.2. Escuta IA (Voz/Gemini)
   document.addEventListener('huby_local_selecionado_ia', async (e) => {
     const { nome, lat, lng } = e.detail;
     const coords = [parseFloat(lat), parseFloat(lng)];
@@ -543,13 +578,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         atualizarResumoValores();
         if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
-        notificarCliente(`Destino IA: ${nome}`, 'sucesso');
+        notificar(`Destino IA: ${nome}`, 'sucesso');
       };
 
       if (origem && origem[0] && origem[1]) {
         await aplicarRotaNoMapa(origem);
       } else {
-        notificarCliente('Identificando sua localização atual...', 'info');
+        notificar('Identificando sua localização atual...', 'info');
         estadoCliente.hubyMapa.obterGPS(async (pos) => {
           if (pos && pos.lat && pos.lng) {
             await aplicarRotaNoMapa([pos.lat, pos.lng]);
@@ -628,7 +663,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       cancelarBusca();
     } else {
       if (!estadoCliente.coordsDestino) {
-        notificarCliente('Selecione primeiro o destino final no mapa.', 'alerta');
+        notificar('Selecione primeiro o destino final no mapa.', 'alerta');
         return;
       }
       submeterPedido();
@@ -698,7 +733,7 @@ function configurarFluxoPagamentoMercadoPago() {
       onConfirmar: async (valDigitado) => {
         const valorFinal = parseFloat(valDigitado.replace(',', '.'));
         if (!valorFinal || valorFinal <= 0) {
-          notificarCliente('Informe um valor numérico válido para a recarga.', 'alerta');
+          notificar('Informe um valor numérico válido para a recarga.', 'alerta');
           return;
         }
         await requisitarPixMercadoPago(valorFinal);
@@ -714,14 +749,14 @@ function configurarFluxoPagamentoMercadoPago() {
       clearInterval(intervalChecagemPix);
       intervalChecagemPix = null;
     }
-    notificarCliente('Modo presencial ativo (Dinheiro ou Maquininha com o condutor).', 'info');
+    notificar('Modo presencial ativo (Dinheiro ou Maquininha com o condutor).', 'info');
   });
 
   btnCopiarPix?.addEventListener('click', () => {
     if (inputChavePix && inputChavePix.value) {
       inputChavePix.select();
       navigator.clipboard.writeText(inputChavePix.value);
-      notificarCliente('Chave Pix Copia e Cola copiada!', 'sucesso');
+      notificar('Chave Pix Copia e Cola copiada!', 'sucesso');
       btnCopiarPix.textContent = 'Copiado!';
       setTimeout(() => { btnCopiarPix.textContent = 'Copiar'; }, 2000);
     }
@@ -769,7 +804,7 @@ async function requisitarPixMercadoPago(valor) {
       txtStatus.textContent = `❌ ${err.message}`;
       txtStatus.style.color = '#EF4444';
     }
-    notificarCliente(err.message, 'erro');
+    notificar(err.message, 'erro');
   }
 }
 
@@ -795,7 +830,7 @@ function iniciarMonitoramentoPix(txid, valor) {
           txtStatus.style.color = '#10B981';
         }
 
-        notificarCliente(`Pagamento de R$ ${Number(valor).toFixed(2).replace('.', ',')} aprovado com sucesso!`, 'sucesso');
+        notificar(`Pagamento de R$ ${Number(valor).toFixed(2).replace('.', ',')} aprovado com sucesso!`, 'sucesso');
 
         if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
           sonsHUBy.tocarMetaBatida();
@@ -813,7 +848,7 @@ function iniciarMonitoramentoPix(txid, valor) {
 }
 
 function exibirModalPixCorridaCliente(pix) {
-  document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+  document.getElementById('modalPixCorrivaAtivaCliente')?.remove();
 
   const modalHTML = `
     <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
@@ -852,7 +887,7 @@ function exibirModalPixCorridaCliente(pix) {
   btnCopiar?.addEventListener('click', () => {
     if (pix.qr_code) {
       navigator.clipboard.writeText(pix.qr_code);
-      notificarCliente('Código Pix copiado!', 'sucesso');
+      notificar('Código Pix copiado!', 'sucesso');
       btnCopiar.textContent = '✅ Código Pix Copiado!';
       btnCopiar.style.background = '#10B981';
       setTimeout(() => {
@@ -878,6 +913,7 @@ function conectarSocketEPollingCliente() {
           sonsHUBy.tocarSucessoAceite();
         }
         alertaProximidadeEmitido = false;
+        alternarModoVisualViagemAtiva(true);
         renderizarMotoristaChegando(data.motorista);
       }
     });
@@ -885,11 +921,11 @@ function conectarSocketEPollingCliente() {
     socket.on('passageiro_a_bordo', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
+        alternarModoVisualViagemAtiva(true);
         atualizarParaViagemEmAndamento();
       }
     });
 
-    // Função unificada para renderizar e mover o carro em tempo real no mapa
     const processarMovimentoCarro = (pos) => {
       if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && pos.lat && pos.lng) {
         criarOuAtualizarVeiculoMapa(
@@ -909,7 +945,7 @@ function conectarSocketEPollingCliente() {
           if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarAlertaChamada) {
             sonsHUBy.tocarAlertaChamada();
           }
-          notificarCliente('Motorista está a menos de 200 metros!', 'info');
+          notificar('Motorista está a menos de 200 metros!', 'info');
           const lblStatus = document.getElementById('lblStatusTextoPassageiro');
           if (lblStatus) {
             lblStatus.textContent = '⚡ MOTORISTA ESTÁ CHEGANDO (MENOS DE 200M)!';
@@ -919,7 +955,6 @@ function conectarSocketEPollingCliente() {
       }
     };
 
-    // Escuta tanto o evento direto quanto o broadcast retransmitido pelo server.js
     socket.on('posicao_motorista', processarMovimentoCarro);
     socket.on('posicao_motorista_atualizada', processarMovimentoCarro);
 
@@ -964,6 +999,7 @@ function conectarSocketEPollingCliente() {
         estadoCliente.intervalPolling = null;
         localStorage.removeItem('huby_pedido_ativo_id');
         estadoCliente.pedidoAtivoId = null;
+        alternarModoVisualViagemAtiva(false);
         return;
       }
 
@@ -971,6 +1007,7 @@ function conectarSocketEPollingCliente() {
       const p = await res.json();
 
       if (p.status === 'a_caminho' || p.status === 'aceito' || p.status === 'em_andamento') {
+        alternarModoVisualViagemAtiva(true);
         renderizarMotoristaChegando({
           nome: p.motorista_nome,
           telefone: p.motorista_telefone,
@@ -984,6 +1021,7 @@ function conectarSocketEPollingCliente() {
           aceita_pix: p.aceita_pix
         });
       } else if (p.status === 'em_viagem') {
+        alternarModoVisualViagemAtiva(true);
         atualizarParaViagemEmAndamento();
       } else if (p.status === 'concluido') {
         document.getElementById('modalPixCorridaAtivaCliente')?.remove();
@@ -993,24 +1031,13 @@ function conectarSocketEPollingCliente() {
         estadoCliente.intervalPolling = null;
         localStorage.removeItem('huby_pedido_ativo_id');
         estadoCliente.pedidoAtivoId = null;
+        alternarModoVisualViagemAtiva(false);
       }
     } catch (e) { }
   }, 3500);
 }
 
 function renderizarMotoristaChegando(mot = {}) {
-  const sliderCategorias = document.getElementById('sliderCategorias');
-  const blocoResumo = document.getElementById('blocoResumo');
-  const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
-  const cardStatusViagem = document.getElementById('cardStatusViagem');
-  const btnPedirHuby = document.getElementById('btnPedirHuby');
-
-  if (sliderCategorias) sliderCategorias.style.display = 'none';
-  if (blocoResumo) blocoResumo.style.display = 'none';
-  if (blocoEntrega) blocoEntrega.style.display = 'none';
-  if (cardStatusViagem) cardStatusViagem.style.display = 'none';
-  if (btnPedirHuby) btnPedirHuby.style.display = 'none';
-
   let painel = document.getElementById('painelMotoristaAceitou');
   if (!painel) painel = document.getElementById('cardStatusViagemPassageiro');
   if (!painel) return;
@@ -1054,7 +1081,7 @@ function renderizarMotoristaChegando(mot = {}) {
           <div>
             <h4 style="margin: 0; color: #FFF; font-size: 15px; font-weight: 800;">${nome}</h4>
             <div style="color: #F59E0B; font-weight: 800; font-size: 12px; margin-top: 2px;">
-              ⭐ ${nota} <span style="color: #94A3B8; font-weight: 500;">• Motorista Parceira</span>
+              ⭐ ${nota} <span style="color: #94A3B8; font-weight: 500;">• Motorista Parceiro</span>
             </div>
           </div>
         </div>
@@ -1130,6 +1157,9 @@ function finalizarViagemCliente(data) {
   localStorage.removeItem('huby_pedido_ativo_id');
   estadoCliente.pedidoAtivoId = null;
 
+  // Restaura controles e abas para nova cotação
+  alternarModoVisualViagemAtiva(false);
+
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) {
     btnChatFlutuante.classList.remove('chat-visivel');
@@ -1144,7 +1174,7 @@ function finalizarViagemCliente(data) {
   if (modalAvaliacao) {
     modalAvaliacao.style.display = 'flex';
   } else {
-    notificarCliente('Viagem concluída com sucesso! Obrigado por viajar com a HUBy.', 'sucesso');
+    notificar('Viagem concluída com sucesso! Obrigado por viajar com a HUBy.', 'sucesso');
     setTimeout(() => location.reload(), 1500);
   }
 }
