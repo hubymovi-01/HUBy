@@ -1,4 +1,4 @@
-// js/ia/cliente-ia.js - Controlador Principal de Voz e IA do Passageiro
+// js/ia/cliente-ia.js - Controlador de Voz e IA HUBy (Nacional com Âncora de Proximidade)
 import { API_URL } from '../config.js';
 import { vozUI } from './voz-ui.js';
 import { configurarIAFlash, processarComandoFlashIA } from './flash-ia.js';
@@ -9,13 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!btnIA || !inputPesquisa) return;
 
-  // Inicializa o ouvinte de eventos do formulário Flash
   configurarIAFlash();
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    console.warn('Reconhecimento de voz não suportado neste navegador.');
+    console.warn('Reconhecimento de voz não suportado neste dispositivo.');
     btnIA.style.display = 'none';
     return;
   }
@@ -64,29 +63,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnIA.innerHTML = '<span style="font-size:14px;">🧠</span>';
 
-    // Se a categoria selecionada for Flash (entrega), extrai recebedor e pacote em segundo plano
+    // Se for encomenda (Flash), processa o recebedor em paralelo
     const cardFlash = document.querySelector('.category-card-pro[data-id="entrega"]');
     if (cardFlash && cardFlash.classList.contains('active')) {
       processarComandoFlashIA(textoFalado);
     }
 
     try {
+      // Captura o GPS atual do usuário gravado no app ou no mapa
+      let userLat = null;
+      let userLng = null;
+
+      if (window.estadoCliente && window.estadoCliente.coordsOrigem) {
+        userLat = window.estadoCliente.coordsOrigem[0];
+        userLng = window.estadoCliente.coordsOrigem[1];
+      }
+
       const urlDestino = `${API_URL}/api/ia/localizar-referencia`;
-      console.log('📡 [IA Frontend] Enviando comando de voz:', textoFalado);
+      console.log('📡 [IA Frontend] Enviando comando com âncora geográfica:', { textoFalado, userLat, userLng });
 
       const res = await fetch(urlDestino, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           referencia: textoFalado,
-          cidadeBase: 'São João do Piauí, Piauí'
+          userLat,
+          userLng
         })
       });
 
       const data = await res.json();
-      console.log('📥 [IA Frontend] Resposta do backend:', data);
+      console.log('📥 [IA Frontend] Resposta recebida:', data);
 
       if (res.ok && data.resultado && !isNaN(data.resultado.lat)) {
         const nomeDestino = data.resultado.nome_curto || textoFalado;
@@ -94,17 +101,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const lng = parseFloat(data.resultado.lng);
 
         inputPesquisa.value = nomeDestino;
-
-        // Som de confirmação imediato
         vozUI.tocarSucesso();
 
-        // Dispara o evento que o app-cliente.js escuta para desenhar no mapa
+        // Dispara o evento que desenha a rota no Leaflet
         const evt = new CustomEvent('huby_local_selecionado_ia', {
           detail: { nome: nomeDestino, lat, lng }
         });
         document.dispatchEvent(evt);
 
-        // Exibe etiqueta elegante de retentativa rápida
         vozUI.exibirBadgeRetentativa(() => {
           iniciarGravacao();
         });
@@ -112,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(data.erro || 'Não foi possível encontrar este local. Tente falar novamente.');
       }
     } catch (err) {
-      console.error('Erro ao conectar com a IA:', err);
+      console.error('Erro na chamada de IA:', err);
       alert('Falha na comunicação com o servidor de IA.');
     } finally {
       btnIA.innerHTML = `

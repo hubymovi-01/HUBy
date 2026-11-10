@@ -1,81 +1,119 @@
-// routes/ia.routes.js - Geocodificação Inteligente e Resiliente para o Piauí
+// routes/ia.routes.js - Geocodificação Nacional com Proximidade Inteligente
 import express from 'express';
 
 const router = express.Router();
 
-// Função auxiliar de busca geográfica progressiva (Nominatim / OSM)
-async function buscarCoordenadasNominatim(termo, cidadeContexto = 'São João do Piauí') {
+// Geocodificador Nominatim com Bounding Box (âncora no raio de proximidade)
+async function buscarNominatimBrasil(termo, lat = null, lng = null) {
+  if (!termo || !termo.trim()) return null;
+
+  const termoLimpo = termo
+    .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para|ir ao|me leva no|me leva na)\s+/i, '')
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
+    .trim();
+
+  let params = `q=${encodeURIComponent(termoLimpo)}&format=json&countrycodes=br&addressdetails=1&limit=1`;
+
+  // Se o GPS do passageiro for fornecido, cria uma caixa de proximidade (~50km ao redor)
+  if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+    const delta = 0.45; // ~50km de raio
+    const minLng = (lng - delta).toFixed(4);
+    const maxLng = (lng + delta).toFixed(4);
+    const minLat = (lat - delta).toFixed(4);
+    const maxLat = (lat + delta).toFixed(4);
+    params += `&viewbox=${minLng},${maxLat},${maxLng},${minLat}`;
+  }
+
   try {
-    // Limpeza de termos comuns de conversação
-    const termoLimpo = termo
-      .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para|ir ao|me leva no|me leva na)\s+/i, '')
-      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
-      .trim();
+    const url = `https://nominatim.openstreetmap.org/search?${params}`;
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'HUBy-Mobility-Brasil/3.0 (contato@hubymovi.com)'
+      }
+    });
 
-    // Variações de busca ordenada da mais específica para a mais ampla
-    const tentativas = [
-      `${termoLimpo}, ${cidadeContexto}, Piauí, Brasil`,
-      `${termoLimpo}, São João do Piauí, Brasil`,
-      `${termoLimpo}, Piauí, Brasil`,
-      `${termoLimpo}, Brasil`
-    ];
+    if (res.ok) {
+      const dados = await res.json();
+      if (dados && dados.length > 0) {
+        const item = dados[0];
+        const partes = item.display_name.split(',');
+        const nomeCurto = partes.slice(0, 2).map(p => p.trim()).join(', ');
 
-    for (const query of tentativas) {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=1`;
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'HUBy-Mobility-App/2.5 (contato@hubymovi.com)' }
+        return {
+          nome_curto: nomeCurto,
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon)
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Erro ao consultar base geográfica:', err.message);
+  }
+
+  // Fallback sem viewbox (caso seja uma busca de outra cidade ou estado)
+  if (lat && lng) {
+    try {
+      const urlGlobal = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(termoLimpo + ', Brasil')}&format=json&countrycodes=br&limit=1`;
+      const resGlobal = await fetch(urlGlobal, {
+        headers: { 'User-Agent': 'HUBy-Mobility-Brasil/3.0 (contato@hubymovi.com)' }
       });
-
-      if (res.ok) {
-        const dados = await res.json();
-        if (dados && dados.length > 0) {
-          const item = dados[0];
-          const nomeCurto = item.display_name.split(',').slice(0, 2).join(', ');
+      if (resGlobal.ok) {
+        const lista = await resGlobal.json();
+        if (lista && lista.length > 0) {
+          const item = lista[0];
           return {
-            nome_curto: nomeCurto,
+            nome_curto: item.display_name.split(',').slice(0, 2).join(', '),
             lat: parseFloat(item.lat),
             lng: parseFloat(item.lon)
           };
         }
       }
-    }
-  } catch (err) {
-    console.warn('⚠️ [Geocodificação Fallback] Erro:', err.message);
+    } catch (e) {}
   }
+
   return null;
 }
 
+// Endpoint de Localização e Voz com IA para qualquer ponto do Brasil
 router.post('/localizar-referencia', async (req, res) => {
   try {
-    const { referencia, cidadeBase = 'São João do Piauí, Piauí' } = req.body;
+    const { referencia, userLat, userLng } = req.body;
 
-    console.log('🤖 [IA] Termo de busca recebido:', referencia);
+    console.log('🤖 [IA HUBy] Comando recebido:', { referencia, userLat, userLng });
 
     if (!referencia || !referencia.trim()) {
       return res.status(400).json({ erro: 'Por favor, fale ou informe o endereço de destino.' });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    let resultadoFinal = null;
+    let termoFormatado = referencia.trim();
+    let latFinal = null;
+    let lngFinal = null;
+    let nomeFinal = null;
 
-    // 1. Tentar geocodificar e limpar via Gemini API com prompt refinado
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    // 1. O Gemini interpreta a fala e tenta retornar as coordenadas ou o termo limpo
     if (apiKey) {
       try {
-        const prompt = `
-Você é um especialista em geolocalização urbana no interior do estado do Piauí, Brasil.
-Contexto / Cidade principal: ${cidadeBase}.
-Destino falado pelo passageiro: "${referencia}".
+        const contextoGPS = (userLat && userLng) 
+          ? `O passageiro está localizado próximo a lat: ${userLat}, lng: ${userLng} no Brasil.` 
+          : 'O passageiro está no Brasil.';
+
+        const prompt = `Você é o geocodificador inteligente do aplicativo HUBy no Brasil.
+${contextoGPS}
+O passageiro falou o destino: "${referencia}".
 
 Instruções:
-1. Remova expressões conversacionais como "quero ir", "me leva", "vamos para".
-2. Se for uma rua, praça, colégio, IFPI, hospital, terminal ou cidade vizinha (ex: João Costa, Simplício Mendes, São Raimundo Nonato, Teresina), encontre as coordenadas aproximadas mais realistas dessa região no Piauí.
-3. Responda RIGOROSAMENTE apenas um JSON válido com esta estrutura exata:
+1. Extraia o destino real. Remova comandos conversacionais como "quero ir", "me leva".
+2. Se o destino for uma rua ou bairro local próximo ao passageiro, priorize a região onde ele está. Se for outra cidade ou estado, use o destino falado.
+3. Se você tiver certeza absoluta das coordenadas no Brasil, preencha lat e lng. Caso contrário, retorne lat e lng como null.
+4. Retorne RIGOROSAMENTE apenas um JSON:
 {
-  "nome_curto": "Nome da Rua/Local, Cidade, PI",
-  "lat": -8.3582,
-  "lng": -42.2476
-}
-`;
+  "nome_curto": "Nome da Rua ou Cidade, UF",
+  "termo_busca": "Nome Limpo Para Busca",
+  "lat": -8.3582 ou null,
+  "lng": -42.2476 ou null
+}`;
 
         const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
@@ -93,44 +131,40 @@ Instruções:
 
         if (respGemini.ok) {
           const json = await respGemini.json();
-          const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (rawText) {
-            const limpo = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-            const parsed = JSON.parse(limpo);
-            const lat = parseFloat(parsed.lat);
-            const lng = parseFloat(parsed.lng);
-
-            // Valida se as coordenadas pertencem geograficamente à região do Brasil/Piauí
-            if (!isNaN(lat) && !isNaN(lng) && lat < 0 && lng < 0) {
-              resultadoFinal = {
-                nome_curto: parsed.nome_curto || referencia,
-                lat,
-                lng
-              };
-              console.log('✅ [IA Gemini] Coordenadas identificadas:', resultadoFinal);
+          const raw = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (raw) {
+            const parsed = JSON.parse(raw.trim());
+            if (parsed.termo_busca) termoFormatado = parsed.termo_busca;
+            if (parsed.lat && parsed.lng && !isNaN(parsed.lat) && !isNaN(parsed.lng)) {
+              latFinal = parseFloat(parsed.lat);
+              lngFinal = parseFloat(parsed.lng);
+              nomeFinal = parsed.nome_curto || termoFormatado;
             }
           }
-        } else {
-          console.warn('⚠️ [IA Gemini] Erro na resposta da API:', await respGemini.text());
         }
       } catch (errGemini) {
-        console.warn('⚠️ [IA Gemini] Falha no modelo:', errGemini.message);
+        console.warn('⚠️ [IA Gemini] Fallback direto para Nominatim:', errGemini.message);
       }
     }
 
-    // 2. Se a IA hesitou ou não encontrou, executa a busca progressiva de contingência
-    if (!resultadoFinal) {
-      console.log('🔄 [IA] Acionando busca geográfica de contingência para:', referencia);
-      resultadoFinal = await buscarCoordenadasNominatim(referencia, 'São João do Piauí');
+    // 2. Se a IA não cravou as coordenadas, a base geográfica com âncora de proximidade localiza
+    let resultadoFinal = null;
+    if (latFinal && lngFinal) {
+      resultadoFinal = { nome_curto: nomeFinal, lat: latFinal, lng: lngFinal };
+    } else {
+      resultadoFinal = await buscarNominatimBrasil(termoFormatado, userLat, userLng);
+      if (!resultadoFinal && termoFormatado !== referencia) {
+        resultadoFinal = await buscarNominatimBrasil(referencia, userLat, userLng);
+      }
     }
 
-    // 3. Resposta final ao frontend
     if (!resultadoFinal) {
       return res.status(404).json({
-        erro: 'Não conseguimos identificar este local. Tente falar o nome da rua junto com o bairro ou cidade.'
+        erro: 'Não conseguimos identificar este local. Tente falar com mais detalhes (ex: rua e bairro).'
       });
     }
 
+    console.log('✅ [HUBy Geocodificação] Destino validado no Brasil:', resultadoFinal);
     return res.json({
       sucesso: true,
       resultado: resultadoFinal
@@ -145,7 +179,7 @@ Instruções:
   }
 });
 
-// Rota de Extração Inteligente de Encomendas HUBy Flash
+// Rota de Extração Inteligente de Encomendas HUBy Flash (Nacional)
 router.post('/flash-extrair', async (req, res) => {
   try {
     const { texto } = req.body;
@@ -158,112 +192,73 @@ router.post('/flash-extrair', async (req, res) => {
       return res.status(500).json({ erro: 'Chave GEMINI_API_KEY ausente.' });
     }
 
-    const prompt = `
-Você é um assistente de logística e entregas urbanas no Piauí, Brasil.
-O cliente ditou uma ordem de entrega de encomenda: "${texto}".
-
-Extraia as seguintes informações e retorne RIGOROSAMENTE apenas um JSON:
+    const prompt = `Extraia dados da ordem de entrega no Brasil: "${texto}".
+Retorne APENAS um JSON:
 {
-  "recebedor": "Nome e telefone de quem vai receber (ou apenas o nome se não houver telefone)",
+  "recebedor": "Nome e telefone",
   "tipoItem": "documento" | "pequeno" | "medio" | "fragil",
-  "observacao": "Instrução adicional curta sobre o item ou entrega (se houver, senão null)"
-}
-
-Regras para tipoItem:
-- "documento": cartas, papéis, envelopes, chaves, contratos.
-- "pequeno": remédios, caixas pequenas, peças leves até 5kg.
-- "medio": compras de mercado, caixas maiores, roupas, até 15kg.
-- "fragil": bolos, copos, vidros, doces delicados.
-`;
+  "observacao": "Instrução curta ou null"
+}`;
 
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-    const respGemini = await fetch(urlGemini, {
+    const resp = await fetch(urlGemini, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: 'application/json'
-        }
+        generationConfig: { responseMimeType: 'application/json' }
       })
     });
 
-    if (respGemini.ok) {
-      const json = await respGemini.json();
-      const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        const parsed = JSON.parse(rawText.trim());
-        return res.json({ sucesso: true, resultado: parsed });
+    if (resp.ok) {
+      const data = await resp.json();
+      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (txt) {
+        return res.json({ sucesso: true, resultado: JSON.parse(txt.trim()) });
       }
     }
-
-    return res.status(500).json({ erro: 'Falha ao processar dados da entrega com IA.' });
+    return res.status(500).json({ erro: 'Falha ao processar encomenda.' });
   } catch (err) {
-    console.error('❌ [IA Flash] Erro:', err.message || err);
-    return res.status(500).json({ erro: 'Erro interno ao processar encomenda.', detalhe: err.message });
+    return res.status(500).json({ erro: err.message });
   }
 });
 
-// Rota de Smart Replies Contextuais para o Chat do Motorista
+// Rota de Smart Replies Contextuais para o Motorista
 router.post('/motorista-respostas', async (req, res) => {
+  const fallback = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
   try {
     const { mensagem } = req.body;
-    if (!mensagem || !mensagem.trim()) {
-      return res.status(400).json({ erro: 'Mensagem do passageiro não fornecida.' });
-    }
-
     const apiKey = process.env.GEMINI_API_KEY;
-    const fallbackRespostas = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
-
-    if (!apiKey) {
-      return res.json({ sucesso: true, sugestoes: fallbackRespostas });
+    if (!apiKey || !mensagem) {
+      return res.json({ sucesso: true, sugestoes: fallback });
     }
 
-    const prompt = `
-Você é um copiloto inteligente de mobilidade urbana para o motorista parceiro da HUBy no Piauí.
-O passageiro acabou de enviar a seguinte mensagem no chat: "${mensagem}".
-
-Gere exatamente 3 sugestões de respostas ultra-curtas, profissionais e seguras para o motorista enviar com 1 toque no trânsito (máximo 6 palavras cada).
-Retorne RIGOROSAMENTE apenas um JSON no formato:
-{
-  "sugestoes": ["Resposta 1", "Resposta 2", "Resposta 3"]
-}
-`;
+    const prompt = `Gere exatamente 3 sugestões curtas de resposta no trânsito para o motorista à mensagem: "${mensagem}".
+Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
 
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-    const respGemini = await fetch(urlGemini, {
+    const resp = await fetch(urlGemini, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json'
-        }
+        generationConfig: { responseMimeType: 'application/json' }
       })
     });
 
-    if (respGemini.ok) {
-      const json = await respGemini.json();
-      const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (rawText) {
-        const parsed = JSON.parse(rawText.trim());
-        if (Array.isArray(parsed.sugestoes) && parsed.sugestoes.length > 0) {
+    if (resp.ok) {
+      const data = await resp.json();
+      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (txt) {
+        const parsed = JSON.parse(txt.trim());
+        if (Array.isArray(parsed.sugestoes)) {
           return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
         }
       }
     }
-
-    return res.json({ sucesso: true, sugestoes: fallbackRespostas });
+    return res.json({ sucesso: true, sugestoes: fallback });
   } catch (err) {
-    console.warn('⚠️ [IA Motorista] Fallback aplicado:', err.message);
-    return res.json({
-      sucesso: true,
-      sugestoes: ['Estou a caminho!', 'Chego em instantes.', 'Aguarde no local.']
-    });
+    return res.json({ sucesso: true, sugestoes: fallback });
   }
 });
 
