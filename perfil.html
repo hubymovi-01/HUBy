@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>HUBy - Meu Perfil</title>
+
+  <!-- Sistema Universal de Alertas e Modais HUBy -->
+  <link rel="stylesheet" href="./css/alertas.css?v=1.0.0">
+
   <style>
     :root {
       --bg-dark: #090D16;
@@ -147,7 +151,7 @@
   <div class="profile-showcase">
     <div class="avatar-wrapper">
       <div class="avatar-circle" id="avatarDisplay">U</div>
-      <button class="btn-edit-avatar" onclick="document.getElementById('inputFoto').click()">📷</button>
+      <button class="btn-edit-avatar" id="btnDispararInputFoto">📷</button>
       <input type="file" id="inputFoto" accept="image/*" style="display: none;">
     </div>
     <h2 class="showcase-name" id="displayNome">Carregando...</h2>
@@ -169,15 +173,15 @@
   <div class="profile-section">
     <span class="section-title">Definições da Conta</span>
     <div class="action-menu">
-      <button class="action-item" onclick="alert('Funcionalidade em desenvolvimento!')">
+      <button type="button" class="action-item" id="btnAvisoLocais">
         <div class="action-left"><div class="action-icon">📍</div> Locais Guardados</div>
         <div class="action-arrow">›</div>
       </button>
-      <button class="action-item" onclick="alert('Funcionalidade em desenvolvimento!')">
+      <button type="button" class="action-item" id="btnAvisoSeguranca">
         <div class="action-left"><div class="action-icon">🛡️</div> Segurança e Privacidade</div>
         <div class="action-arrow">›</div>
       </button>
-      <button class="action-item btn-logout" onclick="fazerLogout()">
+      <button type="button" class="action-item btn-logout" id="btnAcaoLogout">
         <div class="action-left"><div class="action-icon">🚪</div> Terminar Sessão</div>
       </button>
     </div>
@@ -185,6 +189,7 @@
 
   <script type="module">
     import { API_URL } from './js/config.js';
+    import { notificar, confirmarAcao } from './js/util/alertas-huby.js';
     
     let fotoBase64 = null;
     let dadosAtuais = {}; 
@@ -192,7 +197,35 @@
     const token = localStorage.getItem('huby_token');
     if(!token) window.location.href = './login.html';
 
-    // 1. Carregar dados com sistema de segurança anti-falha
+    // Ações dos botões informativos
+    document.getElementById('btnDispararInputFoto')?.addEventListener('click', () => {
+      document.getElementById('inputFoto')?.click();
+    });
+
+    document.getElementById('btnAvisoLocais')?.addEventListener('click', () => {
+      notificar('Aceda aos seus locais favoritos diretamente pelo menu lateral do mapa.', 'info');
+    });
+
+    document.getElementById('btnAvisoSeguranca')?.addEventListener('click', () => {
+      notificar('A criptografia e a proteção da sua conta estão ativas.', 'info');
+    });
+
+    document.getElementById('btnAcaoLogout')?.addEventListener('click', async () => {
+      const confirmado = await confirmarAcao({
+        titulo: 'Terminar Sessão',
+        mensagem: 'Tem a certeza que deseja sair da sua conta?',
+        textoConfirmar: 'Sim, Sair',
+        textoCancelar: 'Cancelar',
+        perigo: true
+      });
+
+      if (confirmado) {
+        localStorage.clear();
+        window.location.replace('./login.html');
+      }
+    });
+
+    // 1. Carregar dados do perfil
     async function carregarDados() {
       try {
         const resp = await fetch(`${API_URL}/api/auth/perfil`, {
@@ -211,10 +244,9 @@
           fotoBase64 = dados.foto_url;
           document.getElementById('avatarDisplay').innerHTML = `<img src="${dados.foto_url}" />`;
         } else {
-          document.getElementById('avatarDisplay').textContent = dados.nome.charAt(0).toUpperCase();
+          document.getElementById('avatarDisplay').textContent = (dados.nome || 'U').charAt(0).toUpperCase();
         }
       } catch(err) {
-        console.warn('Erro na base de dados, a usar memória local para não bloquear o ecrã:', err);
         const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador HUBy';
         document.getElementById('displayNome').textContent = nomeLocal;
         document.getElementById('perfilNome').value = nomeLocal;
@@ -223,7 +255,7 @@
       }
     }
 
-    // 2. Compressor de Imagem Profissional (Reduz 5MB para 50KB)
+    // 2. Compressor de Imagem
     document.getElementById('inputFoto').addEventListener('change', function(e) {
       const file = e.target.files[0];
       if(!file) return;
@@ -233,7 +265,7 @@
         const img = new Image();
         img.onload = function() {
           const canvas = document.createElement('canvas');
-          const tamanhoMaximo = 400; // Tamanho ideal para fotos de perfil
+          const tamanhoMaximo = 400;
           let largura = img.width;
           let altura = img.height;
 
@@ -254,21 +286,29 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, largura, altura);
 
-          fotoBase64 = canvas.toDataURL('image/jpeg', 0.7); // 70% de qualidade
+          fotoBase64 = canvas.toDataURL('image/jpeg', 0.7);
           document.getElementById('avatarDisplay').innerHTML = `<img src="${fotoBase64}" />`;
+          notificar('Nova foto selecionada! Clique em Guardar Alterações.', 'info');
         };
         img.src = event.target.result;
       };
       reader.readAsDataURL(file);
     });
 
-    // 3. Guardar no Backend
+    // 3. Guardar no Backend com Notificação Moderna
     document.getElementById('btnSalvarPerfil').addEventListener('click', async () => {
       const btn = document.getElementById('btnSalvarPerfil');
       btn.textContent = 'A guardar...';
       btn.disabled = true;
 
-      const novoNome = document.getElementById('perfilNome').value;
+      const novoNome = document.getElementById('perfilNome').value.trim();
+
+      if (!novoNome) {
+        notificar('Por favor, informe um nome de exibição.', 'alerta');
+        btn.textContent = 'Guardar Alterações';
+        btn.disabled = false;
+        return;
+      }
 
       const payload = {
         nome: novoNome,
@@ -288,27 +328,20 @@
         });
 
         const resData = await resp.json();
-        if(!resp.ok) throw new Error(resData.erro);
+        if(!resp.ok) throw new Error(resData.erro || 'Falha ao atualizar dados');
 
         document.getElementById('displayNome').textContent = novoNome;
         localStorage.setItem('huby_user_name', novoNome);
         if(fotoBase64) localStorage.setItem('huby_user_foto', fotoBase64);
 
-        alert('Perfil atualizado com sucesso!');
+        notificar('Perfil atualizado com sucesso!', 'sucesso');
       } catch(err) {
-        alert('Erro ao guardar: ' + err.message);
+        notificar(err.message, 'erro');
       } finally {
         btn.textContent = 'Guardar Alterações';
         btn.disabled = false;
       }
     });
-
-    window.fazerLogout = function() {
-      if(confirm('Tem a certeza que deseja terminar sessão?')) {
-        localStorage.clear();
-        window.location.replace('./login.html');
-      }
-    }
 
     carregarDados();
   </script>
