@@ -2,10 +2,45 @@
 import { API_URL, sonsHUBy } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
+import { notificar } from '../util/alertas-huby.js';
+import { ativarEscutaCopiloto, desativarEscutaCopiloto } from '../ia/motorista-ia.js';
 
 let intervalAlertaChamada = null;
+let wakeLockSentinela = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
+
+// ============================================================================
+// WAKE LOCK API: MANTER ECRÃ ACESO ENQUANTO ESTIVER ONLINE
+// ============================================================================
+async function requisitarWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLockSentinela = await navigator.wakeLock.request('screen');
+      wakeLockSentinela.addEventListener('release', () => {
+        wakeLockSentinela = null;
+      });
+    } catch (err) {
+      console.warn('Wake Lock indisponível:', err.message);
+    }
+  }
+}
+
+function libertarWakeLock() {
+  if (wakeLockSentinela) {
+    try {
+      wakeLockSentinela.release();
+    } catch (e) {}
+    wakeLockSentinela = null;
+  }
+}
+
+// Reativar Wake Lock caso o motorista volte a abrir o browser
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && estado.isOnline) {
+    await requisitarWakeLock();
+  }
+});
 
 // ============================================================================
 // UTILITÁRIO: EXTRAIR DADOS DO CARD/BOTÃO
@@ -55,7 +90,7 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
-// Alternar status online/offline na base de dados e UI
+// Alternar status online/offline na base de dados, UI e microfone/Wake Lock
 export async function alternarStatusOnline() {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnToggleStatusOnline');
@@ -69,15 +104,32 @@ export async function alternarStatusOnline() {
       btn.style.borderColor = 'var(--emerald)';
       btn.style.color = 'var(--emerald)';
       btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
+      
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      
+      // 1. Ativação do Copiloto Hands-Free por Voz
+      ativarEscutaCopiloto();
+      
+      // 2. Garante o ecrã sempre aceso ao volante
+      await requisitarWakeLock();
+      
       iniciarRadarChamadas();
+      notificar('Você está online! Copiloto a postos.', 'sucesso');
     } else {
       btn.style.background = '#1F2937';
       btn.style.borderColor = 'rgba(255,255,255,0.12)';
       btn.style.color = '#94A3B8';
       btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
+      
+      // 1. Desliga o microfone para poupar bateria e privacidade
+      desativarEscutaCopiloto();
+      
+      // 2. Liberta o bloqueio de ecrã
+      libertarWakeLock();
+      
       pararRadarChamadas();
       renderizarRadarOffline();
+      notificar('Você ficou offline. Copiloto pausado.', 'info');
     }
   }
 
@@ -96,6 +148,8 @@ export async function alternarStatusOnline() {
         estado.isOnline = Boolean(dados.online);
         estado.statusOnline = estado.isOnline;
         if (!estado.isOnline) {
+          desativarEscutaCopiloto();
+          libertarWakeLock();
           pararRadarChamadas();
           renderizarRadarOffline();
         }
@@ -129,7 +183,6 @@ export function iniciarRadarChamadas() {
       });
 
       estado.socketRadar.on('nova_chamada', () => {
-        // Bloqueio instantâneo se estiver offline
         if (!estado.isOnline) return;
         if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise && estado.statusAprovacaoAtual === 'aprovado') {
           buscarChamadasPendentes(true);
@@ -138,7 +191,7 @@ export function iniciarRadarChamadas() {
 
       estado.socketRadar.on('alerta_broadcast_geral', (dados) => {
         if (dados.publico === 'todos' || dados.publico === 'motoristas') {
-          alert(`📢 COMUNICADO HUBy:\n\n${dados.titulo}\n\n${dados.mensagem}`);
+          notificar(`📢 COMUNICADO: ${dados.titulo} - ${dados.mensagem}`, 'alerta', 6000);
         }
       });
     }
@@ -178,7 +231,6 @@ function renderizarRadarOffline() {
 }
 
 export async function buscarChamadasPendentes(tocarSomForcado = false) {
-  // BLOQUEIO TOTAL: Motorista offline não processa dados
   if (!estado.isOnline) {
     pararAlertaSonoroChamada();
     renderizarRadarOffline();
@@ -203,6 +255,8 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     if (resp.status === 403) {
       estado.isOnline = false;
+      desativarEscutaCopiloto();
+      libertarWakeLock();
       renderizarRadarOffline();
       pararRadarChamadas();
       return;
@@ -334,7 +388,7 @@ export function solicitarPermissaoNotificacoes() {
 
 export function dispararNotificacaoNovaChamada(qtd) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  if (!estado.isOnline) return; // Bloqueado se offline
+  if (!estado.isOnline) return;
 
   if (document.visibilityState === 'hidden') {
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {
