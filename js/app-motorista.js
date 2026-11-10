@@ -16,7 +16,7 @@ import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
-import { inicializarCopilotoVoz, ativarEscutaCopiloto } from './ia/motorista-ia.js';
+import { inicializarCopilotoVoz } from './ia/motorista-ia.js';
 
 // Barreira de autenticação antes de carregar o ecossistema do motorista
 function validarAutenticacaoMotorista() {
@@ -79,7 +79,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   iniciarRadarChamadas();
   inicializarPushNotifications();
 
-  // Inicia o Copiloto por Voz com o código pessoal do condutor
+  // Prepara a instância da Web Speech API (a escuta é ativada apenas quando ficar Online)
   inicializarCopilotoVoz();
-  ativarEscutaCopiloto();
 });
