@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="./css/cliente-layout.css?v=4.3.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
   <link rel="stylesheet" href="./css/ia.css?v=1.0.0">
+  <link rel="stylesheet" href="./css/alertas.css?v=1.0.0">
 
   <!-- BIBLIOTECAS CDN -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -580,7 +581,6 @@
       window.open(link, '_blank');
     });
 
-    // VERIFICAÇÃO AUTOMÁTICA E ROBUSTA DE ADMIN (Lê role do storage e validação pelo token)
     function checarAdminInstantaneo() {
       const token = localStorage.getItem('huby_token');
       const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
@@ -588,7 +588,6 @@
 
       let ehAdmin = role === 'admin' || role === 'administrador';
 
-      // Inspeção de segurança suplementar no payload do token JWT
       if (!ehAdmin && token && token.includes('.')) {
         try {
           const payload = JSON.parse(atob(token.split('.')[1]));
@@ -608,7 +607,6 @@
     checarAdminInstantaneo();
     document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
 
-    // Botão de Sair / Limpar sessão
     document.getElementById('btnAcaoConta')?.addEventListener('click', () => {
       localStorage.removeItem('huby_token');
       localStorage.removeItem('huby_user_role');
@@ -670,7 +668,8 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.17.0"></script> <!-- INTELIGÊNCIA ARTIFICIAL E VOZ -->
+  <script type="module" src="./js/app-cliente.js?v=9.18.0"></script>
+  <!-- INTELIGÊNCIA ARTIFICIAL E VOZ -->
   <script type="module" src="./js/cliente-ia.js?v=3.0.0"></script>
   <script type="module" src="./js/ia/cliente-ia.js?v=1.0.0"></script>
   <script type="module" src="./js/ia/flash-ia.js?v=1.0.0"></script>
