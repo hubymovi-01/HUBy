@@ -1,4 +1,4 @@
-// routes/ia.routes.js - Geocodificação Nacional com Proximidade Inteligente
+// routes/ia.routes.js - Geocodificação Nacional Blindada com Fallback sem Erro 500
 import express from 'express';
 
 const router = express.Router();
@@ -15,12 +15,12 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   let params = `q=${encodeURIComponent(termoLimpo)}&format=json&countrycodes=br&addressdetails=1&limit=1`;
 
   // Se o GPS do passageiro for fornecido, cria uma caixa de proximidade (~50km ao redor)
-  if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
-    const delta = 0.45; // ~50km de raio
-    const minLng = (lng - delta).toFixed(4);
-    const maxLng = (lng + delta).toFixed(4);
-    const minLat = (lat - delta).toFixed(4);
-    const maxLat = (lat + delta).toFixed(4);
+  if (lat && lng && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+    const delta = 0.45;
+    const minLng = (Number(lng) - delta).toFixed(4);
+    const maxLng = (Number(lng) + delta).toFixed(4);
+    const minLat = (Number(lat) - delta).toFixed(4);
+    const maxLat = (Number(lat) + delta).toFixed(4);
     params += `&viewbox=${minLng},${maxLat},${maxLng},${minLat}`;
   }
 
@@ -28,47 +28,62 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
     const url = `https://nominatim.openstreetmap.org/search?${params}`;
     const res = await fetch(url, {
       headers: {
-        'User-Agent': 'HUBy-Mobility-Brasil/3.0 (contato@hubymovi.com)'
+        'User-Agent': 'HUBy-Mobility-Brasil/3.0 (suporte@hubymovi.com)'
       }
     });
 
     if (res.ok) {
-      const dados = await res.json();
-      if (dados && dados.length > 0) {
+      const dados = await res.json().catch(() => null);
+      if (Array.isArray(dados) && dados.length > 0 && dados[0]) {
         const item = dados[0];
-        const partes = item.display_name.split(',');
-        const nomeCurto = partes.slice(0, 2).map(p => p.trim()).join(', ');
+        const nomeCompleto = String(item.display_name || termoLimpo);
+        const partes = nomeCompleto.split(',');
+        const nomeCurto = partes.slice(0, 2).map((p) => p.trim()).join(', ');
 
-        return {
-          nome_curto: nomeCurto,
-          lat: parseFloat(item.lat),
-          lng: parseFloat(item.lon)
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('⚠️ Erro ao consultar base geográfica:', err.message);
-  }
+        const latNum = parseFloat(item.lat);
+        const lngNum = parseFloat(item.lon);
 
-  // Fallback sem viewbox (caso seja uma busca de outra cidade ou estado)
-  if (lat && lng) {
-    try {
-      const urlGlobal = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(termoLimpo + ', Brasil')}&format=json&countrycodes=br&limit=1`;
-      const resGlobal = await fetch(urlGlobal, {
-        headers: { 'User-Agent': 'HUBy-Mobility-Brasil/3.0 (contato@hubymovi.com)' }
-      });
-      if (resGlobal.ok) {
-        const lista = await resGlobal.json();
-        if (lista && lista.length > 0) {
-          const item = lista[0];
+        if (!isNaN(latNum) && !isNaN(lngNum)) {
           return {
-            nome_curto: item.display_name.split(',').slice(0, 2).join(', '),
-            lat: parseFloat(item.lat),
-            lng: parseFloat(item.lon)
+            nome_curto: nomeCurto || termoLimpo,
+            lat: latNum,
+            lng: lngNum
           };
         }
       }
-    } catch (e) {}
+    }
+  } catch (err) {
+    console.warn('⚠️ Erro ao consultar Nominatim com viewbox:', err.message);
+  }
+
+  // Fallback global sem viewbox
+  try {
+    const urlGlobal = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(termoLimpo + ', Brasil')}&format=json&countrycodes=br&limit=1`;
+    const resGlobal = await fetch(urlGlobal, {
+      headers: { 'User-Agent': 'HUBy-Mobility-Brasil/3.0 (suporte@hubymovi.com)' }
+    });
+    if (resGlobal.ok) {
+      const lista = await resGlobal.json().catch(() => null);
+      if (Array.isArray(lista) && lista.length > 0 && lista[0]) {
+        const item = lista[0];
+        const nomeCompleto = String(item.display_name || termoLimpo);
+        const partes = nomeCompleto.split(',');
+        const nomeCurto = partes.slice(0, 2).map((p) => p.trim()).join(', ');
+
+        const latNum = parseFloat(item.lat);
+        const lngNum = parseFloat(item.lon);
+
+        if (!isNaN(latNum) && !isNaN(lngNum)) {
+          return {
+            nome_curto: nomeCurto || termoLimpo,
+            lat: latNum,
+            lng: lngNum
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('⚠️ Erro no fallback global Nominatim:', e.message);
   }
 
   return null;
@@ -77,26 +92,29 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
 // Endpoint de Localização e Voz com IA para qualquer ponto do Brasil
 router.post('/localizar-referencia', async (req, res) => {
   try {
-    const { referencia, userLat, userLng } = req.body;
+    const { referencia, userLat, userLng } = req.body || {};
 
     console.log('🤖 [IA HUBy] Comando recebido:', { referencia, userLat, userLng });
 
-    if (!referencia || !referencia.trim()) {
-      return res.status(400).json({ erro: 'Por favor, fale ou informe o endereço de destino.' });
+    if (!referencia || !String(referencia).trim()) {
+      return res.status(200).json({
+        sucesso: false,
+        erro: 'Por favor, informe ou fale o endereço de destino.'
+      });
     }
 
-    let termoFormatado = referencia.trim();
+    let termoFormatado = String(referencia).trim();
     let latFinal = null;
     let lngFinal = null;
     let nomeFinal = null;
 
     const apiKey = process.env.GEMINI_API_KEY;
 
-    // 1. O Gemini interpreta a fala e tenta retornar as coordenadas ou o termo limpo
+    // 1. Tenta interpretar com o Gemini (se houver chave configurada)
     if (apiKey) {
       try {
-        const contextoGPS = (userLat && userLng) 
-          ? `O passageiro está localizado próximo a lat: ${userLat}, lng: ${userLng} no Brasil.` 
+        const contextoGPS = (userLat && userLng)
+          ? `O passageiro está localizado próximo a lat: ${userLat}, lng: ${userLng} no Brasil.`
           : 'O passageiro está no Brasil.';
 
         const prompt = `Você é o geocodificador inteligente do aplicativo HUBy no Brasil.
@@ -105,14 +123,12 @@ O passageiro falou o destino: "${referencia}".
 
 Instruções:
 1. Extraia o destino real. Remova comandos conversacionais como "quero ir", "me leva".
-2. Se o destino for uma rua ou bairro local próximo ao passageiro, priorize a região onde ele está. Se for outra cidade ou estado, use o destino falado.
-3. Se você tiver certeza absoluta das coordenadas no Brasil, preencha lat e lng. Caso contrário, retorne lat e lng como null.
-4. Retorne RIGOROSAMENTE apenas um JSON:
+2. Retorne RIGOROSAMENTE apenas um JSON no formato:
 {
   "nome_curto": "Nome da Rua ou Cidade, UF",
   "termo_busca": "Nome Limpo Para Busca",
-  "lat": -8.3582 ou null,
-  "lng": -42.2476 ou null
+  "lat": null,
+  "lng": null
 }`;
 
         const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
@@ -130,12 +146,12 @@ Instruções:
         });
 
         if (respGemini.ok) {
-          const json = await respGemini.json();
-          const raw = json.candidates?.[0]?.content?.parts?.[0]?.text;
+          const json = await respGemini.json().catch(() => null);
+          const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
           if (raw) {
             const parsed = JSON.parse(raw.trim());
             if (parsed.termo_busca) termoFormatado = parsed.termo_busca;
-            if (parsed.lat && parsed.lng && !isNaN(parsed.lat) && !isNaN(parsed.lng)) {
+            if (parsed.lat && parsed.lng && !isNaN(Number(parsed.lat)) && !isNaN(Number(parsed.lng))) {
               latFinal = parseFloat(parsed.lat);
               lngFinal = parseFloat(parsed.lng);
               nomeFinal = parsed.nome_curto || termoFormatado;
@@ -143,11 +159,11 @@ Instruções:
           }
         }
       } catch (errGemini) {
-        console.warn('⚠️ [IA Gemini] Fallback direto para Nominatim:', errGemini.message);
+        console.warn('⚠️ [IA Gemini] Aviso na interpretação Gemini:', errGemini.message);
       }
     }
 
-    // 2. Se a IA não cravou as coordenadas, a base geográfica com âncora de proximidade localiza
+    // 2. Geocodificação geográfica (Nominatim)
     let resultadoFinal = null;
     if (latFinal && lngFinal) {
       resultadoFinal = { nome_curto: nomeFinal, lat: latFinal, lng: lngFinal };
@@ -158,23 +174,25 @@ Instruções:
       }
     }
 
+    // 3. Fallback de segurança se não encontrar nada
     if (!resultadoFinal) {
-      return res.status(404).json({
-        erro: 'Não conseguimos identificar este local. Tente falar com mais detalhes (ex: rua e bairro).'
+      return res.status(200).json({
+        sucesso: false,
+        erro: 'Não conseguimos identificar este local com precisão. Tente falar com mais detalhes (ex: rua e bairro).'
       });
     }
 
     console.log('✅ [HUBy Geocodificação] Destino validado no Brasil:', resultadoFinal);
-    return res.json({
+    return res.status(200).json({
       sucesso: true,
       resultado: resultadoFinal
     });
 
   } catch (err) {
-    console.error('❌ [IA] Erro na rota:', err);
-    return res.status(500).json({
-      erro: 'Falha temporária ao processar a localização.',
-      detalhe: err.message
+    console.error('❌ [IA] Erro capturado na rota:', err.message);
+    return res.status(200).json({
+      sucesso: false,
+      erro: 'Falha temporária ao identificar coordenadas. Digite o endereço manualmente.'
     });
   }
 });
@@ -182,14 +200,21 @@ Instruções:
 // Rota de Extração Inteligente de Encomendas HUBy Flash (Nacional)
 router.post('/flash-extrair', async (req, res) => {
   try {
-    const { texto } = req.body;
-    if (!texto || !texto.trim()) {
-      return res.status(400).json({ erro: 'Texto de instrução não fornecido.' });
+    const { texto } = req.body || {};
+    if (!texto || !String(texto).trim()) {
+      return res.status(200).json({ sucesso: false, erro: 'Texto de instrução não fornecido.' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ erro: 'Chave GEMINI_API_KEY ausente.' });
+      return res.status(200).json({
+        sucesso: true,
+        resultado: {
+          recebedor: 'A informar',
+          tipoItem: 'pequeno',
+          observacao: texto
+        }
+      });
     }
 
     const prompt = `Extraia dados da ordem de entrega no Brasil: "${texto}".
@@ -211,15 +236,23 @@ Retorne APENAS um JSON:
     });
 
     if (resp.ok) {
-      const data = await resp.json();
-      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const data = await resp.json().catch(() => null);
+      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (txt) {
         return res.json({ sucesso: true, resultado: JSON.parse(txt.trim()) });
       }
     }
-    return res.status(500).json({ erro: 'Falha ao processar encomenda.' });
+
+    return res.status(200).json({
+      sucesso: true,
+      resultado: {
+        recebedor: 'A informar',
+        tipoItem: 'pequeno',
+        observacao: texto
+      }
+    });
   } catch (err) {
-    return res.status(500).json({ erro: err.message });
+    return res.status(200).json({ sucesso: false, erro: err.message });
   }
 });
 
@@ -227,7 +260,7 @@ Retorne APENAS um JSON:
 router.post('/motorista-respostas', async (req, res) => {
   const fallback = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
   try {
-    const { mensagem } = req.body;
+    const { mensagem } = req.body || {};
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey || !mensagem) {
       return res.json({ sucesso: true, sugestoes: fallback });
@@ -247,8 +280,8 @@ Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
     });
 
     if (resp.ok) {
-      const data = await resp.json();
-      const txt = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const data = await resp.json().catch(() => null);
+      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (txt) {
         const parsed = JSON.parse(txt.trim());
         if (Array.isArray(parsed.sugestoes)) {
