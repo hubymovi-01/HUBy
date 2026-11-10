@@ -107,7 +107,7 @@ async function consultarDestinoIA(frase) {
       return;
     }
 
-    // Se o backend avisar que não achou, aciona o fallback direto pelo cliente
+    // Fallback de contingência no cliente
     await fallbackGeocodificacaoDireta(frase);
 
   } catch (err) {
@@ -116,7 +116,7 @@ async function consultarDestinoIA(frase) {
   }
 }
 
-// Fallback direto no OpenStreetMap caso a IA ou a rede do servidor oscilem
+// Fallback direto no OpenStreetMap caso o servidor oscile
 async function fallbackGeocodificacaoDireta(termo) {
   const termoLimpo = termo
     .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para|ir ao|me leva no)\s+/i, '')
@@ -151,12 +151,17 @@ async function fallbackGeocodificacaoDireta(termo) {
 
 function aplicarDestinoNoMapa(resultado) {
   const { nome_curto, lat, lng } = resultado;
+  const latNum = parseFloat(lat);
+  const lngNum = parseFloat(lng);
+  const coordsArray = [latNum, lngNum];
 
+  // Dispara o evento com suporte duplo: array coords e propriedades individuais
   window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', {
     detail: {
       nome: nome_curto,
-      lat: Number(lat),
-      lng: Number(lng),
+      coords: coordsArray,
+      lat: latNum,
+      lng: lngNum,
       origem: 'ia_voz'
     }
   }));

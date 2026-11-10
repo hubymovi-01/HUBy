@@ -480,7 +480,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
     });
 
-    // Centraliza e armazena o GPS real logo na inicialização
     estadoCliente.hubyMapa.obterGPS?.((pos) => {
       if (pos && pos.lat && pos.lng) {
         estadoCliente.coordsOrigem = [pos.lat, pos.lng];
@@ -530,22 +529,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarAlternanciaSatélite();
   configurarLocaisFavoritosMenu();
 
-  // 3.1. Recursos rápidos: Pagamento, Cupom e Observação
   configurarSeletorPagamentoRapido();
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 3.2. Escuta IA (Voz/Gemini)
+  // 3.2. Escuta IA (Voz/Gemini) - Com Traçado e Enquadramento Garantido
   document.addEventListener('huby_local_selecionado_ia', async (e) => {
-    const { nome, lat, lng } = e.detail;
-    const coords = [parseFloat(lat), parseFloat(lng)];
+    const dados = e.detail || {};
+    const nome = dados.nome || 'Destino Selecionado';
 
-    estadoCliente.coordsDestino = coords;
+    let coordsDestino = null;
+    if (Array.isArray(dados.coords) && dados.coords.length === 2) {
+      coordsDestino = [parseFloat(dados.coords[0]), parseFloat(dados.coords[1])];
+    } else if (dados.lat && dados.lng) {
+      coordsDestino = [parseFloat(dados.lat), parseFloat(dados.lng)];
+    }
+
+    if (!coordsDestino || isNaN(coordsDestino[0]) || isNaN(coordsDestino[1])) {
+      console.warn('⚠️ Coordenadas inválidas da IA:', dados);
+      return;
+    }
+
+    estadoCliente.coordsDestino = coordsDestino;
 
     const txtDestino = document.getElementById('txtDestinoSelecionado');
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
     const btnLimpar = document.getElementById('btnLimparPesquisa');
     const searchBox = document.querySelector('.modern-search');
+    const listaResultados = document.getElementById('listaResultadosPesquisa');
 
     if (txtDestino) {
       txtDestino.textContent = nome;
@@ -557,7 +568,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       inputPesquisa.value = nome;
       if (btnLimpar) btnLimpar.style.display = 'flex';
     }
+
     if (searchBox) searchBox.classList.add('active');
+    if (listaResultados) {
+      listaResultados.innerHTML = '';
+      listaResultados.style.display = 'none';
+    }
 
     if (estadoCliente.hubyMapa) {
       let origem = estadoCliente.coordsOrigem;
@@ -571,27 +587,31 @@ document.addEventListener('DOMContentLoaded', async () => {
         origem = [markerPos.lat, markerPos.lng];
       }
 
-      const aplicarRotaNoMapa = async (pontoOrigem) => {
-        estadoCliente.coordsOrigem = pontoOrigem;
-        const rota = await estadoCliente.hubyMapa.calcularRota(pontoOrigem, coords, '#38BDF8', true);
+      if (!origem) {
+        const centroPadrao = estadoCliente.hubyMapa.map?.getCenter();
+        origem = centroPadrao ? [centroPadrao.lat, centroPadrao.lng] : [-8.3582, -42.2476];
+      }
+
+      estadoCliente.coordsOrigem = origem;
+
+      try {
+        const rota = await estadoCliente.hubyMapa.calcularRota(origem, coordsDestino, '#38BDF8', true);
         estadoCliente.rotaAtual = rota;
 
         atualizarResumoValores();
-        if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
-        notificar(`Destino IA: ${nome}`, 'sucesso');
-      };
+        if (rota?.preco) {
+          atualizarValoresCardsPro(Number(rota.preco));
+        }
 
-      if (origem && origem[0] && origem[1]) {
-        await aplicarRotaNoMapa(origem);
-      } else {
-        notificar('Identificando sua localização atual...', 'info');
-        estadoCliente.hubyMapa.obterGPS(async (pos) => {
-          if (pos && pos.lat && pos.lng) {
-            await aplicarRotaNoMapa([pos.lat, pos.lng]);
-          } else {
-            await aplicarRotaNoMapa([-8.3582, -42.2476]);
+        setTimeout(() => {
+          if (estadoCliente.hubyMapa.map) {
+            estadoCliente.hubyMapa.map.invalidateSize();
           }
-        });
+        }, 150);
+
+        notificar(`Rota traçada: ${nome}`, 'sucesso');
+      } catch (errRota) {
+        console.error('❌ Erro ao traçar rota no mapa:', errRota);
       }
     }
   });
@@ -676,7 +696,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarFluxoPagamentoMercadoPago();
   configurarChatPassageiro();
 
-  // 9. Conexão Socket e Polling Estabilizado
+  // 9. Conexão Socket e Polling
   conectarSocketEPollingCliente();
 
   if ('serviceWorker' in navigator) {
@@ -978,7 +998,6 @@ function conectarSocketEPollingCliente() {
     });
   }
 
-  // Polling blindado com token e descarte automático de corridas canceladas/antigas
   if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
   estadoCliente.intervalPolling = setInterval(async () => {
     const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
@@ -1157,7 +1176,6 @@ function finalizarViagemCliente(data) {
   localStorage.removeItem('huby_pedido_ativo_id');
   estadoCliente.pedidoAtivoId = null;
 
-  // Restaura controles e abas para nova cotação
   alternarModoVisualViagemAtiva(false);
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
