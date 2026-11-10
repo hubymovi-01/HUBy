@@ -21,7 +21,6 @@ let intervalChatCliente = null;
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
 
-// Sanitização defensiva contra Cross-Site Scripting (XSS)
 function escaparHTML(str) {
   if (!str) return '';
   return String(str)
@@ -32,7 +31,6 @@ function escaparHTML(str) {
     .replace(/'/g, '&#39;');
 }
 
-// Cálculo da distância esférica entre dois pontos (metros)
 function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
   const rad = Math.PI / 180;
@@ -44,9 +42,6 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// ============================================================================
-// CONTROLE DE INTERFACE: MODO COTAÇÃO vs MODO VIAGEM ATIVA
-// ============================================================================
 export function alternarModoVisualViagemAtiva(emViagem = false) {
   const elementosParaEsconder = [
     document.getElementById('sliderCategorias'),
@@ -78,7 +73,6 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
   }
 }
 
-// Atualizar a prévia de valores nos cards horizontais
 function atualizarValoresCardsPro(precoBase) {
   const lblCarro = document.getElementById('priceEstCarro');
   const lblMoto = document.getElementById('priceEstMoto');
@@ -110,7 +104,6 @@ function atualizarValoresCardsPro(precoBase) {
   if (lblPrincipal) lblPrincipal.textContent = `R$ ${valAtual}`;
 }
 
-// Configuração de paradas intermediárias
 function configurarParadasIntermediariasSemPrompt() {
   const btnAdd = document.getElementById('btnAddParada');
   const container = document.getElementById('containerParadasIntermediarias');
@@ -168,10 +161,10 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
-// Controle da Barra de Pesquisa Moderna com Visibilidade Dinâmica do Botão Limpar
 function configurarBarraPesquisaAnimada() {
   const searchBox = document.querySelector('.modern-search');
   const btnLupa = document.getElementById('btnAcionarPesquisa');
+  const btnBuscaIA = document.getElementById('btnBuscaIA');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
   const listaResultados = document.getElementById('listaResultadosPesquisa');
@@ -182,12 +175,6 @@ function configurarBarraPesquisaAnimada() {
     if (btnLimpar) {
       btnLimpar.style.display = inputPesquisa?.value.trim() ? 'flex' : 'none';
     }
-  }
-
-  function abrirBarra() {
-    searchBox?.classList.add('active');
-    setTimeout(() => inputPesquisa?.focus(), 80);
-    atualizarVisibilidadeLimpar();
   }
 
   function recolherBarra() {
@@ -205,15 +192,32 @@ function configurarBarraPesquisaAnimada() {
 
   inputPesquisa?.addEventListener('input', atualizarVisibilidadeLimpar);
 
+  // O teclado SÓ sobe se o usuário clicar diretamente no campo de texto para digitar
+  inputPesquisa?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    searchBox?.classList.add('active');
+    atualizarVisibilidadeLimpar();
+  });
+
   btnLupa?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    abrirBarra();
+    searchBox?.classList.add('active');
+    inputPesquisa?.focus();
+    atualizarVisibilidadeLimpar();
   });
 
+  // Clique no container não foca o input se tocar no microfone ou botão limpar
   searchBox?.addEventListener('click', (e) => {
-    if (e.target === btnLimpar || btnLimpar?.contains(e.target)) return;
-    abrirBarra();
+    if (
+      e.target === btnLimpar || btnLimpar?.contains(e.target) ||
+      e.target === btnBuscaIA || btnBuscaIA?.contains(e.target)
+    ) {
+      return;
+    }
+    searchBox?.classList.add('active');
+    inputPesquisa?.focus();
+    atualizarVisibilidadeLimpar();
   });
 
   btnLimpar?.addEventListener('click', (e) => {
@@ -252,7 +256,6 @@ function configurarBarraPesquisaAnimada() {
   });
 }
 
-// Alternância entre Mapa Dark e Visão Satélite
 function configurarAlternanciaSatélite() {
   const btnCamada = document.getElementById('btnAlternarCamadaMapa');
   let modoSatelite = false;
@@ -287,7 +290,6 @@ function configurarAlternanciaSatélite() {
   });
 }
 
-// Gestão de Locais Favoritos (Casa e Trabalho)
 function configurarLocaisFavoritosMenu() {
   const modalFav = document.getElementById('modalConfigFavorito');
   const btnFecharModal = document.getElementById('btnFecharModalFav');
@@ -533,7 +535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 3.2. Escuta IA (Voz/Gemini) - Tratamento Unificado e Imediato de Traçado
+  // 3.2. Escuta IA (Voz/Gemini) - Um Único Alerta Final
   const processarDestinoIA = async (e) => {
     const dados = e.detail || {};
     const nome = dados.nome || 'Destino Selecionado';
@@ -566,6 +568,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (inputPesquisa) {
       inputPesquisa.value = nome;
+      inputPesquisa.blur(); // Garante o teclado recolhido
       if (btnLimpar) btnLimpar.style.display = 'flex';
     }
 
@@ -618,6 +621,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }, 150);
 
+        // ÚNICO alerta emitido ao concluir a rota
         notificar(`Rota traçada: ${nome}`, 'sucesso');
       } catch (errRota) {
         console.error('❌ Erro ao traçar rota no mapa:', errRota);
@@ -625,8 +629,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
+  // Garante registro único do ouvinte
+  window.removeEventListener('huby_local_selecionado_ia', processarDestinoIA);
   window.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
-  document.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
 
   // 4. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
@@ -1209,7 +1214,6 @@ function finalizarViagemCliente(data) {
   }
 }
 
-// CHAT DO PASSAGEIRO
 function configurarChatPassageiro() {
   const btnFechar = document.getElementById('btnFecharChat');
   const btnEnviar = document.getElementById('btnEnviarMsgChat');

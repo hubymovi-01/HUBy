@@ -23,8 +23,10 @@ export function inicializarVozPassageiro() {
   if (!btnBuscaIA) return;
 
   if (!SpeechRecognition) {
-    btnBuscaIA.addEventListener('click', () => {
-      notificar('Seu navegador não suporta pesquisa por voz. Digite o endereço.', 'alerta');
+    btnBuscaIA.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      notificar('Pesquisa por voz indisponível neste navegador.', 'alerta');
       inputPesquisa?.focus();
     });
     return;
@@ -40,7 +42,11 @@ export function inicializarVozPassageiro() {
     btnBuscaIA.style.color = '#EF4444';
     btnBuscaIA.style.transform = 'scale(1.2)';
     btnBuscaIA.style.transition = 'transform 0.2s ease, color 0.2s ease';
-    notificar('Ouvindo destino... Diga para onde você quer ir.', 'info', 3000);
+
+    // Garante que o teclado mobile não abra ao falar
+    if (inputPesquisa) {
+      inputPesquisa.blur();
+    }
   };
 
   recognition.onend = () => {
@@ -54,7 +60,7 @@ export function inicializarVozPassageiro() {
     btnBuscaIA.style.color = '#38BDF8';
     btnBuscaIA.style.transform = 'scale(1)';
     if (ev.error !== 'no-speech') {
-      notificar('Não foi possível identificar o áudio. Tente falar novamente.', 'alerta');
+      notificar('Não foi possível identificar o áudio. Tente novamente.', 'alerta');
     }
   };
 
@@ -62,14 +68,22 @@ export function inicializarVozPassageiro() {
     const transcricao = ev.results[0][0].transcript;
     if (!transcricao || !transcricao.trim()) return;
 
-    if (inputPesquisa) inputPesquisa.value = transcricao;
-    notificar(`Pesquisando: "${transcricao}"`, 'info', 2500);
+    if (inputPesquisa) {
+      inputPesquisa.value = transcricao;
+      inputPesquisa.blur(); // Mantém o teclado fechado
+    }
 
     await consultarDestinoIA(transcricao);
   };
 
   btnBuscaIA.addEventListener('click', (e) => {
     e.preventDefault();
+    e.stopPropagation(); // Impede o clique de abrir o foco do teclado no input
+
+    if (inputPesquisa) {
+      inputPesquisa.blur();
+    }
+
     if (escutaEmAndamento) {
       recognition.stop();
     } else {
@@ -107,7 +121,6 @@ async function consultarDestinoIA(frase) {
       return;
     }
 
-    // Fallback de contingência no cliente
     await fallbackGeocodificacaoDireta(frase);
 
   } catch (err) {
@@ -116,7 +129,6 @@ async function consultarDestinoIA(frase) {
   }
 }
 
-// Fallback direto no OpenStreetMap caso o servidor oscile
 async function fallbackGeocodificacaoDireta(termo) {
   const termoLimpo = termo
     .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para|ir ao|me leva no)\s+/i, '')
@@ -146,7 +158,7 @@ async function fallbackGeocodificacaoDireta(termo) {
     } catch (e) {}
   }
 
-  notificar('Local não identificado. Tente digitar o endereço ou escolher no mapa.', 'alerta');
+  notificar('Local não identificado. Digite o endereço ou toque no mapa.', 'alerta');
 }
 
 function aplicarDestinoNoMapa(resultado) {
@@ -155,9 +167,11 @@ function aplicarDestinoNoMapa(resultado) {
   const lngNum = parseFloat(lng);
   const coordsArray = [latNum, lngNum];
 
-  // Preenche visualmente a barra de pesquisa logo após a resposta
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
-  if (inputPesquisa) inputPesquisa.value = nome_curto;
+  if (inputPesquisa) {
+    inputPesquisa.value = nome_curto;
+    inputPesquisa.blur();
+  }
 
   const payload = {
     detail: {
@@ -169,11 +183,8 @@ function aplicarDestinoNoMapa(resultado) {
     }
   };
 
-  // Disparo duplo garantido para receptores em window ou document
   window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', payload));
   document.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', payload));
-
-  notificar(`Destino traçado: ${nome_curto}`, 'sucesso');
 }
 
 if (document.readyState === 'loading') {
