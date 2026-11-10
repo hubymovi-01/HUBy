@@ -1,8 +1,8 @@
-// js/ia/motorista-ia.js - Assistente Copiloto Hands-Free Completo HUBy
+// js/ia/motorista-ia.js - Copiloto de Voz Hands-Free Totalmente Integrado
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
-import { preVisualizarRotaPedido } from '../motorista/motorista-corrida.js';
+import { preVisualizarRotaPedido, aceitarPedidoPrevia } from '../motorista/motorista-corrida.js';
 import { notificar } from '../util/alertas-huby.js';
 
 let recognition = null;
@@ -11,7 +11,7 @@ let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null
 let processandoComando = false;
 
 // ============================================================================
-// 1. NORMALIZAÇÃO FONÉTICA E PALAVRA-CHAVE
+// 1. PALAVRA-CHAVE E NORMALIZAÇÃO
 // ============================================================================
 function normalizarTexto(txt = '') {
   return txt
@@ -32,7 +32,6 @@ export async function definirCodigoAtivacaoMotorista(novoCodigo) {
   const codLimpo = novoCodigo.trim();
   localStorage.setItem('huby_codigo_voz_motorista', codLimpo);
 
-  // Sincroniza com o servidor se estiver autenticado
   try {
     await fetch(`${API_URL}/api/pedidos/motoristas/perfil/atualizar`, {
       method: 'PUT',
@@ -48,14 +47,14 @@ export async function definirCodigoAtivacaoMotorista(novoCodigo) {
   return true;
 }
 
-// Resposta por voz ultra-rápida (menos de 2s)
+// Resposta ultrarrápida por voz (Text-to-Speech)
 export function falarTexto(texto) {
   if (!sintetizador) return;
   try {
     sintetizador.cancel();
     const utter = new SpeechSynthesisUtterance(texto);
     utter.lang = 'pt-BR';
-    utter.rate = 1.15; // Fala ligeiramente acelerada para não atrasar a condução
+    utter.rate = 1.15;
     utter.pitch = 1.0;
     sintetizador.speak(utter);
   } catch (err) {
@@ -64,12 +63,12 @@ export function falarTexto(texto) {
 }
 
 // ============================================================================
-// 2. MOTOR DE RECONHECIMENTO CONTÍNUO (HANDS-FREE)
+// 2. MOTOR DE RECONHECIMENTO CONTÍNUO
 // ============================================================================
 export function inicializarCopilotoVoz() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) {
-    console.warn('Navegador sem suporte à API de reconhecimento de voz.');
+    console.warn('Navegador sem suporte à SpeechRecognition API.');
     return false;
   }
 
@@ -88,7 +87,7 @@ export function inicializarCopilotoVoz() {
   };
 
   recognition.onend = () => {
-    // Reativa escuta automática contínua se o motorista estiver online
+    // Reativa escuta automática se o motorista continuar online no turno
     if (escutaAtiva && (estado.isOnline || localStorage.getItem('huby_motorista_online') === 'true')) {
       try {
         recognition.start();
@@ -100,7 +99,7 @@ export function inicializarCopilotoVoz() {
 
   recognition.onerror = (ev) => {
     if (ev.error !== 'no-speech') {
-      console.warn('Copiloto áudio info:', ev.error);
+      console.warn('Copiloto áudio:', ev.error);
     }
   };
 
@@ -134,14 +133,14 @@ export function desativarEscutaCopiloto() {
 }
 
 // ============================================================================
-// 3. PROCESSAMENTO DO DICIONÁRIO COMPLETO DE COMANDOS
+// 3. PROCESSAMENTO DE INTENÇÕES E COMANDOS
 // ============================================================================
 function processarComandoVoz(fraseBruta) {
   if (processandoComando) return;
   const frase = normalizarTexto(fraseBruta);
   const codigoPessoal = normalizarTexto(obterCodigoAtivacaoMotorista());
 
-  // Só responde se houver a palavra-chave no texto falado
+  // Ignora ruídos que não chamam pelo código pessoal
   if (!frase.includes(codigoPessoal)) {
     return;
   }
@@ -151,68 +150,69 @@ function processarComandoVoz(fraseBruta) {
 
   const comando = frase.replace(codigoPessoal, '').trim();
 
-  // 1. CHECAR / VER CHAMADA
-  if (comando.includes('checar') || comando.includes('ver') || comando.includes('olhar') || comando.includes('detalhes')) {
-    cmdChecarChamada();
+  // 1. CHECAR OU VER A ROTA DA CORRIDA NO MAPA
+  if (comando.includes('ver') || comando.includes('checar') || comando.includes('olhar') || comando.includes('mostrar') || comando.includes('rota')) {
+    cmdVerRotaNoMapa();
     return;
   }
 
-  // 2. ACEITAR / CONFIRMAR CORRIDA
-  if (comando.includes('aceitar') || comando.includes('confirmar') || comando.includes('pegar') || comando.includes('fazer')) {
+  // 2. ACEITAR OU CONFIRMAR CORRIDA
+  if (comando.includes('aceitar') || comando.includes('confirmar') || comando.includes('pegar') || comando.includes('sim')) {
     cmdAceitarChamada();
     return;
   }
 
-  // 3. RECUSAR / DISPENSAR
-  if (comando.includes('recusar') || comando.includes('dispensar') || comando.includes('ignorar') || comando.includes('pular')) {
+  // 3. RECUSAR OU DISPENSAR CHAMADA
+  if (comando.includes('recusar') || comando.includes('dispensar') || comando.includes('ignorar') || comando.includes('nao')) {
     cmdDispensarChamada();
     return;
   }
 
-  // 4. CHEGUEI AO LOCAL DE EMBARQUE
-  if (comando.includes('cheguei') || comando.includes('estou aqui') || comando.includes('no local')) {
+  // 4. CHEGADA AO LOCAL DE EMBARQUE
+  if (comando.includes('cheguei') || comando.includes('no local') || comando.includes('estou aqui')) {
     cmdAvisarChegada();
     return;
   }
 
-  // 5. INICIAR VIAGEM COM PASSAGEIRO
+  // 5. INICIAR VIAGEM COM O PASSAGEIRO
   if (comando.includes('iniciar') || comando.includes('embarcou') || comando.includes('partiu')) {
     cmdIniciarViagem();
     return;
   }
 
   // 6. FINALIZAR CORRIDA
-  if (comando.includes('finalizar') || comando.includes('concluir') || comando.includes('chegou') || comando.includes('terminar')) {
+  if (comando.includes('finalizar') || comando.includes('concluir') || comando.includes('terminar')) {
     cmdFinalizarViagem();
     return;
   }
 
-  // Retorno caso só fale o código
-  falarTexto(`Às ordens.`);
+  falarTexto('Copiloto a postos.');
 }
 
 // ============================================================================
-// 4. AÇÕES EXECUTÁVEIS DO COPILOTO
+// 4. EXECUÇÃO OPERACIONAL DIRETA
 // ============================================================================
-function cmdChecarChamada() {
+function cmdVerRotaNoMapa() {
   const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
   if (!primeiroBtn) {
-    falarTexto('Nenhuma chamada no radar.');
+    falarTexto('Nenhuma chamada no radar agora.');
     return;
   }
 
   pararAlertaSonoroChamada();
   const dados = extrairDadosDoBotao(primeiroBtn);
+  
+  // Abre o traçado da rota diretamente no mapa
   preVisualizarRotaPedido(dados);
 
-  const valLiq = dados.preco ? (Number(dados.preco) * 0.85).toFixed(2).replace('.', ',') : '';
-  const valorFala = valLiq ? `ganho de ${valLiq} reais` : '';
-  const destinoFala = dados.destino ? `para ${dados.destino}` : '';
+  const repasse = dados.repasse || (Number(dados.preco) * 0.85).toFixed(2).replace('.', ',');
+  const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino indicado';
 
-  falarTexto(`Viagem ${valorFala} ${destinoFala}. Diga aceitar para confirmar.`);
+  falarTexto(`Traçando rota. Ganho de ${repasse} reais para ${destinoLimpo}. Diga aceitar para confirmar.`);
 }
 
 function cmdAceitarChamada() {
+  // Caso o modal de rota já esteja aberto na tela
   const btnModalConfirmar = document.getElementById('btnConfirmarAceiteViagem');
   if (btnModalConfirmar && btnModalConfirmar.offsetParent !== null) {
     falarTexto('Viagem aceita.');
@@ -220,6 +220,7 @@ function cmdAceitarChamada() {
     return;
   }
 
+  // Caso o motorista queira aceitar diretamente sem abrir a rota antes
   const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
   if (primeiroBtn) {
     const dados = extrairDadosDoBotao(primeiroBtn);
@@ -227,10 +228,10 @@ function cmdAceitarChamada() {
     setTimeout(() => {
       const btnModal = document.getElementById('btnConfirmarAceiteViagem');
       if (btnModal) {
-        falarTexto('Viagem aceita. Traçando rota.');
+        falarTexto('Viagem aceita. Iniciando trajeto de embarque.');
         btnModal.click();
       }
-    }, 350);
+    }, 400);
     return;
   }
 
@@ -241,7 +242,7 @@ function cmdDispensarChamada() {
   const btnFecharModal = document.getElementById('btnCancelarPreviaRota');
   if (btnFecharModal && btnFecharModal.offsetParent !== null) {
     btnFecharModal.click();
-    falarTexto('Chamada dispensada.');
+    falarTexto('Rota dispensada.');
     return;
   }
 
@@ -250,7 +251,7 @@ function cmdDispensarChamada() {
     primeiroDispensa.click();
     falarTexto('Dispensada.');
   } else {
-    falarTexto('Nada para dispensar.');
+    falarTexto('Nenhuma chamada no radar.');
   }
 }
 
@@ -260,7 +261,7 @@ function cmdAvisarChegada() {
     falarTexto('Passageiro avisado que você chegou.');
     btnNoLocal.click();
   } else {
-    falarTexto('Comando disponível apenas ao aproximar do embarque.');
+    falarTexto('Comando disponível apenas próximo ao local de embarque.');
   }
 }
 
@@ -270,7 +271,7 @@ function cmdIniciarViagem() {
     falarTexto('Viagem iniciada. Dirija com cuidado.');
     btnIniciar.click();
   } else {
-    falarTexto('Não há corrida aguardando início.');
+    falarTexto('Nenhuma corrida aguardando início.');
   }
 }
 
@@ -285,7 +286,7 @@ function cmdFinalizarViagem() {
 }
 
 // ============================================================================
-// 5. BADGE VISUAL DE STATUS DO MICROFONE
+// 5. STATUS VISUAL DO COPILOTO
 // ============================================================================
 function atualizarIndicadorUIVoz(ativo) {
   let badge = document.getElementById('badgeCopilotoVozStatus');
