@@ -1,340 +1,174 @@
-// js/motorista/motorista-perfil.js
+// js/motorista/motorista-perfil.js - Perfil do Motorista e Configuração do Copiloto
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { notificar } from '../util/alertas-huby.js';
-import { obterCodigoAtivacaoMotorista, definirCodigoAtivacaoMotorista, falarTexto } from '../ia/motorista-ia.js';
+import { 
+  obterCodigoAtivacaoMotorista, 
+  definirCodigoAtivacaoMotorista, 
+  falarTexto 
+} from '../ia/motorista-ia.js';
 
-let fotoBase64Temporaria = null;
-
+// ============================================================================
+// 1. CARREGAR PERFIL DO BANCO E PREENCHER NA TELA
+// ============================================================================
 export async function carregarPerfil() {
   try {
-    const res = await fetch(`${API_URL}/api/motoristas/perfil`, { headers: obterHeaders() });
-    if (!res.ok) return;
-    const m = await res.json();
+    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil`, {
+      headers: obterHeaders()
+    });
 
-    if (m.id) {
-      estado.motoristaId = m.id;
-      estado.motoristaNome = m.nome || 'Carol';
-      estado.dadosMotorista = m;
-      localStorage.setItem('huby_motorista_id', m.id);
+    if (!resp.ok) return null;
+    const motorista = await resp.json();
+
+    if (!motorista) return null;
+
+    // Atualiza estado local
+    estado.motoristaId = motorista.id;
+    estado.categoriaMotorista = motorista.categoria || 'carro';
+    estado.statusAprovacaoAtual = motorista.status_aprovacao || 'aprovado';
+
+    // 🎙️ Sincroniza o comando de ativação personalizado vindo do banco
+    if (motorista.codigo_voz && motorista.codigo_voz.trim()) {
+      localStorage.setItem('huby_codigo_voz_motorista', motorista.codigo_voz.trim());
+      const inputComando = document.getElementById('inputCodigoVozCopiloto');
+      if (inputComando) inputComando.value = motorista.codigo_voz.trim();
     }
 
-    // Carrega preferências de pagamento
-    estado.aceitaDinheiro = m.aceita_dinheiro !== false;
-    estado.aceitaCartao = m.aceita_cartao !== false;
-    estado.aceitaPix = m.aceita_pix !== false;
+    // Preenche elementos visuais da interface (Drawer / Perfil)
+    const elNome = document.getElementById('txtNomeMotorista');
+    const elVeiculo = document.getElementById('txtVeiculoMotorista');
+    const elPlaca = document.getElementById('txtPlacaMotorista');
+    const elSaldo = document.getElementById('txtSaldoCarteira');
+    const elFoto = document.getElementById('imgFotoPerfilMotorista');
 
-    const chkDinheiro = document.getElementById('chkAceitaDinheiro');
-    const chkCartao = document.getElementById('chkAceitaCartao');
-    const chkPix = document.getElementById('chkAceitaPix');
+    if (elNome) elNome.textContent = motorista.nome || 'Motorista Parceiro';
+    if (elVeiculo) elVeiculo.textContent = `${motorista.veiculo_modelo || 'Veículo'} • ${motorista.veiculo_cor || ''}`;
+    if (elPlaca) elPlaca.textContent = motorista.veiculo_placa || 'Sem placa';
+    if (elSaldo) elSaldo.textContent = `R$ ${Number(motorista.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
 
-    if (chkDinheiro) chkDinheiro.checked = estado.aceitaDinheiro;
-    if (chkCartao) chkCartao.checked = estado.aceitaCartao;
-    if (chkPix) chkPix.checked = estado.aceitaPix;
-
-    // Header superior
-    const topNome = document.getElementById('topNomeMotorista');
-    const topNota = document.getElementById('topNotaMotorista');
-    const topAvatar = document.getElementById('topAvatarImg');
-    const elSaldo = document.getElementById('saldoCarteiraValor');
-    const elDrawerSaldo = document.getElementById('drawerSaldoValor');
-
-    if (topNome) topNome.textContent = (m.nome || 'Carol').split(' ')[0];
-    if (topNota) topNota.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
-    if (topAvatar && m.foto_perfil_url) topAvatar.src = m.foto_perfil_url;
-
-    // Saldo
-    estado.saldoCarteira = Number(m.saldo_carteira || 0);
-    const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
-    if (elSaldo) elSaldo.textContent = saldoTxt;
-    if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
-
-    // Drawer lateral
-    const drawerNome = document.getElementById('drawerNomeCondutor');
-    const drawerPlaca = document.getElementById('drawerCarroPlaca');
-    const drawerModelo = document.getElementById('drawerCarroModelo');
-    const drawerDetalhes = document.getElementById('drawerCarroDetalhes');
-    const drawerFoto = document.getElementById('drawerFotoImg');
-    const drawerAvaliacao = document.getElementById('drawerAvaliacaoTxt');
-    const drawerTotalViagens = document.getElementById('drawerTotalViagensTxt');
-    const inputPixDrawer = document.getElementById('drawerInputChavePix');
-
-    if (drawerNome) drawerNome.textContent = m.nome || 'Carol';
-    if (drawerPlaca) drawerPlaca.textContent = (m.veiculo_placa || 'ABC1D23').toUpperCase();
-    if (drawerModelo) drawerModelo.textContent = m.veiculo_modelo || 'Onix';
-    if (drawerDetalhes) {
-      drawerDetalhes.textContent = `Cor: ${m.veiculo_cor || 'Prata'} • Ano: ${m.veiculo_ano || '2023'}`;
-    }
-    if (drawerFoto && m.foto_perfil_url) drawerFoto.src = m.foto_perfil_url;
-    if (drawerAvaliacao) drawerAvaliacao.textContent = `⭐ ${Number(m.avaliacao_media || 5.0).toFixed(1)}`;
-    if (drawerTotalViagens) drawerTotalViagens.textContent = `${m.total_corridas || 0} viagens`;
-
-    if (inputPixDrawer && m.chave_pix_padrao) {
-      inputPixDrawer.value = m.chave_pix_padrao;
+    if (elFoto && motorista.foto_perfil_url) {
+      elFoto.src = motorista.foto_perfil_url;
     }
 
-    // Inicializa o campo do código de ativação por voz
-    const inputCodigoVoz = document.getElementById('drawerInputCodigoVoz');
-    if (inputCodigoVoz) {
-      inputCodigoVoz.value = obterCodigoAtivacaoMotorista();
-    }
+    // Preenche checkboxes de preferências de pagamento
+    const checkDinheiro = document.getElementById('chkAceitaDinheiro');
+    const checkCartao = document.getElementById('chkAceitaCartao');
+    const checkPix = document.getElementById('chkAceitaPix');
 
-    sincronizarExtratoDiario();
-  } catch (e) {
-    console.warn('Erro ao carregar perfil do condutor:', e);
+    if (checkDinheiro) checkDinheiro.checked = motorista.aceita_dinheiro !== false;
+    if (checkCartao) checkCartao.checked = motorista.aceita_cartao !== false;
+    if (checkPix) checkPix.checked = motorista.aceita_pix !== false;
+
+    return motorista;
+  } catch (err) {
+    console.warn('Erro ao carregar dados do perfil:', err);
+    return null;
   }
 }
 
-export function configurarEdicaoPerfil() {
-  const btnAbrirModal = document.getElementById('btnAbrirModalEdicaoPerfil');
-  const modal = document.getElementById('modalEdicaoPerfil');
-  const btnFechar = document.getElementById('btnFecharModalEdicao');
-  const btnCancelar = document.getElementById('btnCancelarEdicao');
-  const btnSalvar = document.getElementById('btnSalvarEdicaoPerfil');
-  const inputFoto = document.getElementById('inputUploadFotoPerfil');
-  const imgPrevia = document.getElementById('previewFotoModal');
+// ============================================================================
+// 2. CONFIGURAÇÃO LIVRE DO COMANDO DE VOZ (COPILOTO HANDS-FREE)
+// ============================================================================
+export function configurarCodigoVozCopiloto() {
+  const inputComando = document.getElementById('inputCodigoVozCopiloto');
+  const btnSalvar = document.getElementById('btnSalvarCodigoVoz');
+  const btnTestar = document.getElementById('btnTestarCodigoVoz');
 
-  const abrirModal = () => {
-    if (!modal) return;
-    const m = estado.dadosMotorista || {};
-
-    const inpNome = document.getElementById('editNome');
-    const inpTel = document.getElementById('editTelefone');
-    const inpMod = document.getElementById('editCarroModelo');
-    const inpPlaca = document.getElementById('editCarroPlaca');
-    const inpCor = document.getElementById('editCarroCor');
-    const inpAno = document.getElementById('editCarroAno');
-
-    if (inpNome) inpNome.value = m.nome || estado.motoristaNome || '';
-    if (inpTel) inpTel.value = m.telefone || '';
-    if (inpMod) inpMod.value = m.veiculo_modelo || '';
-    if (inpPlaca) inpPlaca.value = m.veiculo_placa || '';
-    if (inpCor) inpCor.value = m.veiculo_cor || '';
-    if (inpAno) inpAno.value = m.veiculo_ano || '';
-
-    if (imgPrevia && m.foto_perfil_url) {
-      imgPrevia.src = m.foto_perfil_url;
-    }
-
-    fotoBase64Temporaria = null;
-    modal.style.display = 'flex';
-  };
-
-  const fecharModal = () => {
-    if (modal) modal.style.display = 'none';
-  };
-
-  btnAbrirModal?.addEventListener('click', abrirModal);
-  btnFechar?.addEventListener('click', fecharModal);
-  btnCancelar?.addEventListener('click', fecharModal);
-
-  modal?.addEventListener('click', (e) => {
-    if (e.target === modal) fecharModal();
-  });
-
-  inputFoto?.addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      notificar('A imagem selecionada é muito pesada (máx 5MB).', 'alerta');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      fotoBase64Temporaria = ev.target.result;
-      if (imgPrevia) imgPrevia.src = fotoBase64Temporaria;
-    };
-    reader.readAsDataURL(file);
-  });
+  if (inputComando) {
+    inputComando.value = obterCodigoAtivacaoMotorista();
+  }
 
   btnSalvar?.addEventListener('click', async () => {
-    const nome = document.getElementById('editNome')?.value?.trim();
-    const telefone = document.getElementById('editTelefone')?.value?.trim();
-    const veiculo_modelo = document.getElementById('editCarroModelo')?.value?.trim();
-    const veiculo_placa = document.getElementById('editCarroPlaca')?.value?.trim();
-    const veiculo_cor = document.getElementById('editCarroCor')?.value?.trim();
-    const veiculo_ano = document.getElementById('editCarroAno')?.value?.trim();
-
-    if (!nome) {
-      notificar('O nome completo é obrigatório.', 'alerta');
+    const novoComando = inputComando?.value?.trim();
+    if (!novoComando) {
+      notificar('Digite uma frase para ativar seu copiloto (ex: OK Gavião, Ei Jarvis, Fala Piloto).', 'alerta');
       return;
     }
 
-    btnSalvar.disabled = true;
-    btnSalvar.textContent = 'Salvando...';
-
-    try {
-      const payload = {
-        nome,
-        telefone,
-        veiculo_modelo,
-        veiculo_placa: veiculo_placa ? veiculo_placa.toUpperCase() : 'ABC1D23',
-        veiculo_cor,
-        veiculo_ano: veiculo_ano ? Number(veiculo_ano) : null
-      };
-
-      if (fotoBase64Temporaria) {
-        payload.foto_base64 = fotoBase64Temporaria;
-      }
-
-      const res = await fetch(`${API_URL}/api/pedidos/motoristas/perfil/atualizar`, {
-        method: 'PUT',
-        headers: obterHeaders(),
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || 'Erro ao salvar alterações do perfil.');
-
-      notificar('Dados do condutor atualizados com sucesso!', 'sucesso');
-      fecharModal();
-      carregarPerfil();
-    } catch (err) {
-      notificar(err.message, 'erro');
-    } finally {
-      btnSalvar.disabled = false;
-      btnSalvar.textContent = 'Salvar Alterações';
+    const sucesso = await definirCodigoAtivacaoMotorista(novoComando);
+    if (sucesso) {
+      notificar(`Comando atualizado! Diga "${novoComando}" para falar com o app.`, 'sucesso');
+    } else {
+      notificar('Erro ao registrar comando. Tente novamente.', 'erro');
     }
   });
 
-  const btnSalvarPix = document.getElementById('btnSalvarChavePix');
-  btnSalvarPix?.addEventListener('click', async () => {
-    const chave = document.getElementById('drawerInputChavePix')?.value?.trim();
-    if (!chave) {
-      notificar('Informe uma chave Pix válida.', 'alerta');
-      return;
-    }
-
-    btnSalvarPix.disabled = true;
-    btnSalvarPix.textContent = '...';
-
-    try {
-      const res = await fetch(`${API_URL}/api/pedidos/motoristas/perfil/atualizar`, {
-        method: 'PUT',
-        headers: obterHeaders(),
-        body: JSON.stringify({ chave_pix_padrao: chave })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || 'Falha ao salvar chave Pix.');
-      notificar('Chave Pix padrão salva com sucesso!', 'sucesso');
-    } catch (err) {
-      notificar(err.message, 'erro');
-    } finally {
-      btnSalvarPix.disabled = false;
-      btnSalvarPix.textContent = 'Salvar';
-    }
+  btnTestar?.addEventListener('click', () => {
+    const comandoAtual = inputComando?.value?.trim() || obterCodigoAtivacaoMotorista();
+    falarTexto(`Copiloto pronto. Pode falar ${comandoAtual} seguido da ação que deseja.`);
   });
 }
 
+// ============================================================================
+// 3. SALVAR PREFERÊNCIAS DE FORMAS DE PAGAMENTO
+// ============================================================================
 export function configurarSalvarPreferenciasPagto() {
-  const btn = document.getElementById('btnSalvarPreferenciasPagto');
-  if (!btn) return;
+  const btnSalvar = document.getElementById('btnSalvarPreferenciasPagto');
+  if (!btnSalvar) return;
 
-  btn.addEventListener('click', async () => {
-    const chkDinheiro = document.getElementById('chkAceitaDinheiro');
-    const chkCartao = document.getElementById('chkAceitaCartao');
-    const chkPix = document.getElementById('chkAceitaPix');
-
-    const aceita_dinheiro = !!chkDinheiro?.checked;
-    const aceita_cartao = !!chkCartao?.checked;
-    const aceita_pix = !!chkPix?.checked;
+  btnSalvar.addEventListener('click', async () => {
+    const aceita_dinheiro = document.getElementById('chkAceitaDinheiro')?.checked ?? true;
+    const aceita_cartao = document.getElementById('chkAceitaCartao')?.checked ?? true;
+    const aceita_pix = document.getElementById('chkAceitaPix')?.checked ?? true;
 
     if (!aceita_dinheiro && !aceita_cartao && !aceita_pix) {
-      notificar('Selecione pelo menos uma forma de pagamento para trabalhar.', 'alerta');
+      notificar('Selecione ao menos uma forma de recebimento.', 'alerta');
       return;
     }
 
-    btn.disabled = true;
-    btn.textContent = 'Salvando...';
-
     try {
-      const res = await fetch(`${API_URL}/api/pedidos/motoristas/preferencias-pagamento`, {
+      const resp = await fetch(`${API_URL}/api/pedidos/motoristas/preferencias-pagamento`, {
         method: 'PUT',
         headers: obterHeaders(),
         body: JSON.stringify({ aceita_dinheiro, aceita_cartao, aceita_pix })
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || 'Falha ao salvar preferências.');
-
-      estado.aceitaDinheiro = aceita_dinheiro;
-      estado.aceitaCartao = aceita_cartao;
-      estado.aceitaPix = aceita_pix;
-
-      notificar('Preferências de pagamento salvas com sucesso!', 'sucesso');
+      if (resp.ok) {
+        notificar('Preferências de pagamento salvas!', 'sucesso');
+      } else {
+        notificar('Erro ao salvar preferências.', 'erro');
+      }
     } catch (err) {
-      notificar(err.message, 'erro');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Salvar Preferências';
+      notificar('Falha de conexão ao salvar preferências.', 'erro');
     }
   });
 }
 
-// Configuração e teste do Código Pessoal de Ativação por Voz (Copiloto)
-export function configurarCodigoVozCopiloto() {
-  const inputCodigo = document.getElementById('drawerInputCodigoVoz');
-  const btnSalvarCodigo = document.getElementById('btnSalvarCodigoVoz');
-  const btnTestarVoz = document.getElementById('btnTestarCodigoVoz');
+// ============================================================================
+// 4. EDIÇÃO DE DADOS BÁSICOS DO MOTORISTA
+// ============================================================================
+export function configurarEdicaoPerfil() {
+  const btnSalvar = document.getElementById('btnSalvarDadosPerfil');
+  if (!btnSalvar) return;
 
-  if (inputCodigo) {
-    inputCodigo.value = obterCodigoAtivacaoMotorista();
-  }
+  btnSalvar.addEventListener('click', async () => {
+    const nome = document.getElementById('inputPerfilNome')?.value?.trim();
+    const telefone = document.getElementById('inputPerfilTelefone')?.value?.trim();
+    const veiculo_modelo = document.getElementById('inputPerfilModelo')?.value?.trim();
+    const veiculo_placa = document.getElementById('inputPerfilPlaca')?.value?.trim();
+    const veiculo_cor = document.getElementById('inputPerfilCor')?.value?.trim();
 
-  btnSalvarCodigo?.addEventListener('click', () => {
-    const novoCodigo = inputCodigo?.value?.trim();
-    if (!novoCodigo) {
-      notificar('Digite uma palavra ou código de ativação válido.', 'alerta');
-      return;
+    try {
+      const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil/atualizar`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify({
+          nome,
+          telefone,
+          veiculo_modelo,
+          veiculo_placa,
+          veiculo_cor
+        })
+      });
+
+      if (resp.ok) {
+        notificar('Perfil atualizado com sucesso!', 'sucesso');
+        await carregarPerfil();
+      } else {
+        notificar('Não foi possível salvar os dados.', 'erro');
+      }
+    } catch (e) {
+      notificar('Erro de conexão ao salvar perfil.', 'erro');
     }
-
-    definirCodigoAtivacaoMotorista(novoCodigo);
-    notificar(`Código de ativação definido para: "${novoCodigo}"`, 'sucesso');
   });
-
-  btnTestarVoz?.addEventListener('click', () => {
-    const cod = obterCodigoAtivacaoMotorista();
-    falarTexto(`Copiloto pronto. Ao falar ${cod}, estou às suas ordens.`);
-    notificar(`Ouvindo código: "${cod}"`, 'info', 2500);
-  });
-}
-
-export async function sincronizarExtratoDiario() {
-  const containerExtrato = document.getElementById('drawerListaExtrato');
-  const lblGanhosHoje = document.getElementById('lblGanhosHojeValor');
-  const lblViagensHoje = document.getElementById('lblCorridasHojeQtd');
-
-  try {
-    const res = await fetch(`${API_URL}/api/motoristas/extrato`, { headers: obterHeaders() });
-    if (!res.ok) return;
-    const data = await res.json();
-    const corridas = data.corridas || data.historico || [];
-
-    let totalGanhos = 0;
-    let qtdViagens = 0;
-
-    if (corridas.length && containerExtrato) {
-      containerExtrato.innerHTML = corridas.map(c => {
-        const repasse = Number(c.repasse_liquido || (c.valor_total * 0.85));
-        totalGanhos += repasse;
-        qtdViagens++;
-        return `
-          <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-dark); font-size: 12px;">
-            <div style="max-width: 65%;">
-              <div style="color: #FFF; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                ${c.destino_endereco || 'Viagem Concluída'}
-              </div>
-              <small style="color: var(--text-sec); font-size: 10px;">${new Date(c.criado_em || c.concluido_em).toLocaleDateString('pt-BR')}</small>
-            </div>
-            <strong style="color: var(--emerald);">+ R$ ${repasse.toFixed(2).replace('.', ',')}</strong>
-          </div>
-        `;
-      }).join('');
-    }
-
-    if (lblGanhosHoje) lblGanhosHoje.textContent = `R$ ${totalGanhos.toFixed(2).replace('.', ',')}`;
-    if (lblViagensHoje) lblViagensHoje.textContent = `${qtdViagens} viagens`;
-  } catch (e) { }
 }
