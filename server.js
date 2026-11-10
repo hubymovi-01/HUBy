@@ -38,8 +38,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Sites que podem usar a API. Para adicionar um domínio próprio, use a variável
-// de ambiente ALLOWED_ORIGINS (separe vários com vírgula).
 const origensPermitidas = new Set([
   'https://hubymovi-01.github.io',
   ...(process.env.ALLOWED_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean),
@@ -52,7 +50,6 @@ const origensPermitidas = new Set([
 ]);
 
 const checarOrigem = (origin, callback) => {
-  // Sem "origin" = app nativo, Postman ou servidor: segue normalmente
   if (!origin || origensPermitidas.has(origin)) return callback(null, true);
   console.warn(`CORS: origem bloqueada: ${origin}`);
   return callback(null, false);
@@ -68,9 +65,6 @@ const corsOpcoes = {
 const io = new Server(server, { cors: corsOpcoes });
 app.set('io', io);
 
-// Login do Socket.IO: se o app enviar o token, ele é validado.
-// Para EXIGIR login em todas as conexões, defina SOCKET_EXIGE_LOGIN=true
-// (os apps precisam conectar com io(API_URL, { auth: { token } })).
 const SOCKET_EXIGE_LOGIN = process.env.SOCKET_EXIGE_LOGIN === 'true';
 
 io.use((socket, next) => {
@@ -91,6 +85,12 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
   console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
+
+  // 🚗 Repasse em tempo real do GPS do motorista para o mapa do passageiro
+  socket.on('posicao_motorista', (dados) => {
+    socket.broadcast.emit('posicao_motorista_atualizada', dados);
+  });
+
   socket.on('disconnect', () => {
     console.log(`Utilizador desconectado do radar: ${socket.id}`);
   });
@@ -104,7 +104,6 @@ app.use((req, res, next) => {
 
 app.use(cors(corsOpcoes));
 
-// Limitador simples de tentativas por IP (sem precisar instalar nada)
 function criarLimitador({ janelaMs, max, mensagem }) {
   const acessos = new Map();
 
@@ -336,7 +335,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // Garante colunas adicionais de apoio
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -387,7 +385,6 @@ app.get('/api/config/tarifas', async (req, res) => {
     console.warn('Tarifas: usando valores padrão.', err.message);
   }
 
-  // Mantém as chaves antigas (km_carro...) para não quebrar telas já publicadas
   res.json({
     ...tarifas,
     taxa_plataforma: tarifas.taxa_plataforma ?? 15,
@@ -414,7 +411,7 @@ app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 app.use('/api/socios', sociosRoutes);
 app.use('/api/marketplace', marketplaceRouter);
-app.use('/api/ia', iaRoutes); // 🤖 IA: Registo da Rota na API
+app.use('/api/ia', iaRoutes);
 
 // ============================================================================
 // 6. TRATAMENTO GLOBAL DE ERROS

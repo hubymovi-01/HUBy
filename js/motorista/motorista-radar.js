@@ -207,6 +207,7 @@ function renderizarRadar(pedidos) {
 
   feedEl.innerHTML = pedidos.map((p) => {
     const valorBruto = Number(p.valor_total || 0);
+    const valorFormatado = valorBruto.toFixed(2).replace('.', ',');
     const repasse = (valorBruto * 0.85).toFixed(2).replace('.', ',');
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
@@ -220,14 +221,18 @@ function renderizarRadar(pedidos) {
           ✕
         </button>
 
-        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-right: 30px;">
+        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-right: 30px;">
           <span class="order-badge" style="background: rgba(16,185,129,0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
             ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
           </span>
-          <span class="order-price" style="font-size: 17px; font-weight: 900; color: #FFF;">
-            R$ ${repasse}
-          </span>
+          <div style="text-align: right;">
+            <span class="order-price" style="font-size: 18px; font-weight: 900; color: #10B981; display: block;">
+              R$ ${valorFormatado}
+            </span>
+            <small style="font-size: 11px; color: #94A3B8; font-weight: 700;">Seu ganho: R$ ${repasse}</small>
+          </div>
         </div>
+
         <div class="order-route" style="font-size: 13px; line-height: 1.5; color: #E2E8F0;">
           <span style="display: block;"><strong>Partida:</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
           <span style="display: block;"><strong>Destino:</strong> ${p.destino_endereco || 'Destino no mapa'}</span>

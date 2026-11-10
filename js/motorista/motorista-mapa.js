@@ -72,7 +72,6 @@ export function iniciarRastreamentoGPSContinuo() {
     return;
   }
 
-  // Limpa qualquer rastreio anterior para evitar duplicação
   if (watchId !== null) {
     navigator.geolocation.clearWatch(watchId);
   }
@@ -83,22 +82,22 @@ export function iniciarRastreamentoGPSContinuo() {
       const lng = pos.coords.longitude;
       const heading = pos.coords.heading || 0;
 
-      // 1. Atualiza o estado central
+      // 1. Atualiza estado central
       estado.coords = [lat, lng];
 
-      // 2. Move o marcador do carro na tela do motorista
+      // 2. Move o marcador do carro suavemente na tela do motorista
       if (estado.markerVeiculo) {
         estado.markerVeiculo.setLatLng([lat, lng]);
       }
 
       const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
 
-      // 3. Centraliza a câmera de forma suave (se estiver em corrida)
+      // 3. Centraliza a câmera de forma fluida durante a corrida
       if (estado.mapa && corridaAtiva) {
         estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
       }
 
-      // 4. Transmite a posição ao servidor para o passageiro ver o carro a mover-se
+      // 4. Transmite a posição ao servidor para o passageiro ver o carro se deslocar
       if (estado.socket) {
         estado.socket.emit('posicao_motorista', {
           motoristaId: estado.motoristaId,
@@ -113,9 +112,9 @@ export function iniciarRastreamentoGPSContinuo() {
       console.warn('Aviso de GPS:', err.message);
     },
     {
-      enableHighAccuracy: true, // Força uso do GPS real (satélite) e não apenas IP ou Wi-Fi
-      maximumAge: 1000,         // Aceita dados com no máximo 1 segundo de atraso
-      timeout: 15000            // Tempo máximo de espera pela leitura
+      enableHighAccuracy: true,
+      maximumAge: 1000,
+      timeout: 15000
     }
   );
 }
