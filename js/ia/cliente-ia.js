@@ -1,4 +1,4 @@
-// js/ia/cliente-ia.js - Controlador de Voz e IA HUBy (Nacional com Âncora de Proximidade)
+// js/ia/cliente-ia.js - Controlador Principal de Voz e IA HUBy (Nacional)
 import { API_URL } from '../config.js';
 import { vozUI } from './voz-ui.js';
 import { configurarIAFlash, processarComandoFlashIA } from './flash-ia.js';
@@ -9,12 +9,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!btnIA || !inputPesquisa) return;
 
+  // Inicializa o módulo HUBy Flash (encomendas)
   configurarIAFlash();
 
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   if (!SpeechRecognition) {
-    console.warn('Reconhecimento de voz não suportado neste dispositivo.');
+    console.warn('Reconhecimento de voz não suportado neste navegador/dispositivo.');
     btnIA.style.display = 'none';
     return;
   }
@@ -63,14 +64,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnIA.innerHTML = '<span style="font-size:14px;">🧠</span>';
 
-    // Se for encomenda (Flash), processa o recebedor em paralelo
+    // Se a aba selecionada for HUBy Flash (entrega), extrai recebedor e tipo em paralelo
     const cardFlash = document.querySelector('.category-card-pro[data-id="entrega"]');
     if (cardFlash && cardFlash.classList.contains('active')) {
       processarComandoFlashIA(textoFalado);
     }
 
     try {
-      // Captura o GPS atual do usuário gravado no app ou no mapa
+      // Captura o GPS atual do utilizador para âncora de proximidade
       let userLat = null;
       let userLng = null;
 
@@ -79,12 +80,22 @@ document.addEventListener('DOMContentLoaded', () => {
         userLng = window.estadoCliente.coordsOrigem[1];
       }
 
-      const urlDestino = `${API_URL}/api/ia/localizar-referencia`;
-      console.log('📡 [IA Frontend] Enviando comando com âncora geográfica:', { textoFalado, userLat, userLng });
+      // Normaliza a URL base para evitar barras duplas e garantir /api/ia/localizar-referencia
+      const baseUrl = API_URL.replace(/\/+$/, '');
+      const urlDestino = `${baseUrl}/api/ia/localizar-referencia`;
+
+      console.log('📡 [IA Frontend] Enviando comando com âncora geográfica:', {
+        url: urlDestino,
+        referencia: textoFalado,
+        userLat,
+        userLng
+      });
 
       const res = await fetch(urlDestino, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
           referencia: textoFalado,
           userLat,
@@ -101,14 +112,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const lng = parseFloat(data.resultado.lng);
 
         inputPesquisa.value = nomeDestino;
+
+        // Som de confirmação imediato
         vozUI.tocarSucesso();
 
-        // Dispara o evento que desenha a rota no Leaflet
+        // Dispara o evento que o app-cliente.js escuta para desenhar o trajeto no Leaflet
         const evt = new CustomEvent('huby_local_selecionado_ia', {
           detail: { nome: nomeDestino, lat, lng }
         });
         document.dispatchEvent(evt);
 
+        // Exibe a etiqueta de retentativa rápida
         vozUI.exibirBadgeRetentativa(() => {
           iniciarGravacao();
         });
