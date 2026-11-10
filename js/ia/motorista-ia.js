@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto com Frase de Ativação 100% Personalizada pelo Motorista
+// js/ia/motorista-ia.js - Copiloto Hands-Free com Frase Personalizada, Suporte Gemini e Wake Lock
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -9,6 +9,7 @@ let recognition = null;
 let escutaAtiva = false;
 let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 let processandoComando = false;
+let wakeLockSentinel = null;
 
 // ============================================================================
 // 1. NORMALIZAÇÃO FONÉTICA E PALAVRA-CHAVE PERSONALIZADA
@@ -23,13 +24,13 @@ function normalizarTexto(txt = '') {
     .trim();
 }
 
-// Recupera a frase personalizada escolhida pelo motorista
+// Recupera a frase de ativação cadastrada pelo condutor
 export function obterCodigoAtivacaoMotorista() {
   const salvo = localStorage.getItem('huby_codigo_voz_motorista');
   return salvo && salvo.trim() ? salvo.trim() : 'OK HUBy';
 }
 
-// Grava a nova frase personalizada no dispositivo e no Neon PostgreSQL
+// Grava a nova frase de ativação no storage e no banco PostgreSQL
 export async function definirCodigoAtivacaoMotorista(novaFrase) {
   if (!novaFrase || !novaFrase.trim()) return false;
   const fraseLimpa = novaFrase.trim();
@@ -50,7 +51,7 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
   return true;
 }
 
-// Síntese de voz rápida para feedback imediato ao condutor
+// Resposta por voz (Text-to-Speech)
 export function falarTexto(texto) {
   if (!sintetizador) return;
   try {
@@ -66,7 +67,32 @@ export function falarTexto(texto) {
 }
 
 // ============================================================================
-// 2. RECONHECIMENTO CONTÍNUO (HANDS-FREE)
+// 2. WAKE LOCK: TELA SEMPRE ATIVA AO VOLANTE
+// ============================================================================
+async function requisitarWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+      wakeLockSentinel.addEventListener('release', () => {
+        wakeLockSentinel = null;
+      });
+    } catch (e) {
+      console.warn('Wake Lock não concedido:', e.message);
+    }
+  }
+}
+
+function liberarWakeLock() {
+  if (wakeLockSentinel) {
+    try {
+      wakeLockSentinel.release();
+    } catch (e) {}
+    wakeLockSentinel = null;
+  }
+}
+
+// ============================================================================
+// 3. RECONHECIMENTO CONTÍNUO (HANDS-FREE)
 // ============================================================================
 export function inicializarCopilotoVoz() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -87,6 +113,7 @@ export function inicializarCopilotoVoz() {
   recognition.onstart = () => {
     escutaAtiva = true;
     atualizarIndicadorUIVoz(true);
+    requisitarWakeLock();
   };
 
   recognition.onend = () => {
@@ -96,12 +123,13 @@ export function inicializarCopilotoVoz() {
       } catch (e) {}
     } else {
       atualizarIndicadorUIVoz(false);
+      liberarWakeLock();
     }
   };
 
   recognition.onerror = (ev) => {
     if (ev.error !== 'no-speech') {
-      console.warn('Áudio info:', ev.error);
+      console.warn('Áudio copiloto info:', ev.error);
     }
   };
 
@@ -132,21 +160,20 @@ export function desativarEscutaCopiloto() {
     try { recognition.stop(); } catch (e) {}
   }
   atualizarIndicadorUIVoz(false);
+  liberarWakeLock();
 }
 
 // ============================================================================
-// 3. PROCESSAMENTO DE INTENÇÃO DO MOTORISTA
+// 4. PROCESSAMENTO DE INTENÇÃO E SUPORTE GEMINI
 // ============================================================================
-function processarComandoVoz(fraseBruta) {
+async function processarComandoVoz(fraseBruta) {
   if (processandoComando) return;
 
   const fraseFalada = normalizarTexto(fraseBruta);
   const gatilhoCadastrado = normalizarTexto(obterCodigoAtivacaoMotorista());
 
-  // Checa se a frase falada contém a expressão cadastrada pelo motorista
-  // Exemplo: se cadastrou "ok gaviao" e falou "ok gaviao ver rota"
+  // Checa se chamou pelo gatilho configurado
   if (!fraseFalada.includes(gatilhoCadastrado)) {
-    // Tolerância: se a pessoa cadastrou "ok gaviao" mas falou apenas "gaviao"
     const partePrincipal = gatilhoCadastrado.replace(/^(ok|ei|fala|e ai)\s+/i, '').trim();
     if (!partePrincipal || !fraseFalada.includes(partePrincipal)) {
       return;
@@ -156,10 +183,9 @@ function processarComandoVoz(fraseBruta) {
   processandoComando = true;
   setTimeout(() => { processandoComando = false; }, 1200);
 
-  // Isola a ação após o gatilho
   let acao = fraseFalada.replace(gatilhoCadastrado, '').trim();
 
-  // 1. VER OU CHECAR A ROTA NO MAPA
+  // 1. CHECAR OU VER A ROTA DA CORRIDA NO MAPA
   if (
     acao.includes('ver') || 
     acao.includes('checar') || 
@@ -215,11 +241,47 @@ function processarComandoVoz(fraseBruta) {
     return;
   }
 
+  // 7. CANAL DE SUPORTE E DÚVIDAS COM GEMINI (Perguntas Livres ao Volante)
+  if (acao.length > 3) {
+    await responderDuvidaComGemini(fraseBruta);
+    return;
+  }
+
   falarTexto('Às ordens.');
 }
 
+// Consulta de suporte em tempo real ao modelo Gemini
+async function responderDuvidaComGemini(perguntaCompleta) {
+  falarTexto('Consultando...');
+  try {
+    const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...obterHeaders()
+      },
+      body: JSON.stringify({
+        pergunta: perguntaCompleta,
+        contextoCorrida: {
+          online: estado.isOnline,
+          pedidoAtivoId: estado.pedidoAtivoId || null
+        }
+      })
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (data && data.resposta) {
+      falarTexto(data.resposta);
+    } else {
+      falarTexto('Copiloto conectado. Como posso ajudar?');
+    }
+  } catch (err) {
+    falarTexto('Estou a postos no trajeto.');
+  }
+}
+
 // ============================================================================
-// 4. AÇÕES EXECUTÁVEIS
+// 5. AÇÕES EXECUTÁVEIS DIRETAS
 // ============================================================================
 function cmdVerRotaNoMapa() {
   const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
@@ -231,7 +293,6 @@ function cmdVerRotaNoMapa() {
   pararAlertaSonoroChamada();
   const dados = extrairDadosDoBotao(primeiroBtn);
   
-  // Abre o traçado da rota no mapa
   preVisualizarRotaPedido(dados);
 
   const repasse = dados.repasse || (Number(dados.preco) * 0.85).toFixed(2).replace('.', ',');
@@ -314,7 +375,7 @@ function cmdFinalizarViagem() {
 }
 
 // ============================================================================
-// 5. BADGE VISUAL DE STATUS
+// 6. BADGE VISUAL DE STATUS DO COPILOTO
 // ============================================================================
 function atualizarIndicadorUIVoz(ativo) {
   let badge = document.getElementById('badgeCopilotoVozStatus');

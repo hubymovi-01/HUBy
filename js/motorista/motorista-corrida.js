@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão Completa de Corridas e Liquidação HUBy
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Prévia Hands-Free e Liquidação HUBy
 import { API_URL, sonsHUBy } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -9,7 +9,7 @@ import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motori
 let processandoPagamento = false;
 
 // ============================================================================
-// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR
+// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR (HANDS-FREE OU TOQUE)
 // ============================================================================
 export async function preVisualizarRotaPedido(dados) {
   estado.pedidoEmAnalise = dados;
@@ -56,11 +56,11 @@ export async function preVisualizarRotaPedido(dados) {
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 4px;">
-        <button type="button" id="btnCancelarInspecao"
+        <button type="button" id="btnCancelarPreviaRota"
           style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; font-weight: 700; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
           ✕ Voltar
         </button>
-        <button type="button" id="btnConfirmarAposVisualizar"
+        <button type="button" id="btnConfirmarAceiteViagem"
           style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
           ✅ Aceitar Corrida
         </button>
@@ -68,16 +68,23 @@ export async function preVisualizarRotaPedido(dados) {
     </div>
   `;
 
-  document.getElementById('btnCancelarInspecao')?.addEventListener('click', () => {
+  document.getElementById('btnCancelarPreviaRota')?.addEventListener('click', () => {
     limparRotasMapa();
     pararMonitoramentoDesvios();
     estado.pedidoEmAnalise = null;
     iniciarRadarChamadas();
   });
 
-  document.getElementById('btnConfirmarAposVisualizar')?.addEventListener('click', () => {
+  document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', () => {
     aceitarCorrida(dados);
   });
+}
+
+// Aceite direto para uso por voz do copiloto
+export async function aceitarPedidoPrevia() {
+  if (estado.pedidoEmAnalise) {
+    await aceitarCorrida(estado.pedidoEmAnalise);
+  }
 }
 
 // ============================================================================
@@ -169,14 +176,35 @@ async function iniciarFaseBuscarPassageiro(dados) {
         </a>
       </div>
 
-      <button type="button" id="btnPassageiroEmbarcou"
-        style="width: 100%; background: #38BDF8; border: none; color: #000; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
-        📍 Cheguei / Passageiro a Bordo
-      </button>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <button type="button" id="btnChegueiLocalEmbarque"
+          style="background: rgba(56,189,248,0.18); border: 1px solid #38BDF8; color: #38BDF8; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          📍 Cheguei no Local
+        </button>
+        <button type="button" id="btnIniciarCorridaAtiva"
+          style="background: #38BDF8; border: none; color: #000; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+          🚀 Iniciar Viagem
+        </button>
+      </div>
     </div>
   `;
 
-  document.getElementById('btnPassageiroEmbarcou')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
+  document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async () => {
+    try {
+      const token = localStorage.getItem('huby_token');
+      await fetch(`${API_URL}/api/pedidos/${dados.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ status: 'motorista_no_local' })
+      });
+      alert('Passageiro avisado que você chegou ao local de embarque!');
+    } catch (e) {}
+  });
+
+  document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
 }
 
 // ============================================================================
@@ -241,14 +269,14 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
         </a>
       </div>
 
-      <button type="button" id="btnConcluirViagemAtiva"
+      <button type="button" id="btnConcluirCorrida"
         style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
         🏁 Cheguei ao Destino / Finalizar
       </button>
     </div>
   `;
 
-  document.getElementById('btnConcluirViagemAtiva')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
+  document.getElementById('btnConcluirCorrida')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
 }
 
 // ============================================================================

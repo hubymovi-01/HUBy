@@ -1,9 +1,20 @@
-// routes/ia.routes.js - Geocodificação Nacional com Proximidade Inteligente e Fallback Blindado
+// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Suporte por Voz Gemini
 import express from 'express';
 
 const router = express.Router();
 
-// Geocodificador Nominatim flexível e tolerante
+// Função auxiliar para sanitizar retornos markdown do Gemini
+function extrairJSONPuro(texto) {
+  if (!texto) return null;
+  const limpo = texto.replace(/```json/gi, '').replace(/```/g, '').trim();
+  try {
+    return JSON.parse(limpo);
+  } catch (e) {
+    return null;
+  }
+}
+
+// Geocodificador Nominatim flexível e tolerante no Brasil
 async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   if (!termo || !String(termo).trim()) return null;
 
@@ -20,8 +31,7 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
 
   for (const busca of tentativas) {
     try {
-      let params = `q=${encodeURIComponent(busca)}&format=json&countrycodes=br&limit=1`;
-      
+      const params = `q=${encodeURIComponent(busca)}&format=json&countrycodes=br&limit=1`;
       const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
         headers: { 'User-Agent': 'HUBy-Mobilidade-Brasil/3.2 (contato@hubymovi.com)' }
       });
@@ -53,7 +63,7 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   return null;
 }
 
-// Endpoint de Localização e Voz
+// Endpoint 1: Localização e Voz do Passageiro (Geocodificação Inteligente)
 router.post('/localizar-referencia', async (req, res) => {
   try {
     const { referencia, userLat, userLng } = req.body || {};
@@ -72,7 +82,6 @@ router.post('/localizar-referencia', async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY;
 
-    // 1. O Gemini interpreta o local falado e deduz as coordenadas quando souber
     if (apiKey) {
       try {
         const contextoGPS = (userLat && userLng)
@@ -85,7 +94,7 @@ O passageiro falou o destino: "${referencia}".
 
 Instruções:
 1. Extraia o nome real do local (rua, praça, bairro ou cidade).
-2. Se você souber as coordenadas geográficas precisas dessa cidade, bairro ou ponto no Brasil, preencha os campos "lat" e "lng". Se não tiver certeza absoluta, retorne null neles.
+2. Se souber as coordenadas geográficas precisas dessa cidade, bairro ou ponto no Brasil, preencha os campos "lat" e "lng". Se não tiver certeza absoluta, retorne null.
 3. Retorne RIGOROSAMENTE apenas um JSON no formato:
 {
   "nome_curto": "Nome do Local ou Cidade, UF",
@@ -95,7 +104,6 @@ Instruções:
 }`;
 
         const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
         const respGemini = await fetch(urlGemini, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -111,8 +119,9 @@ Instruções:
         if (respGemini.ok) {
           const json = await respGemini.json().catch(() => null);
           const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (raw) {
-            const parsed = JSON.parse(raw.trim());
+          const parsed = extrairJSONPuro(raw);
+
+          if (parsed) {
             if (parsed.termo_busca) termoFormatado = parsed.termo_busca;
             if (parsed.lat && parsed.lng && !isNaN(Number(parsed.lat)) && !isNaN(Number(parsed.lng))) {
               latFinal = parseFloat(parsed.lat);
@@ -122,11 +131,10 @@ Instruções:
           }
         }
       } catch (errGemini) {
-        console.warn('⚠️ [IA Gemini] Erro ao consultar Gemini:', errGemini.message);
+        console.warn('⚠️ [IA Gemini] Fallback direto para Nominatim:', errGemini.message);
       }
     }
 
-    // 2. Se o Gemini não cravou as coordenadas, pesquisa no Nominatim
     let resultadoFinal = null;
     if (latFinal && lngFinal) {
       resultadoFinal = { nome_curto: nomeFinal, lat: latFinal, lng: lngFinal };
@@ -158,7 +166,74 @@ Instruções:
   }
 });
 
-// Rota de Extração Inteligente de Encomendas HUBy Flash (Nacional)
+// Endpoint 2: Suporte ao Motorista no Trânsito (Dúvidas por Voz)
+router.post('/motorista-suporte', async (req, res) => {
+  try {
+    const { pergunta, contextoCorrida } = req.body || {};
+
+    if (!pergunta || !String(pergunta).trim()) {
+      return res.status(200).json({
+        sucesso: false,
+        resposta: 'Não entendi sua dúvida. Pode repetir?'
+      });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(200).json({
+        sucesso: true,
+        resposta: 'Suporte HUBy: dirija com atenção. Dúvidas financeiras e de conta podem ser vistas no menu perfil.'
+      });
+    }
+
+    const contextoApp = `Você é o copiloto de voz e suporte de IA para motoristas parceiros do aplicativo HUBy Mobility no Brasil.
+O motorista está no trânsito dirigindo.
+Contexto da chamada/turno: ${JSON.stringify(contextoCorrida || {})}.
+Pergunta feita por voz pelo condutor: "${pergunta}".
+
+Instruções:
+1. Responda em no máximo 1 ou 2 frases curtas, claras e objetivas.
+2. Não use formatação, asteriscos ou emojis, pois a resposta será lida por voz em alto-falante.
+3. Se for sobre taxa da HUBy: a plataforma repassa em média 85% do valor da corrida para o condutor.
+4. Se o passageiro não aparecer no embarque: oriente a aguardar até 5 minutos no ponto de partida ou ligar pelo botão de chamada do app.`;
+
+    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const resp = await fetch(urlGemini, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: contextoApp }] }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 80
+        }
+      })
+    });
+
+    if (resp.ok) {
+      const data = await resp.json().catch(() => null);
+      const textoResposta = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (textoResposta && textoResposta.trim()) {
+        const falaLimpa = textoResposta.replace(/[*#_~`]/g, '').trim();
+        return res.status(200).json({ sucesso: true, resposta: falaLimpa });
+      }
+    }
+
+    return res.status(200).json({
+      sucesso: true,
+      resposta: 'Estou com você no trajeto. Siga as orientações da rota na tela.'
+    });
+
+  } catch (err) {
+    console.error('❌ [IA Suporte] Falha:', err.message);
+    return res.status(200).json({
+      sucesso: true,
+      resposta: 'No momento o suporte de voz está indisponível. Consulte o painel da viagem.'
+    });
+  }
+});
+
+// Endpoint 3: Extração Inteligente de Encomendas HUBy Flash
 router.post('/flash-extrair', async (req, res) => {
   try {
     const { texto } = req.body || {};
@@ -199,8 +274,9 @@ Retorne APENAS um JSON:
     if (resp.ok) {
       const data = await resp.json().catch(() => null);
       const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (txt) {
-        return res.json({ sucesso: true, resultado: JSON.parse(txt.trim()) });
+      const parsed = extrairJSONPuro(txt);
+      if (parsed) {
+        return res.json({ sucesso: true, resultado: parsed });
       }
     }
 
@@ -217,7 +293,7 @@ Retorne APENAS um JSON:
   }
 });
 
-// Rota de Smart Replies Contextuais para o Motorista
+// Endpoint 4: Smart Replies Contextuais para o Motorista
 router.post('/motorista-respostas', async (req, res) => {
   const fallback = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
   try {
@@ -243,11 +319,9 @@ Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
     if (resp.ok) {
       const data = await resp.json().catch(() => null);
       const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (txt) {
-        const parsed = JSON.parse(txt.trim());
-        if (Array.isArray(parsed.sugestoes)) {
-          return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
-        }
+      const parsed = extrairJSONPuro(txt);
+      if (parsed && Array.isArray(parsed.sugestoes)) {
+        return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
       }
     }
     return res.json({ sucesso: true, sugestoes: fallback });

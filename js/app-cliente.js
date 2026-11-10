@@ -229,9 +229,9 @@ function configurarBarraPesquisaAnimada() {
     }
 
     if (estadoCliente.hubyMapa) {
-      if (estadoCliente.hubyMapa.linhaRota && estadoCliente.hubyMapa.map) {
-        estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.linhaRota);
-        estadoCliente.hubyMapa.linhaRota = null;
+      if (estadoCliente.hubyMapa.rotaLayer && estadoCliente.hubyMapa.map) {
+        estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.rotaLayer);
+        estadoCliente.hubyMapa.rotaLayer = null;
       }
       if (estadoCliente.hubyMapa.markerDestino && estadoCliente.hubyMapa.map) {
         estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.markerDestino);
@@ -533,8 +533,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 3.2. Escuta IA (Voz/Gemini) - Com Traçado e Enquadramento Garantido
-  document.addEventListener('huby_local_selecionado_ia', async (e) => {
+  // 3.2. Escuta IA (Voz/Gemini) - Tratamento Unificado e Imediato de Traçado
+  const processarDestinoIA = async (e) => {
     const dados = e.detail || {};
     const nome = dados.nome || 'Destino Selecionado';
 
@@ -587,6 +587,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         origem = [markerPos.lat, markerPos.lng];
       }
 
+      if (!origem && estadoCliente.hubyMapa.markerOrigem) {
+        const markerPos = estadoCliente.hubyMapa.markerOrigem.getLatLng();
+        origem = [markerPos.lat, markerPos.lng];
+      }
+
       if (!origem) {
         const centroPadrao = estadoCliente.hubyMapa.map?.getCenter();
         origem = centroPadrao ? [centroPadrao.lat, centroPadrao.lng] : [-8.3582, -42.2476];
@@ -597,6 +602,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const rota = await estadoCliente.hubyMapa.calcularRota(origem, coordsDestino, '#38BDF8', true);
         estadoCliente.rotaAtual = rota;
+
+        if (rota?.geometria && typeof estadoCliente.hubyMapa.desenharRota === 'function') {
+          estadoCliente.hubyMapa.desenharRota(rota.geometria, '#38BDF8');
+        }
 
         atualizarResumoValores();
         if (rota?.preco) {
@@ -614,7 +623,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.error('❌ Erro ao traçar rota no mapa:', errRota);
       }
     }
-  });
+  };
+
+  window.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
+  document.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
 
   // 4. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');

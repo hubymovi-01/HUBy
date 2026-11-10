@@ -155,8 +155,11 @@ function aplicarDestinoNoMapa(resultado) {
   const lngNum = parseFloat(lng);
   const coordsArray = [latNum, lngNum];
 
-  // Dispara o evento com suporte duplo: array coords e propriedades individuais
-  window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', {
+  // Preenche visualmente a barra de pesquisa logo após a resposta
+  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  if (inputPesquisa) inputPesquisa.value = nome_curto;
+
+  const payload = {
     detail: {
       nome: nome_curto,
       coords: coordsArray,
@@ -164,7 +167,11 @@ function aplicarDestinoNoMapa(resultado) {
       lng: lngNum,
       origem: 'ia_voz'
     }
-  }));
+  };
+
+  // Disparo duplo garantido para receptores em window ou document
+  window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', payload));
+  document.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', payload));
 
   notificar(`Destino traçado: ${nome_curto}`, 'sucesso');
 }

@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO BLINDADO - Tratamento de Contêiner Leaflet, GPS e Múltiplas Paradas
+ * CÓDIGO BLINDADO - Renderização de Polilinha, Enquadramento e Retorno Completo
  * ============================================================================
  */
 
@@ -26,7 +26,6 @@ export class HubyMapa {
     const container = document.getElementById(this.containerId);
     if (!container) return;
 
-    // 1. Limpeza segura e completa de instâncias anteriores no DOM
     if (this.map) {
       if (this.watchId !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(this.watchId);
@@ -41,7 +40,6 @@ export class HubyMapa {
       this.map = null;
     }
 
-    // Blindagem direta no DOM: remove id do Leaflet para evitar o erro "already initialized"
     if (container._leaflet_id) {
       delete container._leaflet_id;
     }
@@ -49,7 +47,6 @@ export class HubyMapa {
     this.onClickDestinoCallback = onClickDestino;
     this.gpsFixo = false;
 
-    // 2. Inicialização do mapa Leaflet
     this.map = L.map(this.containerId, {
       zoomControl: false,
       attributionControl: false
@@ -61,18 +58,14 @@ export class HubyMapa {
       crossOrigin: true
     }).addTo(this.map);
 
-    const aplicarEstiloDark = () => {
-      const pane = container.querySelector('.leaflet-tile-pane');
-      if (pane) {
-        pane.style.filter = 'brightness(0.7) invert(1) contrast(1.2) hue-rotate(200deg) saturate(0.3)';
-      }
-    };
-    aplicarEstiloDark();
+    const pane = container.querySelector('.leaflet-tile-pane');
+    if (pane) {
+      pane.style.filter = 'brightness(0.7) invert(1) contrast(1.2) hue-rotate(200deg) saturate(0.3)';
+    }
 
     this.invalidarTamanho();
-    setTimeout(() => this.invalidarTamanho(), 400);
+    setTimeout(() => this.invalidarTamanho(), 300);
 
-    // 3. Clique no mapa para selecionar destino
     if (onClickDestino) {
       this.map.on('click', async (e) => {
         const { lat, lng } = e.latlng;
@@ -151,7 +144,6 @@ export class HubyMapa {
     }
   }
 
-  // Suporte a marcadores visuais para paradas intermediárias
   atualizarMarcadoresParadas(paradas = []) {
     if (!this.map) return;
     this.markersParadas.forEach(m => this.map.removeLayer(m));
@@ -211,7 +203,39 @@ export class HubyMapa {
     this.obterGPSReal(callbackSucesso);
   }
 
+  // Traçado explícito de geometria GeoJSON
+  desenharRota(geometria, cor = '#38BDF8') {
+    if (!this.map || !geometria) return;
+
+    if (this.rotaLayer) {
+      this.map.removeLayer(this.rotaLayer);
+      this.rotaLayer = null;
+    }
+
+    this.rotaLayer = L.geoJSON(geometria, {
+      style: {
+        color: cor,
+        weight: 5,
+        opacity: 0.95,
+        lineJoin: 'round',
+        lineCap: 'round'
+      }
+    }).addTo(this.map);
+
+    this.invalidarTamanho();
+    this.map.fitBounds(this.rotaLayer.getBounds(), {
+      padding: [40, 40],
+      maxZoom: 16,
+      animate: true
+    });
+  }
+
   async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true, pontosIntermediarios = []) {
+    if (!origem || !destino) return null;
+
+    // Garante que o marcador de destino seja posicionado
+    this.definirDestino(destino[0], destino[1]);
+
     const pontos = [origem, ...pontosIntermediarios, destino];
     const coordenadasStr = pontos.map(p => `${p[1]},${p[0]}`).join(';');
 
@@ -233,7 +257,7 @@ export class HubyMapa {
           }
         }
       } catch (e) {
-        console.warn(`Falha no provedor de rotas (${url}), tentando alternativo...`);
+        console.warn(`Falha na rota (${url}), testando próxima...`);
       }
     }
 
@@ -242,21 +266,20 @@ export class HubyMapa {
       const distanciaKm = Math.max(0.5, rota.distance / 1000);
       const duracaoMin = Math.max(2, Math.round(rota.duration / 60));
 
+      // Cálculo de preço base estimado
+      const precoEstimado = Math.max(6.0, 5.0 + (distanciaKm * 2.2) + (duracaoMin * 0.35));
+
       if (this.rotaLayer && this.map) {
         this.map.removeLayer(this.rotaLayer);
         this.rotaLayer = null;
       }
 
       if (exibirLinha && this.map) {
-        const estiloTracado = cor === '#38BDF8' ? '10, 10' : null;
-        const pesoLinha = (cor === '#38BDF8' || cor === '#F59E0B') ? 4 : 5;
-
         this.rotaLayer = L.geoJSON(rota.geometry, {
           style: {
             color: cor,
-            weight: pesoLinha,
-            opacity: 0.92,
-            dashArray: estiloTracado,
+            weight: 5,
+            opacity: 0.95,
             lineJoin: 'round',
             lineCap: 'round'
           }
@@ -266,19 +289,24 @@ export class HubyMapa {
           if (this.map && this.rotaLayer) {
             this.map.invalidateSize();
             this.map.fitBounds(this.rotaLayer.getBounds(), {
-              paddingTopLeft: [40, 50],
-              paddingBottomRight: [40, 270],
+              paddingTopLeft: [30, 30],
+              paddingBottomRight: [30, 160],
               maxZoom: 16,
               animate: true
             });
           }
-        }, 200);
+        }, 150);
       }
 
-      return { distanciaKm: Number(distanciaKm.toFixed(1)), duracaoMin };
+      return {
+        distanciaKm: Number(distanciaKm.toFixed(1)),
+        duracaoMin,
+        preco: Number(precoEstimado.toFixed(2)),
+        geometria: rota.geometry
+      };
     }
 
-    // Fallback de distância euclidiana caso nenhum serviço responda
+    // Fallback matemático se os servidores de rota oscilarem
     const lat1 = origem[0], lon1 = origem[1];
     const lat2 = destino[0], lon2 = destino[1];
     const rad = Math.PI / 180;
@@ -286,7 +314,27 @@ export class HubyMapa {
     const dLon = (lon2 - lon1) * rad;
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
     const distEstimada = Math.max(1.0, 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.3);
+    const duracaoEstimada = Math.max(3, Math.round(distEstimada * 2.2));
+    const precoEstimadoFallback = Math.max(6.0, 5.0 + (distEstimada * 2.2) + (duracaoEstimada * 0.35));
 
-    return { distanciaKm: Number(distEstimada.toFixed(1)), duracaoMin: Math.max(3, Math.round(distEstimada * 2.2)) };
+    // Traça linha reta de contingência se a malha OSRM estiver fora do ar
+    if (exibirLinha && this.map) {
+      if (this.rotaLayer) this.map.removeLayer(this.rotaLayer);
+      this.rotaLayer = L.polyline([origem, destino], {
+        color: cor,
+        weight: 4,
+        dashArray: '6, 8',
+        opacity: 0.8
+      }).addTo(this.map);
+
+      this.map.fitBounds(this.rotaLayer.getBounds(), { padding: [40, 40], maxZoom: 15 });
+    }
+
+    return {
+      distanciaKm: Number(distEstimada.toFixed(1)),
+      duracaoMin: duracaoEstimada,
+      preco: Number(precoEstimadoFallback.toFixed(2)),
+      geometria: null
+    };
   }
 }
