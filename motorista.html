@@ -21,6 +21,7 @@
   <link rel="stylesheet" href="./css/motorista-layout.css?v=1.0.0">
   <link rel="stylesheet" href="./css/motorista-modais.css?v=1.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
+  <link rel="stylesheet" href="./css/ia.css?v=1.1.0">
 </head>
 
 <body>
@@ -109,7 +110,8 @@
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 17px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;" id="drawerCategoriaBadge">HUBY CARRO</span>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;"
+            id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
             <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
             <span id="drawerTotalViagensTxt">0 viagens</span>
@@ -127,7 +129,8 @@
       <div class="drawer-section-card">
         <h4>⚡ Modos e Ferramentas</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <button type="button" id="btnAbrirMarketplaceDrawer" class="btn-drawer-tool" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #C084FC;">
+          <button type="button" id="btnAbrirMarketplaceDrawer" class="btn-drawer-tool"
+            style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #C084FC;">
             <span style="font-size: 18px;">🛍️</span>
             <div>
               <strong>HUBy Loja</strong>
@@ -135,7 +138,8 @@
             </div>
           </button>
 
-          <button type="button" id="btnToggleHeatmap" class="btn-drawer-tool" style="background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); color: var(--amber);">
+          <button type="button" id="btnToggleHeatmap" class="btn-drawer-tool"
+            style="background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); color: var(--amber);">
             <span style="font-size: 18px;">🔥</span>
             <div>
               <strong>Mapa Calor</strong>
@@ -143,7 +147,8 @@
             </div>
           </button>
 
-          <button type="button" id="btnModoPausa" class="btn-drawer-tool" style="background: rgba(255, 255, 255, 0.05); border-color: var(--border-dark); color: #FFF;">
+          <button type="button" id="btnModoPausa" class="btn-drawer-tool"
+            style="background: rgba(255, 255, 255, 0.05); border-color: var(--border-dark); color: #FFF;">
             <span style="font-size: 18px;">☕</span>
             <div>
               <strong>Modo Pausa</strong>
@@ -151,7 +156,8 @@
             </div>
           </button>
 
-          <button type="button" id="btnModoDestino" class="btn-drawer-tool" style="background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.3); color: var(--blue);">
+          <button type="button" id="btnModoDestino" class="btn-drawer-tool"
+            style="background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.3); color: var(--blue);">
             <span style="font-size: 18px;">🏠</span>
             <div>
               <strong>Ir p/ Casa</strong>
@@ -193,7 +199,8 @@
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <strong style="font-size: 14px; color: #FFF;" id="drawerCarroModelo">Onix</strong>
-            <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div>
+            <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata •
+              Ano: 2023</div>
           </div>
           <div class="placa-mercosul">
             <div class="placa-mercosul-header"><span>BRASIL</span> <span>🇧🇷</span></div>
@@ -209,7 +216,8 @@
           <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
         <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando histórico...</div>
+          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando
+            histórico...</div>
         </div>
       </div>
 
@@ -255,7 +263,9 @@
 
       <div style="text-align: center; margin-bottom: 16px;">
         <div style="position: relative; width: 84px; height: 84px; margin: 0 auto 8px;">
-          <img id="previewFotoModal" src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Prévia"
+          <img id="previewFotoModal"
+            src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
+            alt="Prévia"
             style="width: 100%; height: 100%; border-radius: 50%; border: 2.5px solid var(--emerald); object-fit: cover; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
           <label for="inputUploadFotoPerfil"
             style="position: absolute; bottom: 0; right: 0; background: var(--blue); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 13px; font-weight: 900; box-shadow: 0 2px 6px rgba(0,0,0,0.5);">
@@ -301,31 +311,41 @@
         <button type="button" id="btnCancelarEdicao"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 10px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 10px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 10px; font-weight: 900; cursor: pointer;">Salvar
+          Alterações</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL HUBY CLUBE & MARKETPLACE -->
   <div id="modalMarketplace" class="modal-backdrop-custom" style="z-index: 10015;">
-    <div class="modal-box-edit" style="max-width: 440px; max-height: 85vh; display: flex; flex-direction: column; padding: 18px;">
+    <div class="modal-box-edit"
+      style="max-width: 440px; max-height: 85vh; display: flex; flex-direction: column; padding: 18px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <div>
           <h3 style="margin: 0; color: #FFF; font-size: 17px; font-weight: 800;">🛍️ HUBy Clube de Vantagens</h3>
           <small style="color: #94A3B8; font-size: 11px;">Benefícios e descontos exclusivos para parceiros</small>
         </div>
-        <button type="button" id="btnFecharMarketplace" style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+        <button type="button" id="btnFecharMarketplace"
+          style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
       </div>
 
-      <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px;" id="filtrosMarketplace">
-        <button type="button" class="btn-fast-val active" data-cat="todos" style="padding: 6px 12px; border-radius: 20px; background: rgba(139, 92, 246, 0.25); border-color: #8B5CF6;">Todos</button>
-        <button type="button" class="btn-fast-val" data-cat="adesivos" style="padding: 6px 12px; border-radius: 20px;">🎨 Adesivos</button>
-        <button type="button" class="btn-fast-val" data-cat="oficina" style="padding: 6px 12px; border-radius: 20px;">🔧 Oficinas</button>
-        <button type="button" class="btn-fast-val" data-cat="guincho" style="padding: 6px 12px; border-radius: 20px;">🛞 Guincho</button>
+      <div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; margin-bottom: 10px;"
+        id="filtrosMarketplace">
+        <button type="button" class="btn-fast-val active" data-cat="todos"
+          style="padding: 6px 12px; border-radius: 20px; background: rgba(139, 92, 246, 0.25); border-color: #8B5CF6;">Todos</button>
+        <button type="button" class="btn-fast-val" data-cat="adesivos"
+          style="padding: 6px 12px; border-radius: 20px;">🎨 Adesivos</button>
+        <button type="button" class="btn-fast-val" data-cat="oficina" style="padding: 6px 12px; border-radius: 20px;">🔧
+          Oficinas</button>
+        <button type="button" class="btn-fast-val" data-cat="guincho" style="padding: 6px 12px; border-radius: 20px;">🛞
+          Guincho</button>
       </div>
 
-      <div id="feedItensMarketplace" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
-        <div style="text-align: center; color: #94A3B8; font-size: 12px; padding: 20px 0;">Carregando benefícios...</div>
+      <div id="feedItensMarketplace"
+        style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+        <div style="text-align: center; color: #94A3B8; font-size: 12px; padding: 20px 0;">Carregando benefícios...
+        </div>
       </div>
     </div>
   </div>
@@ -334,13 +354,17 @@
   <div id="modalEscolhaPagamentoMotorista" class="modal-backdrop-custom" style="z-index: 10008;">
     <div class="modal-box-edit" style="max-width: 370px; text-align: center;">
       <h3 style="margin: 0 0 4px; font-size: 17px; color: #FFF; font-weight: 900;">🏁 Chegou ao Destino</h3>
-      <p style="color: var(--text-sec); font-size: 12px; margin: 0 0 14px;">Selecione como o passageiro efetuou o pagamento:</p>
+      <p style="color: var(--text-sec); font-size: 12px; margin: 0 0 14px;">Selecione como o passageiro efetuou o
+        pagamento:</p>
 
       <div
         style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
-        <small style="color: var(--text-sec); font-size: 10px; font-weight: 800; text-transform: uppercase;">Valor Total da Corrida</small>
-        <div id="lblValorTotalPagamentoMotorista" style="color: var(--emerald); font-size: 24px; font-weight: 900;">R$ 0,00</div>
-        <small style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos pela plataforma</small>
+        <small style="color: var(--text-sec); font-size: 10px; font-weight: 800; text-transform: uppercase;">Valor Total
+          da Corrida</small>
+        <div id="lblValorTotalPagamentoMotorista" style="color: var(--emerald); font-size: 24px; font-weight: 900;">R$
+          0,00</div>
+        <small style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos
+          pela plataforma</small>
       </div>
 
       <button type="button" id="btnPagarDinheiro" class="btn-metodo-pagto"
@@ -348,7 +372,8 @@
         <span style="font-size: 20px;">💵</span>
         <div>
           <div style="color: var(--emerald);">Dinheiro (Espécie)</div>
-          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de 15% é descontada da carteira.</small>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de
+            15% é descontada da carteira.</small>
         </div>
       </button>
 
@@ -357,7 +382,8 @@
         <span style="font-size: 20px;">💳</span>
         <div>
           <div style="color: var(--blue);">Maquininha Própria</div>
-          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15% é descontada da sua carteira.</small>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15%
+            é descontada da sua carteira.</small>
         </div>
       </button>
 
@@ -366,7 +392,8 @@
         <span style="font-size: 20px;">📱</span>
         <div>
           <div style="color: #A78BFA;">Pix na Tela (Mercado Pago)</div>
-          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Gera QR Code na sua tela e na do cliente. Repasse líquido automático.</small>
+          <small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Gera QR Code na sua tela e na do
+            cliente. Repasse líquido automático.</small>
         </div>
       </button>
 
@@ -380,7 +407,8 @@
   <!-- MODAL QR CODE PIX -->
   <div id="modalExibicaoPixMotorista" class="modal-backdrop-custom" style="z-index: 10009;">
     <div class="modal-box-edit" style="max-width: 350px; text-align: center;">
-      <h3 style="margin: 0 0 6px; font-size: 16px; color: #FFF; font-weight: 800;">📱 Apresente o QR Code ao Passageiro</h3>
+      <h3 style="margin: 0 0 6px; font-size: 16px; color: #FFF; font-weight: 800;">📱 Apresente o QR Code ao Passageiro
+      </h3>
       <div id="lblValorPixMotorista"
         style="color: var(--emerald); font-size: 22px; font-weight: 900; margin-bottom: 12px;">R$ 0,00</div>
 
@@ -393,7 +421,8 @@
       <div style="margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px;">
         <span
           style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); animation: pulse 1.5s infinite;"></span>
-        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando confirmação do banco...</small>
+        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando confirmação do
+          banco...</small>
       </div>
 
       <button type="button" id="btnFecharPixMotorista"
@@ -414,7 +443,8 @@
 
       <div
         style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;">
-        <small style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo Disponível (85% Líquido)</small>
+        <small style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo
+          Disponível (85% Líquido)</small>
         <div id="modalSaldoTexto" style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ 0,00</div>
       </div>
 
@@ -454,7 +484,8 @@
         <button type="button" id="btnCancelarSaqueModal"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnConfirmarSaquePix"
-          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar
+          Saque</button>
       </div>
     </div>
   </div>
@@ -486,6 +517,12 @@
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <script type="module" src="./js/app-motorista.js?v=10.3.0"></script>
+  <script type="module">
+    import { motoristaIA } from './js/ia/motorista-ia.js?v=1.0.0';
+    document.addEventListener('DOMContentLoaded', () => {
+      motoristaIA.iniciar();
+    });
+  </script>
 </body>
 
 </html>

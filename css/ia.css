@@ -72,3 +72,39 @@
     transform: translateY(0);
   }
 }
+/* 4. Barra de Smart Replies para o Chat do Motorista (1 Toque) */
+.huby-smart-replies-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(14, 20, 32, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+.huby-smart-replies-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.huby-reply-pill {
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  color: #38BDF8;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+}
+
+.huby-reply-pill:active {
+  transform: scale(0.94);
+  background: rgba(56, 189, 248, 0.28);
+  border-color: #38BDF8;
+}

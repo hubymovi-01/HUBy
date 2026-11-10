@@ -133,4 +133,126 @@ Sua tarefa:
   }
 });
 
+// Rota de Extração Inteligente de Encomendas HUBy Flash
+router.post('/flash-extrair', async (req, res) => {
+  try {
+    const { texto } = req.body;
+    if (!texto || !texto.trim()) {
+      return res.status(400).json({ erro: 'Texto de instrução não fornecido.' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ erro: 'Chave GEMINI_API_KEY ausente.' });
+    }
+
+    const prompt = `
+Você é um assistente de logística e entregas urbanas no Piauí, Brasil.
+O cliente ditou uma ordem de entrega de encomenda: "${texto}".
+
+Extraia as seguintes informações e retorne RIGOROSAMENTE apenas um JSON:
+{
+  "recebedor": "Nome e telefone de quem vai receber (ou apenas o nome se não houver telefone)",
+  "tipoItem": "documento" | "pequeno" | "medio" | "fragil",
+  "observacao": "Instrução adicional curta sobre o item ou entrega (se houver, senão null)"
+}
+
+Regras para tipoItem:
+- "documento": cartas, papéis, envelopes, chaves, contratos.
+- "pequeno": remédios, caixas pequenas, peças leves até 5kg.
+- "medio": compras de mercado, caixas maiores, roupas, até 15kg.
+- "fragil": bolos, copos, vidros, doces delicados.
+`;
+
+    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const respGemini = await fetch(urlGemini, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json'
+        }
+      })
+    });
+
+    if (respGemini.ok) {
+      const json = await respGemini.json();
+      const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) {
+        const parsed = JSON.parse(rawText.trim());
+        return res.json({ sucesso: true, resultado: parsed });
+      }
+    }
+
+    return res.status(500).json({ erro: 'Falha ao processar dados da entrega com IA.' });
+  } catch (err) {
+    console.error('❌ [IA Flash] Erro:', err.message || err);
+    return res.status(500).json({ erro: 'Erro interno ao processar encomenda.', detalhe: err.message });
+  }
+});
+// Rota de Smart Replies Contextuais para o Chat do Motorista
+router.post('/motorista-respostas', async (req, res) => {
+  try {
+    const { mensagem } = req.body;
+    if (!mensagem || !mensagem.trim()) {
+      return res.status(400).json({ erro: 'Mensagem do passageiro não fornecida.' });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    // Respostas padrão de contingência caso a API não esteja acessível
+    const fallbackRespostas = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
+
+    if (!apiKey) {
+      return res.json({ sucesso: true, sugestoes: fallbackRespostas });
+    }
+
+    const prompt = `
+Você é um copiloto inteligente de mobilidade urbana para o motorista parceiro da HUBy no Piauí.
+O passageiro acabou de enviar a seguinte mensagem no chat: "${mensagem}".
+
+Gere exatamente 3 sugestões de respostas ultra-curtas, profissionais e seguras para o motorista enviar com 1 toque no trânsito (máximo 6 palavras cada).
+Retorne RIGOROSAMENTE apenas um JSON no formato:
+{
+  "sugestoes": ["Resposta 1", "Resposta 2", "Resposta 3"]
+}
+`;
+
+    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+    const respGemini = await fetch(urlGemini, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.2,
+          responseMimeType: 'application/json'
+        }
+      })
+    });
+
+    if (respGemini.ok) {
+      const json = await respGemini.json();
+      const rawText = json.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (rawText) {
+        const parsed = JSON.parse(rawText.trim());
+        if (Array.isArray(parsed.sugestoes) && parsed.sugestoes.length > 0) {
+          return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
+        }
+      }
+    }
+
+    return res.json({ sucesso: true, sugestoes: fallbackRespostas });
+  } catch (err) {
+    console.warn('⚠️ [IA Motorista] Fallback aplicado:', err.message);
+    return res.json({
+      sucesso: true,
+      sugestoes: ['Estou a caminho!', 'Chego em instantes.', 'Aguarde no local.']
+    });
+  }
+});
 export default router;
