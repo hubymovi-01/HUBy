@@ -5,7 +5,6 @@ import { notificar } from '../util/alertas-huby.js';
 let recognition = null;
 let escutaEmAndamento = false;
 
-// Obtém coordenadas locais aproximadas do passageiro para âncora de busca
 function obterCoordenadasUsuario() {
   const latSalva = localStorage.getItem('huby_user_lat') || localStorage.getItem('huby_origem_lat');
   const lngSalva = localStorage.getItem('huby_user_lng') || localStorage.getItem('huby_origem_lng');
@@ -16,7 +15,6 @@ function obterCoordenadasUsuario() {
   return { userLat: null, userLng: null };
 }
 
-// Inicializa o reconhecimento de voz do passageiro
 export function inicializarVozPassageiro() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   const btnBuscaIA = document.getElementById('btnBuscaIA');
@@ -26,7 +24,7 @@ export function inicializarVozPassageiro() {
 
   if (!SpeechRecognition) {
     btnBuscaIA.addEventListener('click', () => {
-      notificar('O seu navegador não suporta pesquisa por voz. Digite o endereço.', 'alerta');
+      notificar('Seu navegador não suporta pesquisa por voz. Digite o endereço.', 'alerta');
       inputPesquisa?.focus();
     });
     return;
@@ -42,7 +40,7 @@ export function inicializarVozPassageiro() {
     btnBuscaIA.style.color = '#EF4444';
     btnBuscaIA.style.transform = 'scale(1.2)';
     btnBuscaIA.style.transition = 'transform 0.2s ease, color 0.2s ease';
-    notificar('A ouvir destino... Diga para onde deseja ir.', 'info', 3000);
+    notificar('Ouvindo destino... Diga para onde você quer ir.', 'info', 3000);
   };
 
   recognition.onend = () => {
@@ -56,7 +54,7 @@ export function inicializarVozPassageiro() {
     btnBuscaIA.style.color = '#38BDF8';
     btnBuscaIA.style.transform = 'scale(1)';
     if (ev.error !== 'no-speech') {
-      notificar('Não foi possível identificar o áudio. Tente novamente.', 'alerta');
+      notificar('Não foi possível identificar o áudio. Tente falar novamente.', 'alerta');
     }
   };
 
@@ -65,7 +63,7 @@ export function inicializarVozPassageiro() {
     if (!transcricao || !transcricao.trim()) return;
 
     if (inputPesquisa) inputPesquisa.value = transcricao;
-    notificar(`A pesquisar destino: "${transcricao}"`, 'info', 2500);
+    notificar(`Pesquisando: "${transcricao}"`, 'info', 2500);
 
     await consultarDestinoIA(transcricao);
   };
@@ -84,7 +82,6 @@ export function inicializarVozPassageiro() {
   });
 }
 
-// Envia a fala para o backend (ia.routes.js -> /api/ia/localizar-referencia)
 async function consultarDestinoIA(frase) {
   const { userLat, userLng } = obterCoordenadasUsuario();
   const token = localStorage.getItem('huby_token');
@@ -103,32 +100,70 @@ async function consultarDestinoIA(frase) {
       })
     });
 
-    const data = await resp.json();
+    const data = await resp.json().catch(() => null);
 
-    if (!resp.ok || !data.sucesso || !data.resultado) {
-      throw new Error(data.erro || 'Localização não identificada.');
+    if (data && data.sucesso && data.resultado) {
+      aplicarDestinoNoMapa(data.resultado);
+      return;
     }
 
-    const { nome_curto, lat, lng } = data.resultado;
+    // Se o backend avisar que não achou, aciona o fallback direto pelo cliente
+    await fallbackGeocodificacaoDireta(frase);
 
-    // Dispara o evento captado pelo app-cliente.js para traçar a rota e abrir as categorias
-    window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', {
-      detail: {
-        nome: nome_curto,
-        lat: Number(lat),
-        lng: Number(lng),
-        origem: 'ia_voz'
-      }
-    }));
-
-    notificar(`Destino traçado: ${nome_curto}`, 'sucesso');
   } catch (err) {
-    console.warn('Erro na rota IA:', err);
-    notificar(err.message || 'Não conseguimos identificar o local. Digite manualmente.', 'alerta');
+    console.warn('Backend indisponível, tentando fallback no cliente:', err);
+    await fallbackGeocodificacaoDireta(frase);
   }
 }
 
-// Inicialização automática
+// Fallback direto no OpenStreetMap caso a IA ou a rede do servidor oscilem
+async function fallbackGeocodificacaoDireta(termo) {
+  const termoLimpo = termo
+    .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para|ir ao|me leva no)\s+/i, '')
+    .trim();
+
+  const buscas = [
+    termoLimpo,
+    `${termoLimpo}, Piauí, Brasil`,
+    `${termoLimpo}, Brasil`
+  ];
+
+  for (const b of buscas) {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(b)}&countrycodes=br&limit=1`);
+      if (res.ok) {
+        const itens = await res.json().catch(() => null);
+        if (Array.isArray(itens) && itens.length > 0 && itens[0]) {
+          const item = itens[0];
+          aplicarDestinoNoMapa({
+            nome_curto: item.display_name.split(',').slice(0, 2).join(', '),
+            lat: parseFloat(item.lat),
+            lng: parseFloat(item.lon)
+          });
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
+  notificar('Local não identificado. Tente digitar o endereço ou escolher no mapa.', 'alerta');
+}
+
+function aplicarDestinoNoMapa(resultado) {
+  const { nome_curto, lat, lng } = resultado;
+
+  window.dispatchEvent(new CustomEvent('huby_local_selecionado_ia', {
+    detail: {
+      nome: nome_curto,
+      lat: Number(lat),
+      lng: Number(lng),
+      origem: 'ia_voz'
+    }
+  }));
+
+  notificar(`Destino traçado: ${nome_curto}`, 'sucesso');
+}
+
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', inicializarVozPassageiro);
 } else {
