@@ -1,37 +1,46 @@
-// routes/ia.routes.js - Geocodificação Robusta com Tratamento Inteligente de Comandos de Voz
+// routes/ia.routes.js - Geocodificação Inteligente e Resiliente para o Piauí
 import express from 'express';
 
 const router = express.Router();
 
-// Função auxiliar para consultar o serviço geográfico com coordenadas reais
-async function geocodificarFallback(termo, cidadeBase) {
+// Função auxiliar de busca geográfica progressiva (Nominatim / OSM)
+async function buscarCoordenadasNominatim(termo, cidadeContexto = 'São João do Piauí') {
   try {
-    const termosLimpos = termo
-      .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para)\s+/i, '')
+    // Limpeza de termos comuns de conversação
+    const termoLimpo = termo
+      .replace(/^(quero ir para|me leva para|me leve para|ir para|vamos para|ir ate|ir até|vou para|ir ao|me leva no|me leva na)\s+/i, '')
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, '')
       .trim();
 
-    const buscas = [
-      `${termosLimpos}, ${cidadeBase}`,
-      `${termosLimpos}, Piauí, Brasil`,
-      `${termosLimpos}, Brasil`
+    // Variações de busca ordenada da mais específica para a mais ampla
+    const tentativas = [
+      `${termoLimpo}, ${cidadeContexto}, Piauí, Brasil`,
+      `${termoLimpo}, São João do Piauí, Brasil`,
+      `${termoLimpo}, Piauí, Brasil`,
+      `${termoLimpo}, Brasil`
     ];
 
-    for (const query of buscas) {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'HUBy-Mobility/2.0' } });
+    for (const query of tentativas) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=1`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'HUBy-Mobility-App/2.5 (contato@hubymovi.com)' }
+      });
+
       if (res.ok) {
         const dados = await res.json();
         if (dados && dados.length > 0) {
+          const item = dados[0];
+          const nomeCurto = item.display_name.split(',').slice(0, 2).join(', ');
           return {
-            nome_curto: dados[0].display_name.split(',')[0] + ', PI',
-            lat: parseFloat(dados[0].lat),
-            lng: parseFloat(dados[0].lon)
+            nome_curto: nomeCurto,
+            lat: parseFloat(item.lat),
+            lng: parseFloat(item.lon)
           };
         }
       }
     }
   } catch (err) {
-    console.warn('⚠️ Falha no fallback geográfico:', err.message);
+    console.warn('⚠️ [Geocodificação Fallback] Erro:', err.message);
   }
   return null;
 }
@@ -40,29 +49,29 @@ router.post('/localizar-referencia', async (req, res) => {
   try {
     const { referencia, cidadeBase = 'São João do Piauí, Piauí' } = req.body;
 
-    console.log('🤖 [IA] Comando de voz recebido:', referencia);
+    console.log('🤖 [IA] Termo de busca recebido:', referencia);
 
     if (!referencia || !referencia.trim()) {
-      return res.status(400).json({ erro: 'Por favor, informe o ponto de referência ou destino.' });
+      return res.status(400).json({ erro: 'Por favor, fale ou informe o endereço de destino.' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     let resultadoFinal = null;
 
-    // 1. Tentar resolver e limpar com Gemini (via REST direta para evitar conflitos de SDK)
+    // 1. Tentar geocodificar e limpar via Gemini API com prompt refinado
     if (apiKey) {
       try {
         const prompt = `
-Você é um assistente de GPS e geolocalização no Piauí, Brasil.
-Região base: ${cidadeBase}.
-O passageiro falou o seguinte comando de voz: "${referencia}".
+Você é um especialista em geolocalização urbana no interior do estado do Piauí, Brasil.
+Contexto / Cidade principal: ${cidadeBase}.
+Destino falado pelo passageiro: "${referencia}".
 
-Sua tarefa:
-1. Extraia apenas o DESTINO pretendido (remova frases como "quero ir para", "me leva", "vamos até", etc.).
-2. Identifique o município ou ponto de interesse real no estado do Piauí (ex: Simplício Mendes, Teresina, São João do Piauí, João Costa, praça, bairro, etc.).
-3. Devolva RIGOROSAMENTE apenas um JSON no formato:
+Instruções:
+1. Remova expressões conversacionais como "quero ir", "me leva", "vamos para".
+2. Se for uma rua, praça, colégio, IFPI, hospital, terminal ou cidade vizinha (ex: João Costa, Simplício Mendes, São Raimundo Nonato, Teresina), encontre as coordenadas aproximadas mais realistas dessa região no Piauí.
+3. Responda RIGOROSAMENTE apenas um JSON válido com esta estrutura exata:
 {
-  "nome_curto": "Nome Limpo do Local ou Cidade, PI",
+  "nome_curto": "Nome da Rua/Local, Cidade, PI",
   "lat": -8.3582,
   "lng": -42.2476
 }
@@ -90,32 +99,35 @@ Sua tarefa:
             const parsed = JSON.parse(limpo);
             const lat = parseFloat(parsed.lat);
             const lng = parseFloat(parsed.lng);
-            if (!isNaN(lat) && !isNaN(lng)) {
+
+            // Valida se as coordenadas pertencem geograficamente à região do Brasil/Piauí
+            if (!isNaN(lat) && !isNaN(lng) && lat < 0 && lng < 0) {
               resultadoFinal = {
                 nome_curto: parsed.nome_curto || referencia,
                 lat,
                 lng
               };
-              console.log('✅ [IA Gemini] Sucesso:', resultadoFinal);
+              console.log('✅ [IA Gemini] Coordenadas identificadas:', resultadoFinal);
             }
           }
         } else {
-          console.warn('⚠️ [IA Gemini] Erro na API:', await respGemini.text());
+          console.warn('⚠️ [IA Gemini] Erro na resposta da API:', await respGemini.text());
         }
       } catch (errGemini) {
-        console.warn('⚠️ [IA Gemini] Exceção no processamento do modelo:', errGemini.message);
+        console.warn('⚠️ [IA Gemini] Falha no modelo:', errGemini.message);
       }
     }
 
-    // 2. Se a IA falhou, aplicar fallback geográfico imediato
+    // 2. Se a IA hesitou ou não encontrou, executa a busca progressiva de contingência
     if (!resultadoFinal) {
-      console.log('🔄 [IA] Acionando geocodificação direta para garantir o destino...');
-      resultadoFinal = await geocodificarFallback(referencia, cidadeBase);
+      console.log('🔄 [IA] Acionando busca geográfica de contingência para:', referencia);
+      resultadoFinal = await buscarCoordenadasNominatim(referencia, 'São João do Piauí');
     }
 
+    // 3. Resposta final ao frontend
     if (!resultadoFinal) {
       return res.status(404).json({
-        erro: 'Não conseguimos localizar esse destino. Diga o nome da cidade, praça ou rua.'
+        erro: 'Não conseguimos identificar este local. Tente falar o nome da rua junto com o bairro ou cidade.'
       });
     }
 
@@ -125,7 +137,7 @@ Sua tarefa:
     });
 
   } catch (err) {
-    console.error('❌ [IA] Erro geral na rota:', err);
+    console.error('❌ [IA] Erro na rota:', err);
     return res.status(500).json({
       erro: 'Falha temporária ao processar a localização.',
       detalhe: err.message
@@ -193,6 +205,7 @@ Regras para tipoItem:
     return res.status(500).json({ erro: 'Erro interno ao processar encomenda.', detalhe: err.message });
   }
 });
+
 // Rota de Smart Replies Contextuais para o Chat do Motorista
 router.post('/motorista-respostas', async (req, res) => {
   try {
@@ -202,8 +215,6 @@ router.post('/motorista-respostas', async (req, res) => {
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-
-    // Respostas padrão de contingência caso a API não esteja acessível
     const fallbackRespostas = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
 
     if (!apiKey) {
@@ -255,4 +266,5 @@ Retorne RIGOROSAMENTE apenas um JSON no formato:
     });
   }
 });
+
 export default router;
