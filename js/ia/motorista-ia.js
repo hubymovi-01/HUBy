@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Hands-Free com Frase Personalizada, Suporte Gemini e Wake Lock
+// js/ia/motorista-ia.js - Copiloto Hands-Free com Tolerância Fonética, Checagem de Radar e Suporte Gemini
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -11,9 +11,7 @@ let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null
 let processandoComando = false;
 let wakeLockSentinel = null;
 
-// ============================================================================
-// 1. NORMALIZAÇÃO FONÉTICA E PALAVRA-CHAVE PERSONALIZADA
-// ============================================================================
+// Normalização fonética inteligente (remove acentos, pontuações e simplifica sons)
 function normalizarTexto(txt = '') {
   return txt
     .toLowerCase()
@@ -24,13 +22,41 @@ function normalizarTexto(txt = '') {
     .trim();
 }
 
-// Recupera a frase de ativação cadastrada pelo condutor
+// Algoritmo de tolerância: calcula similaridade fonética entre duas palavras (Levenshtein simplificado)
+function saoPalavrasParecidas(p1, p2) {
+  if (!p1 || !p2) return false;
+  if (p1 === p2) return true;
+  if (p1.includes(p2) || p2.includes(p1)) return true;
+
+  // Se uma palavra tiver comprimento parecido e apenas 1 ou 2 letras diferentes (ex: zanix e zanc)
+  const len1 = p1.length;
+  const len2 = p2.length;
+  if (Math.abs(len1 - len2) > 2) return false;
+
+  let matriz = [];
+  for (let i = 0; i <= len1; i++) matriz[i] = [i];
+  for (let j = 0; j <= len2; j++) matriz[0][j] = j;
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const custo = p1[i - 1] === p2[j - 1] ? 0 : 1;
+      matriz[i][j] = Math.min(
+        matriz[i - 1][j] + 1,
+        matriz[i][j - 1] + 1,
+        matriz[i - 1][j - 1] + custo
+      );
+    }
+  }
+
+  const distancia = matriz[len1][len2];
+  return distancia <= 2; // Tolera até 2 caracteres de variação de pronúncia/transcrição
+}
+
 export function obterCodigoAtivacaoMotorista() {
   const salvo = localStorage.getItem('huby_codigo_voz_motorista');
   return salvo && salvo.trim() ? salvo.trim() : 'OK HUBy';
 }
 
-// Grava a nova frase de ativação no storage e no banco PostgreSQL
 export async function definirCodigoAtivacaoMotorista(novaFrase) {
   if (!novaFrase || !novaFrase.trim()) return false;
   const fraseLimpa = novaFrase.trim();
@@ -46,12 +72,11 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
     console.warn('Persistência local mantida para o comando de ativação.');
   }
 
-  falarTexto(`Comando definido para: ${fraseLimpa}`);
+  falarTexto(`Comando ativado: ${fraseLimpa}`);
   atualizarIndicadorUIVoz(escutaAtiva);
   return true;
 }
 
-// Resposta por voz (Text-to-Speech)
 export function falarTexto(texto) {
   if (!sintetizador) return;
   try {
@@ -66,9 +91,6 @@ export function falarTexto(texto) {
   }
 }
 
-// ============================================================================
-// 2. WAKE LOCK: TELA SEMPRE ATIVA AO VOLANTE
-// ============================================================================
 async function requisitarWakeLock() {
   if ('wakeLock' in navigator) {
     try {
@@ -76,30 +98,20 @@ async function requisitarWakeLock() {
       wakeLockSentinel.addEventListener('release', () => {
         wakeLockSentinel = null;
       });
-    } catch (e) {
-      console.warn('Wake Lock não concedido:', e.message);
-    }
+    } catch (e) {}
   }
 }
 
 function liberarWakeLock() {
   if (wakeLockSentinel) {
-    try {
-      wakeLockSentinel.release();
-    } catch (e) {}
+    try { wakeLockSentinel.release(); } catch (e) {}
     wakeLockSentinel = null;
   }
 }
 
-// ============================================================================
-// 3. RECONHECIMENTO CONTÍNUO (HANDS-FREE)
-// ============================================================================
 export function inicializarCopilotoVoz() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRecognition) {
-    console.warn('Reconhecimento de fala indisponível no navegador.');
-    return false;
-  }
+  if (!SpeechRecognition) return false;
 
   if (recognition) {
     try { recognition.stop(); } catch (e) {}
@@ -117,10 +129,9 @@ export function inicializarCopilotoVoz() {
   };
 
   recognition.onend = () => {
-    if (escutaAtiva && (estado.isOnline || localStorage.getItem('huby_motorista_online') === 'true')) {
-      try {
-        recognition.start();
-      } catch (e) {}
+    const online = estado.isOnline || localStorage.getItem('huby_motorista_online') === 'true';
+    if (escutaAtiva && online) {
+      try { recognition.start(); } catch (e) {}
     } else {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
@@ -136,7 +147,6 @@ export function inicializarCopilotoVoz() {
   recognition.onresult = (ev) => {
     const ultimoResultado = ev.results[ev.results.length - 1];
     if (!ultimoResultado || !ultimoResultado[0]) return;
-
     const transcricao = ultimoResultado[0].transcript;
     processarComandoVoz(transcricao);
   };
@@ -163,143 +173,152 @@ export function desativarEscutaCopiloto() {
   liberarWakeLock();
 }
 
-// ============================================================================
-// 4. PROCESSAMENTO DE INTENÇÃO E SUPORTE GEMINI
-// ============================================================================
+// Reconhecimento de intenção tolerante com fonética
 async function processarComandoVoz(fraseBruta) {
   if (processandoComando) return;
 
   const fraseFalada = normalizarTexto(fraseBruta);
   const gatilhoCadastrado = normalizarTexto(obterCodigoAtivacaoMotorista());
+  const palavrasFaladas = fraseFalada.split(' ');
 
-  // Checa se chamou pelo gatilho configurado
-  if (!fraseFalada.includes(gatilhoCadastrado)) {
-    const partePrincipal = gatilhoCadastrado.replace(/^(ok|ei|fala|e ai)\s+/i, '').trim();
-    if (!partePrincipal || !fraseFalada.includes(partePrincipal)) {
-      return;
+  // Extrai o nome principal do gatilho (ex: se cadastrou "Ok Zanix", a palavra principal é "zanix")
+  const partesGatilho = gatilhoCadastrado.split(' ').filter(p => !['ok', 'ei', 'fala', 'e', 'ai'].includes(p));
+  const palavraChavePrincipal = partesGatilho[partesGatilho.length - 1] || gatilhoCadastrado;
+
+  // Verifica se o condutor chamou o copiloto (por casamento direto ou tolerância fonética de palavras parecidas)
+  let gatilhoDetectado = fraseFalada.includes(gatilhoCadastrado);
+
+  if (!gatilhoDetectado) {
+    for (const palavra of palavrasFaladas) {
+      if (saoPalavrasParecidas(palavra, palavraChavePrincipal)) {
+        gatilhoDetectado = true;
+        break;
+      }
     }
   }
+
+  // Se não foi chamado pelo nome/gatilho, ignora
+  if (!gatilhoDetectado) return;
 
   processandoComando = true;
   setTimeout(() => { processandoComando = false; }, 1200);
 
-  let acao = fraseFalada.replace(gatilhoCadastrado, '').trim();
+  // Limpa o gatilho da frase para pegar apenas a ação/pergunta
+  let acao = fraseFalada
+    .replace(gatilhoCadastrado, '')
+    .replace(new RegExp(`\\b${palavraChavePrincipal}\\b`, 'gi'), '')
+    .replace(/^(ok|ei|fala|e ai)\s+/i, '')
+    .trim();
 
-  // 1. CHECAR OU VER A ROTA DA CORRIDA NO MAPA
+  // 1. CHECAGEM DE RADAR: "Tem alguma rota?", "Tem corrida?", "Alguma chamada?"
   if (
-    acao.includes('ver') || 
-    acao.includes('checar') || 
-    acao.includes('olhar') || 
-    acao.includes('mostrar') || 
-    acao.includes('rota') || 
-    acao.includes('pedido') ||
-    acao.includes('chamada')
+    acao.includes('tem rota') ||
+    acao.includes('tem corrida') ||
+    acao.includes('tem chamada') ||
+    acao.includes('alguma rota') ||
+    acao.includes('alguma corrida') ||
+    acao.includes('algum pedido')
+  ) {
+    cmdChecarRadarStatus();
+    return;
+  }
+
+  // 2. VER / CHECAR ROTA DO PEDIDO NO MAPA
+  if (
+    acao.includes('ver rota') ||
+    acao.includes('mostrar rota') ||
+    acao.includes('olhar rota') ||
+    acao.includes('ver corrida') ||
+    acao.includes('checar')
   ) {
     cmdVerRotaNoMapa();
     return;
   }
 
-  // 2. ACEITAR / CONFIRMAR CORRIDA
+  // 3. ACEITAR CORRIDA
   if (
-    acao.includes('aceitar') || 
-    acao.includes('confirmar') || 
-    acao.includes('pegar') || 
-    acao.includes('vou fazer') || 
-    acao.includes('sim')
+    acao.includes('aceitar') ||
+    acao.includes('confirmar') ||
+    acao.includes('pegar') ||
+    acao.includes('vou fazer') ||
+    acao.includes('pode aceitar')
   ) {
     cmdAceitarChamada();
     return;
   }
 
-  // 3. RECUSAR / DISPENSAR CHAMADA
+  // 4. RECUSAR / DISPENSAR
   if (
-    acao.includes('recusar') || 
-    acao.includes('dispensar') || 
-    acao.includes('ignorar') || 
-    acao.includes('passo') || 
-    acao.includes('nao')
+    acao.includes('recusar') ||
+    acao.includes('dispensar') ||
+    acao.includes('ignorar') ||
+    acao.includes('passo') ||
+    acao.includes('nao quero')
   ) {
     cmdDispensarChamada();
     return;
   }
 
-  // 4. AVISAR CHEGADA AO EMBARQUE
+  // 5. CHEGOU AO EMBARQUE
   if (acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui')) {
     cmdAvisarChegada();
     return;
   }
 
-  // 5. INICIAR VIAGEM COM PASSAGEIRO
+  // 6. INICIAR VIAGEM
   if (acao.includes('iniciar') || acao.includes('embarcou') || acao.includes('partiu')) {
     cmdIniciarViagem();
     return;
   }
 
-  // 6. FINALIZAR CORRIDA
+  // 7. FINALIZAR CORRIDA
   if (acao.includes('finalizar') || acao.includes('concluir') || acao.includes('terminar')) {
     cmdFinalizarViagem();
     return;
   }
 
-  // 7. CANAL DE SUPORTE E DÚVIDAS COM GEMINI (Perguntas Livres ao Volante)
+  // 8. DÚVIDA OU CONVERSA LIVRE AO VOLANTE (GEMINI)
   if (acao.length > 3) {
     await responderDuvidaComGemini(fraseBruta);
     return;
   }
 
-  falarTexto('Às ordens.');
+  falarTexto('Estou ouvindo. Pode falar.');
 }
 
-// Consulta de suporte em tempo real ao modelo Gemini
-async function responderDuvidaComGemini(perguntaCompleta) {
-  falarTexto('Consultando...');
-  try {
-    const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...obterHeaders()
-      },
-      body: JSON.stringify({
-        pergunta: perguntaCompleta,
-        contextoCorrida: {
-          online: estado.isOnline,
-          pedidoAtivoId: estado.pedidoAtivoId || null
-        }
-      })
-    });
-
-    const data = await resp.json().catch(() => null);
-    if (data && data.resposta) {
-      falarTexto(data.resposta);
-    } else {
-      falarTexto('Copiloto conectado. Como posso ajudar?');
-    }
-  } catch (err) {
-    falarTexto('Estou a postos no trajeto.');
+// Responde se há corridas no radar no momento
+function cmdChecarRadarStatus() {
+  const chamadas = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
+  if (!chamadas || chamadas.length === 0) {
+    falarTexto('Nenhuma chamada no radar no momento. Estou monitorando.');
+    return;
   }
+
+  const primeiroBtn = chamadas[0];
+  const dados = extrairDadosDoBotao(primeiroBtn);
+  const repasse = dados.repasse || (Number(dados.preco || 0) * 0.85).toFixed(2).replace('.', ',');
+  const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
+  const gatilho = obterCodigoAtivacaoMotorista();
+
+  falarTexto(`Temos 1 chamada disponível para ${destinoLimpo}, ganho de ${repasse} reais. Diga ${gatilho} ver rota ou ${gatilho} aceitar.`);
 }
 
-// ============================================================================
-// 5. AÇÕES EXECUTÁVEIS DIRETAS
-// ============================================================================
 function cmdVerRotaNoMapa() {
   const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
   if (!primeiroBtn) {
-    falarTexto('Nenhuma chamada no radar agora.');
+    falarTexto('Nenhuma chamada pendente para visualizar.');
     return;
   }
 
   pararAlertaSonoroChamada();
   const dados = extrairDadosDoBotao(primeiroBtn);
-  
   preVisualizarRotaPedido(dados);
 
-  const repasse = dados.repasse || (Number(dados.preco) * 0.85).toFixed(2).replace('.', ',');
+  const repasse = dados.repasse || (Number(dados.preco || 0) * 0.85).toFixed(2).replace('.', ',');
   const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
   const gatilho = obterCodigoAtivacaoMotorista();
 
-  falarTexto(`Rota na tela. Ganho de ${repasse} reais para ${destinoLimpo}. Diga ${gatilho} aceitar para confirmar.`);
+  falarTexto(`Rota na tela. Ganho de ${repasse} reais para ${destinoLimpo}. Diga ${gatilho} aceitar.`);
 }
 
 function cmdAceitarChamada() {
@@ -350,7 +369,7 @@ function cmdAvisarChegada() {
     falarTexto('Passageiro avisado que você chegou.');
     btnNoLocal.click();
   } else {
-    falarTexto('Comando disponível apenas próximo ao embarque.');
+    falarTexto('Você só pode avisar chegada próximo ao embarque.');
   }
 }
 
@@ -374,9 +393,35 @@ function cmdFinalizarViagem() {
   }
 }
 
-// ============================================================================
-// 6. BADGE VISUAL DE STATUS DO COPILOTO
-// ============================================================================
+async function responderDuvidaComGemini(perguntaCompleta) {
+  falarTexto('Consultando...');
+  try {
+    const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...obterHeaders()
+      },
+      body: JSON.stringify({
+        pergunta: perguntaCompleta,
+        contextoCorrida: {
+          online: estado.isOnline,
+          pedidoAtivoId: estado.pedidoAtivoId || null
+        }
+      })
+    });
+
+    const data = await resp.json().catch(() => null);
+    if (data && data.resposta) {
+      falarTexto(data.resposta);
+    } else {
+      falarTexto('Copiloto conectado. Em que posso ajudar?');
+    }
+  } catch (err) {
+    falarTexto('Estou a postos no trajeto.');
+  }
+}
+
 function atualizarIndicadorUIVoz(ativo) {
   let badge = document.getElementById('badgeCopilotoVozStatus');
   if (!badge) {
