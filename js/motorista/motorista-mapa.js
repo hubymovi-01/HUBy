@@ -8,7 +8,10 @@ let watchId = null;
 
 export function inicializarSocket() {
   if (typeof io !== 'undefined') {
-    estado.socket = io(API_URL);
+    const token = localStorage.getItem('huby_token');
+    estado.socket = io(API_URL, {
+      auth: { token: token || '' }
+    });
 
     // Ouve confirmação de pagamento do Mercado Pago em tempo real
     estado.socket.on('corrida_finalizada', (dados) => {
@@ -47,7 +50,7 @@ export function inicializarMapa() {
 
     const iconeCarro = L.divIcon({
       className: 'huby-driver-pin',
-      html: '<div style="width:38px;height:38px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(16,185,129,0.9);font-size:19px;">🚘</div>',
+      html: '<div id="marcadorCarroIcone" style="width:38px;height:38px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(16,185,129,0.9);font-size:19px;transition:transform 0.4s ease;">🚘</div>',
       iconSize: [38, 38],
       iconAnchor: [19, 19]
     });
@@ -82,12 +85,18 @@ export function iniciarRastreamentoGPSContinuo() {
       const lng = pos.coords.longitude;
       const heading = pos.coords.heading || 0;
 
-      // 1. Atualiza estado central
+      // 1. Atualiza estado central de coordenadas
       estado.coords = [lat, lng];
 
       // 2. Move o marcador do carro suavemente na tela do motorista
       if (estado.markerVeiculo) {
         estado.markerVeiculo.setLatLng([lat, lng]);
+
+        // Rotaciona o ícone de acordo com a direção do movimento (bússola / heading)
+        const elIcone = document.getElementById('marcadorCarroIcone');
+        if (elIcone && heading) {
+          elIcone.style.transform = `rotate(${heading}deg)`;
+        }
       }
 
       const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
@@ -97,10 +106,14 @@ export function iniciarRastreamentoGPSContinuo() {
         estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
       }
 
-      // 4. Transmite a posição ao servidor para o passageiro ver o carro se deslocar
-      if (estado.socket) {
+      // 4. Só transmite a posição ao servidor se estiver ONLINE ou em corrida ativa
+      if (estado.socket && (estado.isOnline || corridaAtiva)) {
+        const idMotorista = estado.motoristaId || localStorage.getItem('huby_user_id') || '';
+        const idPedidoAtivo = corridaAtiva?.id || null;
+
         estado.socket.emit('posicao_motorista', {
-          motoristaId: estado.motoristaId,
+          motoristaId: idMotorista,
+          pedidoId: idPedidoAtivo,
           lat: lat,
           lng: lng,
           heading: heading,

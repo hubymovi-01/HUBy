@@ -77,6 +77,7 @@ export async function alternarStatusOnline() {
       btn.style.color = '#94A3B8';
       btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
       pararRadarChamadas();
+      renderizarRadarOffline();
     }
   }
 
@@ -94,6 +95,10 @@ export async function alternarStatusOnline() {
       if (dados.online !== undefined) {
         estado.isOnline = Boolean(dados.online);
         estado.statusOnline = estado.isOnline;
+        if (!estado.isOnline) {
+          pararRadarChamadas();
+          renderizarRadarOffline();
+        }
       }
     }
   } catch (err) {
@@ -105,7 +110,13 @@ export async function alternarStatusOnline() {
 
 export function iniciarRadarChamadas() {
   solicitarPermissaoNotificacoes();
-  estado.isOnline = true;
+
+  // Se o motorista estiver desligado ou offline, não inicia radar nem busca corridas
+  if (!estado.isOnline) {
+    renderizarRadarOffline();
+    pararRadarChamadas();
+    return;
+  }
 
   buscarChamadasPendentes();
 
@@ -118,6 +129,8 @@ export function iniciarRadarChamadas() {
       });
 
       estado.socketRadar.on('nova_chamada', () => {
+        // Bloqueio instantâneo se estiver offline
+        if (!estado.isOnline) return;
         if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise && estado.statusAprovacaoAtual === 'aprovado') {
           buscarChamadasPendentes(true);
         }
@@ -133,6 +146,10 @@ export function iniciarRadarChamadas() {
 
   pararRadarChamadas();
   estado.intervalRadar = setInterval(() => {
+    if (!estado.isOnline) {
+      pararRadarChamadas();
+      return;
+    }
     if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
       buscarChamadasPendentes(false);
     }
@@ -147,7 +164,27 @@ export function pararRadarChamadas() {
   pararAlertaSonoroChamada();
 }
 
+function renderizarRadarOffline() {
+  const feedEl = document.getElementById('listaChamadasPendentes');
+  if (feedEl) {
+    feedEl.innerHTML = `
+      <div class="dock-empty" style="text-align: center; color: #94A3B8; font-size: 13px; padding: 22px 10px; background: rgba(15,23,42,0.6); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px;">
+        <span style="font-size: 24px; display: block; margin-bottom: 6px;">⚪</span>
+        <strong>Você está offline</strong><br>
+        <span style="font-size: 11.5px; color: #64748B;">Toque no botão "Ficar Online" para receber chamadas de passageiros.</span>
+      </div>
+    `;
+  }
+}
+
 export async function buscarChamadasPendentes(tocarSomForcado = false) {
+  // BLOQUEIO TOTAL: Motorista offline não processa dados
+  if (!estado.isOnline) {
+    pararAlertaSonoroChamada();
+    renderizarRadarOffline();
+    return;
+  }
+
   if (estado.pedidoAceitoAtual || estado.pedidoEmAnalise) {
     pararAlertaSonoroChamada();
     return;
@@ -163,6 +200,14 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
         'Authorization': `Bearer ${token}`
       }
     });
+
+    if (resp.status === 403) {
+      estado.isOnline = false;
+      renderizarRadarOffline();
+      pararRadarChamadas();
+      return;
+    }
+
     if (!resp.ok) return;
 
     const pedidos = await resp.json();
@@ -289,6 +334,7 @@ export function solicitarPermissaoNotificacoes() {
 
 export function dispararNotificacaoNovaChamada(qtd) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!estado.isOnline) return; // Bloqueado se offline
 
   if (document.visibilityState === 'hidden') {
     if (navigator.serviceWorker && navigator.serviceWorker.controller) {

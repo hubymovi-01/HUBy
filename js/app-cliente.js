@@ -525,7 +525,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (searchBox) searchBox.classList.add('active');
 
     if (estadoCliente.hubyMapa) {
-      // 1. Tenta pegar a posição onde o círculo verde do GPS está marcado
       let origem = estadoCliente.coordsOrigem;
 
       if (!origem && estadoCliente.hubyMapa.posicaoAtual) {
@@ -537,7 +536,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         origem = [markerPos.lat, markerPos.lng];
       }
 
-      // Função interna para traçar a rota a partir do ponto verificado
       const aplicarRotaNoMapa = async (pontoOrigem) => {
         estadoCliente.coordsOrigem = pontoOrigem;
         const rota = await estadoCliente.hubyMapa.calcularRota(pontoOrigem, coords, '#38BDF8', true);
@@ -548,17 +546,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         notificarCliente(`Destino IA: ${nome}`, 'sucesso');
       };
 
-      // Se a localização atual já estiver carregada, calcula imediatamente
       if (origem && origem[0] && origem[1]) {
         await aplicarRotaNoMapa(origem);
       } else {
-        // Se ainda não estava guardada, solicita o GPS na hora
         notificarCliente('Identificando sua localização atual...', 'info');
         estadoCliente.hubyMapa.obterGPS(async (pos) => {
           if (pos && pos.lat && pos.lng) {
             await aplicarRotaNoMapa([pos.lat, pos.lng]);
           } else {
-            // Último caso: centro de São João do Piauí
             await aplicarRotaNoMapa([-8.3582, -42.2476]);
           }
         });
@@ -818,7 +813,7 @@ function iniciarMonitoramentoPix(txid, valor) {
 }
 
 function exibirModalPixCorridaCliente(pix) {
-  document.getElementById('modalPixCorrivaAtivaCliente')?.remove();
+  document.getElementById('modalPixCorridaAtivaCliente')?.remove();
 
   const modalHTML = `
     <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
@@ -894,7 +889,8 @@ function conectarSocketEPollingCliente() {
       }
     });
 
-    socket.on('posicao_motorista', (pos) => {
+    // Função unificada para renderizar e mover o carro em tempo real no mapa
+    const processarMovimentoCarro = (pos) => {
       if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && pos.lat && pos.lng) {
         criarOuAtualizarVeiculoMapa(
           estadoCliente.hubyMapa.map,
@@ -921,7 +917,11 @@ function conectarSocketEPollingCliente() {
           }
         }
       }
-    });
+    };
+
+    // Escuta tanto o evento direto quanto o broadcast retransmitido pelo server.js
+    socket.on('posicao_motorista', processarMovimentoCarro);
+    socket.on('posicao_motorista_atualizada', processarMovimentoCarro);
 
     socket.onAny((evento, dados) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');

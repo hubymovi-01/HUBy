@@ -278,13 +278,27 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES
+  // 3. CONSULTA DE CHAMADAS PENDENTES (TRAVA MOTORISTA OFFLINE)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
       if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
         return res.status(403).json({ erro: 'Acesso restrito a motoristas parceiros.' });
       }
+
+      // Validação estrita: se for motorista e estiver offline no banco, não entrega corridas
+      if (ehMotoristaToken(req.usuario)) {
+        const mot = await sql`
+          SELECT status_online FROM motoristas 
+          WHERE id::text = ${String(req.usuario.id)}::text 
+             OR usuario_id::text = ${String(req.usuario.id)}::text
+          LIMIT 1;
+        `;
+        if (mot.length > 0 && !mot[0].status_online) {
+          return res.json([]);
+        }
+      }
+
       const { categoria } = req.query;
       let pedidos;
       if (categoria === 'moto') {
@@ -588,7 +602,7 @@ export default function pedidosRouter(io) {
   // =========================================================================
   router.post('/:id/finalizar-liquidacao', autenticarToken, async (req, res) => {
     const { id } = req.params;
-    const { forma_pagamento } = req.body; // 'dinheiro', 'cartao_maquininha', 'pix_mp'
+    const { forma_pagamento } = req.body;
 
     try {
       const pedidos = await sql`
@@ -604,7 +618,6 @@ export default function pedidosRouter(io) {
       const pedido = pedidos[0];
       const valorTotal = Number(pedido.valor_total || 0);
 
-      // Lê a comissão da plataforma cadastrada no painel (padrão 15%)
       let taxaPorcentagem = 15;
       try {
         const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
@@ -616,9 +629,6 @@ export default function pedidosRouter(io) {
       const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
       const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
 
-      // -----------------------------------------------------------------------
-      // CENÁRIO A: DINHEIRO EM MÃOS OU MAQUININHA PRÓPRIA DO MOTORISTA
-      // -----------------------------------------------------------------------
       if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
         await sql`
           UPDATE pedidos
@@ -658,9 +668,6 @@ export default function pedidosRouter(io) {
         return res.json({ sucesso: true, status: 'concluido', forma_pagamento });
       }
 
-      // -----------------------------------------------------------------------
-      // CENÁRIO B: PIX OFICIAL DO MERCADO PAGO NA TELA
-      // -----------------------------------------------------------------------
       if (forma_pagamento === 'pix_mp') {
         let accessToken = process.env.MP_ACCESS_TOKEN;
 
