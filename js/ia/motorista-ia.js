@@ -28,6 +28,34 @@ let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
 
 const historicoConversa = [];
+
+// ============================================================================
+// PREFERÊNCIAS DO COPILOTO (guardadas no aparelho do motorista)
+// ============================================================================
+function vozesDisponiveis() {
+  const todas = sintetizador ? sintetizador.getVoices() : [];
+  const pt = todas.filter((v) => /^pt([-_]|$)/i.test(v.lang));
+  return pt.length ? pt : todas;
+}
+
+function obterVozEscolhida() {
+  const uri = localStorage.getItem('huby_ia_voz');
+  const lista = vozesDisponiveis();
+  return lista.find((v) => v.voiceURI === uri)
+    || lista.find((v) => /pt[-_]BR/i.test(v.lang))
+    || lista[0]
+    || null;
+}
+
+function obterTomVoz() {
+  const t = Number(localStorage.getItem('huby_ia_tom'));
+  return t >= 0.5 && t <= 2 ? t : 1.0;
+}
+
+function obterVelocidadeVoz() {
+  const v = Number(localStorage.getItem('huby_ia_velocidade'));
+  return v >= 0.7 && v <= 1.6 ? v : 1.05;
+}
 const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
 function normalizarTexto(txt = '') {
@@ -139,9 +167,11 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
 
     sintetizador.cancel();
     const utter = new SpeechSynthesisUtterance(String(texto));
-    utter.lang = 'pt-BR';
-    utter.rate = 1.12;
-    utter.pitch = 1.0;
+    const voz = obterVozEscolhida();
+    if (voz) utter.voice = voz;
+    utter.lang = voz?.lang || 'pt-BR';
+    utter.rate = obterVelocidadeVoz();
+    utter.pitch = obterTomVoz();
 
     const finalizarFala = () => {
       falandoAgora = false;
@@ -255,6 +285,7 @@ export function inicializarCopilotoVoz() {
 
 export function ativarEscutaCopiloto() {
   escutaDesejada = true;
+  localStorage.setItem('huby_ia_ativa', 'true');
   if (!recognition) inicializarCopilotoVoz();
 
   atualizarIndicadorUIVoz(true);
@@ -270,6 +301,7 @@ export function ativarEscutaCopiloto() {
 
 export function desativarEscutaCopiloto() {
   escutaDesejada = false;
+  localStorage.setItem('huby_ia_ativa', 'false');
   janelaConversaAtiva = false;
 
   if (timeoutReinicio) {
@@ -848,6 +880,7 @@ async function executarAcaoNoApp(acao, ctx) {
 }
 
 function atualizarIndicadorUIVoz(ativo) {
+  criarBotaoConfigCopiloto();
   let badge = document.getElementById('badgeCopilotoVozStatus');
   if (!badge) {
     badge = document.createElement('div');
@@ -877,6 +910,8 @@ function atualizarIndicadorUIVoz(ativo) {
   }
 
   const gatilho = obterCodigoAtivacaoMotorista();
+  const chkAtivo = document.getElementById('chkCopilotoAtivo');
+  if (chkAtivo) chkAtivo.checked = Boolean(ativo);
   if (ativo) {
     badge.style.background = 'rgba(16, 185, 129, 0.22)';
     badge.style.border = '1px solid #10B981';
@@ -887,5 +922,108 @@ function atualizarIndicadorUIVoz(ativo) {
     badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
     badge.style.color = '#94A3B8';
     badge.innerHTML = `🎙️ "${gatilho}" Pausado`;
+  }
+}
+
+
+// ============================================================================
+// PAINEL DE CONFIGURAÇÃO DO COPILOTO (ativar, voz, tom e velocidade)
+// ============================================================================
+function criarBotaoConfigCopiloto() {
+  if (document.getElementById('btnConfigCopiloto')) return;
+
+  const gear = document.createElement('button');
+  gear.id = 'btnConfigCopiloto';
+  gear.type = 'button';
+  gear.textContent = '⚙️';
+  gear.title = 'Configurar Copiloto';
+  gear.style.cssText = 'position:fixed;bottom:66px;right:18px;z-index:9999;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(15,23,42,0.88);color:#fff;font-size:17px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,0.5);';
+  gear.addEventListener('click', abrirPainelCopiloto);
+  document.body.appendChild(gear);
+}
+
+function abrirPainelCopiloto() {
+  const existente = document.getElementById('painelCopilotoConfig');
+  if (existente) { existente.remove(); return; }
+
+  const estiloRotulo = 'display:block;font-size:11px;font-weight:800;color:#94A3B8;margin:10px 0 4px;text-transform:uppercase;';
+  const estiloCampo = 'width:100%;padding:9px;border-radius:8px;background:#090D16;color:#fff;border:1px solid rgba(255,255,255,0.15);font-size:13px;';
+
+  const painel = document.createElement('div');
+  painel.id = 'painelCopilotoConfig';
+  painel.style.cssText = 'position:fixed;bottom:114px;right:18px;z-index:10000;width:290px;max-width:calc(100vw - 36px);background:rgba(15,23,42,0.97);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:14px;color:#fff;font-size:13px;box-shadow:0 12px 32px rgba(0,0,0,0.6);';
+  painel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <strong style="font-size:14px;">🎙️ Copiloto IA</strong>
+      <button type="button" id="btnFecharPainelCopiloto" style="background:none;border:none;color:#94A3B8;font-size:18px;cursor:pointer;">✕</button>
+    </div>
+
+    <label style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-weight:700;">
+      <span>Copiloto ativado</span>
+      <input type="checkbox" id="chkCopilotoAtivo" style="width:22px;height:22px;">
+    </label>
+
+    <label style="${estiloRotulo}">Voz</label>
+    <select id="selVozCopiloto" style="${estiloCampo}"></select>
+
+    <label style="${estiloRotulo}">Tom da voz</label>
+    <select id="selTomCopiloto" style="${estiloCampo}">
+      <option value="0.75">Grave (mais masculina)</option>
+      <option value="1">Normal</option>
+      <option value="1.3">Aguda (mais feminina)</option>
+    </select>
+
+    <label style="${estiloRotulo}">Velocidade</label>
+    <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05" style="width:100%;">
+
+    <button type="button" id="btnTestarVozCopiloto" style="width:100%;margin-top:14px;padding:11px;border:none;border-radius:10px;background:#10B981;color:#032017;font-weight:900;font-size:13px;cursor:pointer;">▶ Testar voz</button>
+  `;
+  document.body.appendChild(painel);
+
+  const chk = painel.querySelector('#chkCopilotoAtivo');
+  const selVoz = painel.querySelector('#selVozCopiloto');
+  const selTom = painel.querySelector('#selTomCopiloto');
+  const rng = painel.querySelector('#rngVelocidadeCopiloto');
+
+  chk.checked = escutaDesejada;
+  rng.value = String(obterVelocidadeVoz());
+
+  // Tom: escolhe a opção mais próxima do valor salvo
+  const tomSalvo = obterTomVoz();
+  selTom.value = tomSalvo <= 0.9 ? '0.75' : (tomSalvo >= 1.15 ? '1.3' : '1');
+
+  // As vozes do aparelho às vezes demoram a carregar
+  const preencherVozes = () => {
+    const lista = vozesDisponiveis();
+    const atual = obterVozEscolhida();
+    selVoz.innerHTML = lista.length
+      ? lista.map((v) => `<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join('')
+      : '<option value="">Voz padrão do aparelho</option>';
+    if (atual) selVoz.value = atual.voiceURI;
+  };
+  preencherVozes();
+  if (sintetizador) sintetizador.onvoiceschanged = preencherVozes;
+
+  chk.addEventListener('change', () => {
+    if (chk.checked) ativarEscutaCopiloto();
+    else desativarEscutaCopiloto();
+  });
+
+  selVoz.addEventListener('change', () => localStorage.setItem('huby_ia_voz', selVoz.value));
+  selTom.addEventListener('change', () => localStorage.setItem('huby_ia_tom', selTom.value));
+  rng.addEventListener('input', () => localStorage.setItem('huby_ia_velocidade', rng.value));
+
+  painel.querySelector('#btnTestarVozCopiloto').addEventListener('click', () => {
+    falarTexto('Olá parceiro! Essa é a minha voz. Como posso te ajudar hoje?');
+  });
+
+  painel.querySelector('#btnFecharPainelCopiloto').addEventListener('click', () => painel.remove());
+}
+
+// Chamar uma vez quando a tela do motorista abrir
+export function restaurarPreferenciaCopiloto() {
+  atualizarIndicadorUIVoz(false);
+  if (localStorage.getItem('huby_ia_ativa') === 'true') {
+    ativarEscutaCopiloto();
   }
 }

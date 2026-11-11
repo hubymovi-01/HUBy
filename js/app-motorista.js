@@ -15,7 +15,13 @@ import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
-import { inicializarCopilotoVoz, definirCodigoAtivacaoMotorista, obterCodigoAtivacaoMotorista, falarTexto } from './ia/motorista-ia.js';
+import {
+  inicializarCopilotoVoz,
+  definirCodigoAtivacaoMotorista,
+  obterCodigoAtivacaoMotorista,
+  falarTexto,
+  restaurarPreferenciaCopiloto
+} from './ia/motorista-ia.js';
 import { notificar } from './util/alertas-huby.js';
 
 function validarAutenticacaoMotorista() {
@@ -118,6 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   iniciarRadarChamadas();
   inicializarPushNotifications();
 
-  // Inicializa o copiloto de voz
+  // Inicializa o copiloto de voz e restaura a escolha do motorista (ligado/desligado)
   inicializarCopilotoVoz();
+  restaurarPreferenciaCopiloto();
 });
