@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Hands-Free com Tolerância Fonética, Checagem de Radar e Suporte Gemini
+// js/ia/motorista-ia.js - Copiloto Hands-Free com Tolerância Fonética Ampliada
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -11,7 +11,6 @@ let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null
 let processandoComando = false;
 let wakeLockSentinel = null;
 
-// Normalização fonética inteligente (remove acentos, pontuações e simplifica sons)
 function normalizarTexto(txt = '') {
   return txt
     .toLowerCase()
@@ -22,13 +21,11 @@ function normalizarTexto(txt = '') {
     .trim();
 }
 
-// Algoritmo de tolerância: calcula similaridade fonética entre duas palavras (Levenshtein simplificado)
 function saoPalavrasParecidas(p1, p2) {
   if (!p1 || !p2) return false;
   if (p1 === p2) return true;
   if (p1.includes(p2) || p2.includes(p1)) return true;
 
-  // Se uma palavra tiver comprimento parecido e apenas 1 ou 2 letras diferentes (ex: zanix e zanc)
   const len1 = p1.length;
   const len2 = p2.length;
   if (Math.abs(len1 - len2) > 2) return false;
@@ -48,8 +45,7 @@ function saoPalavrasParecidas(p1, p2) {
     }
   }
 
-  const distancia = matriz[len1][len2];
-  return distancia <= 2; // Tolera até 2 caracteres de variação de pronúncia/transcrição
+  return matriz[len1][len2] <= 2;
 }
 
 export function obterCodigoAtivacaoMotorista() {
@@ -138,17 +134,10 @@ export function inicializarCopilotoVoz() {
     }
   };
 
-  recognition.onerror = (ev) => {
-    if (ev.error !== 'no-speech') {
-      console.warn('Áudio copiloto info:', ev.error);
-    }
-  };
-
   recognition.onresult = (ev) => {
     const ultimoResultado = ev.results[ev.results.length - 1];
     if (!ultimoResultado || !ultimoResultado[0]) return;
-    const transcricao = ultimoResultado[0].transcript;
-    processarComandoVoz(transcricao);
+    processarComandoVoz(ultimoResultado[0].transcript);
   };
 
   return true;
@@ -173,7 +162,6 @@ export function desativarEscutaCopiloto() {
   liberarWakeLock();
 }
 
-// Reconhecimento de intenção tolerante com fonética
 async function processarComandoVoz(fraseBruta) {
   if (processandoComando) return;
 
@@ -181,11 +169,9 @@ async function processarComandoVoz(fraseBruta) {
   const gatilhoCadastrado = normalizarTexto(obterCodigoAtivacaoMotorista());
   const palavrasFaladas = fraseFalada.split(' ');
 
-  // Extrai o nome principal do gatilho (ex: se cadastrou "Ok Zanix", a palavra principal é "zanix")
   const partesGatilho = gatilhoCadastrado.split(' ').filter(p => !['ok', 'ei', 'fala', 'e', 'ai'].includes(p));
   const palavraChavePrincipal = partesGatilho[partesGatilho.length - 1] || gatilhoCadastrado;
 
-  // Verifica se o condutor chamou o copiloto (por casamento direto ou tolerância fonética de palavras parecidas)
   let gatilhoDetectado = fraseFalada.includes(gatilhoCadastrado);
 
   if (!gatilhoDetectado) {
@@ -197,64 +183,43 @@ async function processarComandoVoz(fraseBruta) {
     }
   }
 
-  // Se não foi chamado pelo nome/gatilho, ignora
   if (!gatilhoDetectado) return;
 
   processandoComando = true;
   setTimeout(() => { processandoComando = false; }, 1200);
 
-  // Limpa o gatilho da frase para pegar apenas a ação/pergunta
   let acao = fraseFalada
     .replace(gatilhoCadastrado, '')
     .replace(new RegExp(`\\b${palavraChavePrincipal}\\b`, 'gi'), '')
     .replace(/^(ok|ei|fala|e ai)\s+/i, '')
     .trim();
 
-  // 1. CHECAGEM DE RADAR: "Tem alguma rota?", "Tem corrida?", "Alguma chamada?"
+  // 1. CHECAGEM DE RADAR
   if (
-    acao.includes('tem rota') ||
-    acao.includes('tem corrida') ||
-    acao.includes('tem chamada') ||
-    acao.includes('alguma rota') ||
-    acao.includes('alguma corrida') ||
-    acao.includes('algum pedido')
+    acao.includes('tem rota') || acao.includes('tem corrida') || acao.includes('tem chamada') ||
+    acao.includes('alguma rota') || acao.includes('alguma corrida') || acao.includes('algum pedido')
   ) {
     cmdChecarRadarStatus();
     return;
   }
 
-  // 2. VER / CHECAR ROTA DO PEDIDO NO MAPA
+  // 2. VISUALIZAR ROTA NO MAPA
   if (
-    acao.includes('ver rota') ||
-    acao.includes('mostrar rota') ||
-    acao.includes('olhar rota') ||
-    acao.includes('ver corrida') ||
-    acao.includes('checar')
+    acao.includes('ver rota') || acao.includes('visualizar') || acao.includes('mostrar rota') ||
+    acao.includes('olhar rota') || acao.includes('ver corrida') || acao.includes('exibir')
   ) {
     cmdVerRotaNoMapa();
     return;
   }
 
   // 3. ACEITAR CORRIDA
-  if (
-    acao.includes('aceitar') ||
-    acao.includes('confirmar') ||
-    acao.includes('pegar') ||
-    acao.includes('vou fazer') ||
-    acao.includes('pode aceitar')
-  ) {
+  if (acao.includes('aceitar') || acao.includes('confirmar') || acao.includes('pegar') || acao.includes('vou fazer')) {
     cmdAceitarChamada();
     return;
   }
 
   // 4. RECUSAR / DISPENSAR
-  if (
-    acao.includes('recusar') ||
-    acao.includes('dispensar') ||
-    acao.includes('ignorar') ||
-    acao.includes('passo') ||
-    acao.includes('nao quero')
-  ) {
+  if (acao.includes('recusar') || acao.includes('dispensar') || acao.includes('ignorar') || acao.includes('passo')) {
     cmdDispensarChamada();
     return;
   }
@@ -277,7 +242,7 @@ async function processarComandoVoz(fraseBruta) {
     return;
   }
 
-  // 8. DÚVIDA OU CONVERSA LIVRE AO VOLANTE (GEMINI)
+  // 8. SUPORTE GEMINI
   if (acao.length > 3) {
     await responderDuvidaComGemini(fraseBruta);
     return;
@@ -286,11 +251,10 @@ async function processarComandoVoz(fraseBruta) {
   falarTexto('Estou ouvindo. Pode falar.');
 }
 
-// Responde se há corridas no radar no momento
 function cmdChecarRadarStatus() {
   const chamadas = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
   if (!chamadas || chamadas.length === 0) {
-    falarTexto('Nenhuma chamada no radar no momento. Estou monitorando.');
+    falarTexto('Nenhuma chamada no radar no momento. Monitorando.');
     return;
   }
 
@@ -300,7 +264,7 @@ function cmdChecarRadarStatus() {
   const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
   const gatilho = obterCodigoAtivacaoMotorista();
 
-  falarTexto(`Temos 1 chamada disponível para ${destinoLimpo}, ganho de ${repasse} reais. Diga ${gatilho} ver rota ou ${gatilho} aceitar.`);
+  falarTexto(`Temos 1 chamada disponível para ${destinoLimpo}, ganho de ${repasse} reais. Diga ${gatilho} visualizar ou ${gatilho} aceitar.`);
 }
 
 function cmdVerRotaNoMapa() {
@@ -336,7 +300,7 @@ function cmdAceitarChamada() {
     setTimeout(() => {
       const btnModal = document.getElementById('btnConfirmarAceiteViagem');
       if (btnModal) {
-        falarTexto('Viagem aceita. Traçando trajeto até o passageiro.');
+        falarTexto('Viagem aceita. Traçando trajeto.');
         btnModal.click();
       }
     }, 400);
@@ -366,10 +330,10 @@ function cmdDispensarChamada() {
 function cmdAvisarChegada() {
   const btnNoLocal = document.getElementById('btnChegueiLocalEmbarque');
   if (btnNoLocal && btnNoLocal.offsetParent !== null) {
-    falarTexto('Passageiro avisado que você chegou.');
+    falarTexto('Passageiro avisado.');
     btnNoLocal.click();
   } else {
-    falarTexto('Você só pode avisar chegada próximo ao embarque.');
+    falarTexto('Disponível apenas próximo ao embarque.');
   }
 }
 
@@ -404,10 +368,7 @@ async function responderDuvidaComGemini(perguntaCompleta) {
       },
       body: JSON.stringify({
         pergunta: perguntaCompleta,
-        contextoCorrida: {
-          online: estado.isOnline,
-          pedidoAtivoId: estado.pedidoAtivoId || null
-        }
+        contextoCorrida: { online: estado.isOnline, pedidoAtivoId: estado.pedidoAtivoId || null }
       })
     });
 
@@ -438,7 +399,6 @@ function atualizarIndicadorUIVoz(ativo) {
     badge.style.backdropFilter = 'blur(12px)';
     badge.style.webkitBackdropFilter = 'blur(12px)';
     badge.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5)';
-    badge.style.transition = 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
     document.body.appendChild(badge);
   }
 
