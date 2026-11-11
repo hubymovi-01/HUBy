@@ -5,6 +5,7 @@ import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
 import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
 import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motorista-rotas.js';
+import { notificar } from '../util/alertas-huby.js';
 
 let processandoPagamento = false;
 
@@ -39,7 +40,7 @@ export async function preVisualizarRotaPedido(dados) {
   const repasseLiquido = (valorTotal * 0.85).toFixed(2).replace('.', ',');
 
   container.innerHTML = `
-    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
+    <div id="modalPreviaRotaCorrida" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <span style="font-size: 11px; font-weight: 800; color: var(--amber); background: rgba(245,158,11,0.15); padding: 4px 10px; border-radius: 8px;">
           🔍 ROTA EM ANÁLISE
@@ -51,7 +52,7 @@ export async function preVisualizarRotaPedido(dados) {
         <div style="color: #94A3B8;">🟢 <strong>Buscar em:</strong> ${dados.origem}</div>
         <div style="margin-top: 3px;">📍 <strong>Destino:</strong> ${dados.destino}</div>
         <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
-          📏 Distância: <strong>${dados.dist || '1.0'} km</strong> • ⏱️ ~${dados.dur || 5} min
+          📏 Distância: <strong id="lblPreviaDistKm">${dados.dist || '1.0'} km</strong> • ⏱️ ~<span id="lblPreviaDurMin">${dados.dur || 5}</span> min
         </div>
       </div>
 
@@ -80,7 +81,6 @@ export async function preVisualizarRotaPedido(dados) {
   });
 }
 
-// Aceite direto para uso por voz do copiloto
 export async function aceitarPedidoPrevia() {
   if (estado.pedidoEmAnalise) {
     await aceitarCorrida(estado.pedidoEmAnalise);
@@ -92,13 +92,9 @@ export async function aceitarPedidoPrevia() {
 // ============================================================================
 export async function aceitarCorrida(dados) {
   try {
-    const token = localStorage.getItem('huby_token');
     const res = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
+      headers: obterHeaders(),
       body: JSON.stringify({
         motoristaId: estado.motoristaId || localStorage.getItem('huby_motorista_id'),
         motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Carol'
@@ -111,7 +107,7 @@ export async function aceitarCorrida(dados) {
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
       iniciarFaseBuscarPassageiro(dados);
     } else {
-      alert(resJson.erro || 'Esta corrida já não está disponível.');
+      notificar(resJson.erro || 'Esta corrida já não está disponível.', 'alerta');
       limparRotasMapa();
       pararMonitoramentoDesvios();
       estado.pedidoEmAnalise = null;
@@ -163,6 +159,9 @@ async function iniciarFaseBuscarPassageiro(dados) {
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
         🟢 <strong>Embarque:</strong> <span style="color: #94A3B8;">${dados.origem}</span>
+        <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
+          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
+        </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -191,17 +190,13 @@ async function iniciarFaseBuscarPassageiro(dados) {
 
   document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async () => {
     try {
-      const token = localStorage.getItem('huby_token');
       await fetch(`${API_URL}/api/pedidos/${dados.id}/status`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
+        headers: obterHeaders(),
         body: JSON.stringify({ status: 'motorista_no_local' })
       });
-      alert('Passageiro avisado que você chegou ao local de embarque!');
     } catch (e) {}
+    notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
   });
 
   document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
@@ -212,13 +207,9 @@ async function iniciarFaseBuscarPassageiro(dados) {
 // ============================================================================
 export async function confirmarEmbarqueEIrAoDestino(dados) {
   try {
-    const token = localStorage.getItem('huby_token');
     await fetch(`${API_URL}/api/pedidos/${dados.id}/embarque`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      }
+      headers: obterHeaders()
     });
   } catch (e) { }
 
@@ -256,6 +247,9 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
         🏁 <strong>Destino Final:</strong> <span style="color: #94A3B8;">${dados.destino}</span>
+        <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
+          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
+        </div>
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -308,12 +302,14 @@ export function abrirModalOpcoesPagamento(dados) {
 
   if (modal) modal.style.display = 'flex';
 
-  btnDinheiro.onclick = () => processarLiquidacao(dados.id, 'dinheiro');
-  btnMaquininha.onclick = () => processarLiquidacao(dados.id, 'cartao_maquininha');
-  btnPixMP.onclick = () => processarLiquidacao(dados.id, 'pix_mp');
-  btnCancelar.onclick = () => {
-    if (modal) modal.style.display = 'none';
-  };
+  if (btnDinheiro) btnDinheiro.onclick = () => processarLiquidacao(dados.id, 'dinheiro');
+  if (btnMaquininha) btnMaquininha.onclick = () => processarLiquidacao(dados.id, 'cartao_maquininha');
+  if (btnPixMP) btnPixMP.onclick = () => processarLiquidacao(dados.id, 'pix_mp');
+  if (btnCancelar) {
+    btnCancelar.onclick = () => {
+      if (modal) modal.style.display = 'none';
+    };
+  }
 }
 
 export async function processarLiquidacao(pedidoId, formaPagamento) {
@@ -321,15 +317,11 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
   processandoPagamento = true;
 
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
-  const token = localStorage.getItem('huby_token');
 
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      },
+      headers: obterHeaders(),
       body: JSON.stringify({ forma_pagamento: formaPagamento })
     });
 
@@ -338,7 +330,7 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     try {
       data = JSON.parse(textoResposta);
     } catch (eJson) {
-      throw new Error('O servidor respondeu com um formato inesperado. Aguarde alguns segundos e tente novamente.');
+      throw new Error('O servidor respondeu com um formato inesperado. Tente novamente.');
     }
 
     if (!res.ok) {
@@ -350,12 +342,12 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     if (formaPagamento === 'pix_mp') {
       exibirQrCodePixMotorista(data.pix);
     } else {
-      alert('✅ Corrida encerrada com sucesso! A taxa da plataforma (15%) foi debitada da sua carteira.');
+      notificar('✅ Corrida encerrada com sucesso! Taxa de 15% atualizada na carteira.', 'sucesso');
       if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
       concluirLimpezaPosCorrida();
     }
   } catch (err) {
-    alert(err.message);
+    notificar(err.message || 'Erro ao finalizar corrida.', 'erro');
   } finally {
     processandoPagamento = false;
   }
@@ -372,10 +364,12 @@ export function exibirQrCodePixMotorista(pix) {
 
   if (modalPix) modalPix.style.display = 'flex';
 
-  btnFechar.onclick = () => {
-    if (modalPix) modalPix.style.display = 'none';
-    concluirLimpezaPosCorrida();
-  };
+  if (btnFechar) {
+    btnFechar.onclick = () => {
+      if (modalPix) modalPix.style.display = 'none';
+      concluirLimpezaPosCorrida();
+    };
+  }
 }
 
 export function fecharModaisPagamento() {
@@ -393,6 +387,7 @@ export function concluirLimpezaPosCorrida() {
 
   estado.pedidoAceitoAtual = null;
   estado.pedidoAtivo = null;
+  estado.etapaCorridaAtual = 'a_caminho';
   carregarPerfil();
   iniciarRadarChamadas();
 }
