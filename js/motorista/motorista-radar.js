@@ -10,9 +10,6 @@ let wakeLockSentinela = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
-// ============================================================================
-// WAKE LOCK API: MANTER ECRÃ ACESO ENQUANTO ESTIVER ONLINE
-// ============================================================================
 async function requisitarWakeLock() {
   if ('wakeLock' in navigator) {
     try {
@@ -35,16 +32,12 @@ function libertarWakeLock() {
   }
 }
 
-// Reativar Wake Lock caso o motorista volte a abrir o browser
 document.addEventListener('visibilitychange', async () => {
   if (document.visibilityState === 'visible' && estado.isOnline) {
     await requisitarWakeLock();
   }
 });
 
-// ============================================================================
-// UTILITÁRIO: EXTRAIR DADOS DO CARD/BOTÃO
-// ============================================================================
 export function extrairDadosDoBotao(btn) {
   const precoTotal = parseFloat(btn.getAttribute('data-preco')) || 0;
   const repasse = btn.getAttribute('data-repasse') || (precoTotal * 0.85).toFixed(2).replace('.', ',');
@@ -73,7 +66,6 @@ export function extrairDadosDoBotao(btn) {
   };
 }
 
-// Inicia bipe sonoro de alta atenção em pulso até o motorista interagir
 export function iniciarAlertaSonoroChamada() {
   if (intervalAlertaChamada) return;
   sonsHUBy.tocarAlertaChamada();
@@ -82,7 +74,6 @@ export function iniciarAlertaSonoroChamada() {
   }, 1400);
 }
 
-// Interrompe o som do radar
 export function pararAlertaSonoroChamada() {
   if (intervalAlertaChamada) {
     clearInterval(intervalAlertaChamada);
@@ -90,7 +81,6 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
-// Alternar status online/offline na base de dados, UI e microfone/Wake Lock
 export async function alternarStatusOnline() {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnToggleStatusOnline');
@@ -107,10 +97,7 @@ export async function alternarStatusOnline() {
       
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
       
-      // 1. Ativação do Copiloto Hands-Free por Voz
       ativarEscutaCopiloto();
-      
-      // 2. Garante o ecrã sempre aceso ao volante
       await requisitarWakeLock();
       
       iniciarRadarChamadas();
@@ -121,10 +108,7 @@ export async function alternarStatusOnline() {
       btn.style.color = '#94A3B8';
       btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
       
-      // 1. Desliga o microfone para poupar bateria e privacidade
       desativarEscutaCopiloto();
-      
-      // 2. Liberta o bloqueio de ecrã
       libertarWakeLock();
       
       pararRadarChamadas();
@@ -165,7 +149,6 @@ export async function alternarStatusOnline() {
 export function iniciarRadarChamadas() {
   solicitarPermissaoNotificacoes();
 
-  // Se o motorista estiver desligado ou offline, não inicia radar nem busca corridas
   if (!estado.isOnline) {
     renderizarRadarOffline();
     pararRadarChamadas();

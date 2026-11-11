@@ -22,19 +22,16 @@ export async function carregarPerfil() {
 
     if (!motorista) return null;
 
-    // Atualiza estado local
     estado.motoristaId = motorista.id;
     estado.categoriaMotorista = motorista.categoria || 'carro';
     estado.statusAprovacaoAtual = motorista.status_aprovacao || 'aprovado';
 
-    // 🎙️ Sincroniza o comando de ativação personalizado vindo do banco
     if (motorista.codigo_voz && motorista.codigo_voz.trim()) {
       localStorage.setItem('huby_codigo_voz_motorista', motorista.codigo_voz.trim());
       const inputComando = document.getElementById('inputCodigoVozCopiloto');
       if (inputComando) inputComando.value = motorista.codigo_voz.trim();
     }
 
-    // Preenche elementos visuais da interface (Drawer / Perfil)
     const elNome = document.getElementById('txtNomeMotorista');
     const elVeiculo = document.getElementById('txtVeiculoMotorista');
     const elPlaca = document.getElementById('txtPlacaMotorista');
@@ -50,7 +47,6 @@ export async function carregarPerfil() {
       elFoto.src = motorista.foto_perfil_url;
     }
 
-    // Preenche checkboxes de preferências de pagamento
     const checkDinheiro = document.getElementById('chkAceitaDinheiro');
     const checkCartao = document.getElementById('chkAceitaCartao');
     const checkPix = document.getElementById('chkAceitaPix');
@@ -58,6 +54,19 @@ export async function carregarPerfil() {
     if (checkDinheiro) checkDinheiro.checked = motorista.aceita_dinheiro !== false;
     if (checkCartao) checkCartao.checked = motorista.aceita_cartao !== false;
     if (checkPix) checkPix.checked = motorista.aceita_pix !== false;
+
+    // Preenche os campos do formulário de edição se estiverem abertos
+    const inNome = document.getElementById('inputPerfilNome');
+    const inTel = document.getElementById('inputPerfilTelefone');
+    const inMod = document.getElementById('inputPerfilModelo');
+    const inPlaca = document.getElementById('inputPerfilPlaca');
+    const inCor = document.getElementById('inputPerfilCor');
+
+    if (inNome) inNome.value = motorista.nome || '';
+    if (inTel) inTel.value = motorista.telefone || '';
+    if (inMod) inMod.value = motorista.veiculo_modelo || '';
+    if (inPlaca) inPlaca.value = motorista.veiculo_placa || '';
+    if (inCor) inCor.value = motorista.veiculo_cor || '';
 
     return motorista;
   } catch (err) {
@@ -67,7 +76,7 @@ export async function carregarPerfil() {
 }
 
 // ============================================================================
-// 2. CONFIGURAÇÃO LIVRE DO COMANDO DE VOZ (COPILOTO HANDS-FREE)
+// 2. CONFIGURAÇÃO DO COMANDO DE VOZ (COPILOTO HANDS-FREE)
 // ============================================================================
 export function configurarCodigoVozCopiloto() {
   const inputComando = document.getElementById('inputCodigoVozCopiloto');
@@ -78,10 +87,14 @@ export function configurarCodigoVozCopiloto() {
     inputComando.value = obterCodigoAtivacaoMotorista();
   }
 
-  btnSalvar?.addEventListener('click', async () => {
+  btnSalvar?.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     const novoComando = inputComando?.value?.trim();
     if (!novoComando) {
-      notificar('Digite uma frase para ativar seu copiloto (ex: OK Gavião, Ei Jarvis, Fala Piloto).', 'alerta');
+      notificar('Digite uma frase para ativar seu copiloto (ex: OK Gavião, Ei Jarvis).', 'alerta');
+      inputComando?.focus();
       return;
     }
 
@@ -93,7 +106,9 @@ export function configurarCodigoVozCopiloto() {
     }
   });
 
-  btnTestar?.addEventListener('click', () => {
+  btnTestar?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const comandoAtual = inputComando?.value?.trim() || obterCodigoAtivacaoMotorista();
     falarTexto(`Copiloto pronto. Pode falar ${comandoAtual} seguido da ação que deseja.`);
   });
@@ -106,7 +121,8 @@ export function configurarSalvarPreferenciasPagto() {
   const btnSalvar = document.getElementById('btnSalvarPreferenciasPagto');
   if (!btnSalvar) return;
 
-  btnSalvar.addEventListener('click', async () => {
+  btnSalvar.addEventListener('click', async (e) => {
+    e.preventDefault();
     const aceita_dinheiro = document.getElementById('chkAceitaDinheiro')?.checked ?? true;
     const aceita_cartao = document.getElementById('chkAceitaCartao')?.checked ?? true;
     const aceita_pix = document.getElementById('chkAceitaPix')?.checked ?? true;
@@ -135,13 +151,33 @@ export function configurarSalvarPreferenciasPagto() {
 }
 
 // ============================================================================
-// 4. EDIÇÃO DE DADOS BÁSICOS DO MOTORISTA
+// 4. EDIÇÃO DE DADOS BÁSICOS DO MOTORISTA E CONTROLE DO MODAL
 // ============================================================================
 export function configurarEdicaoPerfil() {
+  const btnAbrirModal = document.getElementById('btnAbrirModalEditarPerfil');
+  const modalEditar = document.getElementById('modalEditarPerfilMotorista');
+  const btnFecharModal = document.getElementById('btnFecharModalEditarPerfil');
   const btnSalvar = document.getElementById('btnSalvarDadosPerfil');
+
+  // Abre o modal de edição
+  btnAbrirModal?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (modalEditar) {
+      modalEditar.style.display = 'flex';
+      carregarPerfil(); // Recarrega os dados nos inputs
+    }
+  });
+
+  // Fecha o modal
+  btnFecharModal?.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (modalEditar) modalEditar.style.display = 'none';
+  });
+
   if (!btnSalvar) return;
 
-  btnSalvar.addEventListener('click', async () => {
+  btnSalvar.addEventListener('click', async (e) => {
+    e.preventDefault();
     const nome = document.getElementById('inputPerfilNome')?.value?.trim();
     const telefone = document.getElementById('inputPerfilTelefone')?.value?.trim();
     const veiculo_modelo = document.getElementById('inputPerfilModelo')?.value?.trim();
@@ -163,6 +199,7 @@ export function configurarEdicaoPerfil() {
 
       if (resp.ok) {
         notificar('Perfil atualizado com sucesso!', 'sucesso');
+        if (modalEditar) modalEditar.style.display = 'none';
         await carregarPerfil();
       } else {
         notificar('Não foi possível salvar os dados.', 'erro');
