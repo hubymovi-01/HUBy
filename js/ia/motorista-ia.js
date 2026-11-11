@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Hands-Free Estabilizado sem Loop de Reconhecimento
+// js/ia/motorista-ia.js - Copiloto Hands-Free com Ações Rápidas, Leitura de Km e Visualização de Rota
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -11,6 +11,10 @@ let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null
 let processandoComando = false;
 let timeoutReinicio = null;
 let wakeLockSentinel = null;
+
+// Mantém a IA atenta por 8 segundos após falar "Ok Zanix" para aceitar comandos soltos (ex: "Visualizar")
+let copilotoAguardandoComando = false;
+let timeoutJanelaComando = null;
 
 function normalizarTexto(txt = '') {
   return txt
@@ -128,7 +132,6 @@ export function inicializarCopilotoVoz() {
   recognition.onend = () => {
     const online = estado.isOnline || localStorage.getItem('huby_motorista_online') === 'true';
 
-    // Evita loop agressivo: aguarda 600ms antes de reiniciar para não ser bloqueado pelo Android
     if (escutaDesejada && online) {
       if (timeoutReinicio) clearTimeout(timeoutReinicio);
       timeoutReinicio = setTimeout(() => {
@@ -137,7 +140,7 @@ export function inicializarCopilotoVoz() {
             recognition.start();
           } catch (e) {}
         }
-      }, 600);
+      }, 500);
     } else {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
@@ -172,7 +175,9 @@ export function ativarEscutaCopiloto() {
 
 export function desativarEscutaCopiloto() {
   escutaDesejada = false;
+  copilotoAguardandoComando = false;
   if (timeoutReinicio) clearTimeout(timeoutReinicio);
+  if (timeoutJanelaComando) clearTimeout(timeoutJanelaComando);
 
   if (recognition) {
     try { recognition.stop(); } catch (e) {}
@@ -202,10 +207,11 @@ async function processarComandoVoz(fraseBruta) {
     }
   }
 
-  if (!gatilhoDetectado) return;
+  // Se o condutor não chamou pelo nome e a janela de escuta anterior não estiver aberta, ignora
+  if (!gatilhoDetectado && !copilotoAguardandoComando) return;
 
   processandoComando = true;
-  setTimeout(() => { processandoComando = false; }, 1200);
+  setTimeout(() => { processandoComando = false; }, 1000);
 
   let acao = fraseFalada
     .replace(gatilhoCadastrado, '')
@@ -213,61 +219,138 @@ async function processarComandoVoz(fraseBruta) {
     .replace(/^(ok|ei|fala|e ai)\s+/i, '')
     .trim();
 
-  // 1. CHECAR RADAR
+  // 1. DISTÂNCIA / QUILÔMETROS / TEMPO DA ROTA
   if (
-    acao.includes('tem rota') || acao.includes('tem corrida') || acao.includes('tem chamada') ||
-    acao.includes('alguma rota') || acao.includes('alguma corrida')
+    acao.includes('quantos km') || acao.includes('quantos quilometros') ||
+    acao.includes('qual a distancia') || acao.includes('distancia') ||
+    acao.includes('quanto tempo') || acao.includes('informacoes da rota')
   ) {
-    cmdChecarRadarStatus();
+    copilotoAguardandoComando = false;
+    cmdInformarDistanciaETempo();
     return;
   }
 
-  // 2. VISUALIZAR ROTA NO MAPA
+  // 2. VISUALIZAR ROTA NO MAPA (Aceita variações diretas)
   if (
-    acao.includes('ver rota') || acao.includes('visualizar') || acao.includes('mostrar rota') ||
-    acao.includes('olhar rota') || acao.includes('ver corrida') || acao.includes('exibir rota')
+    acao.includes('visualizar') || acao.includes('ver rota') || acao.includes('mostrar rota') ||
+    acao.includes('olhar rota') || acao.includes('abrir mapa') || acao.includes('mostrar trajeto') ||
+    acao.includes('ver trajeto') || acao.includes('exibir rota')
   ) {
+    copilotoAguardandoComando = false;
     cmdVerRotaNoMapa();
     return;
   }
 
-  // 3. ACEITAR CORRIDA
-  if (acao.includes('aceitar') || acao.includes('confirmar') || acao.includes('pegar') || acao.includes('vou fazer')) {
+  // 3. CHECAR RADAR
+  if (
+    acao.includes('tem rota') || acao.includes('tem corrida') || acao.includes('tem chamada') ||
+    acao.includes('alguma rota') || acao.includes('alguma corrida')
+  ) {
+    copilotoAguardandoComando = false;
+    cmdChecarRadarStatus();
+    return;
+  }
+
+  // 4. ACEITAR CORRIDA
+  if (
+    acao.includes('aceitar') || acao.includes('confirmar') || acao.includes('pegar') ||
+    acao.includes('vou fazer') || acao.includes('pode aceitar')
+  ) {
+    copilotoAguardandoComando = false;
     cmdAceitarChamada();
     return;
   }
 
-  // 4. RECUSAR / DISPENSAR
+  // 5. RECUSAR / DISPENSAR
   if (acao.includes('recusar') || acao.includes('dispensar') || acao.includes('ignorar') || acao.includes('passo')) {
+    copilotoAguardandoComando = false;
     cmdDispensarChamada();
     return;
   }
 
-  // 5. CHEGADA AO EMBARQUE
+  // 6. CHEGADA AO EMBARQUE
   if (acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui')) {
+    copilotoAguardandoComando = false;
     cmdAvisarChegada();
     return;
   }
 
-  // 6. INICIAR VIAGEM
+  // 7. INICIAR VIAGEM
   if (acao.includes('iniciar') || acao.includes('embarcou') || acao.includes('partiu')) {
+    copilotoAguardandoComando = false;
     cmdIniciarViagem();
     return;
   }
 
-  // 7. FINALIZAR CORRIDA
+  // 8. FINALIZAR CORRIDA
   if (acao.includes('finalizar') || acao.includes('concluir') || acao.includes('terminar')) {
+    copilotoAguardandoComando = false;
     cmdFinalizarViagem();
     return;
   }
 
-  // 8. SUPORTE GEMINI
+  // Se ele chamou apenas o nome (ex: "Ok Zanix"), abre janela de 8 segundos para ouvir o comando solto
+  if (acao.length === 0 || acao === 'olá' || acao === 'ola') {
+    copilotoAguardandoComando = true;
+    if (timeoutJanelaComando) clearTimeout(timeoutJanelaComando);
+    timeoutJanelaComando = setTimeout(() => {
+      copilotoAguardandoComando = false;
+    }, 8000);
+
+    falarTexto('Estou ouvindo. Pode falar.');
+    return;
+  }
+
+  // 9. DÚVIDA LIVRE AO VOLANTE (GEMINI)
   if (acao.length > 3) {
+    copilotoAguardandoComando = false;
     await responderDuvidaComGemini(fraseBruta);
     return;
   }
 
-  falarTexto('Estou ouvindo. Pode falar.');
+  falarTexto('Estou a postos.');
+}
+
+// INFORMAR QUILOMETRAGEM E TEMPO DA ROTA
+function cmdInformarDistanciaETempo() {
+  // 1. Tenta ler do card em análise de rota aberta
+  const modalPrevia = document.getElementById('modalPreviaRotaCorrida') || document.querySelector('.rota-em-analise');
+  const cardRotaAnalise = document.querySelector('[style*="ROTA EM ANÁLISE"]') || document.body;
+
+  let kmEncontrado = null;
+  let tempoEncontrado = null;
+
+  // Busca em elementos com dados de km
+  const spans = document.querySelectorAll('span, small, div');
+  for (const s of spans) {
+    const texto = s.textContent || '';
+    if (texto.includes('km') && !kmEncontrado) {
+      const matchKm = texto.match(/([0-9]+[.,]?[0-9]*)\s*km/i);
+      if (matchKm) kmEncontrado = matchKm[1].replace(',', '.');
+    }
+    if ((texto.includes('min') || texto.includes('minutos')) && !tempoEncontrado) {
+      const matchMin = texto.match(/([0-9]+)\s*min/i);
+      if (matchMin) tempoEncontrado = matchMin[1];
+    }
+  }
+
+  // Se não encontrou no texto, tenta no botão do radar
+  if (!kmEncontrado) {
+    const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
+    if (primeiroBtn) {
+      kmEncontrado = primeiroBtn.getAttribute('data-dist') || primeiroBtn.getAttribute('data-km');
+      tempoEncontrado = primeiroBtn.getAttribute('data-dur');
+    }
+  }
+
+  if (kmEncontrado) {
+    const kmNum = parseFloat(kmEncontrado);
+    const kmFormatado = kmNum < 1 ? `${Math.round(kmNum * 1000)} metros` : `${kmNum.toFixed(1).replace('.', ',')} quilômetros`;
+    const tempoTexto = tempoEncontrado ? ` e cerca de ${tempoEncontrado} minutos` : '';
+    falarTexto(`Essa rota tem ${kmFormatado}${tempoTexto}.`);
+  } else {
+    falarTexto('Não identifiquei nenhuma rota aberta no momento.');
+  }
 }
 
 function cmdChecarRadarStatus() {
@@ -283,35 +366,46 @@ function cmdChecarRadarStatus() {
   const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
   const gatilho = obterCodigoAtivacaoMotorista();
 
-  falarTexto(`Temos 1 chamada disponível para ${destinoLimpo}, ganho de ${repasse} reais. Diga ${gatilho} visualizar ou ${gatilho} aceitar.`);
+  falarTexto(`Temos uma chamada para ${destinoLimpo}, seu ganho é de ${repasse} reais. Diga ${gatilho} visualizar para ver a rota.`);
 }
 
 function cmdVerRotaNoMapa() {
-  const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
+  // Procura pelo botão verde de visualizar rota no card
+  const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order') ||
+                      document.querySelector('button.btn-accept-order');
+
   if (!primeiroBtn) {
-    falarTexto('Nenhuma chamada pendente para visualizar.');
+    falarTexto('Nenhuma chamada pendente no momento para visualizar.');
     return;
   }
 
   pararAlertaSonoroChamada();
-  const dados = extrairDadosDoBotao(primeiroBtn);
-  preVisualizarRotaPedido(dados);
+  
+  // Executa o clique do botão verde para desenhar e abrir a rota
+  primeiroBtn.click();
 
+  const dados = extrairDadosDoBotao(primeiroBtn);
   const repasse = dados.repasse || (Number(dados.preco || 0) * 0.85).toFixed(2).replace('.', ',');
-  const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
+  const distNum = parseFloat(dados.dist || 0);
+  const distTexto = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
   const gatilho = obterCodigoAtivacaoMotorista();
 
-  falarTexto(`Rota na tela. Ganho de ${repasse} reais para ${destinoLimpo}. Diga ${gatilho} aceitar para confirmar.`);
+  falarTexto(`Visualizando rota no mapa. Distância de ${distTexto}, ganho de ${repasse} reais. Diga ${gatilho} aceitar para confirmar.`);
 }
 
 function cmdAceitarChamada() {
-  const btnModalConfirmar = document.getElementById('btnConfirmarAceiteViagem');
+  // 1. Se a prévia da rota já estiver aberta com o botão "Aceitar Corrida"
+  const btnModalConfirmar = document.getElementById('btnConfirmarAceiteViagem') || 
+                            document.querySelector('button.btn-confirmar-aceite') ||
+                            document.querySelector('button:contains("Aceitar Corrida")');
+
   if (btnModalConfirmar && btnModalConfirmar.offsetParent !== null) {
-    falarTexto('Viagem aceita.');
+    falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
     btnModalConfirmar.click();
     return;
   }
 
+  // 2. Ou aceita direto pelo primeiro botão do radar
   const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
   if (primeiroBtn) {
     const dados = extrairDadosDoBotao(primeiroBtn);
@@ -319,7 +413,7 @@ function cmdAceitarChamada() {
     setTimeout(() => {
       const btnModal = document.getElementById('btnConfirmarAceiteViagem');
       if (btnModal) {
-        falarTexto('Viagem aceita. Traçando trajeto até o passageiro.');
+        falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
         btnModal.click();
       }
     }, 400);
@@ -349,7 +443,7 @@ function cmdDispensarChamada() {
 function cmdAvisarChegada() {
   const btnNoLocal = document.getElementById('btnChegueiLocalEmbarque');
   if (btnNoLocal && btnNoLocal.offsetParent !== null) {
-    falarTexto('Passageiro avisado.');
+    falarTexto('Passageiro avisado que você chegou.');
     btnNoLocal.click();
   } else {
     falarTexto('Disponível apenas próximo ao embarque.');
