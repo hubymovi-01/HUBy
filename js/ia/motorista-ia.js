@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Autônomo com Discernimento e Execução em Tempo Real
+// js/ia/motorista-ia.js - Copiloto Humanizado com Raciocínio Situacional e Ações Dinâmicas
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -108,6 +108,7 @@ function liberarWakeLock() {
   }
 }
 
+// Captura fiel e dinâmica de todo o ecossistema visual
 function capturarContextoCompletoApp() {
   const saldoElement = document.getElementById('saldoCarteiraValor') || document.getElementById('drawerSaldoValor');
   const saldo = saldoElement ? saldoElement.textContent.trim() : 'R$ 0,00';
@@ -184,7 +185,7 @@ export function inicializarCopilotoVoz() {
 
   recognition.onerror = (ev) => {
     if (ev.error !== 'no-speech') {
-      console.warn('Status áudio:', ev.error);
+      console.warn('Status microfone:', ev.error);
     }
   };
 
@@ -242,6 +243,7 @@ async function processarFalaMotorista(fraseBruta) {
     }
   }
 
+  // Permite comandos sem repetir o nome caso a janela de escuta esteja aberta
   if (!gatilhoDetectado && !copilotoAguardandoComando) return;
 
   processandoComando = true;
@@ -253,44 +255,42 @@ async function processarFalaMotorista(fraseBruta) {
     .replace(/^(ok|ei|fala|e ai)\s+/i, '')
     .trim();
 
-  // Caso chame apenas pelo gatilho (ex: "Ok Zanix")
+  // Se chamou apenas o nome (ex: "Ok Zanix"), abre janela de 9 segundos
   if (acao.length === 0 || acao === 'ola' || acao === 'opa' || acao === 'e ai') {
     copilotoAguardandoComando = true;
     if (timeoutJanelaComando) clearTimeout(timeoutJanelaComando);
     timeoutJanelaComando = setTimeout(() => { copilotoAguardandoComando = false; }, 9000);
-    falarTexto('Estou ouvindo. Pode falar.');
+    falarTexto('Pode falar, parceiro.');
     return;
   }
 
   copilotoAguardandoComando = false;
 
   // --------------------------------------------------------------------------
-  // ATALHOS RÁPIDOS LOCAIS DE ALTA VELOCIDADE (LATÊNCIA ZERO)
+  // REAÇÕES INSTANTÂNEAS DE BAIXA LATÊNCIA (DISPARO IMEDIATO)
   // --------------------------------------------------------------------------
 
-  // 1. CANCELAR / FECHAR / VOLTAR / NÃO QUERO / DISPENSAR
+  // 1. CANCELAR / FECHAR / VOLTAR / DESCARTAR
   if (
-    acao.includes('cancela') || acao.includes('cancelar') || acao.includes('volta') ||
-    acao.includes('voltar') || acao.includes('fecha') || acao.includes('fechar') ||
-    acao.includes('dispensa') || acao.includes('dispensar') || acao.includes('recusa') ||
-    acao.includes('recusar') || acao.includes('nao quero') || acao.includes('esquece') ||
-    acao.includes('sai fora')
+    acao.includes('cancela') || acao.includes('volta') || acao.includes('fecha') ||
+    acao.includes('dispensa') || acao.includes('recusa') || acao.includes('nao quero') ||
+    acao.includes('esquece') || acao.includes('sai fora')
   ) {
     cmdCancelarOuDispensar();
     return;
   }
 
-  // 2. INICIAR VIAGEM (inicia, iniciar, partiu, bora, etc.)
+  // 2. INICIAR VIAGEM / DAR PARTIDA
   if (
-    acao.includes('inicia') || acao.includes('iniciar') || acao.includes('comeca') ||
-    acao.includes('comecar') || acao.includes('partiu') || acao.includes('embarcou') ||
-    acao.includes('partida') || acao.includes('pode ir') || acao.includes('bora')
+    acao.includes('inicia') || acao.includes('comeca') || acao.includes('partiu') ||
+    acao.includes('embarcou') || acao.includes('partida') || acao.includes('pode ir') ||
+    acao.includes('bora') || acao.includes('vamos rodar')
   ) {
     cmdIniciarViagem();
     return;
   }
 
-  // 3. CHEGADA AO EMBARQUE
+  // 3. CHEGADA AO LOCAL
   if (
     acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui') ||
     acao.includes('to aqui') || acao.includes('chegando')
@@ -301,40 +301,29 @@ async function processarFalaMotorista(fraseBruta) {
 
   // 4. ACEITAR CORRIDA
   if (
-    acao.includes('aceita') || acao.includes('aceitar') || acao.includes('confirma') ||
-    acao.includes('confirmar') || acao.includes('pega') || acao.includes('pegar') ||
+    acao.includes('aceita') || acao.includes('confirma') || acao.includes('pega') ||
     acao.includes('vou fazer') || acao.includes('pode pegar') || acao.includes('fechou')
   ) {
     cmdAceitarChamada();
     return;
   }
 
-  // 5. VISUALIZAR ROTA NO MAPA
+  // 5. VISUALIZAR ROTA
   if (
     acao.includes('visualizar') || acao.includes('ver rota') || acao.includes('mostra') ||
-    acao.includes('mostrar rota') || acao.includes('olhar rota') || acao.includes('abrir mapa')
+    acao.includes('olhar rota') || acao.includes('abrir mapa')
   ) {
     cmdVerRotaNoMapa();
     return;
   }
 
-  // 6. DISTÂNCIA / QUILÔMETROS / TEMPO
-  if (
-    acao.includes('quantos km') || acao.includes('quantos quilometros') ||
-    acao.includes('qual a distancia') || acao.includes('distancia') ||
-    acao.includes('quanto tempo')
-  ) {
-    cmdInformarDistanciaETempo();
-    return;
-  }
-
   // --------------------------------------------------------------------------
-  // LINGUAGEM LIVRE: O CÉREBRO GEMINI DECIDE AÇÃO E EXECUTA NA TELA
+  // PROCESSAMENTO COGNITIVO COM GEMINI (RACIOCÍNIO + AÇÃO AUTÔNOMA)
   // --------------------------------------------------------------------------
-  await processarDecisaoGemini(fraseBruta);
+  await processarCognicaoGemini(fraseBruta);
 }
 
-async function processarDecisaoGemini(perguntaCompleta) {
+async function processarCognicaoGemini(perguntaCompleta) {
   const contexto = capturarContextoCompletoApp();
 
   try {
@@ -352,23 +341,21 @@ async function processarDecisaoGemini(perguntaCompleta) {
 
     const data = await resp.json().catch(() => null);
     if (!data || !data.resposta) {
-      falarTexto('Estou a postos no trajeto.');
+      falarTexto('Tô monitorando o mapa com você.');
       return;
     }
 
-    // Reproduz a resposta falada
     falarTexto(data.resposta);
 
-    // Executa imediatamente a ação de interface identificada pela IA
     if (data.acao && data.acao !== 'NENHUMA') {
-      executarAcaoDecididaPelaIA(data.acao);
+      executarAcaoInteligente(data.acao);
     }
   } catch (err) {
-    falarTexto('Estou monitorando seu trajeto.');
+    falarTexto('Estou atento no trajeto.');
   }
 }
 
-function executarAcaoDecididaPelaIA(acao) {
+function executarAcaoInteligente(acao) {
   switch (acao) {
     case 'CANCELAR_ROTA':
       cmdCancelarOuDispensar();
@@ -401,6 +388,10 @@ function executarAcaoDecididaPelaIA(acao) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// AÇÕES FÍSICAS DE CONTROLE DA TELA
+// ----------------------------------------------------------------------------
+
 function cmdCancelarOuDispensar() {
   const btnFecharPrevia = document.getElementById('btnCancelarPreviaRota') ||
                           document.querySelector('.btn-fechar-previa') ||
@@ -408,7 +399,7 @@ function cmdCancelarOuDispensar() {
 
   if (btnFecharPrevia && btnFecharPrevia.offsetParent !== null) {
     btnFecharPrevia.click();
-    falarTexto('Rota fechada. Voltando para o radar.');
+    falarTexto('Fechado. Rota cancelada.');
     return;
   }
 
@@ -423,11 +414,11 @@ function cmdCancelarOuDispensar() {
                          document.getElementById('btnFecharDrawerPerfil');
   if (btnFecharModal && btnFecharModal.offsetParent !== null) {
     btnFecharModal.click();
-    falarTexto('Fechado.');
+    falarTexto('Pronto, fechado.');
     return;
   }
 
-  falarTexto('Nenhuma rota ou tela aberta para cancelar.');
+  falarTexto('Nada aberto para fechar agora.');
 }
 
 function cmdVerRotaNoMapa() {
@@ -435,7 +426,7 @@ function cmdVerRotaNoMapa() {
                       document.querySelector('button.btn-accept-order');
 
   if (!primeiroBtn) {
-    falarTexto('Nenhuma chamada pendente no momento para visualizar.');
+    falarTexto('Nenhuma chamada no radar pra ver.');
     return;
   }
 
@@ -446,9 +437,8 @@ function cmdVerRotaNoMapa() {
   const repasse = dados.repasse || (Number(dados.preco || 0) * 0.85).toFixed(2).replace('.', ',');
   const distNum = parseFloat(dados.dist || 0);
   const distTexto = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
-  const gatilho = obterCodigoAtivacaoMotorista();
 
-  falarTexto(`Visualizando rota no mapa. Distância de ${distTexto}, ganho de ${repasse} reais. Diga ${gatilho} aceitar para confirmar.`);
+  falarTexto(`Rota na tela. Deu ${distTexto}, pagando ${repasse} reais. Quer que eu aceite?`);
 }
 
 function cmdAceitarChamada() {
@@ -456,7 +446,7 @@ function cmdAceitarChamada() {
                             document.querySelector('button.btn-confirmar-aceite');
 
   if (btnModalConfirmar && btnModalConfirmar.offsetParent !== null) {
-    falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
+    falarTexto('Fechado, corrida aceita. Traçando rota.');
     btnModalConfirmar.click();
     return;
   }
@@ -468,78 +458,43 @@ function cmdAceitarChamada() {
     setTimeout(() => {
       const btnModal = document.getElementById('btnConfirmarAceiteViagem');
       if (btnModal) {
-        falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
+        falarTexto('Fechado, corrida aceita.');
         btnModal.click();
       }
     }, 400);
     return;
   }
 
-  falarTexto('Nenhuma chamada no radar para aceitar.');
+  falarTexto('Não tem nenhuma corrida no radar pra pegar.');
 }
 
 function cmdAvisarChegada() {
   const btnNoLocal = document.getElementById('btnChegueiLocalEmbarque');
   if (btnNoLocal && btnNoLocal.offsetParent !== null) {
-    falarTexto('Passageiro avisado que você chegou.');
+    falarTexto('Avisando o passageiro que você encostou.');
     btnNoLocal.click();
   } else {
-    falarTexto('Disponível apenas próximo ao local de embarque.');
+    falarTexto('Você só pode avisar quando estiver perto do embarque.');
   }
 }
 
 function cmdIniciarViagem() {
   const btnIniciar = document.getElementById('btnIniciarCorridaAtiva');
   if (btnIniciar && btnIniciar.offsetParent !== null) {
-    falarTexto('Viagem iniciada. Boa corrida.');
+    falarTexto('Partiu, viagem iniciada. Boa corrida.');
     btnIniciar.click();
   } else {
-    falarTexto('Nenhuma corrida aguardando início no momento.');
+    falarTexto('Nenhuma corrida aguardando partida.');
   }
 }
 
 function cmdFinalizarViagem() {
   const btnConcluir = document.getElementById('btnConcluirCorrida');
   if (btnConcluir && btnConcluir.offsetParent !== null) {
-    falarTexto('Abrindo recebimento.');
+    falarTexto('Corrida concluída. Abrindo acerto.');
     btnConcluir.click();
   } else {
-    falarTexto('Nenhuma viagem ativa para finalizar.');
-  }
-}
-
-function cmdInformarDistanciaETempo() {
-  let kmEncontrado = null;
-  let tempoEncontrado = null;
-
-  const spans = document.querySelectorAll('span, small, div');
-  for (const s of spans) {
-    const texto = s.textContent || '';
-    if (texto.includes('km') && !kmEncontrado) {
-      const matchKm = texto.match(/([0-9]+[.,]?[0-9]*)\s*km/i);
-      if (matchKm) kmEncontrado = matchKm[1].replace(',', '.');
-    }
-    if ((texto.includes('min') || texto.includes('minutos')) && !tempoEncontrado) {
-      const matchMin = texto.match(/([0-9]+)\s*min/i);
-      if (matchMin) tempoEncontrado = matchMin[1];
-    }
-  }
-
-  if (!kmEncontrado) {
-    const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
-    if (primeiroBtn) {
-      kmEncontrado = primeiroBtn.getAttribute('data-dist') || primeiroBtn.getAttribute('data-km');
-      tempoEncontrado = primeiroBtn.getAttribute('data-dur');
-    }
-  }
-
-  if (kmEncontrado) {
-    const kmNum = parseFloat(kmEncontrado);
-    const kmFormatado = kmNum < 1 ? `${Math.round(kmNum * 1000)} metros` : `${kmNum.toFixed(1).replace('.', ',')} quilômetros`;
-    const tempoTexto = tempoEncontrado ? ` e cerca de ${tempoEncontrado} minutos` : '';
-    falarTexto(`Essa rota tem ${kmFormatado}${tempoTexto}.`);
-  } else {
-    falarTexto('Nenhuma rota aberta no momento para calcular distância.');
+    falarTexto('Nenhuma corrida ativa pra encerrar.');
   }
 }
 
@@ -568,7 +523,7 @@ function atualizarIndicadorUIVoz(ativo) {
     badge.style.background = 'rgba(16, 185, 129, 0.22)';
     badge.style.border = '1px solid #10B981';
     badge.style.color = '#10B981';
-    badge.innerHTML = `🎙️ "${gatilho}" Ativo`;
+    badge.innerHTML = `🎙️ "${gatilho}" Pronto`;
   } else {
     badge.style.background = 'rgba(15, 23, 42, 0.85)';
     badge.style.border = '1px solid rgba(255, 255, 255, 0.12)';

@@ -1,9 +1,8 @@
-// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Suporte Autônomo por Voz Gemini
+// routes/ia.routes.js - Geocodificação Nacional e Copiloto com Consciência de Corrida
 import express from 'express';
 
 const router = express.Router();
 
-// Função auxiliar para sanitizar retornos markdown do Gemini
 function extrairJSONPuro(texto) {
   if (!texto) return null;
   const limpo = texto.replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -14,7 +13,7 @@ function extrairJSONPuro(texto) {
   }
 }
 
-// Geocodificador Nominatim flexível e tolerante no Brasil
+// Geocodificador Nominatim flexível no Brasil
 async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   if (!termo || !String(termo).trim()) return null;
 
@@ -63,16 +62,13 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   return null;
 }
 
-// Endpoint 1: Localização e Voz do Passageiro (Geocodificação Inteligente)
+// Endpoint 1: Localização e Voz do Passageiro
 router.post('/localizar-referencia', async (req, res) => {
   try {
     const { referencia, userLat, userLng } = req.body || {};
 
     if (!referencia || !String(referencia).trim()) {
-      return res.status(200).json({
-        sucesso: false,
-        erro: 'Por favor, fale ou informe o endereço de destino.'
-      });
+      return res.status(200).json({ sucesso: false, erro: 'Informe o endereço de destino.' });
     }
 
     let termoFormatado = String(referencia).trim();
@@ -88,13 +84,13 @@ router.post('/localizar-referencia', async (req, res) => {
           ? `O passageiro está próximo a lat: ${userLat}, lng: ${userLng} no estado do Piauí / Brasil.`
           : 'O passageiro está no Brasil, região do Piauí.';
 
-        const prompt = `Você é o geocodificador inteligente do aplicativo de mobilidade HUBy no Brasil.
+        const prompt = `Você é o geocodificador inteligente do aplicativo HUBy no Brasil.
 ${contextoGPS}
-O passageiro falou o destino: "${referencia}".
+Destino falado: "${referencia}".
 
 Instruções:
-1. Extraia o nome real do local (rua, praça, bairro ou cidade).
-2. Se souber as coordenadas geográficas precisas dessa cidade, bairro ou ponto no Brasil, preencha os campos "lat" e "lng". Se não tiver certeza absoluta, retorne null.
+1. Extraia o nome real do local.
+2. Preencha "lat" e "lng" apenas com certeza absoluta, caso contrário use null.
 3. Retorne RIGOROSAMENTE apenas um JSON no formato:
 {
   "nome_curto": "Nome do Local ou Cidade, UF",
@@ -109,10 +105,7 @@ Instruções:
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: 'application/json'
-            }
+            generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
           })
         });
 
@@ -131,7 +124,7 @@ Instruções:
           }
         }
       } catch (errGemini) {
-        console.warn('⚠️ [IA Gemini] Fallback direto para Nominatim:', errGemini.message);
+        console.warn('Fallback direto para Nominatim:', errGemini.message);
       }
     }
 
@@ -146,37 +139,26 @@ Instruções:
     }
 
     if (!resultadoFinal) {
-      return res.status(200).json({
-        sucesso: false,
-        erro: 'Não conseguimos identificar este local com precisão. Tente falar com mais detalhes (ex: rua e bairro).'
-      });
+      return res.status(200).json({ sucesso: false, erro: 'Local não identificado com precisão.' });
     }
 
-    return res.status(200).json({
-      sucesso: true,
-      resultado: resultadoFinal
-    });
-
+    return res.status(200).json({ sucesso: true, resultado: resultadoFinal });
   } catch (err) {
-    console.error('❌ [IA] Erro na rota:', err.message);
-    return res.status(200).json({
-      sucesso: false,
-      erro: 'Falha temporária ao processar a localização.'
-    });
+    return res.status(200).json({ sucesso: false, erro: 'Falha ao processar localização.' });
   }
 });
 
-// Endpoint 2: Cérebro Autônomo com Discernimento Contextual e Decisão de Ação
+// Endpoint 2: Mente Situacional do Copiloto (Conversa e Execução Dinâmica)
 router.post('/motorista-suporte', async (req, res) => {
   try {
-    const { pergunta, contextoCompleto, contextoCorrida } = req.body || {};
-    const ctx = contextoCompleto || contextoCorrida || {};
+    const { pergunta, contextoCompleto, historicoConversa } = req.body || {};
+    const ctx = contextoCompleto || {};
 
     if (!pergunta || !String(pergunta).trim()) {
       return res.status(200).json({
         sucesso: false,
         acao: 'NENHUMA',
-        resposta: 'Pode falar, estou ouvindo.'
+        resposta: 'Pode falar, parceiro.'
       });
     }
 
@@ -185,56 +167,56 @@ router.post('/motorista-suporte', async (req, res) => {
       return res.status(200).json({
         sucesso: true,
         acao: 'NENHUMA',
-        resposta: ctx.saldo ? `Seu saldo atual é de ${ctx.saldo}.` : 'Copiloto ativo. Prossiga com atenção.'
+        resposta: ctx.saldo ? `Saldo atual: ${ctx.saldo}.` : 'Copiloto operacional.'
       });
     }
 
-    const promptContextual = `Você é o copiloto inteligente com discernimento e consciência situacional do aplicativo HUBy para motoristas parceiros.
-Você NÃO é um assistente engessado por regras fixas. Você compreende intenções humanas, gírias e o contexto visual da interface do motorista.
+    const promptMente = `Você é o copiloto de inteligência artificial de bordo do motorista no HUBy.
+Sua postura é a de um co-piloto profissional, humano, atento e direto. Você não repete frases prontas de robô nem lê opções como menu de telefone.
+Você CONVERSA com o motorista de forma natural, mas ESTREITAMENTE FOCADA em assuntos da corrida, direção, rota, valores, trânsito e decisões operacionais.
 
-ESTADO EM TEMPO REAL DA INTERFACE DO MOTORISTA:
-- Condutor: ${ctx.nomeCondutor || 'Parceiro'}
-- Status de Conexão: ${ctx.statusOnline ? 'Online (Pronto para chamadas)' : 'Offline'}
-- Saldo da Carteira: ${ctx.saldo || 'R$ 0,00'}
-- Ganhos do Dia: ${ctx.ganhosHoje || 'R$ 0,00'} em ${ctx.corridasHoje || '0 corridas'}
+ESTADO VIVO DO APLICATIVO AGORA:
+- Motorista: ${ctx.nomeCondutor || 'Parceiro'}
+- Conexão: ${ctx.statusOnline ? 'Online (Aguardando/em rota)' : 'Offline'}
+- Saldo: ${ctx.saldo || 'R$ 0,00'}
+- Produção Hoje: ${ctx.ganhosHoje || 'R$ 0,00'} (${ctx.corridasHoje || '0 corridas'})
 - Chamadas Disponíveis no Radar: ${ctx.qtdChamadasNoRadar || 0}
-- Prévia de Rota Aberta na Tela: ${ctx.telasAbertas?.previaRota ? 'SIM (Aguardando decisão)' : 'NÃO'}
-- Viagem Ativa em Andamento: ${ctx.corridaAtivaId ? 'SIM' : 'NÃO'}
-${ctx.primeiraChamadaRadar ? `- Corrida no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, Repasse de R$ ${ctx.primeiraChamadaRadar.repasse}, Distância ${ctx.primeiraChamadaRadar.dist} km, Duração ${ctx.primeiraChamadaRadar.dur} min.` : ''}
+- Prévia de Rota Aberta na Tela: ${ctx.telasAbertas?.previaRota ? 'SIM (A rota está desenhada na tela aguardando aceite ou rejeição)' : 'NÃO'}
+- Viagem Ativa em Andamento: ${ctx.corridaAtivaId ? 'SIM (Passageiro a bordo ou a caminho)' : 'NÃO'}
+${ctx.primeiraChamadaRadar ? `- Chamada no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, ganho líquido de R$ ${ctx.primeiraChamadaRadar.repasse}, distância ${ctx.primeiraChamadaRadar.dist} km, tempo estimado ${ctx.primeiraChamadaRadar.dur} min.` : ''}
 
-AÇÕES DE CONTROLE QUE VOCÊ PODE EXECUTAR:
-- "VISUALIZAR_ROTA": Ver a corrida no mapa, trajeto, detalhes ou prévia.
-- "ACEITAR_CORRIDA": Aceitar, confirmar ou pegar a chamada disponível.
-- "CANCELAR_ROTA": Voltar, fechar o mapa de prévia, cancelar, não querer, dispensar ou recusar a chamada.
-- "AVISAR_CHEGADA": Avisar que chegou ao ponto de encontro ou ao embarque.
-- "INICIAR_VIAGEM": Iniciar a corrida, dar a partida após o passageiro embarcar.
-- "FINALIZAR_CORRIDA": Concluir, finalizar ou encerrar a viagem no destino.
-- "ABRIR_SAQUE": Abrir painel de saque Pix ou transferência.
-- "ABRIR_PERFIL": Abrir menu lateral ou dados cadastrais.
-- "FECHAR_TELAS": Voltar à tela principal ou fechar gaveta e modais.
-- "NENHUMA": Apenas fornecer respostas orais a dúvidas (km, saldo, ganhos, placas, regras da plataforma, etc.).
+AÇÕES DISPONÍVEIS NA INTERFACE:
+- "VISUALIZAR_ROTA": Quando o motorista demonstrar curiosidade sobre o trajeto, pedir para olhar o mapa ou avaliar a corrida pendente.
+- "ACEITAR_CORRIDA": Quando ele decidir pegar a corrida (ex: "vamos fazer", "pega", "pode aceitar", "fechou", "aceita logo").
+- "CANCELAR_ROTA": Quando ele rejeitar, quiser voltar pro radar, desistir da prévia ou mandar fechar o trajeto.
+- "AVISAR_CHEGADA": Quando ele disser que encostou, chegou no passageiro ou tá no portão.
+- "INICIAR_VIAGEM": Quando o passageiro entrar e ele mandar rodar, dar a partida ou começar a corrida.
+- "FINALIZAR_CORRIDA": Quando chegar ao destino final e for hora de acertar o valor.
+- "ABRIR_SAQUE": Se ele quiser retirar dinheiro ou ver a tela do Pix.
+- "ABRIR_PERFIL": Se pedir pra ver dados cadastrais ou preferências.
+- "FECHAR_TELAS": Voltar pra tela limpa do mapa.
+- "NENHUMA": Apenas responde com raciocínio, tirando dúvidas sobre km, valores, se vale a pena a corrida, etc.
 
-MENSAGEM FALADA PELO MOTORISTA:
+MENSAGEM DO MOTORISTA:
 "${pergunta}"
 
-INSTRUÇÕES RIGOROSAS:
-1. Responda em JSON puro no formato:
+DIRETRIZES DE RESPOSTA:
+1. Responda em JSON puro:
 {
   "acao": "NOME_DA_ACAO",
-  "fala": "Resposta falada concisa (máximo 1 a 2 frases curtas), fluida e sem caracteres de formatação (sem emojis, asteriscos ou hashtags)."
+  "fala": "Sua resposta com voz natural humana. Máximo 1 ou 2 frases enxutas. Sem asteriscos, sem emojis e sem traços."
 }
-2. Se a intenção do condutor for clara (ex: "não quero", "sai dessa rota", "volta pro radar"), atribua "CANCELAR_ROTA".
-3. Se o condutor perguntar sobre distância ou tempo, informe os dados reais da chamada do radar e use "NENHUMA".
-4. Taxa da plataforma: o motorista retém 85% líquido do valor total da viagem.`;
+2. Responda de igual para igual, demonstrando raciocínio situacional imediato.
+3. Se ele fizer perguntas analíticas (ex: "Vale a pena pegar essa?", "Quantos km dá?"), analise os dados do radar e dê uma opinião prática de trânsito.`;
 
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const resp = await fetch(urlGemini, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: promptContextual }] }],
+        contents: [{ parts: [{ text: promptMente }] }],
         generationConfig: {
-          temperature: 0.15,
+          temperature: 0.25,
           maxOutputTokens: 110,
           responseMimeType: 'application/json'
         }
@@ -258,36 +240,32 @@ INSTRUÇÕES RIGOROSAS:
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Estou com você no trajeto. Prossiga com o comando.'
+      resposta: 'Estou monitorando o trajeto com você.'
     });
 
   } catch (err) {
-    console.error('❌ [IA Suporte] Falha:', err.message);
+    console.error('Falha no copiloto:', err.message);
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Copiloto operacional. Pode falar o que deseja.'
+      resposta: 'Copiloto a postos. Pode comandar.'
     });
   }
 });
 
-// Endpoint 3: Extração Inteligente de Encomendas HUBy Flash
+// Endpoint 3: Extração Flash
 router.post('/flash-extrair', async (req, res) => {
   try {
     const { texto } = req.body || {};
     if (!texto || !String(texto).trim()) {
-      return res.status(200).json({ sucesso: false, erro: 'Texto de instrução não fornecido.' });
+      return res.status(200).json({ sucesso: false, erro: 'Instrução não informada.' });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return res.status(200).json({
         sucesso: true,
-        resultado: {
-          recebedor: 'A informar',
-          tipoItem: 'pequeno',
-          observacao: texto
-        }
+        resultado: { recebedor: 'A informar', tipoItem: 'pequeno', observacao: texto }
       });
     }
 
@@ -311,35 +289,26 @@ Retorne APENAS um JSON:
 
     if (resp.ok) {
       const data = await resp.json().catch(() => null);
-      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = extrairJSONPuro(txt);
-      if (parsed) {
-        return res.json({ sucesso: true, resultado: parsed });
-      }
+      const parsed = extrairJSONPuro(data?.candidates?.[0]?.content?.parts?.[0]?.text);
+      if (parsed) return res.json({ sucesso: true, resultado: parsed });
     }
 
     return res.status(200).json({
       sucesso: true,
-      resultado: {
-        recebedor: 'A informar',
-        tipoItem: 'pequeno',
-        observacao: texto
-      }
+      resultado: { recebedor: 'A informar', tipoItem: 'pequeno', observacao: texto }
     });
   } catch (err) {
     return res.status(200).json({ sucesso: false, erro: err.message });
   }
 });
 
-// Endpoint 4: Smart Replies Contextuais para o Motorista
+// Endpoint 4: Respostas Rápidas
 router.post('/motorista-respostas', async (req, res) => {
   const fallback = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
   try {
     const { mensagem } = req.body || {};
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || !mensagem) {
-      return res.json({ sucesso: true, sugestoes: fallback });
-    }
+    if (!apiKey || !mensagem) return res.json({ sucesso: true, sugestoes: fallback });
 
     const prompt = `Gere exatamente 3 sugestões curtas de resposta no trânsito para o motorista à mensagem: "${mensagem}".
 Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
@@ -356,8 +325,7 @@ Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
 
     if (resp.ok) {
       const data = await resp.json().catch(() => null);
-      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = extrairJSONPuro(txt);
+      const parsed = extrairJSONPuro(data?.candidates?.[0]?.content?.parts?.[0]?.text);
       if (parsed && Array.isArray(parsed.sugestoes)) {
         return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
       }
