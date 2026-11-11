@@ -1,11 +1,19 @@
-// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Copiloto Cognitivo Gemini
+// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Copiloto Conversacional Gemini
 import express from 'express';
 
 const router = express.Router();
 
+// Modelos oficiais ativos da API Gemini (ordem de prioridade com fallback automático)
+const MODELOS_GEMINI = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash-latest'
+];
+
+// Extrai JSON mesmo que o modelo envie texto ou blocos markdown ao redor
 function extrairJSONPuro(texto) {
   if (!texto) return null;
-  const limpo = texto.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const limpo = String(texto).replace(/```json/gi, '').replace(/```/g, '').trim();
   try {
     return JSON.parse(limpo);
   } catch (e) {
@@ -17,6 +25,45 @@ function extrairJSONPuro(texto) {
   }
 }
 
+// Chama a API Gemini testando automaticamente os modelos ativos
+async function chamarGeminiAPI(prompt, apiKey, modoJSON = true, temperatura = 0.4) {
+  if (!apiKey) return null;
+
+  for (const modelo of MODELOS_GEMINI) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`;
+      const generationConfig = {
+        temperature: temperatura,
+        maxOutputTokens: 450
+      };
+      if (modoJSON) {
+        generationConfig.responseMimeType = 'application/json';
+      }
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig
+        })
+      });
+
+      if (resp.ok) {
+        const data = await resp.json().catch(() => null);
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (rawText && rawText.trim()) {
+          return rawText.trim();
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠️ Tentativa com modelo ${modelo} falhou:`, err.message);
+    }
+  }
+  return null;
+}
+
+// Geocodificador Nominatim flexível no Brasil
 async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   if (!termo || !String(termo).trim()) return null;
 
@@ -65,7 +112,9 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   return null;
 }
 
-// Endpoint 1: Localização e Voz do Passageiro (Geocodificação Inteligente)
+// ============================================================================
+// ENDPOINT 1: LOCALIZAÇÃO E VOZ DO PASSAGEIRO
+// ============================================================================
 router.post('/localizar-referencia', async (req, res) => {
   try {
     const { referencia, userLat, userLng } = req.body || {};
@@ -85,19 +134,15 @@ router.post('/localizar-referencia', async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (apiKey) {
-      try {
-        const contextoGPS = (userLat && userLng)
-          ? `O passageiro está próximo a lat: ${userLat}, lng: ${userLng} no estado do Piauí / Brasil.`
-          : 'O passageiro está no Brasil, região do Piauí.';
+      const contextoGPS = (userLat && userLng)
+        ? `O passageiro está próximo a lat: ${userLat}, lng: ${userLng} no estado do Piauí / Brasil.`
+        : 'O passageiro está no Brasil, região do Piauí.';
 
-        const prompt = `Você é o geocodificador inteligente do aplicativo de mobilidade HUBy no Brasil.
+      const prompt = `Você é o geocodificador inteligente do aplicativo de mobilidade HUBy no Brasil.
 ${contextoGPS}
 O passageiro falou o destino: "${referencia}".
 
-Instruções:
-1. Extraia o nome real do local (rua, praça, bairro ou cidade).
-2. Se souber as coordenadas geográficas precisas dessa cidade, bairro ou ponto no Brasil, preencha os campos "lat" e "lng". Se não tiver certeza absoluta, retorne null.
-3. Retorne RIGOROSAMENTE apenas um JSON no formato:
+Extraia o nome real do local e retorne APENAS um JSON no formato:
 {
   "nome_curto": "Nome do Local ou Cidade, UF",
   "termo_busca": "Nome Limpo Para Busca",
@@ -105,35 +150,16 @@ Instruções:
   "lng": -42.2476 ou null
 }`;
 
-        const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-        const respGemini = await fetch(urlGemini, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: 0.1,
-              responseMimeType: 'application/json'
-            }
-          })
-        });
+      const raw = await chamarGeminiAPI(prompt, apiKey, true, 0.1);
+      const parsed = extrairJSONPuro(raw);
 
-        if (respGemini.ok) {
-          const json = await respGemini.json().catch(() => null);
-          const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text;
-          const parsed = extrairJSONPuro(raw);
-
-          if (parsed) {
-            if (parsed.termo_busca) termoFormatado = parsed.termo_busca;
-            if (parsed.lat && parsed.lng && !isNaN(Number(parsed.lat)) && !isNaN(Number(parsed.lng))) {
-              latFinal = parseFloat(parsed.lat);
-              lngFinal = parseFloat(parsed.lng);
-              nomeFinal = parsed.nome_curto || termoFormatado;
-            }
-          }
+      if (parsed) {
+        if (parsed.termo_busca) termoFormatado = parsed.termo_busca;
+        if (parsed.lat && parsed.lng && !isNaN(Number(parsed.lat)) && !isNaN(Number(parsed.lng))) {
+          latFinal = parseFloat(parsed.lat);
+          lngFinal = parseFloat(parsed.lng);
+          nomeFinal = parsed.nome_curto || termoFormatado;
         }
-      } catch (errGemini) {
-        console.warn('Fallback direto para Nominatim:', errGemini.message);
       }
     }
 
@@ -150,7 +176,7 @@ Instruções:
     if (!resultadoFinal) {
       return res.status(200).json({
         sucesso: false,
-        erro: 'Não conseguimos identificar este local com precisão. Tente falar com mais detalhes (ex: rua e bairro).'
+        erro: 'Não conseguimos identificar este local com precisão. Tente falar com mais detalhes.'
       });
     }
 
@@ -167,99 +193,86 @@ Instruções:
   }
 });
 
-// Endpoint 2: Mente Cognitiva do Copiloto (Raciocínio Livre no Nicho de Mobilidade)
+// ============================================================================
+// ENDPOINT 2: COPILOTO CONVERSACIONAL COM INTERAÇÃO LIVRE E COMANDOS DE TELA
+// ============================================================================
 router.post('/motorista-suporte', async (req, res) => {
   try {
-    const { pergunta, intencaoLimpa, contextoCompleto, contextoCorrida } = req.body || {};
-    const ctx = contextoCompleto || contextoCorrida || {};
+    const { pergunta, intencaoLimpa, contextoCompleto, historicoConversa } = req.body || {};
+    const ctx = contextoCompleto || {};
     const falaMotorista = intencaoLimpa || pergunta || '';
 
     if (!falaMotorista || !String(falaMotorista).trim()) {
       return res.status(200).json({
-        sucesso: false,
+        sucesso: true,
         acao: 'NENHUMA',
-        resposta: 'Estou na escuta, parceiro.'
+        resposta: 'Fala comigo, parceiro! O que você manda?'
       });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(200).json({
-        sucesso: true,
-        acao: 'NENHUMA',
-        resposta: ctx.saldo ? `Seu saldo na carteira é ${ctx.saldo}.` : 'Copiloto ativo no trajeto.'
-      });
-    }
+    const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
 
-    const promptCognitivo = `Você é a Inteligência Artificial Copiloto de Bordo do aplicativo HUBy para motoristas profissionais.
-Você tem mente própria, raciocínio analítico e consciência em tempo real de tudo o que acontece na tela do motorista.
-Converse como um parceiro experiente sentado no banco do carona: natural, ágil, inteligente e focado no universo de corridas, rotas, faturamento, segurança e operação do aplicativo.
+    const historicoFormatado = Array.isArray(historicoConversa) && historicoConversa.length > 0
+      ? historicoConversa.map(h => `Motorista: "${h.motorista}" | Você respondeu: "${h.ia}"`).join('\n')
+      : 'Início da conversa.';
 
-RAIO-X EM TEMPO REAL DA TELA DO MOTORISTA:
-- Motorista: ${ctx.nomeCondutor || 'Parceiro'} (${ctx.avaliacao || '5.0'})
-- Veículo: ${ctx.veiculo || 'Cadastrado'}
-- Status: ${ctx.statusOnline ? 'Online' : 'Offline'} | Em Pausa: ${ctx.emPausa ? 'Sim' : 'Não'} | Modo Casa: ${ctx.modoCasaAtivo ? 'Ativo' : 'Inativo'}
-- Saldo Disponível (Carteira): ${ctx.saldo || 'R$ 0,00'}
-- Ganhos de Hoje: ${ctx.ganhosHoje || 'R$ 0,00'} (${ctx.corridasHoje || '0 viagens'}) | Meta: ${ctx.metaDiaria || 'R$ 200,00'}
-- Chamadas Pendentes no Radar: ${ctx.qtdChamadasNoRadar || 0}
-${ctx.primeiraChamadaRadar ? `- Chamada #1 no Radar: Buscar em "${ctx.primeiraChamadaRadar.origem}" -> Levar para "${ctx.primeiraChamadaRadar.destino}". Distância: ${ctx.primeiraChamadaRadar.distanciaKm} km (~${ctx.primeiraChamadaRadar.duracaoMin} min). Ganho líquido (85%): R$ ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} (Valor total: R$ ${ctx.primeiraChamadaRadar.valorBruto}).` : '- Nenhuma chamada esperando no radar.'}
-${ctx.rotaEmAnalise ? `- ROTA ABERTA EM ANÁLISE NO MAPA AGORA: De "${ctx.rotaEmAnalise.origem}" para "${ctx.rotaEmAnalise.destino}", ${ctx.rotaEmAnalise.distanciaKm} km (~${ctx.rotaEmAnalise.duracaoMin} min), ganho líquido R$ ${ctx.rotaEmAnalise.ganhoLiquidoMotorista}. Aguardando o motorista mandar aceitar ou voltar/cancelar.` : ''}
-${ctx.corridaAtiva ? `- CORRIDA ACEITA EM ANDAMENTO: Fase atual = "${ctx.corridaAtiva.etapa === 'a_caminho' ? 'Indo buscar o passageiro no embarque' : 'Em viagem levando o passageiro ao destino'}". Origem: "${ctx.corridaAtiva.origem}", Destino: "${ctx.corridaAtiva.destino}", Distância: ${ctx.corridaAtiva.distanciaKm} km, Ganho líquido: R$ ${ctx.corridaAtiva.ganhoLiquidoMotorista}.` : ''}
-- Modal de Pagamento Final Aberto: ${ctx.telasAbertas?.modalLiquidacaoPagamento ? 'SIM (Aguardando escolher Dinheiro, Maquininha ou Pix)' : 'NÃO'}
+    const promptConversacional = `Você é o Copiloto de Inteligência Artificial do aplicativo HUBy, um parceiro inteligente, carismático, prestativo e articulado que conversa com o motorista enquanto ele trabalha.
+Você NÃO é limitado nem robótico. Você conversa de verdade, responde perguntas, dá dicas estratégicas, analisa corridas, tira dúvidas, troca ideia e também executa comandos na tela quando o motorista pede.
 
-COMANDOS DE CONTROLE QUE VOCÊ PODE DISPARAR NA TELA (campo "acao"):
-- "VISUALIZAR_ROTA": Abre o mapa com o traçado da chamada pendente do radar.
-- "ACEITAR_CORRIDA": Aceita a corrida (seja da prévia aberta ou direto do radar).
-- "CANCELAR_ROTA": Fecha a prévia da rota, volta pro radar ou recusa/dispensa a chamada.
-- "AVISAR_CHEGADA": Notifica o passageiro que o motorista encostou no embarque.
-- "INICIAR_VIAGEM": Inicia a corrida quando o passageiro entra no veículo.
-- "FINALIZAR_CORRIDA": Abre a tela de encerramento/recebimento ao chegar no destino.
-- "PAGAR_DINHEIRO": Liquida a corrida em espécie.
-- "PAGAR_MAQUININHA": Liquida a corrida na maquininha de cartão.
-- "PAGAR_PIX": Gera o QR Code Pix do Mercado Pago na tela.
-- "ABRIR_SAQUE": Abre o modal de saque Pix da carteira.
-- "ABRIR_PERFIL": Abre o menu lateral do motorista.
-- "ABRIR_EDICAO_PERFIL": Abre o modal de editar dados e foto do perfil.
-- "ABRIR_CHAT": Abre o chat com o passageiro.
-- "ABRIR_LOJA": Abre o HUBy Clube de descontos e loja.
-- "ALTERNAR_CALOR": Liga ou desliga o mapa de calor de demanda.
-- "ALTERNAR_PAUSA": Ativa ou desativa a pausa de 15 minutos.
-- "ALTERNAR_MODO_CASA": Ativa ou desativa o filtro de corridas para casa.
-- "EXPORTAR_FECHAMENTO": Baixa o relatório de fechamento diário.
-- "FICAR_OFFLINE": Desconecta o motorista.
-- "FICAR_ONLINE": Conecta o motorista.
-- "FECHAR_TELAS": Fecha modais ou gavetas abertas.
-- "NENHUMA": Quando for uma pergunta informativa, cálculo de ganho por km, conselho se a corrida compensa ou bate-papo de trânsito.
+HORÁRIO ATUAL NO BRASIL: ${horaAtual}
 
-O QUE O MOTORISTA ACABOU DE FALAR:
+DADOS REAIS DA TELA DO MOTORISTA NESTE EXATO SEGUNDO:
+- Nome do Motorista: ${ctx.nomeCondutor || 'Parceiro'} (Nota: ${ctx.avaliacao || '5.0'})
+- Veículo: ${ctx.veiculo || 'Veículo cadastrado'}
+- Status no App: ${ctx.statusOnline ? 'Online' : 'Offline'} | Modo Pausa: ${ctx.emPausa ? 'Ativado' : 'Desativado'} | Modo Ir p/ Casa: ${ctx.modoCasaAtivo ? 'Ativado' : 'Desativado'}
+- Saldo Disponível na Carteira: ${ctx.saldo || 'R$ 0,00'}
+- Ganhos de Hoje: ${ctx.ganhosHoje || 'R$ 0,00'}
+- Quantidade de Corridas Feitas Hoje: ${ctx.corridasHoje || '0 viagens'}
+- Meta Diária: ${ctx.metaDiaria || 'R$ 200,00'}
+- Chamadas Pendentes no Radar Agora: ${ctx.qtdChamadasNoRadar || 0}
+${ctx.primeiraChamadaRadar ? `- Chamada Disponível no Radar: Buscar em "${ctx.primeiraChamadaRadar.origem}" para "${ctx.primeiraChamadaRadar.destino}". Distância: ${ctx.primeiraChamadaRadar.distanciaKm} km (~${ctx.primeiraChamadaRadar.duracaoMin} min). Ganho líquido do motorista (85%): R$ ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista}.` : '- Nenhuma chamada no radar neste instante.'}
+${ctx.rotaEmAnalise ? `- ROTA ABERTA NA TELA EM ANÁLISE: Origem "${ctx.rotaEmAnalise.origem}" -> Destino "${ctx.rotaEmAnalise.destino}", Distância: ${ctx.rotaEmAnalise.distanciaKm} km (~${ctx.rotaEmAnalise.duracaoMin} min), Ganho líquido: R$ ${ctx.rotaEmAnalise.ganhoLiquidoMotorista}.` : ''}
+${ctx.corridaAtiva ? `- CORRIDA EM ANDAMENTO: Etapa = "${ctx.corridaAtiva.etapa === 'a_caminho' ? 'Indo buscar passageiro' : 'Passageiro a bordo rumo ao destino'}". Destino: "${ctx.corridaAtiva.destino}", Distância: ${ctx.corridaAtiva.distanciaKm} km, Ganho líquido: R$ ${ctx.corridaAtiva.ganhoLiquidoMotorista}.` : ''}
+
+HISTÓRICO RECENTE DA CONVERSA:
+${historicoFormatado}
+
+AÇÕES QUE VOCÊ PODE EXECUTAR NA TELA (use apenas se o motorista pedir para fazer uma ação):
+- "VISUALIZAR_ROTA": Mostrar/abrir a rota da chamada no mapa.
+- "ACEITAR_CORRIDA": Aceitar/confirmar a corrida.
+- "CANCELAR_ROTA": Cancelar, fechar a prévia da rota, voltar para o radar ou recusar a chamada.
+- "AVISAR_CHEGADA": Avisar que chegou no local de embarque.
+- "INICIAR_VIAGEM": Iniciar a viagem com o passageiro.
+- "FINALIZAR_CORRIDA": Finalizar/concluir a corrida no destino.
+- "PAGAR_DINHEIRO" | "PAGAR_MAQUININHA" | "PAGAR_PIX": Confirmar forma de pagamento.
+- "ABRIR_SAQUE": Abrir modal de saque Pix.
+- "ABRIR_PERFIL": Abrir menu lateral do perfil.
+- "ABRIR_EDICAO_PERFIL": Abrir edição de dados e foto.
+- "ABRIR_CHAT": Abrir chat com o passageiro.
+- "ABRIR_LOJA": Abrir loja/clube de vantagens HUBy.
+- "ALTERNAR_CALOR": Ativar/desativar mapa de calor.
+- "ALTERNAR_PAUSA": Ativar/desativar modo pausa.
+- "ALTERNAR_MODO_CASA": Ativar/desativar modo ir para casa.
+- "EXPORTAR_FECHAMENTO": Baixar fechamento do dia.
+- "FICAR_OFFLINE" | "FICAR_ONLINE": Mudar status online/offline.
+- "FECHAR_TELAS": Fechar janelas ou menus abertos.
+- "NENHUMA": Use "NENHUMA" quando o motorista estiver conversando, fazendo perguntas sobre corridas, melhores horários, ganhos, metas, dicas ou batendo papo.
+
+FALA ATUAL DO MOTORISTA:
 "${falaMotorista}"
 
-REGRAS DE OURO:
-1. Retorne APENAS um objeto JSON válido:
+INSTRUÇÕES OBRIGATÓRIAS:
+1. Responda como um amigo e copiloto inteligente conversando por voz: seja natural, prestativo, responda exatamente o que ele perguntou e, quando fizer sentido, faça uma pergunta curta ou sugestão de volta para manter o diálogo vivo!
+2. Não use emojis, asteriscos (*) ou hashtags (#), pois o texto será falado em voz alta pelo celular.
+3. Responda SEMPRE em JSON válido no formato:
 {
-  "acao": "CODIGO_DA_ACAO_OU_NENHUMA",
-  "fala": "Sua resposta natural falada (1 a 2 frases diretas, sem asteriscos, sem markdown e sem emojis)."
-}
-2. Se o motorista perguntar se a corrida compensa ou pedir análise, calcule mentalmente a relação R$/km usando os dados reais acima e dê sua recomendação sincera de parceiro.
-3. Se o motorista pedir algo fora do nicho de mobilidade/trânsito/corridas, traga a conversa de volta para a pista com bom humor e foco profissional.`;
+  "acao": "NOME_DA_ACAO_OU_NENHUMA",
+  "fala": "Sua resposta conversacional completa, natural e inteligente (2 a 3 frases fluidas)."
+}`;
 
-    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const resp = await fetch(urlGemini, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptCognitivo }] }],
-        generationConfig: {
-          temperature: 0.25,
-          maxOutputTokens: 130,
-          responseMimeType: 'application/json'
-        }
-      })
-    });
-
-    if (resp.ok) {
-      const data = await resp.json().catch(() => null);
-      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (apiKey) {
+      const raw = await chamarGeminiAPI(promptConversacional, apiKey, true, 0.45);
       const parsed = extrairJSONPuro(raw);
 
       if (parsed && parsed.fala) {
@@ -269,25 +282,66 @@ REGRAS DE OURO:
           resposta: String(parsed.fala).replace(/[*#_~`]/g, '').trim()
         });
       }
+
+      // Se o Gemini respondeu em texto puro sem JSON, aproveita o próprio texto
+      if (raw && !raw.startsWith('{')) {
+        return res.status(200).json({
+          sucesso: true,
+          acao: 'NENHUMA',
+          resposta: String(raw).replace(/[*#_~`]/g, '').trim()
+        });
+      }
     }
 
+    // Motor Conversacional Inteligente Nativo (caso o servidor esteja sem GEMINI_API_KEY configurada)
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Tô na escuta acompanhando sua rota.'
+      resposta: gerarRespostaConversacionalNativa(falaMotorista, ctx, horaAtual)
     });
 
   } catch (err) {
-    console.error('❌ [IA Suporte] Falha:', err.message);
+    console.error('❌ [IA Suporte] Erro:', err.message);
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Copiloto ativo no painel. Pode mandar o comando.'
+      resposta: 'Estou aqui com você, parceiro! Pode me perguntar sobre suas corridas, ganhos ou melhores horários.'
     });
   }
 });
 
-// Endpoint 3: Extração Inteligente de Encomendas HUBy Flash
+// Resposta conversacional rica no servidor caso a chave da API externa não esteja definida
+function gerarRespostaConversacionalNativa(fala, ctx, horaAtual) {
+  const f = String(fala || '').toLowerCase();
+
+  if (f.includes('melhor horario') || f.includes('melhores horarios') || f.includes('horario bom') || f.includes('pico') || f.includes('movimento')) {
+    return `Os melhores horários para faturar alto são das 6 e meia às 9 da manhã, no horário de almoço entre 11 e meia e 2 da tarde, e no fim do expediente das 17 às 20 horas. Nos fins de semana, a noite a partir das 19 horas também bomba! Quer que eu ative o mapa de calor para vermos onde tem demanda agora?`;
+  }
+  if (f.includes('quantas corridas') || f.includes('quantas viagens')) {
+    return `Hoje você realizou ${ctx.corridasHoje || 'zero viagens'} até agora, acumulando ${ctx.ganhosHoje || 'zero reais'} de ganho líquido. Sua meta diária está em ${ctx.metaDiaria || 'duzentos reais'}. Vamos buscar a próxima?`;
+  }
+  if (f.includes('quanto ganhei') || f.includes('meus ganhos') || f.includes('faturei')) {
+    return `Seus ganhos de hoje estão em ${ctx.ganhosHoje || 'zero reais'} com ${ctx.corridasHoje || 'zero viagens'}, e seu saldo disponível na carteira é de ${ctx.saldo || 'zero reais'}. Lembre que no HUBy você fica com 85 por cento livre de cada corrida!`;
+  }
+  if (f.includes('saldo') || f.includes('carteira')) {
+    return `Você tem ${ctx.saldo || 'zero reais'} disponíveis na carteira para saque via Pix. Se quiser transferir agora, é só me dizer para abrir o saque!`;
+  }
+  if (f.includes('compensa') || f.includes('vale a pena') || f.includes('boa essa')) {
+    const alvo = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
+    if (alvo) {
+      const km = parseFloat(alvo.distanciaKm || 1);
+      const ganho = parseFloat(String(alvo.ganhoLiquidoMotorista || '0').replace(',', '.'));
+      const porKm = km > 0 ? (ganho / km).toFixed(2).replace('.', ',') : ganho;
+      return `Olha, essa corrida paga ${alvo.ganhoLiquidoMotorista} reais livres para rodar ${alvo.distanciaKm} quilômetros, o que dá cerca de ${porKm} reais por quilômetro. É um tiro curto e rápido, vale a pena pegar! Quer que eu aceite?`;
+    }
+    return `No momento não tem nenhuma chamada aberta na tela para eu calcular o ganho por quilômetro, mas assim que tocar uma eu já analiso para você!`;
+  }
+  return `Tô aqui com você, ${ctx.nomeCondutor || 'parceiro'}! Agora são ${horaAtual}, você está com ${ctx.corridasHoje || '0 viagens'} hoje e ${ctx.saldo || 'R$ 0,00'} na carteira. O que você quer saber ou fazer agora?`;
+}
+
+// ============================================================================
+// ENDPOINT 3: EXTRAÇÃO INTELIGENTE DE ENCOMENDAS HUBY FLASH
+// ============================================================================
 router.post('/flash-extrair', async (req, res) => {
   try {
     const { texto } = req.body || {};
@@ -296,35 +350,16 @@ router.post('/flash-extrair', async (req, res) => {
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(200).json({
-        sucesso: true,
-        resultado: { recebedor: 'A informar', tipoItem: 'pequeno', observacao: texto }
-      });
-    }
-
-    const prompt = `Extraia dados da ordem de entrega no Brasil: "${texto}".
+    if (apiKey) {
+      const prompt = `Extraia dados da ordem de entrega no Brasil: "${texto}".
 Retorne APENAS um JSON:
 {
   "recebedor": "Nome e telefone",
   "tipoItem": "documento" | "pequeno" | "medio" | "fragil",
   "observacao": "Instrução curta ou null"
 }`;
-
-    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const resp = await fetch(urlGemini, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    });
-
-    if (resp.ok) {
-      const data = await resp.json().catch(() => null);
-      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = extrairJSONPuro(txt);
+      const raw = await chamarGeminiAPI(prompt, apiKey, true, 0.2);
+      const parsed = extrairJSONPuro(raw);
       if (parsed) return res.json({ sucesso: true, resultado: parsed });
     }
 
@@ -337,33 +372,19 @@ Retorne APENAS um JSON:
   }
 });
 
-// Endpoint 4: Smart Replies Contextuais para o Motorista
+// ============================================================================
+// ENDPOINT 4: SMART REPLIES CONTEXTUAIS PARA O MOTORISTA
+// ============================================================================
 router.post('/motorista-respostas', async (req, res) => {
   const fallback = ['Estou a caminho!', 'Chego em 2 minutos.', 'Já cheguei no local!'];
   try {
     const { mensagem } = req.body || {};
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || !mensagem) {
-      return res.json({ sucesso: true, sugestoes: fallback });
-    }
-
-    const prompt = `Gere exatamente 3 sugestões curtas de resposta no trânsito para o motorista à mensagem: "${mensagem}".
+    if (apiKey && mensagem) {
+      const prompt = `Gere exatamente 3 sugestões curtas de resposta no trânsito para o motorista à mensagem: "${mensagem}".
 Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
-
-    const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const resp = await fetch(urlGemini, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    });
-
-    if (resp.ok) {
-      const data = await resp.json().catch(() => null);
-      const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      const parsed = extrairJSONPuro(txt);
+      const raw = await chamarGeminiAPI(prompt, apiKey, true, 0.3);
+      const parsed = extrairJSONPuro(raw);
       if (parsed && Array.isArray(parsed.sugestoes)) {
         return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
       }

@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Autônomo HUBy com Estabilização Anti-Loop e Controle Total
+// js/ia/motorista-ia.js - Copiloto Conversacional Livre com Controle Total da Área do Motorista
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada, alternarStatusOnline, iniciarRadarChamadas } from '../motorista/motorista-radar.js';
@@ -23,9 +23,12 @@ let processandoRequisicao = false;
 let timeoutReinicio = null;
 let wakeLockSentinel = null;
 
-// Janela de conversa ativa: após chamar o copiloto, você pode continuar falando sem repetir o nome por 12s
+// Janela de conversa ativa (25 segundos após qualquer interação para conversar sem repetir o nome)
 let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
+
+// Memória das últimas interações para manter contexto de conversa real
+const historicoConversa = [];
 
 const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
@@ -81,12 +84,12 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
     });
   } catch (e) {}
 
-  falarTexto(`Código de voz atualizado para ${fraseLimpa}.`);
+  falarTexto(`Perfeito! Agora você pode me chamar dizendo ${fraseLimpa}.`);
   atualizarIndicadorUIVoz(escutaDesejada);
   return true;
 }
 
-function renovarJanelaConversa(segundos = 12) {
+function renovarJanelaConversa(segundos = 25) {
   janelaConversaAtiva = true;
   if (timerJanelaConversa) clearTimeout(timerJanelaConversa);
   timerJanelaConversa = setTimeout(() => {
@@ -94,11 +97,23 @@ function renovarJanelaConversa(segundos = 12) {
   }, segundos * 1000);
 }
 
+function registrarMemoriaConversa(falaMotorista, respostaIA) {
+  if (!falaMotorista || !respostaIA) return;
+  historicoConversa.push({ motorista: falaMotorista, ia: respostaIA });
+  if (historicoConversa.length > 6) {
+    historicoConversa.shift();
+  }
+}
+
 // ============================================================================
-// SINTETIZADOR DE VOZ SINCRONIZADO COM O MICROFONE (EVITA AUTO-ESCUTA E LOOP)
+// SINTETIZADOR DE VOZ FLUIDO E NATURAL
 // ============================================================================
-export function falarTexto(texto) {
+export function falarTexto(texto, falaOriginalMotorista = null) {
   if (!texto) return;
+  if (falaOriginalMotorista) {
+    registrarMemoriaConversa(falaOriginalMotorista, texto);
+  }
+
   if (!sintetizador) {
     notificar(texto, 'info');
     return;
@@ -112,7 +127,6 @@ export function falarTexto(texto) {
 
     falandoAgora = true;
 
-    // Pausa o microfone suavemente antes de falar para não ouvir a própria voz
     if (recognition && reconhecimentoRodando) {
       try { recognition.stop(); } catch (e) {}
     }
@@ -120,13 +134,13 @@ export function falarTexto(texto) {
     sintetizador.cancel();
     const utter = new SpeechSynthesisUtterance(String(texto));
     utter.lang = 'pt-BR';
-    utter.rate = 1.15;
+    utter.rate = 1.12;
     utter.pitch = 1.0;
 
     const finalizarFala = () => {
       falandoAgora = false;
-      renovarJanelaConversa(12);
-      agendarReinicioMicrofone(650);
+      renovarJanelaConversa(25);
+      agendarReinicioMicrofone(600);
     };
 
     utter.onend = finalizarFala;
@@ -135,7 +149,7 @@ export function falarTexto(texto) {
     sintetizador.speak(utter);
   } catch (err) {
     falandoAgora = false;
-    agendarReinicioMicrofone(650);
+    agendarReinicioMicrofone(600);
   }
 }
 
@@ -158,9 +172,9 @@ function liberarWakeLock() {
 }
 
 // ============================================================================
-// CONTROLE ESTÁVEL DO MICROFONE (ZERO LOOP DE ATIVAÇÃO/DESATIVAÇÃO)
+// CONTROLE ESTÁVEL DO MICROFONE (ANTI-LOOP)
 // ============================================================================
-function agendarReinicioMicrofone(delayMs = 700) {
+function agendarReinicioMicrofone(delayMs = 650) {
   if (timeoutReinicio) {
     clearTimeout(timeoutReinicio);
     timeoutReinicio = null;
@@ -200,10 +214,9 @@ export function inicializarCopilotoVoz() {
     reconhecimentoRodando = false;
     const online = estado.isOnline || estado.statusOnline || localStorage.getItem('huby_motorista_online') === 'true';
 
-    // Mantém o badge visual firme em "Ativo" enquanto o motorista estiver online, sem piscar
     if (escutaDesejada && online) {
       if (!falandoAgora) {
-        agendarReinicioMicrofone(750);
+        agendarReinicioMicrofone(700);
       }
     } else {
       atualizarIndicadorUIVoz(false);
@@ -217,9 +230,7 @@ export function inicializarCopilotoVoz() {
       reconhecimentoRodando = false;
       atualizarIndicadorUIVoz(false);
       notificar('Permissão de microfone bloqueada no navegador.', 'alerta');
-      return;
     }
-    // Erros normais de silêncio ('no-speech' / 'aborted') são tratados silenciosamente pelo onend
   };
 
   recognition.onresult = (ev) => {
@@ -248,7 +259,7 @@ export function ativarEscutaCopiloto() {
   }
 
   const comandoAtual = obterCodigoAtivacaoMotorista();
-  notificar(`🎙️ Copiloto ativo! Chame por "${comandoAtual}"`, 'sucesso', 2800);
+  notificar(`🎙️ Copiloto ativo! Converse dizendo "${comandoAtual}"`, 'sucesso', 2800);
 }
 
 export function desativarEscutaCopiloto() {
@@ -273,7 +284,7 @@ export function desativarEscutaCopiloto() {
 }
 
 // ============================================================================
-// RAIO-X COMPLETO DO ESTADO E DA TELA DO MOTORISTA PARA O GEMINI
+// LEITURA COMPLETA DO CONTEXTO DA TELA EM TEMPO REAL
 // ============================================================================
 function capturarContextoCompletoApp() {
   const saldoTxt = document.getElementById('saldoCarteiraValor')?.textContent?.trim() || 
@@ -288,7 +299,6 @@ function capturarContextoCompletoApp() {
   const detalhesVeiculo = document.getElementById('drawerCarroDetalhes')?.textContent?.trim() || '';
   const avaliacao = document.getElementById('drawerAvaliacaoTxt')?.textContent?.trim() || '⭐ 5.0';
 
-  // Chamadas pendentes no radar
   const botoesRadar = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
   const chamadasRadar = Array.from(botoesRadar).map((btn, idx) => {
     const d = extrairDadosDoBotao(btn);
@@ -305,7 +315,6 @@ function capturarContextoCompletoApp() {
     };
   });
 
-  // Dados da rota em pré-visualização (se estiver aberta)
   const rotaEmAnalise = estado.pedidoEmAnalise ? {
     id: estado.pedidoEmAnalise.id,
     origem: estado.pedidoEmAnalise.origem,
@@ -316,10 +325,9 @@ function capturarContextoCompletoApp() {
     ganhoLiquidoMotorista: (Number(estado.pedidoEmAnalise.preco || 0) * 0.85).toFixed(2).replace('.', ',')
   } : null;
 
-  // Dados da corrida ativa aceita (a caminho ou em viagem)
   const corridaAtiva = estado.pedidoAceitoAtual || estado.pedidoAtivo ? {
     id: (estado.pedidoAceitoAtual || estado.pedidoAtivo).id,
-    etapa: estado.etapaCorridaAtual || 'a_caminho', // 'a_caminho' | 'em_viagem'
+    etapa: estado.etapaCorridaAtual || 'a_caminho',
     origem: (estado.pedidoAceitoAtual || estado.pedidoAtivo).origem,
     destino: (estado.pedidoAceitoAtual || estado.pedidoAtivo).destino,
     distanciaKm: (estado.pedidoAceitoAtual || estado.pedidoAtivo).dist,
@@ -328,7 +336,6 @@ function capturarContextoCompletoApp() {
     ganhoLiquidoMotorista: (Number((estado.pedidoAceitoAtual || estado.pedidoAtivo).preco || 0) * 0.85).toFixed(2).replace('.', ',')
   } : null;
 
-  // Estado dos Modais e Gavetas na tela
   const previaRotaAberta = Boolean(estado.pedidoEmAnalise || document.getElementById('btnConfirmarAceiteViagem'));
   const modalPagamentoAberto = document.getElementById('modalEscolhaPagamentoMotorista')?.style.display === 'flex';
   const modalSaqueAberto = document.getElementById('modalSaquePix')?.style.display === 'flex';
@@ -363,7 +370,7 @@ function capturarContextoCompletoApp() {
 }
 
 // ============================================================================
-// PROCESSAMENTO DE VOZ COM DISCERNIMENTO COGNITIVO
+// PROCESSAMENTO DE VOZ FLEXÍVEL E CONVERSACIONAL
 // ============================================================================
 async function processarEntradaVoz(fraseBruta) {
   if (processandoRequisicao || falandoAgora) return;
@@ -380,50 +387,55 @@ async function processarEntradaVoz(fraseBruta) {
 
   if (!chamouGatilho) {
     for (const p of palavrasFaladas) {
-      if (saoPalavrasParecidas(p, palavraChave) || saoPalavrasParecidas(p, 'huby') || saoPalavrasParecidas(p, 'zank') || saoPalavrasParecidas(p, 'zanix')) {
+      if (
+        saoPalavrasParecidas(p, palavraChave) ||
+        saoPalavrasParecidas(p, 'huby') ||
+        saoPalavrasParecidas(p, 'zank') ||
+        saoPalavrasParecidas(p, 'zanix') ||
+        saoPalavrasParecidas(p, 'xanax') ||
+        saoPalavrasParecidas(p, 'zenix')
+      ) {
         chamouGatilho = true;
         break;
       }
     }
   }
 
-  // Aceita se chamou pelo nome OU se está dentro da janela de conversa contínua
+  // Aceita se chamou pelo nome OU se a janela de conversa de 25s está aberta
   if (!chamouGatilho && !janelaConversaAtiva) return;
 
   let intencaoLimpa = fraseNormalizada
     .replace(gatilhoCadastrado, '')
-    .replace(new RegExp(`\\b(${palavraChave}|huby|zank|zanix|zenix|zanki)\\b`, 'gi'), '')
-    .replace(/^(ok|ei|oi|fala|e ai|entao|por favor)\s+/i, '')
+    .replace(new RegExp(`\\b(${palavraChave}|huby|zank|zanix|zenix|zanki|xanax|xanx)\\b`, 'gi'), '')
+    .replace(/^(ok|okay|ei|oi|fala|e ai|entao|por favor)\s+/i, '')
     .trim();
 
-  // Se o motorista só chamou pelo nome (ex: "Ok Zank"), responde pronto e abre a janela de escuta
-  if (!intencaoLimpa || ['ola', 'oi', 'opa', 'ta ai', 'escuta'].includes(intencaoLimpa)) {
-    renovarJanelaConversa(14);
+  // Se o motorista só chamou pelo nome ("Ok Zanix"), responde de forma amigável e contextual
+  if (!intencaoLimpa || ['ola', 'oi', 'opa', 'ta ai', 'escuta', 'fala comigo'].includes(intencaoLimpa)) {
+    renovarJanelaConversa(25);
     const ctx = capturarContextoCompletoApp();
     if (ctx.rotaEmAnalise) {
-      falarTexto(`Na escuta! Rota de ${ctx.rotaEmAnalise.distanciaKm} quilômetros pagando ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} reais na tela. Quer aceitar ou voltar?`);
+      falarTexto(`Oi! A rota de ${ctx.rotaEmAnalise.distanciaKm} quilômetros pagando ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} reais está aberta. Quer aceitar, cancelar ou saber algum detalhe?`);
     } else if (ctx.primeiraChamadaRadar) {
-      falarTexto(`Tô na escuta! Tem chamada no radar pagando ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} reais. Quer visualizar ou aceitar?`);
-    } else if (ctx.corridaAtiva) {
-      falarTexto('Na escuta, parceiro. Pode mandar o comando da viagem.');
+      falarTexto(`Oi, parceiro! Tem uma corrida no radar pagando ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} reais. Quer visualizar a rota ou conversar sobre outra coisa?`);
     } else {
-      falarTexto('Na escuta, piloto. O que manda?');
+      falarTexto(`Fala comigo, parceiro! Estou na escuta. Pode mandar qualquer comando ou perguntar o que quiser!`);
     }
     return;
   }
 
   processandoRequisicao = true;
-  renovarJanelaConversa(12);
+  renovarJanelaConversa(25);
 
   try {
-    // 1. Verifica comandos operacionais instantâneos claros para resposta em 0ms
-    const executouLocal = tentarExecucaoInstantaneaContextual(intencaoLimpa);
+    // 1. Verifica intenções de ação direta na tela (flexível para frases como "quero cancelar", "pode visualizar", etc.)
+    const executouLocal = await tentarAcaoIntuitivaLocal(intencaoLimpa);
     if (executouLocal) {
       processandoRequisicao = false;
       return;
     }
 
-    // 2. Qualquer frase livre, pergunta analítica ou comando conversacional vai para a mente Gemini
+    // 2. Conversa livre, perguntas sobre corridas, melhores horários, dicas ou comandos complexos -> Gemini
     const contexto = capturarContextoCompletoApp();
     const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
       method: 'POST',
@@ -431,7 +443,8 @@ async function processarEntradaVoz(fraseBruta) {
       body: JSON.stringify({
         pergunta: fraseBruta,
         intencaoLimpa,
-        contextoCompleto: contexto
+        contextoCompleto: contexto,
+        historicoConversa
       })
     });
 
@@ -442,158 +455,249 @@ async function processarEntradaVoz(fraseBruta) {
     }
 
     if (data && data.resposta) {
-      falarTexto(data.resposta);
+      falarTexto(data.resposta, intencaoLimpa);
     } else {
-      responderContingenciaInteligente(intencaoLimpa, contexto);
+      responderConversaLocalInteligente(intencaoLimpa, contexto);
     }
   } catch (err) {
     const contexto = capturarContextoCompletoApp();
-    responderContingenciaInteligente(intencaoLimpa, contexto);
+    responderConversaLocalInteligente(intencaoLimpa, contexto);
   } finally {
     processandoRequisicao = false;
   }
 }
 
 // ============================================================================
-// EXECUÇÃO INSTANTÂNEA CONTEXTUAL (RESPOSTA IMEDIATA PARA COMANDOS DIRETOS)
+// INTENÇÕES LOCAIS FLEXÍVEIS (ENTENDE FRASES COMPLETAS NATURALMENTE)
 // ============================================================================
-function tentarExecucaoInstantaneaContextual(fala) {
+async function tentarAcaoIntuitivaLocal(fala) {
   const ctx = capturarContextoCompletoApp();
 
-  // Se o modal de escolha de pagamento estiver aberto na tela
+  // 1. Modal de pagamento aberto
   if (ctx.telasAbertas.modalLiquidacaoPagamento) {
     if (fala.includes('dinheiro') || fala.includes('especie')) {
-      executarAcaoNoApp('PAGAR_DINHEIRO', ctx);
-      falarTexto('Confirmado recebimento em dinheiro. Corrida finalizada!');
+      await executarAcaoNoApp('PAGAR_DINHEIRO', ctx);
+      falarTexto('Confirmado recebimento em dinheiro! Corrida encerrada com sucesso.', fala);
       return true;
     }
     if (fala.includes('maquininha') || fala.includes('cartao')) {
-      executarAcaoNoApp('PAGAR_MAQUININHA', ctx);
-      falarTexto('Confirmado pagamento na maquininha. Corrida encerrada!');
+      await executarAcaoNoApp('PAGAR_MAQUININHA', ctx);
+      falarTexto('Pagamento na maquininha registrado! Corrida finalizada.', fala);
       return true;
     }
     if (fala.includes('pix')) {
-      executarAcaoNoApp('PAGAR_PIX', ctx);
-      falarTexto('Gerando QR Code Pix na tela para o passageiro.');
+      await executarAcaoNoApp('PAGAR_PIX', ctx);
+      falarTexto('Gerando o QR Code Pix na tela para o passageiro pagar.', fala);
       return true;
     }
   }
 
-  // Perguntas diretas sobre distância, quilometragem ou tempo
+  // 2. CANCELAR / VOLTAR / FECHAR / NÃO QUERO (Entende "quero cancelar", "pode cancelar", "cancela essa", "voltar", etc.)
   if (
-    (fala.includes('quantos km') || fala.includes('quantos quilometros') || fala.includes('qual a distancia') || fala.includes('quanto tempo') || fala.includes('longe')) &&
-    !fala.includes('aceita')
-  ) {
-    const alvo = ctx.corridaAtiva || ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
-    if (alvo) {
-      const distNum = parseFloat(alvo.distanciaKm || 0);
-      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
-      falarTexto(`Essa corrida tem ${distTxt}, tempo estimado de ${alvo.duracaoMin || 5} minutos e ganho líquido de ${alvo.ganhoLiquidoMotorista} reais.`);
-    } else {
-      falarTexto('Não há nenhuma rota aberta ou no radar neste momento.');
-    }
-    return true;
-  }
-
-  // Visualizar rota no mapa
-  if (
-    fala.includes('visualiza') || fala.includes('ver rota') || fala.includes('ver a rota') ||
-    fala.includes('mostra a rota') || fala.includes('mostrar rota') || fala.includes('olhar rota') ||
-    fala.includes('abrir rota') || fala.includes('analisar rota')
-  ) {
-    if (ctx.primeiraChamadaRadar) {
-      executarAcaoNoApp('VISUALIZAR_ROTA', ctx);
-      const c = ctx.primeiraChamadaRadar;
-      const distNum = parseFloat(c.distanciaKm || 0);
-      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
-      falarTexto(`Rota na tela! São ${distTxt} até ${c.destino.split(',')[0]}, pagando ${c.ganhoLiquidoMotorista} reais livres. Quer aceitar ou cancelar?`);
-    } else if (ctx.rotaEmAnalise) {
-      falarTexto(`A rota já está na tela: ${ctx.rotaEmAnalise.distanciaKm} quilômetros pagando ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} reais. Diga aceitar ou voltar.`);
-    } else {
-      falarTexto('Não temos chamadas pendentes no radar agora.');
-    }
-    return true;
-  }
-
-  // Aceitar corrida
-  if (
-    fala === 'aceitar' || fala === 'aceita' || fala.includes('aceitar corrida') ||
-    fala.includes('aceita a corrida') || fala.includes('pode aceitar') ||
-    fala.includes('pegar corrida') || fala.includes('pega essa') || fala.includes('vamos fazer essa')
-  ) {
-    if (ctx.rotaEmAnalise || ctx.primeiraChamadaRadar) {
-      executarAcaoNoApp('ACEITAR_CORRIDA', ctx);
-      const alvo = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
-      falarTexto(`Corrida aceita! Traçando rota até o passageiro em ${alvo.origem.split(',')[0]}.`);
-    } else {
-      falarTexto('Não há chamada disponível para aceitar agora.');
-    }
-    return true;
-  }
-
-  // Cancelar prévia / voltar / recusar chamada
-  if (
-    fala === 'voltar' || fala === 'volta' || fala === 'cancelar' || fala === 'cancela' ||
-    fala.includes('cancelar rota') || fala.includes('cancela a rota') || fala.includes('fechar rota') ||
-    fala.includes('fecha a rota') || fala.includes('dispensar') || fala.includes('recusar') ||
-    fala.includes('nao quero')
+    fala.includes('cancelar') || fala.includes('cancela') ||
+    fala.includes('voltar') || fala.includes('volta') ||
+    fala.includes('dispensar') || fala.includes('dispensa') ||
+    fala.includes('recusar') || fala.includes('recusa') ||
+    fala.includes('nao quero') || fala.includes('fechar rota') || fala.includes('fecha a rota')
   ) {
     if (ctx.telasAbertas.previaRota || ctx.rotaEmAnalise) {
-      executarAcaoNoApp('CANCELAR_ROTA', ctx);
-      falarTexto('Rota fechada. Voltamos para o radar.');
+      await executarAcaoNoApp('CANCELAR_ROTA', ctx);
+      falarTexto('Pronto, cancelei a visualização da rota e voltamos para o radar.', fala);
       return true;
     }
     if (ctx.qtdChamadasNoRadar > 0) {
-      executarAcaoNoApp('CANCELAR_ROTA', ctx);
-      falarTexto('Chamada dispensada do radar.');
+      await executarAcaoNoApp('CANCELAR_ROTA', ctx);
+      falarTexto('Chamada dispensada! Continuamos aguardando uma corrida melhor.', fala);
       return true;
     }
     if (ctx.telasAbertas.drawerPerfil || ctx.telasAbertas.modalSaquePix || ctx.telasAbertas.modalLiquidacaoPagamento) {
-      executarAcaoNoApp('FECHAR_TELAS', ctx);
-      falarTexto('Tela fechada.');
+      await executarAcaoNoApp('FECHAR_TELAS', ctx);
+      falarTexto('Pronto, fechei a janela.', fala);
       return true;
     }
+    falarTexto('Não tem nenhuma rota aberta para cancelar agora, estamos no radar principal.', fala);
+    return true;
   }
 
-  // Avisar chegada no embarque
+  // 3. VISUALIZAR ROTA (Entende "quero visualizar", "visualizar rota", "mostra a rota", "ver no mapa", etc.)
+  if (
+    fala.includes('visualizar') || fala.includes('visualiza') ||
+    fala.includes('ver rota') || fala.includes('ver a rota') ||
+    fala.includes('mostrar rota') || fala.includes('mostra a rota') ||
+    fala.includes('olhar rota') || fala.includes('abrir rota')
+  ) {
+    if (ctx.primeiraChamadaRadar) {
+      await executarAcaoNoApp('VISUALIZAR_ROTA', ctx);
+      const c = ctx.primeiraChamadaRadar;
+      const distNum = parseFloat(c.distanciaKm || 0);
+      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
+      falarTexto(`Rota aberta no mapa! São ${distTxt} pagando ${c.ganhoLiquidoMotorista} reais livres. Você quer aceitar ou cancelar?`, fala);
+      return true;
+    }
+    if (ctx.rotaEmAnalise) {
+      const distNum = parseFloat(ctx.rotaEmAnalise.distanciaKm || 0);
+      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
+      falarTexto(`Essa rota já está aberta na sua tela! São ${distTxt} pagando ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} reais. Quer que eu aceite ou cancele?`, fala);
+      return true;
+    }
+    falarTexto('Não temos nenhuma chamada pendente no radar neste momento para visualizar.', fala);
+    return true;
+  }
+
+  // 4. ACEITAR CORRIDA (Entende "quero aceitar", "pode aceitar", "aceita essa", "pegar corrida", etc.)
+  if (
+    fala.includes('aceitar') || fala.includes('aceita') ||
+    fala.includes('confirmar corrida') || fala.includes('confirma essa') ||
+    fala.includes('pegar corrida') || fala.includes('pega essa') ||
+    fala.includes('quero fazer essa') || fala.includes('vamos fazer essa')
+  ) {
+    if (ctx.rotaEmAnalise || ctx.primeiraChamadaRadar) {
+      const alvo = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
+      await executarAcaoNoApp('ACEITAR_CORRIDA', ctx);
+      falarTexto(`Show! Corrida aceita. Já tracei a rota no mapa para buscar o passageiro.`, fala);
+      return true;
+    }
+    falarTexto('Não tem nenhuma chamada disponível no momento para aceitar.', fala);
+    return true;
+  }
+
+  // 5. CHEGADA NO EMBARQUE
   if (
     fala.includes('cheguei') || fala.includes('estou no local') ||
     fala.includes('to no local') || fala.includes('avisa o passageiro') || fala.includes('encostei')
   ) {
-    if (ctx.corridaAtiva && ctx.corridaAtiva.etapa === 'a_caminho') {
-      executarAcaoNoApp('AVISAR_CHEGADA', ctx);
-      falarTexto('Passageiro notificado que você já está no ponto de embarque.');
+    if (ctx.corridaAtiva) {
+      await executarAcaoNoApp('AVISAR_CHEGADA', ctx);
+      falarTexto('Avisei o passageiro que você já está no ponto de embarque! Assim que ele entrar, me diga para iniciar a viagem.', fala);
       return true;
     }
   }
 
-  // Iniciar viagem com passageiro a bordo
+  // 6. INICIAR VIAGEM
   if (
-    fala.includes('iniciar viagem') || fala.includes('inicia a viagem') || fala.includes('iniciar corrida') ||
-    fala.includes('inicia a corrida') || fala.includes('passageiro embarcou') || fala.includes('passageiro entrou') ||
-    fala === 'iniciar' || fala === 'inicia' || fala === 'partiu'
+    fala.includes('iniciar') || fala.includes('inicia') ||
+    fala.includes('passageiro embarcou') || fala.includes('passageiro entrou') ||
+    fala.includes('comecar viagem') || fala.includes('comeca a viagem') || fala === 'partiu'
   ) {
     if (ctx.corridaAtiva) {
-      executarAcaoNoApp('INICIAR_VIAGEM', ctx);
-      falarTexto(`Viagem iniciada! Seguindo para ${ctx.corridaAtiva.destino.split(',')[0]}. Boa corrida!`);
+      await executarAcaoNoApp('INICIAR_VIAGEM', ctx);
+      falarTexto(`Viagem iniciada! Seguindo rota para o destino final. Boa corrida!`, fala);
       return true;
     }
   }
 
-  // Finalizar / Concluir corrida
+  // 7. FINALIZAR / CONCLUIR CORRIDA
   if (
     fala.includes('finalizar') || fala.includes('finaliza') ||
     fala.includes('concluir') || fala.includes('conclui') ||
     fala.includes('encerrar corrida') || fala.includes('chegamos no destino')
   ) {
     if (ctx.corridaAtiva) {
-      executarAcaoNoApp('FINALIZAR_CORRIDA', ctx);
-      falarTexto(`Chegamos ao destino! O valor total é ${ctx.corridaAtiva.valorBruto} reais. Diga se o pagamento foi dinheiro, maquininha ou Pix.`);
+      await executarAcaoNoApp('FINALIZAR_CORRIDA', ctx);
+      falarTexto(`Chegamos ao destino! Abri a tela de pagamento no valor de ${ctx.corridaAtiva.valorBruto} reais. Foi em dinheiro, maquininha ou Pix?`, fala);
       return true;
     }
   }
 
+  // 8. TEM ALGUMA ROTA / CHAMADA NO RADAR?
+  if (
+    fala.includes('tem alguma rota') || fala.includes('tem rota') ||
+    fala.includes('tem alguma corrida') || fala.includes('tem corrida') ||
+    fala.includes('tem chamada')
+  ) {
+    if (ctx.primeiraChamadaRadar) {
+      const c = ctx.primeiraChamadaRadar;
+      const distNum = parseFloat(c.distanciaKm || 0);
+      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
+      falarTexto(`Sim! Temos uma chamada no radar de ${distTxt} pagando ${c.ganhoLiquidoMotorista} reais livres. Quer visualizar a rota ou aceitar direto?`, fala);
+    } else if (ctx.rotaEmAnalise) {
+      falarTexto(`Você já está com uma rota em análise na tela pagando ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} reais. Quer aceitar ou cancelar?`, fala);
+    } else {
+      falarTexto('Ainda não tocou nenhuma chamada no radar, mas estou monitorando aqui. Assim que aparecer eu te aviso!', fala);
+    }
+    return true;
+  }
+
   return false;
+}
+
+// ============================================================================
+// CONVERSA INTELIGENTE LOCAL (RESPONDE QUALQUER PERGUNTA MESMO SEM INTERNET/API)
+// ============================================================================
+function responderConversaLocalInteligente(fala, ctx) {
+  // Quantas corridas / ganhos de hoje
+  if (fala.includes('quantas corridas') || fala.includes('quantas viagens') || fala.includes('fiz hoje')) {
+    falarTexto(`Hoje você completou ${ctx.corridasHoje}, somando ${ctx.ganhosHoje} de lucro líquido. Sua meta do dia é ${ctx.metaDiaria}. Quer alguma dica para bater a meta mais rápido?`, fala);
+    return;
+  }
+
+  // Quanto ganhou / saldo / dinheiro
+  if (fala.includes('quanto ganhei') || fala.includes('meus ganhos') || fala.includes('faturei') || fala.includes('saldo') || fala.includes('carteira')) {
+    falarTexto(`Hoje você já faturou ${ctx.ganhosHoje} em ${ctx.corridasHoje}, e o seu saldo disponível na carteira para saque é de ${ctx.saldo}. Quer que eu abra a tela de saque Pix?`, fala);
+    return;
+  }
+
+  // Melhores horários para rodar / movimento / pico
+  if (fala.includes('melhor horario') || fala.includes('melhores horarios') || fala.includes('horario bom') || fala.includes('horario para corrida') || fala.includes('pico') || fala.includes('movimento')) {
+    falarTexto(`Os horários de ouro para fazer corrida são de manhã cedo, das 6 e meia às 9 horas, no horário de almoço entre 11 e meia e 2 da tarde, e no fim da tarde das 17 às 20 horas. Se quiser ver onde estão chamando mais agora, é só me pedir para ligar o mapa de calor!`, fala);
+    return;
+  }
+
+  // Distância / Quilômetros / Tempo da rota
+  if (fala.includes('quantos km') || fala.includes('quantos quilometros') || fala.includes('distancia') || fala.includes('quanto tempo') || fala.includes('longe')) {
+    const alvo = ctx.corridaAtiva || ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
+    if (alvo) {
+      const distNum = parseFloat(alvo.distanciaKm || 0);
+      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
+      falarTexto(`Esse trajeto tem ${distTxt}, levando cerca de ${alvo.duracaoMin || 5} minutos, com ganho líquido de ${alvo.ganhoLiquidoMotorista} reais para você.`, fala);
+    } else {
+      falarTexto('Nenhuma corrida aberta no momento para eu medir a distância, parceiro.', fala);
+    }
+    return;
+  }
+
+  // Compensa / Vale a pena?
+  if (fala.includes('compensa') || fala.includes('vale a pena') || fala.includes('acha dessa')) {
+    const alvo = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
+    if (alvo) {
+      const km = parseFloat(alvo.distanciaKm || 1);
+      const ganho = parseFloat(String(alvo.ganhoLiquidoMotorista || '0').replace(',', '.'));
+      const relacao = km > 0 ? (ganho / km).toFixed(2).replace('.', ',') : ganho;
+      falarTexto(`Analisando aqui: são ${alvo.ganhoLiquidoMotorista} reais livres para rodar ${alvo.distanciaKm} quilômetros, pagando ${relacao} reais por quilômetro. É uma corrida rápida que gira bem o caixa! Quer aceitar?`, fala);
+    } else {
+      falarTexto('Assim que aparecer uma chamada no radar eu calculo o valor por quilômetro e te digo na hora se vale a pena!', fala);
+    }
+    return;
+  }
+
+  // Mapa de calor
+  if (fala.includes('calor') || fala.includes('demanda') || fala.includes('onde tem passageiro')) {
+    executarAcaoNoApp('ALTERNAR_CALOR', ctx);
+    falarTexto('Acionei o mapa de calor na tela para você ver os pontos com mais chamadas na região!', fala);
+    return;
+  }
+
+  // Pausa
+  if (fala.includes('pausa') || fala.includes('descansar') || fala.includes('almocar') || fala.includes('abastecer')) {
+    executarAcaoNoApp('ALTERNAR_PAUSA', ctx);
+    falarTexto('Modo pausa acionado! Você tem 15 minutos tranquilos sem tocar corridas.', fala);
+    return;
+  }
+
+  // Saque
+  if (fala.includes('saque') || fala.includes('sacar') || fala.includes('pix')) {
+    executarAcaoNoApp('ABRIR_SAQUE', ctx);
+    falarTexto(`Abri a tela de saque Pix. Seu saldo disponível é de ${ctx.saldo}.`, fala);
+    return;
+  }
+
+  // Perfil / Carro / Placa
+  if (fala.includes('meu carro') || fala.includes('minha placa') || fala.includes('veiculo') || fala.includes('minha nota')) {
+    falarTexto(`Você está rodando com o ${ctx.veiculo} e sua nota atual é ${ctx.avaliacao}. Tudo em dia!`, fala);
+    return;
+  }
+
+  falarTexto(`Estou aqui com você, ${ctx.nomeCondutor}! Hoje você tem ${ctx.corridasHoje} e ${ctx.saldo} na carteira. Pode me pedir para ver rotas, analisar corridas, checar melhores horários ou controlar o painel!`, fala);
 }
 
 // ============================================================================
@@ -755,22 +859,6 @@ async function executarAcaoNoApp(acao, ctx) {
       document.getElementById('btnFecharChat')?.click();
       fecharModaisPagamento();
       break;
-  }
-}
-
-function responderContingenciaInteligente(fala, ctx) {
-  if (fala.includes('saldo') || fala.includes('carteira')) {
-    falarTexto(`Seu saldo disponível na carteira é de ${ctx.saldo}.`);
-  } else if (fala.includes('ganho') || fala.includes('hoje') || fala.includes('faturei')) {
-    falarTexto(`Hoje você já acumulou ${ctx.ganhosHoje} em ${ctx.corridasHoje}.`);
-  } else if (fala.includes('chamada') || fala.includes('radar') || fala.includes('corrida')) {
-    if (ctx.primeiraChamadaRadar) {
-      falarTexto(`Temos chamada no radar para ${ctx.primeiraChamadaRadar.destino.split(',')[0]}, pagando ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} reais.`);
-    } else {
-      falarTexto('O radar está limpo no momento. Assim que pintar corrida eu te aviso.');
-    }
-  } else {
-    falarTexto('Tô na escuta acompanhando sua rota.');
   }
 }
 
