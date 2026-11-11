@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Humanizado com Raciocínio Situacional e Ações Dinâmicas
+// js/ia/motorista-ia.js - Microfone Blindado Anti-Loop com Raciocínio Livre Situacional
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -8,11 +8,10 @@ import { notificar } from '../util/alertas-huby.js';
 let recognition = null;
 let escutaDesejada = false;
 let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
-let processandoComando = false;
+let falandoAgora = false;
 let timeoutReinicio = null;
 let wakeLockSentinel = null;
-let copilotoAguardandoComando = false;
-let timeoutJanelaComando = null;
+let processandoRequisicao = false;
 
 function normalizarTexto(txt = '') {
   return txt
@@ -26,8 +25,7 @@ function normalizarTexto(txt = '') {
 
 function saoPalavrasParecidas(p1, p2) {
   if (!p1 || !p2) return false;
-  if (p1 === p2) return true;
-  if (p1.includes(p2) || p2.includes(p1)) return true;
+  if (p1 === p2 || p1.includes(p2) || p2.includes(p1)) return true;
 
   const len1 = p1.length;
   const len2 = p2.length;
@@ -47,7 +45,6 @@ function saoPalavrasParecidas(p1, p2) {
       );
     }
   }
-
   return matriz[len1][len2] <= 2;
 }
 
@@ -68,7 +65,7 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
       body: JSON.stringify({ codigo_voz: fraseLimpa })
     });
   } catch (e) {
-    console.warn('Comando salvo localmente.');
+    console.warn('Persistência local mantida para ativação.');
   }
 
   falarTexto(`Comando configurado para: ${fraseLimpa}`);
@@ -80,14 +77,45 @@ export function falarTexto(texto) {
   if (!sintetizador) return;
   try {
     sintetizador.cancel();
+    falandoAgora = true;
+
+    // Pausa o reconhecimento enquanto a IA fala para o microfone não capturar a própria voz
+    pausarReconhecimentoTemporariamente();
+
     const utter = new SpeechSynthesisUtterance(texto);
     utter.lang = 'pt-BR';
     utter.rate = 1.15;
     utter.pitch = 1.0;
+
+    utter.onend = () => {
+      falandoAgora = false;
+      retomarReconhecimentoAposFala();
+    };
+
+    utter.onerror = () => {
+      falandoAgora = false;
+      retomarReconhecimentoAposFala();
+    };
+
     sintetizador.speak(utter);
   } catch (err) {
-    console.warn('Falha no sintetizador:', err);
+    falandoAgora = false;
+    retomarReconhecimentoAposFala();
   }
+}
+
+function pausarReconhecimentoTemporariamente() {
+  if (recognition) {
+    try { recognition.abort(); } catch (e) {}
+  }
+}
+
+function retomarReconhecimentoAposFala() {
+  if (!escutaDesejada) return;
+  if (timeoutReinicio) clearTimeout(timeoutReinicio);
+  timeoutReinicio = setTimeout(() => {
+    iniciarInstanciaMicrofone();
+  }, 400);
 }
 
 async function requisitarWakeLock() {
@@ -108,7 +136,6 @@ function liberarWakeLock() {
   }
 }
 
-// Captura fiel e dinâmica de todo o ecossistema visual
 function capturarContextoCompletoApp() {
   const saldoElement = document.getElementById('saldoCarteiraValor') || document.getElementById('drawerSaldoValor');
   const saldo = saldoElement ? saldoElement.textContent.trim() : 'R$ 0,00';
@@ -147,12 +174,13 @@ function capturarContextoCompletoApp() {
   };
 }
 
+// Inicializador Único e Estável do Microfone
 export function inicializarCopilotoVoz() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return false;
 
   if (recognition) {
-    try { recognition.stop(); } catch (e) {}
+    try { recognition.abort(); } catch (e) {}
     recognition = null;
   }
 
@@ -167,63 +195,63 @@ export function inicializarCopilotoVoz() {
   };
 
   recognition.onend = () => {
+    // Só reinicia se estiver explicitamente online, ativo e sem estar falando
     const online = estado.isOnline || localStorage.getItem('huby_motorista_online') === 'true';
-    if (escutaDesejada && online) {
+
+    if (escutaDesejada && online && !falandoAgora) {
       if (timeoutReinicio) clearTimeout(timeoutReinicio);
       timeoutReinicio = setTimeout(() => {
-        if (escutaDesejada && recognition) {
-          try {
-            recognition.start();
-          } catch (e) {}
-        }
-      }, 500);
-    } else {
+        iniciarInstanciaMicrofone();
+      }, 600); // 600ms de respiro previne o loop do Android
+    } else if (!escutaDesejada) {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
     }
   };
 
   recognition.onerror = (ev) => {
-    if (ev.error !== 'no-speech') {
-      console.warn('Status microfone:', ev.error);
+    if (ev.error !== 'no-speech' && ev.error !== 'aborted') {
+      console.warn('Microfone copiloto info:', ev.error);
     }
   };
 
   recognition.onresult = (ev) => {
     const ultimo = ev.results[ev.results.length - 1];
-    if (!ultimo || !ultimo[0]) return;
-    processarFalaMotorista(ultimo[0].transcript);
+    if (!ultimo || !ultimo[0] || falandoAgora) return;
+    processarFalaCognitiva(ultimo[0].transcript);
   };
 
   return true;
 }
 
-export function ativarEscutaCopiloto() {
-  escutaDesejada = true;
+function iniciarInstanciaMicrofone() {
   if (!recognition) inicializarCopilotoVoz();
-
   try {
     recognition.start();
-    const comandoAtual = obterCodigoAtivacaoMotorista();
-    notificar(`Copiloto ativo: Diga "${comandoAtual}"`, 'info', 2500);
   } catch (e) {}
+}
+
+export function ativarEscutaCopiloto() {
+  escutaDesejada = true;
+  iniciarInstanciaMicrofone();
+  const comandoAtual = obterCodigoAtivacaoMotorista();
+  notificar(`Copiloto ativo: "${comandoAtual}"`, 'info', 2200);
 }
 
 export function desativarEscutaCopiloto() {
   escutaDesejada = false;
-  copilotoAguardandoComando = false;
   if (timeoutReinicio) clearTimeout(timeoutReinicio);
-  if (timeoutJanelaComando) clearTimeout(timeoutJanelaComando);
 
   if (recognition) {
-    try { recognition.stop(); } catch (e) {}
+    try { recognition.abort(); } catch (e) {}
   }
   atualizarIndicadorUIVoz(false);
   liberarWakeLock();
 }
 
-async function processarFalaMotorista(fraseBruta) {
-  if (processandoComando) return;
+// Cérebro Livre: Compreensão de Intenção Situacional
+async function processarFalaCognitiva(fraseBruta) {
+  if (processandoRequisicao || falandoAgora) return;
 
   const fraseFalada = normalizarTexto(fraseBruta);
   const gatilhoCadastrado = normalizarTexto(obterCodigoAtivacaoMotorista());
@@ -243,87 +271,24 @@ async function processarFalaMotorista(fraseBruta) {
     }
   }
 
-  // Permite comandos sem repetir o nome caso a janela de escuta esteja aberta
-  if (!gatilhoDetectado && !copilotoAguardandoComando) return;
+  // Se o motorista não se dirigiu à IA pelo gatilho, ignora barulhos do trânsito
+  if (!gatilhoDetectado) return;
 
-  processandoComando = true;
-  setTimeout(() => { processandoComando = false; }, 900);
+  processandoRequisicao = true;
 
-  let acao = fraseFalada
+  let mensagemLimpa = fraseFalada
     .replace(gatilhoCadastrado, '')
     .replace(new RegExp(`\\b${palavraChavePrincipal}\\b`, 'gi'), '')
     .replace(/^(ok|ei|fala|e ai)\s+/i, '')
     .trim();
 
-  // Se chamou apenas o nome (ex: "Ok Zanix"), abre janela de 9 segundos
-  if (acao.length === 0 || acao === 'ola' || acao === 'opa' || acao === 'e ai') {
-    copilotoAguardandoComando = true;
-    if (timeoutJanelaComando) clearTimeout(timeoutJanelaComando);
-    timeoutJanelaComando = setTimeout(() => { copilotoAguardandoComando = false; }, 9000);
-    falarTexto('Pode falar, parceiro.');
+  // Caso chame apenas pelo nome ("Ok Zanix")
+  if (mensagemLimpa.length === 0 || mensagemLimpa === 'ola' || mensagemLimpa === 'opa') {
+    processandoRequisicao = false;
+    falarTexto('Na escuta, piloto.');
     return;
   }
 
-  copilotoAguardandoComando = false;
-
-  // --------------------------------------------------------------------------
-  // REAÇÕES INSTANTÂNEAS DE BAIXA LATÊNCIA (DISPARO IMEDIATO)
-  // --------------------------------------------------------------------------
-
-  // 1. CANCELAR / FECHAR / VOLTAR / DESCARTAR
-  if (
-    acao.includes('cancela') || acao.includes('volta') || acao.includes('fecha') ||
-    acao.includes('dispensa') || acao.includes('recusa') || acao.includes('nao quero') ||
-    acao.includes('esquece') || acao.includes('sai fora')
-  ) {
-    cmdCancelarOuDispensar();
-    return;
-  }
-
-  // 2. INICIAR VIAGEM / DAR PARTIDA
-  if (
-    acao.includes('inicia') || acao.includes('comeca') || acao.includes('partiu') ||
-    acao.includes('embarcou') || acao.includes('partida') || acao.includes('pode ir') ||
-    acao.includes('bora') || acao.includes('vamos rodar')
-  ) {
-    cmdIniciarViagem();
-    return;
-  }
-
-  // 3. CHEGADA AO LOCAL
-  if (
-    acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui') ||
-    acao.includes('to aqui') || acao.includes('chegando')
-  ) {
-    cmdAvisarChegada();
-    return;
-  }
-
-  // 4. ACEITAR CORRIDA
-  if (
-    acao.includes('aceita') || acao.includes('confirma') || acao.includes('pega') ||
-    acao.includes('vou fazer') || acao.includes('pode pegar') || acao.includes('fechou')
-  ) {
-    cmdAceitarChamada();
-    return;
-  }
-
-  // 5. VISUALIZAR ROTA
-  if (
-    acao.includes('visualizar') || acao.includes('ver rota') || acao.includes('mostra') ||
-    acao.includes('olhar rota') || acao.includes('abrir mapa')
-  ) {
-    cmdVerRotaNoMapa();
-    return;
-  }
-
-  // --------------------------------------------------------------------------
-  // PROCESSAMENTO COGNITIVO COM GEMINI (RACIOCÍNIO + AÇÃO AUTÔNOMA)
-  // --------------------------------------------------------------------------
-  await processarCognicaoGemini(fraseBruta);
-}
-
-async function processarCognicaoGemini(perguntaCompleta) {
   const contexto = capturarContextoCompletoApp();
 
   try {
@@ -334,46 +299,75 @@ async function processarCognicaoGemini(perguntaCompleta) {
         ...obterHeaders()
       },
       body: JSON.stringify({
-        pergunta: perguntaCompleta,
+        pergunta: mensagemLimpa,
         contextoCompleto: contexto
       })
     });
 
     const data = await resp.json().catch(() => null);
-    if (!data || !data.resposta) {
-      falarTexto('Tô monitorando o mapa com você.');
-      return;
-    }
 
-    falarTexto(data.resposta);
-
-    if (data.acao && data.acao !== 'NENHUMA') {
-      executarAcaoInteligente(data.acao);
+    if (data && data.resposta) {
+      falarTexto(data.resposta);
+      if (data.acao && data.acao !== 'NENHUMA') {
+        executarAcaoDecididaPelaMente(data.acao);
+      }
+    } else {
+      falarTexto('Copiado.');
     }
   } catch (err) {
-    falarTexto('Estou atento no trajeto.');
+    falarTexto('Acompanhando sua rota.');
+  } finally {
+    processandoRequisicao = false;
   }
 }
 
-function executarAcaoInteligente(acao) {
+// Execução Dinâmica de Ações na Tela do Motorista
+function executarAcaoDecididaPelaMente(acao) {
   switch (acao) {
-    case 'CANCELAR_ROTA':
-      cmdCancelarOuDispensar();
+    case 'VISUALIZAR_ROTA': {
+      const btn = document.querySelector('#listaChamadasPendentes .btn-accept-order') ||
+                  document.querySelector('button.btn-accept-order');
+      if (btn) {
+        pararAlertaSonoroChamada();
+        btn.click();
+      }
       break;
-    case 'ACEITAR_CORRIDA':
-      cmdAceitarChamada();
+    }
+    case 'ACEITAR_CORRIDA': {
+      const btnModal = document.getElementById('btnConfirmarAceiteViagem') || 
+                       document.querySelector('button.btn-confirmar-aceite');
+      if (btnModal && btnModal.offsetParent !== null) {
+        btnModal.click();
+      } else {
+        const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
+        if (primeiroBtn) {
+          preVisualizarRotaPedido(extrairDadosDoBotao(primeiroBtn));
+          setTimeout(() => {
+            document.getElementById('btnConfirmarAceiteViagem')?.click();
+          }, 400);
+        }
+      }
       break;
-    case 'VISUALIZAR_ROTA':
-      cmdVerRotaNoMapa();
+    }
+    case 'CANCELAR_ROTA': {
+      const btnFecharPrevia = document.getElementById('btnCancelarPreviaRota') ||
+                              document.querySelector('.btn-fechar-previa');
+      if (btnFecharPrevia && btnFecharPrevia.offsetParent !== null) {
+        btnFecharPrevia.click();
+      } else {
+        const btnDispensa = document.querySelector('#listaChamadasPendentes .btn-dispensar-pedido');
+        if (btnDispensa) btnDispensa.click();
+      }
       break;
+    }
     case 'AVISAR_CHEGADA':
-      cmdAvisarChegada();
+      document.getElementById('btnChegueiLocalEmbarque')?.click();
       break;
     case 'INICIAR_VIAGEM':
-      cmdIniciarViagem();
+      document.getElementById('btnIniciarCorridaAtiva')?.click();
       break;
     case 'FINALIZAR_CORRIDA':
-      cmdFinalizarViagem();
+      document.getElementById('btnConcluirCorrida')?.click();
       break;
     case 'ABRIR_SAQUE':
       document.getElementById('btnAbrirModalSaque')?.click();
@@ -383,118 +377,9 @@ function executarAcaoInteligente(acao) {
       break;
     case 'FECHAR_TELAS':
       document.getElementById('btnFecharDrawerPerfil')?.click();
+      document.getElementById('btnFecharModalEdicao')?.click();
       document.getElementById('btnCancelarPreviaRota')?.click();
       break;
-  }
-}
-
-// ----------------------------------------------------------------------------
-// AÇÕES FÍSICAS DE CONTROLE DA TELA
-// ----------------------------------------------------------------------------
-
-function cmdCancelarOuDispensar() {
-  const btnFecharPrevia = document.getElementById('btnCancelarPreviaRota') ||
-                          document.querySelector('.btn-fechar-previa') ||
-                          document.querySelector('[data-acao="cancelar-previa"]');
-
-  if (btnFecharPrevia && btnFecharPrevia.offsetParent !== null) {
-    btnFecharPrevia.click();
-    falarTexto('Fechado. Rota cancelada.');
-    return;
-  }
-
-  const btnDispensa = document.querySelector('#listaChamadasPendentes .btn-dispensar-pedido');
-  if (btnDispensa) {
-    btnDispensa.click();
-    falarTexto('Chamada dispensada.');
-    return;
-  }
-
-  const btnFecharModal = document.getElementById('btnFecharModalEdicao') ||
-                         document.getElementById('btnFecharDrawerPerfil');
-  if (btnFecharModal && btnFecharModal.offsetParent !== null) {
-    btnFecharModal.click();
-    falarTexto('Pronto, fechado.');
-    return;
-  }
-
-  falarTexto('Nada aberto para fechar agora.');
-}
-
-function cmdVerRotaNoMapa() {
-  const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order') ||
-                      document.querySelector('button.btn-accept-order');
-
-  if (!primeiroBtn) {
-    falarTexto('Nenhuma chamada no radar pra ver.');
-    return;
-  }
-
-  pararAlertaSonoroChamada();
-  primeiroBtn.click();
-
-  const dados = extrairDadosDoBotao(primeiroBtn);
-  const repasse = dados.repasse || (Number(dados.preco || 0) * 0.85).toFixed(2).replace('.', ',');
-  const distNum = parseFloat(dados.dist || 0);
-  const distTexto = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
-
-  falarTexto(`Rota na tela. Deu ${distTexto}, pagando ${repasse} reais. Quer que eu aceite?`);
-}
-
-function cmdAceitarChamada() {
-  const btnModalConfirmar = document.getElementById('btnConfirmarAceiteViagem') || 
-                            document.querySelector('button.btn-confirmar-aceite');
-
-  if (btnModalConfirmar && btnModalConfirmar.offsetParent !== null) {
-    falarTexto('Fechado, corrida aceita. Traçando rota.');
-    btnModalConfirmar.click();
-    return;
-  }
-
-  const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
-  if (primeiroBtn) {
-    const dados = extrairDadosDoBotao(primeiroBtn);
-    preVisualizarRotaPedido(dados);
-    setTimeout(() => {
-      const btnModal = document.getElementById('btnConfirmarAceiteViagem');
-      if (btnModal) {
-        falarTexto('Fechado, corrida aceita.');
-        btnModal.click();
-      }
-    }, 400);
-    return;
-  }
-
-  falarTexto('Não tem nenhuma corrida no radar pra pegar.');
-}
-
-function cmdAvisarChegada() {
-  const btnNoLocal = document.getElementById('btnChegueiLocalEmbarque');
-  if (btnNoLocal && btnNoLocal.offsetParent !== null) {
-    falarTexto('Avisando o passageiro que você encostou.');
-    btnNoLocal.click();
-  } else {
-    falarTexto('Você só pode avisar quando estiver perto do embarque.');
-  }
-}
-
-function cmdIniciarViagem() {
-  const btnIniciar = document.getElementById('btnIniciarCorridaAtiva');
-  if (btnIniciar && btnIniciar.offsetParent !== null) {
-    falarTexto('Partiu, viagem iniciada. Boa corrida.');
-    btnIniciar.click();
-  } else {
-    falarTexto('Nenhuma corrida aguardando partida.');
-  }
-}
-
-function cmdFinalizarViagem() {
-  const btnConcluir = document.getElementById('btnConcluirCorrida');
-  if (btnConcluir && btnConcluir.offsetParent !== null) {
-    falarTexto('Corrida concluída. Abrindo acerto.');
-    btnConcluir.click();
-  } else {
-    falarTexto('Nenhuma corrida ativa pra encerrar.');
   }
 }
 

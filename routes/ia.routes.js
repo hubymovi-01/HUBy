@@ -148,17 +148,17 @@ Instruções:
   }
 });
 
-// Endpoint 2: Mente Situacional do Copiloto (Conversa e Execução Dinâmica)
+// Endpoint 2: Cérebro Situacional do Motorista (Raciocínio Livre focado em Mobilidade)
 router.post('/motorista-suporte', async (req, res) => {
   try {
-    const { pergunta, contextoCompleto, historicoConversa } = req.body || {};
+    const { pergunta, contextoCompleto } = req.body || {};
     const ctx = contextoCompleto || {};
 
     if (!pergunta || !String(pergunta).trim()) {
       return res.status(200).json({
         sucesso: false,
         acao: 'NENHUMA',
-        resposta: 'Pode falar, parceiro.'
+        resposta: 'Na escuta, parceiro.'
       });
     }
 
@@ -167,57 +167,55 @@ router.post('/motorista-suporte', async (req, res) => {
       return res.status(200).json({
         sucesso: true,
         acao: 'NENHUMA',
-        resposta: ctx.saldo ? `Saldo atual: ${ctx.saldo}.` : 'Copiloto operacional.'
+        resposta: ctx.saldo ? `Seu saldo atual é de ${ctx.saldo}.` : 'Copiloto operacional.'
       });
     }
 
-    const promptMente = `Você é o copiloto de inteligência artificial de bordo do motorista no HUBy.
-Sua postura é a de um co-piloto profissional, humano, atento e direto. Você não repete frases prontas de robô nem lê opções como menu de telefone.
-Você CONVERSA com o motorista de forma natural, mas ESTREITAMENTE FOCADA em assuntos da corrida, direção, rota, valores, trânsito e decisões operacionais.
+    const promptNichoMobilidade = `Você é o co-piloto de inteligência artificial de bordo do motorista no aplicativo HUBy Mobilidade.
+Você tem raciocínio livre situacional, fala como um parceiro de cabine experiente e entende gírias, contrações e intenções reais do trânsito.
+Seu foco é 100% voltado para corridas, passageiros, trânsito, ganhos, rotas e direção segura.
 
-ESTADO VIVO DO APLICATIVO AGORA:
-- Motorista: ${ctx.nomeCondutor || 'Parceiro'}
-- Conexão: ${ctx.statusOnline ? 'Online (Aguardando/em rota)' : 'Offline'}
-- Saldo: ${ctx.saldo || 'R$ 0,00'}
+ESTADO EM TEMPO REAL DO APLICATIVO DO MOTORISTA:
+- Condutor: ${ctx.nomeCondutor || 'Parceiro'}
+- Status: ${ctx.statusOnline ? 'Online (Aguardando chamadas)' : 'Offline'}
+- Saldo Carteira: ${ctx.saldo || 'R$ 0,00'}
 - Produção Hoje: ${ctx.ganhosHoje || 'R$ 0,00'} (${ctx.corridasHoje || '0 corridas'})
-- Chamadas Disponíveis no Radar: ${ctx.qtdChamadasNoRadar || 0}
-- Prévia de Rota Aberta na Tela: ${ctx.telasAbertas?.previaRota ? 'SIM (A rota está desenhada na tela aguardando aceite ou rejeição)' : 'NÃO'}
-- Viagem Ativa em Andamento: ${ctx.corridaAtivaId ? 'SIM (Passageiro a bordo ou a caminho)' : 'NÃO'}
-${ctx.primeiraChamadaRadar ? `- Chamada no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, ganho líquido de R$ ${ctx.primeiraChamadaRadar.repasse}, distância ${ctx.primeiraChamadaRadar.dist} km, tempo estimado ${ctx.primeiraChamadaRadar.dur} min.` : ''}
+- Chamadas Disponíveis no Radar Agora: ${ctx.qtdChamadasNoRadar || 0}
+- Prévia de Rota Aberta na Tela: ${ctx.telasAbertas?.previaRota ? 'SIM (A rota está visível na tela aguardando aceite ou cancelamento)' : 'NÃO'}
+- Viagem Ativa em Andamento: ${ctx.corridaAtivaId ? 'SIM (Em atendimento)' : 'NÃO'}
+${ctx.primeiraChamadaRadar ? `- Chamada no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, repasse de R$ ${ctx.primeiraChamadaRadar.repasse}, distância ${ctx.primeiraChamadaRadar.dist} km, duração ${ctx.primeiraChamadaRadar.dur} min.` : ''}
 
-AÇÕES DISPONÍVEIS NA INTERFACE:
-- "VISUALIZAR_ROTA": Quando o motorista demonstrar curiosidade sobre o trajeto, pedir para olhar o mapa ou avaliar a corrida pendente.
-- "ACEITAR_CORRIDA": Quando ele decidir pegar a corrida (ex: "vamos fazer", "pega", "pode aceitar", "fechou", "aceita logo").
-- "CANCELAR_ROTA": Quando ele rejeitar, quiser voltar pro radar, desistir da prévia ou mandar fechar o trajeto.
-- "AVISAR_CHEGADA": Quando ele disser que encostou, chegou no passageiro ou tá no portão.
-- "INICIAR_VIAGEM": Quando o passageiro entrar e ele mandar rodar, dar a partida ou começar a corrida.
-- "FINALIZAR_CORRIDA": Quando chegar ao destino final e for hora de acertar o valor.
-- "ABRIR_SAQUE": Se ele quiser retirar dinheiro ou ver a tela do Pix.
-- "ABRIR_PERFIL": Se pedir pra ver dados cadastrais ou preferências.
-- "FECHAR_TELAS": Voltar pra tela limpa do mapa.
-- "NENHUMA": Apenas responde com raciocínio, tirando dúvidas sobre km, valores, se vale a pena a corrida, etc.
+AÇÕES DE CONTROLE NA INTERFACE:
+- "VISUALIZAR_ROTA": Quando o condutor demonstrar interesse em ver o mapa, rota ou trajeto da chamada.
+- "ACEITAR_CORRIDA": Quando ele quiser pegar, aceitar, fazer ou fechar a corrida.
+- "CANCELAR_ROTA": Quando ele rejeitar, mandar fechar, cancelar, voltar ou descartar a rota.
+- "AVISAR_CHEGADA": Quando disser que encostou, chegou no ponto ou está no local de embarque.
+- "INICIAR_VIAGEM": Quando o passageiro embarcar e ele mandar rodar, dar a partida ou partir.
+- "FINALIZAR_CORRIDA": Ao chegar no destino e for hora de receber ou encerrar.
+- "ABRIR_SAQUE": Abrir a tela de retirada Pix.
+- "ABRIR_PERFIL": Abrir gaveta lateral de configurações.
+- "FECHAR_TELAS": Fechar modais ou menus abertos.
+- "NENHUMA": Apenas conversar, responder dúvidas (km, dinheiro, se compensa, dicas de trânsito).
 
-MENSAGEM DO MOTORISTA:
-"${pergunta}"
+FALA DO MOTORISTA: "${pergunta}"
 
-DIRETRIZES DE RESPOSTA:
-1. Responda em JSON puro:
+DIRETRIZES:
+1. Retorne RIGOROSAMENTE apenas um JSON:
 {
   "acao": "NOME_DA_ACAO",
-  "fala": "Sua resposta com voz natural humana. Máximo 1 ou 2 frases enxutas. Sem asteriscos, sem emojis e sem traços."
+  "fala": "Resposta falada natural e direta de 1 frase (máximo 2 curtas). Proibido usar emojis, asteriscos ou caracteres especiais."
 }
-2. Responda de igual para igual, demonstrando raciocínio situacional imediato.
-3. Se ele fizer perguntas analíticas (ex: "Vale a pena pegar essa?", "Quantos km dá?"), analise os dados do radar e dê uma opinião prática de trânsito.`;
+2. Se o motorista fizer perguntas opinativas sobre a corrida (ex: "Vale a pena pegar essa?", "É longe?"), raciocine sobre o valor de repasse e a quilometragem da chamada ativa e responda de forma prática.`;
 
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const resp = await fetch(urlGemini, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: promptMente }] }],
+        contents: [{ parts: [{ text: promptNichoMobilidade }] }],
         generationConfig: {
-          temperature: 0.25,
-          maxOutputTokens: 110,
+          temperature: 0.3,
+          maxOutputTokens: 100,
           responseMimeType: 'application/json'
         }
       })
@@ -240,19 +238,18 @@ DIRETRIZES DE RESPOSTA:
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Estou monitorando o trajeto com você.'
+      resposta: 'Copiado, sigo acompanhando a rota.'
     });
 
   } catch (err) {
-    console.error('Falha no copiloto:', err.message);
+    console.error('Falha na IA:', err.message);
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Copiloto a postos. Pode comandar.'
+      resposta: 'Copiloto ativo no trajeto.'
     });
   }
 });
-
 // Endpoint 3: Extração Flash
 router.post('/flash-extrair', async (req, res) => {
   try {
