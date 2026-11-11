@@ -876,21 +876,24 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 13. ATUALIZAR PERFIL DO MOTORISTA (PERSISTÊNCIA DO CÓDIGO DE VOZ)
+  // 13. ATUALIZAR PERFIL DO MOTORISTA (PERSISTÊNCIA COMPLETA DE FOTO E VOZ)
   // =========================================================================
   router.put('/motoristas/perfil/atualizar', autenticarToken, async (req, res) => {
     try {
       const usuarioId = req.usuario.id;
       const emailUsuario = req.usuario.email || '';
       const {
-        nome, telefone, foto_base64,
+        nome, telefone, foto_perfil_url, foto_base64,
         veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
         chave_pix_padrao, codigo_voz
       } = req.body;
 
       const fNome = (nome && nome.trim()) ? nome.trim() : null;
       const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
-      const fFoto = (foto_base64 && foto_base64.trim()) ? foto_base64.trim() : null;
+      const fFoto = (foto_perfil_url && foto_perfil_url.trim()) 
+        ? foto_perfil_url.trim() 
+        : ((foto_base64 && foto_base64.trim()) ? foto_base64.trim() : null);
+
       const fMod = (veiculo_modelo && veiculo_modelo.trim()) ? veiculo_modelo.trim() : null;
       const fPlaca = (veiculo_placa && veiculo_placa.trim()) ? veiculo_placa.trim().toUpperCase() : null;
       const fCor = (veiculo_cor && veiculo_cor.trim()) ? veiculo_cor.trim() : null;
@@ -932,6 +935,17 @@ export default function pedidosRouter(io) {
             codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
           WHERE id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1)
           RETURNING *;
+        `;
+      }
+
+      if (fFoto || fNome || fTel) {
+        await sql`
+          UPDATE usuarios
+          SET 
+            nome = COALESCE(${fNome}, nome),
+            telefone = COALESCE(${fTel}, telefone),
+            foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url)
+          WHERE id::text = ${String(usuarioId)}::text;
         `;
       }
 
