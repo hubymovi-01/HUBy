@@ -174,9 +174,12 @@ export function configurarEdicaoPerfil() {
   const inputFoto = document.getElementById('inputUploadFotoPerfil');
   const previewFoto = document.getElementById('previewFotoModal');
 
+  let novaFotoBase64 = null;
+
   btnAbrir?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
+    novaFotoBase64 = null;
     if (modal) {
       modal.style.display = 'flex';
       carregarPerfil();
@@ -188,21 +191,54 @@ export function configurarEdicaoPerfil() {
       e.preventDefault();
       e.stopPropagation();
     }
+    novaFotoBase64 = null;
     if (modal) modal.style.display = 'none';
   };
 
   btnFechar?.addEventListener('click', fecharModal);
   btnCancelar?.addEventListener('click', fecharModal);
 
+  // Lê, comprime e redimensiona a foto para Base64 antes de salvar
   inputFoto?.addEventListener('change', () => {
     const file = inputFoto.files?.[0];
-    if (file && previewFoto) {
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        previewFoto.src = ev.target.result;
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 400;
+        const MAX_HEIGHT = 400;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        novaFotoBase64 = canvas.toDataURL('image/jpeg', 0.85);
+
+        if (previewFoto) {
+          previewFoto.src = novaFotoBase64;
+        }
       };
-      reader.readAsDataURL(file);
-    }
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
   });
 
   btnSalvar?.addEventListener('click', async (e) => {
@@ -216,22 +252,36 @@ export function configurarEdicaoPerfil() {
     const veiculo_cor = document.getElementById('editCarroCor')?.value?.trim();
     const veiculo_ano = document.getElementById('editCarroAno')?.value?.trim();
 
+    const payload = {
+      nome,
+      telefone,
+      veiculo_modelo,
+      veiculo_placa,
+      veiculo_cor,
+      veiculo_ano
+    };
+
+    if (novaFotoBase64) {
+      payload.foto_perfil_url = novaFotoBase64;
+    }
+
     try {
       const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil/atualizar`, {
         method: 'PUT',
         headers: obterHeaders(),
-        body: JSON.stringify({
-          nome,
-          telefone,
-          veiculo_modelo,
-          veiculo_placa,
-          veiculo_cor,
-          veiculo_ano
-        })
+        body: JSON.stringify(payload)
       });
 
       if (resp.ok) {
-        notificar('Perfil atualizado com sucesso!', 'sucesso');
+        notificar('Perfil e foto atualizados com sucesso!', 'sucesso');
+
+        if (novaFotoBase64) {
+          const topAvatar = document.getElementById('topAvatarImg');
+          const drawerFoto = document.getElementById('drawerFotoImg');
+          if (topAvatar) topAvatar.src = novaFotoBase64;
+          if (drawerFoto) drawerFoto.src = novaFotoBase64;
+        }
+
         fecharModal();
         await carregarPerfil();
       } else {
