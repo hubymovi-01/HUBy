@@ -15,7 +15,7 @@ import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
-import { inicializarCopilotoVoz, definirCodigoAtivacaoMotorista, obterCodigoAtivacaoMotorista } from './ia/motorista-ia.js';
+import { inicializarCopilotoVoz, definirCodigoAtivacaoMotorista, obterCodigoAtivacaoMotorista, falarTexto } from './ia/motorista-ia.js';
 import { notificar } from './util/alertas-huby.js';
 
 function validarAutenticacaoMotorista() {
@@ -35,10 +35,11 @@ function validarAutenticacaoMotorista() {
   return true;
 }
 
-// Configuração blindada do input e botão de salvar comando de voz
+// Configuração vinculada aos IDs exatos do motorista.html (drawerInputCodigoVoz)
 function configurarCodigoVozDireto() {
-  const inputComando = document.getElementById('inputCodigoVozMotorista');
+  const inputComando = document.getElementById('drawerInputCodigoVoz') || document.getElementById('inputCodigoVozMotorista');
   const btnSalvarComando = document.getElementById('btnSalvarCodigoVoz');
+  const btnTestarComando = document.getElementById('btnTestarCodigoVoz');
 
   if (inputComando) {
     inputComando.value = obterCodigoAtivacaoMotorista();
@@ -52,7 +53,7 @@ function configurarCodigoVozDireto() {
       const valorDigitado = (inputComando.value || '').trim();
 
       if (!valorDigitado) {
-        notificar('Digite uma frase para ativar seu copiloto (Ex: OK HUBy, OK Piloto).', 'alerta');
+        notificar('Digite uma frase para ativar seu copiloto (Ex: OK HUBy, Zanki, Gavião).', 'alerta');
         inputComando.focus();
         return;
       }
@@ -61,13 +62,24 @@ function configurarCodigoVozDireto() {
       notificar(`Comando "${valorDigitado}" salvo com sucesso!`, 'sucesso');
     });
   }
+
+  if (btnTestarComando && inputComando) {
+    btnTestarComando.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const comandoAtual = (inputComando.value || '').trim() || obterCodigoAtivacaoMotorista();
+      falarTexto(`Copiloto pronto. Pode falar ${comandoAtual} seguido da ação que deseja.`);
+    });
+  }
 }
 
 function registrarEventosUI() {
+  // Alternar Online / Offline
   document.getElementById('btnToggleStatusOnline')?.addEventListener('click', async () => {
     await alternarStatusOnline();
   });
 
+  // Drawer Lateral
   const drawer = document.getElementById('driverDrawer');
   const overlay = document.getElementById('drawerOverlay');
 
@@ -84,6 +96,7 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
+  // Módulos especializados
   if (typeof configurarChatMotorista === 'function') configurarChatMotorista();
   if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
   if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
@@ -91,7 +104,7 @@ function registrarEventosUI() {
   if (typeof configurarMarketplace === 'function') configurarMarketplace();
   if (typeof configurarModosInteligentes === 'function') configurarModosInteligentes();
   
-  // Registra o salvamento sem falha de blur
+  // Registro direto dos eventos de voz
   configurarCodigoVozDireto();
 }
 
@@ -105,5 +118,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   iniciarRadarChamadas();
   inicializarPushNotifications();
 
+  // Inicializa o copiloto de voz
   inicializarCopilotoVoz();
 });

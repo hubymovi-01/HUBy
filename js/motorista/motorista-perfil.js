@@ -26,27 +26,53 @@ export async function carregarPerfil() {
     estado.categoriaMotorista = motorista.categoria || 'carro';
     estado.statusAprovacaoAtual = motorista.status_aprovacao || 'aprovado';
 
+    // 🎙️ Sincroniza o comando de voz cadastrado no banco com o input do HTML
     if (motorista.codigo_voz && motorista.codigo_voz.trim()) {
       localStorage.setItem('huby_codigo_voz_motorista', motorista.codigo_voz.trim());
-      const inputComando = document.getElementById('inputCodigoVozCopiloto');
-      if (inputComando) inputComando.value = motorista.codigo_voz.trim();
+      const inVoz = document.getElementById('drawerInputCodigoVoz');
+      if (inVoz) inVoz.value = motorista.codigo_voz.trim();
+    } else {
+      const inVoz = document.getElementById('drawerInputCodigoVoz');
+      if (inVoz) inVoz.value = obterCodigoAtivacaoMotorista();
     }
 
-    const elNome = document.getElementById('txtNomeMotorista');
-    const elVeiculo = document.getElementById('txtVeiculoMotorista');
-    const elPlaca = document.getElementById('txtPlacaMotorista');
-    const elSaldo = document.getElementById('txtSaldoCarteira');
-    const elFoto = document.getElementById('imgFotoPerfilMotorista');
+    // Top Bar
+    const topNome = document.getElementById('topNomeMotorista');
+    const topNota = document.getElementById('topNotaMotorista');
+    const topAvatar = document.getElementById('topAvatarImg');
 
-    if (elNome) elNome.textContent = motorista.nome || 'Motorista Parceiro';
-    if (elVeiculo) elVeiculo.textContent = `${motorista.veiculo_modelo || 'Veículo'} • ${motorista.veiculo_cor || ''}`;
-    if (elPlaca) elPlaca.textContent = motorista.veiculo_placa || 'Sem placa';
-    if (elSaldo) elSaldo.textContent = `R$ ${Number(motorista.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
+    if (topNome) topNome.textContent = motorista.nome || 'Carol';
+    if (topNota) topNota.textContent = `⭐ ${Number(motorista.avaliacao || 5.0).toFixed(1)}`;
+    if (topAvatar && motorista.foto_perfil_url) topAvatar.src = motorista.foto_perfil_url;
 
-    if (elFoto && motorista.foto_perfil_url) {
-      elFoto.src = motorista.foto_perfil_url;
-    }
+    // Drawer Header
+    const drawerNome = document.getElementById('drawerNomeCondutor');
+    const drawerCat = document.getElementById('drawerCategoriaBadge');
+    const drawerNota = document.getElementById('drawerAvaliacaoTxt');
+    const drawerFoto = document.getElementById('drawerFotoImg');
 
+    if (drawerNome) drawerNome.textContent = motorista.nome || 'Carol';
+    if (drawerCat) drawerCat.textContent = `HUBY ${(motorista.categoria || 'carro').toUpperCase()}`;
+    if (drawerNota) drawerNota.textContent = `⭐ ${Number(motorista.avaliacao || 5.0).toFixed(1)}`;
+    if (drawerFoto && motorista.foto_perfil_url) drawerFoto.src = motorista.foto_perfil_url;
+
+    // Veículo Cadastrado no Drawer
+    const drawerCarroModelo = document.getElementById('drawerCarroModelo');
+    const drawerCarroDetalhes = document.getElementById('drawerCarroDetalhes');
+    const drawerCarroPlaca = document.getElementById('drawerCarroPlaca');
+
+    if (drawerCarroModelo) drawerCarroModelo.textContent = motorista.veiculo_modelo || 'Onix';
+    if (drawerCarroDetalhes) drawerCarroDetalhes.textContent = `Cor: ${motorista.veiculo_cor || 'Prata'} • Ano: ${motorista.veiculo_ano || '2023'}`;
+    if (drawerCarroPlaca) drawerCarroPlaca.textContent = (motorista.veiculo_placa || 'ABC1D23').toUpperCase();
+
+    // Saldo
+    const saldoTxt = `R$ ${Number(motorista.saldo_carteira || 0).toFixed(2).replace('.', ',')}`;
+    const elSaldo = document.getElementById('saldoCarteiraValor');
+    const elDrawerSaldo = document.getElementById('drawerSaldoValor');
+    if (elSaldo) elSaldo.textContent = saldoTxt;
+    if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
+
+    // Checkboxes de Preferências de Pagamento
     const checkDinheiro = document.getElementById('chkAceitaDinheiro');
     const checkCartao = document.getElementById('chkAceitaCartao');
     const checkPix = document.getElementById('chkAceitaPix');
@@ -55,18 +81,22 @@ export async function carregarPerfil() {
     if (checkCartao) checkCartao.checked = motorista.aceita_cartao !== false;
     if (checkPix) checkPix.checked = motorista.aceita_pix !== false;
 
-    // Preenche os campos do formulário de edição se estiverem abertos
-    const inNome = document.getElementById('inputPerfilNome');
-    const inTel = document.getElementById('inputPerfilTelefone');
-    const inMod = document.getElementById('inputPerfilModelo');
-    const inPlaca = document.getElementById('inputPerfilPlaca');
-    const inCor = document.getElementById('inputPerfilCor');
+    // Preenche os campos do modal de edição
+    const editNome = document.getElementById('editNome');
+    const editTelefone = document.getElementById('editTelefone');
+    const editModelo = document.getElementById('editCarroModelo');
+    const editPlaca = document.getElementById('editCarroPlaca');
+    const editCor = document.getElementById('editCarroCor');
+    const editAno = document.getElementById('editCarroAno');
+    const prevFoto = document.getElementById('previewFotoModal');
 
-    if (inNome) inNome.value = motorista.nome || '';
-    if (inTel) inTel.value = motorista.telefone || '';
-    if (inMod) inMod.value = motorista.veiculo_modelo || '';
-    if (inPlaca) inPlaca.value = motorista.veiculo_placa || '';
-    if (inCor) inCor.value = motorista.veiculo_cor || '';
+    if (editNome) editNome.value = motorista.nome || '';
+    if (editTelefone) editTelefone.value = motorista.telefone || '';
+    if (editModelo) editModelo.value = motorista.veiculo_modelo || '';
+    if (editPlaca) editPlaca.value = motorista.veiculo_placa || '';
+    if (editCor) editCor.value = motorista.veiculo_cor || '';
+    if (editAno) editAno.value = motorista.veiculo_ano || '';
+    if (prevFoto && motorista.foto_perfil_url) prevFoto.src = motorista.foto_perfil_url;
 
     return motorista;
   } catch (err) {
@@ -76,10 +106,10 @@ export async function carregarPerfil() {
 }
 
 // ============================================================================
-// 2. CONFIGURAÇÃO DO COMANDO DE VOZ (COPILOTO HANDS-FREE)
+// 2. CONFIGURAÇÃO DO COMANDO DE VOZ (IDs: drawerInputCodigoVoz, btnSalvarCodigoVoz)
 // ============================================================================
 export function configurarCodigoVozCopiloto() {
-  const inputComando = document.getElementById('inputCodigoVozCopiloto');
+  const inputComando = document.getElementById('drawerInputCodigoVoz');
   const btnSalvar = document.getElementById('btnSalvarCodigoVoz');
   const btnTestar = document.getElementById('btnTestarCodigoVoz');
 
@@ -93,7 +123,7 @@ export function configurarCodigoVozCopiloto() {
 
     const novoComando = inputComando?.value?.trim();
     if (!novoComando) {
-      notificar('Digite uma frase para ativar seu copiloto (ex: OK Gavião, Ei Jarvis).', 'alerta');
+      notificar('Digite uma frase para ativar seu copiloto (ex: OK Gavião, Zanki).', 'alerta');
       inputComando?.focus();
       return;
     }
@@ -102,7 +132,7 @@ export function configurarCodigoVozCopiloto() {
     if (sucesso) {
       notificar(`Comando atualizado! Diga "${novoComando}" para falar com o app.`, 'sucesso');
     } else {
-      notificar('Erro ao registrar comando. Tente novamente.', 'erro');
+      notificar('Erro ao salvar comando.', 'erro');
     }
   });
 
@@ -151,38 +181,63 @@ export function configurarSalvarPreferenciasPagto() {
 }
 
 // ============================================================================
-// 4. EDIÇÃO DE DADOS BÁSICOS DO MOTORISTA E CONTROLE DO MODAL
+// 4. EDIÇÃO DE PERFIL E FOTO (IDs: btnAbrirModalEdicaoPerfil, modalEdicaoPerfil)
 // ============================================================================
 export function configurarEdicaoPerfil() {
-  const btnAbrirModal = document.getElementById('btnAbrirModalEditarPerfil');
-  const modalEditar = document.getElementById('modalEditarPerfilMotorista');
-  const btnFecharModal = document.getElementById('btnFecharModalEditarPerfil');
-  const btnSalvar = document.getElementById('btnSalvarDadosPerfil');
+  const btnAbrir = document.getElementById('btnAbrirModalEdicaoPerfil');
+  const modal = document.getElementById('modalEdicaoPerfil');
+  const btnFechar = document.getElementById('btnFecharModalEdicao');
+  const btnCancelar = document.getElementById('btnCancelarEdicao');
+  const btnSalvar = document.getElementById('btnSalvarEdicaoPerfil');
 
-  // Abre o modal de edição
-  btnAbrirModal?.addEventListener('click', (e) => {
+  const inputFoto = document.getElementById('inputUploadFotoPerfil');
+  const previewFoto = document.getElementById('previewFotoModal');
+
+  // Abre o modal
+  btnAbrir?.addEventListener('click', (e) => {
     e.preventDefault();
-    if (modalEditar) {
-      modalEditar.style.display = 'flex';
-      carregarPerfil(); // Recarrega os dados nos inputs
+    e.stopPropagation();
+    if (modal) {
+      modal.style.display = 'flex';
+      carregarPerfil();
     }
   });
 
   // Fecha o modal
-  btnFecharModal?.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (modalEditar) modalEditar.style.display = 'none';
+  const fecharModal = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (modal) modal.style.display = 'none';
+  };
+
+  btnFechar?.addEventListener('click', fecharModal);
+  btnCancelar?.addEventListener('click', fecharModal);
+
+  // Pré-visualização de nova foto selecionada
+  inputFoto?.addEventListener('change', () => {
+    const file = inputFoto.files?.[0];
+    if (file && previewFoto) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        previewFoto.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
   });
 
-  if (!btnSalvar) return;
-
-  btnSalvar.addEventListener('click', async (e) => {
+  // Salva os dados editados
+  btnSalvar?.addEventListener('click', async (e) => {
     e.preventDefault();
-    const nome = document.getElementById('inputPerfilNome')?.value?.trim();
-    const telefone = document.getElementById('inputPerfilTelefone')?.value?.trim();
-    const veiculo_modelo = document.getElementById('inputPerfilModelo')?.value?.trim();
-    const veiculo_placa = document.getElementById('inputPerfilPlaca')?.value?.trim();
-    const veiculo_cor = document.getElementById('inputPerfilCor')?.value?.trim();
+    e.stopPropagation();
+
+    const nome = document.getElementById('editNome')?.value?.trim();
+    const telefone = document.getElementById('editTelefone')?.value?.trim();
+    const veiculo_modelo = document.getElementById('editCarroModelo')?.value?.trim();
+    const veiculo_placa = document.getElementById('editCarroPlaca')?.value?.trim();
+    const veiculo_cor = document.getElementById('editCarroCor')?.value?.trim();
+    const veiculo_ano = document.getElementById('editCarroAno')?.value?.trim();
 
     try {
       const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil/atualizar`, {
@@ -193,18 +248,19 @@ export function configurarEdicaoPerfil() {
           telefone,
           veiculo_modelo,
           veiculo_placa,
-          veiculo_cor
+          veiculo_cor,
+          veiculo_ano
         })
       });
 
       if (resp.ok) {
         notificar('Perfil atualizado com sucesso!', 'sucesso');
-        if (modalEditar) modalEditar.style.display = 'none';
+        fecharModal();
         await carregarPerfil();
       } else {
         notificar('Não foi possível salvar os dados.', 'erro');
       }
-    } catch (e) {
+    } catch (err) {
       notificar('Erro de conexão ao salvar perfil.', 'erro');
     }
   });
