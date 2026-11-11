@@ -1,4 +1,4 @@
-// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Suporte por Voz Gemini
+// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Suporte Autônomo por Voz Gemini
 import express from 'express';
 
 const router = express.Router();
@@ -166,7 +166,7 @@ Instruções:
   }
 });
 
-// Endpoint 2: Suporte ao Motorista com Controle e Leitura Total da Área do App
+// Endpoint 2: Cérebro Autônomo com Discernimento Contextual e Decisão de Ação
 router.post('/motorista-suporte', async (req, res) => {
   try {
     const { pergunta, contextoCompleto, contextoCorrida } = req.body || {};
@@ -175,75 +175,98 @@ router.post('/motorista-suporte', async (req, res) => {
     if (!pergunta || !String(pergunta).trim()) {
       return res.status(200).json({
         sucesso: false,
-        resposta: 'Não entendi sua dúvida. Pode repetir?'
+        acao: 'NENHUMA',
+        resposta: 'Pode falar, estou ouvindo.'
       });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
-      // Fallback sem chave configurada
       return res.status(200).json({
         sucesso: true,
-        resposta: ctx.saldo ? `Seu saldo atual é de ${ctx.saldo}.` : 'Copiloto HUBy conectado. Dirija com atenção.'
+        acao: 'NENHUMA',
+        resposta: ctx.saldo ? `Seu saldo atual é de ${ctx.saldo}.` : 'Copiloto ativo. Prossiga com atenção.'
       });
     }
 
-    const promptContexto = `Você é o copiloto de voz com CONTROLE TOTAL do aplicativo de mobilidade HUBy para motoristas parceiros no Brasil.
-O motorista está no volante e falará com você por voz.
-Sua resposta será sintetizada diretamente em áudio (Text-to-Speech).
+    const promptContextual = `Você é o copiloto inteligente com discernimento e consciência situacional do aplicativo HUBy para motoristas parceiros.
+Você NÃO é um assistente engessado por regras fixas. Você compreende intenções humanas, gírias e o contexto visual da interface do motorista.
 
-DADOS REAIS EM TEMPO REAL DA ÁREA DO MOTORISTA:
+ESTADO EM TEMPO REAL DA INTERFACE DO MOTORISTA:
 - Condutor: ${ctx.nomeCondutor || 'Parceiro'}
-- Status: ${ctx.statusOnline ? 'Online (Apto a receber chamadas)' : 'Offline'}
-- Saldo Disponível na Carteira: ${ctx.saldo || 'R$ 0,00'}
-- Ganhos Hoje: ${ctx.ganhosHoje || 'R$ 0,00'} (${ctx.corridasHoje || '0 viagens'})
-- Meta Diária: ${ctx.metaDiaria || 'Não definida'}
-- Veículo Cadastrado: ${ctx.veiculo || 'Não informado'}
-- Avaliação: ${ctx.avaliacao || '5.0 estrelas'}
-- Chamadas Disponíveis no Radar Agora: ${ctx.qtdChamadasNoRadar || 0}
-${ctx.primeiraChamadaRadar ? `- Detalhes da Chamada no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, valor de repasse R$ ${ctx.primeiraChamadaRadar.repasse}, distância ${ctx.primeiraChamadaRadar.dist} km, duração aproximada ${ctx.primeiraChamadaRadar.dur} min.` : ''}
+- Status de Conexão: ${ctx.statusOnline ? 'Online (Pronto para chamadas)' : 'Offline'}
+- Saldo da Carteira: ${ctx.saldo || 'R$ 0,00'}
+- Ganhos do Dia: ${ctx.ganhosHoje || 'R$ 0,00'} em ${ctx.corridasHoje || '0 corridas'}
+- Chamadas Disponíveis no Radar: ${ctx.qtdChamadasNoRadar || 0}
+- Prévia de Rota Aberta na Tela: ${ctx.telasAbertas?.previaRota ? 'SIM (Aguardando decisão)' : 'NÃO'}
+- Viagem Ativa em Andamento: ${ctx.corridaAtivaId ? 'SIM' : 'NÃO'}
+${ctx.primeiraChamadaRadar ? `- Corrida no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, Repasse de R$ ${ctx.primeiraChamadaRadar.repasse}, Distância ${ctx.primeiraChamadaRadar.dist} km, Duração ${ctx.primeiraChamadaRadar.dur} min.` : ''}
 
-PERGUNTA FEITA POR VOZ PELO MOTORISTA:
+AÇÕES DE CONTROLE QUE VOCÊ PODE EXECUTAR:
+- "VISUALIZAR_ROTA": Ver a corrida no mapa, trajeto, detalhes ou prévia.
+- "ACEITAR_CORRIDA": Aceitar, confirmar ou pegar a chamada disponível.
+- "CANCELAR_ROTA": Voltar, fechar o mapa de prévia, cancelar, não querer, dispensar ou recusar a chamada.
+- "AVISAR_CHEGADA": Avisar que chegou ao ponto de encontro ou ao embarque.
+- "INICIAR_VIAGEM": Iniciar a corrida, dar a partida após o passageiro embarcar.
+- "FINALIZAR_CORRIDA": Concluir, finalizar ou encerrar a viagem no destino.
+- "ABRIR_SAQUE": Abrir painel de saque Pix ou transferência.
+- "ABRIR_PERFIL": Abrir menu lateral ou dados cadastrais.
+- "FECHAR_TELAS": Voltar à tela principal ou fechar gaveta e modais.
+- "NENHUMA": Apenas fornecer respostas orais a dúvidas (km, saldo, ganhos, placas, regras da plataforma, etc.).
+
+MENSAGEM FALADA PELO MOTORISTA:
 "${pergunta}"
 
 INSTRUÇÕES RIGOROSAS:
-1. Responda em no máximo 1 ou 2 frases curtas, claras e naturais para fala.
-2. NUNCA use pontuações de markdown como asteriscos (*), travessões, cerquilhas (#) ou emojis, pois serão lidos pelo sintetizador de voz.
-3. Use os dados reais acima para responder sobre saldo, dinheiro, ganhos do dia, veículo, placa, chamadas ou rota atual.
-4. Se o motorista perguntar sobre taxa: o repasse da HUBy para ele é de 85% do valor total da viagem.`;
+1. Responda em JSON puro no formato:
+{
+  "acao": "NOME_DA_ACAO",
+  "fala": "Resposta falada concisa (máximo 1 a 2 frases curtas), fluida e sem caracteres de formatação (sem emojis, asteriscos ou hashtags)."
+}
+2. Se a intenção do condutor for clara (ex: "não quero", "sai dessa rota", "volta pro radar"), atribua "CANCELAR_ROTA".
+3. Se o condutor perguntar sobre distância ou tempo, informe os dados reais da chamada do radar e use "NENHUMA".
+4. Taxa da plataforma: o motorista retém 85% líquido do valor total da viagem.`;
 
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const resp = await fetch(urlGemini, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: promptContexto }] }],
+        contents: [{ parts: [{ text: promptContextual }] }],
         generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 90
+          temperature: 0.15,
+          maxOutputTokens: 110,
+          responseMimeType: 'application/json'
         }
       })
     });
 
     if (resp.ok) {
       const data = await resp.json().catch(() => null);
-      const textoResposta = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (textoResposta && textoResposta.trim()) {
-        const falaLimpa = textoResposta.replace(/[*#_~`]/g, '').trim();
-        return res.status(200).json({ sucesso: true, resposta: falaLimpa });
+      const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      const parsed = extrairJSONPuro(raw);
+
+      if (parsed && parsed.fala) {
+        return res.status(200).json({
+          sucesso: true,
+          acao: parsed.acao || 'NENHUMA',
+          resposta: parsed.fala.replace(/[*#_~`]/g, '').trim()
+        });
       }
     }
 
     return res.status(200).json({
       sucesso: true,
-      resposta: 'Copiloto conectado. Como posso ajudar com sua rota ou saldo?'
+      acao: 'NENHUMA',
+      resposta: 'Estou com você no trajeto. Prossiga com o comando.'
     });
 
   } catch (err) {
     console.error('❌ [IA Suporte] Falha:', err.message);
     return res.status(200).json({
       sucesso: true,
-      resposta: 'Estou monitorando seu trajeto. Pode falar o comando.'
+      acao: 'NENHUMA',
+      resposta: 'Copiloto operacional. Pode falar o que deseja.'
     });
   }
 });

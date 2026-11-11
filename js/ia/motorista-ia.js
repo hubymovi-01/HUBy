@@ -1,7 +1,7 @@
-// js/ia/motorista-ia.js - Controle Total da Área do Motorista por Voz e IA
+// js/ia/motorista-ia.js - Copiloto Autônomo com Discernimento e Execução em Tempo Real
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
-import { extrairDadosDoBotao, pararAlertaSonoroChamada, alternarStatusOnline } from '../motorista/motorista-radar.js';
+import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
 import { preVisualizarRotaPedido } from '../motorista/motorista-corrida.js';
 import { notificar } from '../util/alertas-huby.js';
 
@@ -71,7 +71,7 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
     console.warn('Comando salvo localmente.');
   }
 
-  falarTexto(`Comando definido para: ${fraseLimpa}`);
+  falarTexto(`Comando configurado para: ${fraseLimpa}`);
   atualizarIndicadorUIVoz(escutaDesejada);
   return true;
 }
@@ -108,25 +108,17 @@ function liberarWakeLock() {
   }
 }
 
-// ============================================================================
-// INSPEÇÃO TOTAL DA ÁREA DO MOTORISTA EM TEMPO REAL
-// ============================================================================
 function capturarContextoCompletoApp() {
-  // Dados de Saldo e Finanças
   const saldoElement = document.getElementById('saldoCarteiraValor') || document.getElementById('drawerSaldoValor');
   const saldo = saldoElement ? saldoElement.textContent.trim() : 'R$ 0,00';
   const ganhosHoje = document.getElementById('lblGanhosHojeValor')?.textContent.trim() || 'R$ 0,00';
-  const corridasHoje = document.getElementById('lblCorridasHojeQtd')?.textContent.trim() || '0 viagens';
-  const metaDiaria = document.getElementById('lblMetaDiariaTxt')?.textContent.trim() || '';
+  const corridasHoje = document.getElementById('lblCorridasHojeQtd')?.textContent.trim() || '0 corridas';
 
-  // Dados do Motorista e Veículo
-  const nomeCondutor = document.getElementById('drawerNomeCondutor')?.textContent.trim() || 'Condutor';
+  const nomeCondutor = document.getElementById('drawerNomeCondutor')?.textContent.trim() || 'Carol';
   const modeloVeiculo = document.getElementById('drawerCarroModelo')?.textContent.trim() || '';
   const placaVeiculo = document.getElementById('drawerCarroPlaca')?.textContent.trim() || '';
   const detalhesVeiculo = document.getElementById('drawerCarroDetalhes')?.textContent.trim() || '';
-  const avaliacao = document.getElementById('drawerAvaliacaoTxt')?.textContent.trim() || '5.0';
 
-  // Radar e Chamadas
   const cardsChamadas = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
   const qtdChamadas = cardsChamadas.length;
   let dadosPrimeiraChamada = null;
@@ -134,10 +126,7 @@ function capturarContextoCompletoApp() {
     dadosPrimeiraChamada = extrairDadosDoBotao(cardsChamadas[0]);
   }
 
-  // Modais abertos e Telas
   const previaAberta = Boolean(document.getElementById('modalPreviaRotaCorrida')?.offsetParent || document.getElementById('btnConfirmarAceiteViagem')?.offsetParent);
-  const modalPagamentoAberto = Boolean(document.getElementById('modalEscolhaPagamentoMotorista')?.offsetParent);
-  const modalSaqueAberto = Boolean(document.getElementById('modalSaquePix')?.offsetParent);
   const drawerAberto = Boolean(document.getElementById('driverDrawer')?.classList.contains('active'));
 
   return {
@@ -145,25 +134,18 @@ function capturarContextoCompletoApp() {
     saldo,
     ganhosHoje,
     corridasHoje,
-    metaDiaria,
     nomeCondutor,
-    veiculo: `${modeloVeiculo} (${detalhesVeiculo}) placa ${placaVeiculo}`,
-    avaliacao,
+    veiculo: `${modeloVeiculo} ${detalhesVeiculo} Placa ${placaVeiculo}`,
     qtdChamadasNoRadar: qtdChamadas,
     primeiraChamadaRadar: dadosPrimeiraChamada,
     corridaAtivaId: estado.pedidoAtivoId || null,
     telasAbertas: {
       previaRota: previaAberta,
-      pagamento: modalPagamentoAberto,
-      saquePix: modalSaqueAberto,
       drawerPerfil: drawerAberto
     }
   };
 }
 
-// ============================================================================
-// ESCUTA CONTÍNUA
-// ============================================================================
 export function inicializarCopilotoVoz() {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return false;
@@ -209,7 +191,7 @@ export function inicializarCopilotoVoz() {
   recognition.onresult = (ev) => {
     const ultimo = ev.results[ev.results.length - 1];
     if (!ultimo || !ultimo[0]) return;
-    processarComandoTotal(ultimo[0].transcript);
+    processarFalaMotorista(ultimo[0].transcript);
   };
 
   return true;
@@ -222,7 +204,7 @@ export function ativarEscutaCopiloto() {
   try {
     recognition.start();
     const comandoAtual = obterCodigoAtivacaoMotorista();
-    notificar(`Copiloto ativo. Diga "${comandoAtual}"`, 'info', 2500);
+    notificar(`Copiloto ativo: Diga "${comandoAtual}"`, 'info', 2500);
   } catch (e) {}
 }
 
@@ -239,10 +221,7 @@ export function desativarEscutaCopiloto() {
   liberarWakeLock();
 }
 
-// ============================================================================
-// PROCESSADOR DE CONTROLE TOTAL (AÇÕES DIRETAS + GEMINI CONTEXTUAL)
-// ============================================================================
-async function processarComandoTotal(fraseBruta) {
+async function processarFalaMotorista(fraseBruta) {
   if (processandoComando) return;
 
   const fraseFalada = normalizarTexto(fraseBruta);
@@ -274,47 +253,72 @@ async function processarComandoTotal(fraseBruta) {
     .replace(/^(ok|ei|fala|e ai)\s+/i, '')
     .trim();
 
-  // Chamou apenas a ativação
-  if (acao.length === 0 || acao === 'ola' || acao === 'opa') {
+  // Caso chame apenas pelo gatilho (ex: "Ok Zanix")
+  if (acao.length === 0 || acao === 'ola' || acao === 'opa' || acao === 'e ai') {
     copilotoAguardandoComando = true;
     if (timeoutJanelaComando) clearTimeout(timeoutJanelaComando);
-    timeoutJanelaComando = setTimeout(() => { copilotoAguardandoComando = false; }, 8000);
-    falarTexto('Estou ouvindo. Pode pedir.');
+    timeoutJanelaComando = setTimeout(() => { copilotoAguardandoComando = false; }, 9000);
+    falarTexto('Estou ouvindo. Pode falar.');
     return;
   }
 
   copilotoAguardandoComando = false;
 
-  // -------------------------------------------------------------
-  // AÇÕES DIRETAS DE HARDWARE E INTERFACE (DISPARO INSTANTÂNEO)
-  // -------------------------------------------------------------
+  // --------------------------------------------------------------------------
+  // ATALHOS RÁPIDOS LOCAIS DE ALTA VELOCIDADE (LATÊNCIA ZERO)
+  // --------------------------------------------------------------------------
 
-  // 1. VISUALIZAR ROTA NO MAPA
+  // 1. CANCELAR / FECHAR / VOLTAR / NÃO QUERO / DISPENSAR
   if (
-    acao.includes('visualizar') || acao.includes('ver rota') || acao.includes('mostrar rota') ||
-    acao.includes('olhar rota') || acao.includes('abrir rota') || acao.includes('mostrar trajeto') ||
-    acao.includes('ver corrida')
+    acao.includes('cancela') || acao.includes('cancelar') || acao.includes('volta') ||
+    acao.includes('voltar') || acao.includes('fecha') || acao.includes('fechar') ||
+    acao.includes('dispensa') || acao.includes('dispensar') || acao.includes('recusa') ||
+    acao.includes('recusar') || acao.includes('nao quero') || acao.includes('esquece') ||
+    acao.includes('sai fora')
   ) {
-    cmdVerRotaNoMapa();
+    cmdCancelarOuDispensar();
     return;
   }
 
-  // 2. ACEITAR CORRIDA
+  // 2. INICIAR VIAGEM (inicia, iniciar, partiu, bora, etc.)
   if (
-    acao.includes('aceitar') || acao.includes('confirmar corrida') ||
-    acao.includes('pegar corrida') || acao.includes('vou fazer') || acao.includes('pode aceitar')
+    acao.includes('inicia') || acao.includes('iniciar') || acao.includes('comeca') ||
+    acao.includes('comecar') || acao.includes('partiu') || acao.includes('embarcou') ||
+    acao.includes('partida') || acao.includes('pode ir') || acao.includes('bora')
+  ) {
+    cmdIniciarViagem();
+    return;
+  }
+
+  // 3. CHEGADA AO EMBARQUE
+  if (
+    acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui') ||
+    acao.includes('to aqui') || acao.includes('chegando')
+  ) {
+    cmdAvisarChegada();
+    return;
+  }
+
+  // 4. ACEITAR CORRIDA
+  if (
+    acao.includes('aceita') || acao.includes('aceitar') || acao.includes('confirma') ||
+    acao.includes('confirmar') || acao.includes('pega') || acao.includes('pegar') ||
+    acao.includes('vou fazer') || acao.includes('pode pegar') || acao.includes('fechou')
   ) {
     cmdAceitarChamada();
     return;
   }
 
-  // 3. RECUSAR / DISPENSAR CHAMADA
-  if (acao.includes('recusar') || acao.includes('dispensar') || acao.includes('ignorar') || acao.includes('passar')) {
-    cmdDispensarChamada();
+  // 5. VISUALIZAR ROTA NO MAPA
+  if (
+    acao.includes('visualizar') || acao.includes('ver rota') || acao.includes('mostra') ||
+    acao.includes('mostrar rota') || acao.includes('olhar rota') || acao.includes('abrir mapa')
+  ) {
+    cmdVerRotaNoMapa();
     return;
   }
 
-  // 4. DISTÂNCIA / QUILÔMETROS / TEMPO
+  // 6. DISTÂNCIA / QUILÔMETROS / TEMPO
   if (
     acao.includes('quantos km') || acao.includes('quantos quilometros') ||
     acao.includes('qual a distancia') || acao.includes('distancia') ||
@@ -324,104 +328,13 @@ async function processarComandoTotal(fraseBruta) {
     return;
   }
 
-  // 5. CHECAR RADAR
-  if (acao.includes('tem rota') || acao.includes('tem corrida') || acao.includes('tem chamada') || acao.includes('alguma corrida')) {
-    cmdChecarRadarStatus();
-    return;
-  }
-
-  // 6. CHEGADA AO EMBARQUE
-  if (acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui')) {
-    cmdAvisarChegada();
-    return;
-  }
-
-  // 7. INICIAR VIAGEM
-  if (acao.includes('iniciar viagem') || acao.includes('iniciar corrida') || acao.includes('embarcou') || acao.includes('partiu')) {
-    cmdIniciarViagem();
-    return;
-  }
-
-  // 8. FINALIZAR CORRIDA
-  if (acao.includes('finalizar') || acao.includes('concluir viagem') || acao.includes('terminar')) {
-    cmdFinalizarViagem();
-    return;
-  }
-
-  // 9. STATUS ONLINE / OFFLINE
-  if (acao.includes('ficar offline') || acao.includes('desconectar') || acao.includes('desligar')) {
-    if (estado.isOnline) {
-      document.getElementById('btnToggleStatusOnline')?.click();
-      falarTexto('Ficando offline.');
-    } else {
-      falarTexto('Você já está offline.');
-    }
-    return;
-  }
-
-  // 10. ABRIR / FECHAR PERFIL E DRAWER
-  if (acao.includes('abrir perfil') || acao.includes('meu perfil') || acao.includes('abrir menu')) {
-    document.getElementById('btnAbrirDrawerPerfil')?.click();
-    falarTexto('Menu aberto.');
-    return;
-  }
-
-  if (acao.includes('fechar perfil') || acao.includes('fechar menu') || acao.includes('voltar')) {
-    document.getElementById('btnFecharDrawerPerfil')?.click();
-    document.getElementById('btnFecharModalEdicao')?.click();
-    falarTexto('Fechado.');
-    return;
-  }
-
-  // 11. SOLICITAR SAQUE PIX
-  if (acao.includes('sacar') || acao.includes('saque') || acao.includes('pedir saque')) {
-    const btnSaque = document.getElementById('btnAbrirModalSaque');
-    if (btnSaque) {
-      btnSaque.click();
-      const saldo = document.getElementById('saldoCarteiraValor')?.textContent || '0 reais';
-      falarTexto(`Tela de saque aberta. Seu saldo disponível é de ${saldo}.`);
-      return;
-    }
-  }
-
-  // 12. MODO PAUSA
-  if (acao.includes('pausa') || acao.includes('parada') || acao.includes('abastecer')) {
-    const btnPausa = document.getElementById('btnModoPausa');
-    if (btnPausa) {
-      btnPausa.click();
-      falarTexto('Modo pausa acionado.');
-      return;
-    }
-  }
-
-  // 13. MAPA DE CALOR
-  if (acao.includes('mapa de calor') || acao.includes('onde tem corrida') || acao.includes('calor')) {
-    const btnCalor = document.getElementById('btnToggleHeatmap');
-    if (btnCalor) {
-      btnCalor.click();
-      falarTexto('Exibindo zonas de alta demanda no mapa.');
-      return;
-    }
-  }
-
-  // 14. LOJA / BENEFÍCIOS
-  if (acao.includes('loja') || acao.includes('clube') || acao.includes('desconto')) {
-    const btnLoja = document.getElementById('btnAbrirMarketplaceDrawer');
-    if (btnLoja) {
-      btnLoja.click();
-      falarTexto('Abrindo Clube de vantagens HUBy.');
-      return;
-    }
-  }
-
-  // -------------------------------------------------------------
-  // CONSULTAS GERAIS, SALDO, PERGUNTAS E CONTROLE POR IA (GEMINI)
-  // -------------------------------------------------------------
-  await responderQualquerPerguntaComGemini(fraseBruta);
+  // --------------------------------------------------------------------------
+  // LINGUAGEM LIVRE: O CÉREBRO GEMINI DECIDE AÇÃO E EXECUTA NA TELA
+  // --------------------------------------------------------------------------
+  await processarDecisaoGemini(fraseBruta);
 }
 
-// Responde a qualquer pergunta usando o contexto da tela
-async function responderQualquerPerguntaComGemini(perguntaCompleta) {
+async function processarDecisaoGemini(perguntaCompleta) {
   const contexto = capturarContextoCompletoApp();
 
   try {
@@ -438,29 +351,85 @@ async function responderQualquerPerguntaComGemini(perguntaCompleta) {
     });
 
     const data = await resp.json().catch(() => null);
-    if (data && data.resposta) {
-      falarTexto(data.resposta);
-    } else {
-      falarTexto('Copiloto a postos. Como posso ajudar agora?');
+    if (!data || !data.resposta) {
+      falarTexto('Estou a postos no trajeto.');
+      return;
+    }
+
+    // Reproduz a resposta falada
+    falarTexto(data.resposta);
+
+    // Executa imediatamente a ação de interface identificada pela IA
+    if (data.acao && data.acao !== 'NENHUMA') {
+      executarAcaoDecididaPelaIA(data.acao);
     }
   } catch (err) {
-    // Respostas de contingência local se o servidor demorar
-    const textoBaixo = normalizarTexto(perguntaCompleta);
-    if (textoBaixo.includes('saldo') || textoBaixo.includes('carteira')) {
-      falarTexto(`Seu saldo atual é de ${contexto.saldo}.`);
-    } else if (textoBaixo.includes('ganho') || textoBaixo.includes('hoje')) {
-      falarTexto(`Hoje você fez ${contexto.ganhosHoje} em ${contexto.corridasHoje}.`);
-    } else if (textoBaixo.includes('placa') || textoBaixo.includes('carro')) {
-      falarTexto(`Seu veículo cadastrado é o ${contexto.veiculo}.`);
-    } else {
-      falarTexto('Comando recebido. Estou monitorando o trajeto.');
-    }
+    falarTexto('Estou monitorando seu trajeto.');
   }
 }
 
-// -------------------------------------------------------------
-// FUNÇÕES DE AÇÕES DIRETAS
-// -------------------------------------------------------------
+function executarAcaoDecididaPelaIA(acao) {
+  switch (acao) {
+    case 'CANCELAR_ROTA':
+      cmdCancelarOuDispensar();
+      break;
+    case 'ACEITAR_CORRIDA':
+      cmdAceitarChamada();
+      break;
+    case 'VISUALIZAR_ROTA':
+      cmdVerRotaNoMapa();
+      break;
+    case 'AVISAR_CHEGADA':
+      cmdAvisarChegada();
+      break;
+    case 'INICIAR_VIAGEM':
+      cmdIniciarViagem();
+      break;
+    case 'FINALIZAR_CORRIDA':
+      cmdFinalizarViagem();
+      break;
+    case 'ABRIR_SAQUE':
+      document.getElementById('btnAbrirModalSaque')?.click();
+      break;
+    case 'ABRIR_PERFIL':
+      document.getElementById('btnAbrirDrawerPerfil')?.click();
+      break;
+    case 'FECHAR_TELAS':
+      document.getElementById('btnFecharDrawerPerfil')?.click();
+      document.getElementById('btnCancelarPreviaRota')?.click();
+      break;
+  }
+}
+
+function cmdCancelarOuDispensar() {
+  const btnFecharPrevia = document.getElementById('btnCancelarPreviaRota') ||
+                          document.querySelector('.btn-fechar-previa') ||
+                          document.querySelector('[data-acao="cancelar-previa"]');
+
+  if (btnFecharPrevia && btnFecharPrevia.offsetParent !== null) {
+    btnFecharPrevia.click();
+    falarTexto('Rota fechada. Voltando para o radar.');
+    return;
+  }
+
+  const btnDispensa = document.querySelector('#listaChamadasPendentes .btn-dispensar-pedido');
+  if (btnDispensa) {
+    btnDispensa.click();
+    falarTexto('Chamada dispensada.');
+    return;
+  }
+
+  const btnFecharModal = document.getElementById('btnFecharModalEdicao') ||
+                         document.getElementById('btnFecharDrawerPerfil');
+  if (btnFecharModal && btnFecharModal.offsetParent !== null) {
+    btnFecharModal.click();
+    falarTexto('Fechado.');
+    return;
+  }
+
+  falarTexto('Nenhuma rota ou tela aberta para cancelar.');
+}
+
 function cmdVerRotaNoMapa() {
   const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order') ||
                       document.querySelector('button.btn-accept-order');
@@ -480,6 +449,63 @@ function cmdVerRotaNoMapa() {
   const gatilho = obterCodigoAtivacaoMotorista();
 
   falarTexto(`Visualizando rota no mapa. Distância de ${distTexto}, ganho de ${repasse} reais. Diga ${gatilho} aceitar para confirmar.`);
+}
+
+function cmdAceitarChamada() {
+  const btnModalConfirmar = document.getElementById('btnConfirmarAceiteViagem') || 
+                            document.querySelector('button.btn-confirmar-aceite');
+
+  if (btnModalConfirmar && btnModalConfirmar.offsetParent !== null) {
+    falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
+    btnModalConfirmar.click();
+    return;
+  }
+
+  const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
+  if (primeiroBtn) {
+    const dados = extrairDadosDoBotao(primeiroBtn);
+    preVisualizarRotaPedido(dados);
+    setTimeout(() => {
+      const btnModal = document.getElementById('btnConfirmarAceiteViagem');
+      if (btnModal) {
+        falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
+        btnModal.click();
+      }
+    }, 400);
+    return;
+  }
+
+  falarTexto('Nenhuma chamada no radar para aceitar.');
+}
+
+function cmdAvisarChegada() {
+  const btnNoLocal = document.getElementById('btnChegueiLocalEmbarque');
+  if (btnNoLocal && btnNoLocal.offsetParent !== null) {
+    falarTexto('Passageiro avisado que você chegou.');
+    btnNoLocal.click();
+  } else {
+    falarTexto('Disponível apenas próximo ao local de embarque.');
+  }
+}
+
+function cmdIniciarViagem() {
+  const btnIniciar = document.getElementById('btnIniciarCorridaAtiva');
+  if (btnIniciar && btnIniciar.offsetParent !== null) {
+    falarTexto('Viagem iniciada. Boa corrida.');
+    btnIniciar.click();
+  } else {
+    falarTexto('Nenhuma corrida aguardando início no momento.');
+  }
+}
+
+function cmdFinalizarViagem() {
+  const btnConcluir = document.getElementById('btnConcluirCorrida');
+  if (btnConcluir && btnConcluir.offsetParent !== null) {
+    falarTexto('Abrindo recebimento.');
+    btnConcluir.click();
+  } else {
+    falarTexto('Nenhuma viagem ativa para finalizar.');
+  }
 }
 
 function cmdInformarDistanciaETempo() {
@@ -513,97 +539,7 @@ function cmdInformarDistanciaETempo() {
     const tempoTexto = tempoEncontrado ? ` e cerca de ${tempoEncontrado} minutos` : '';
     falarTexto(`Essa rota tem ${kmFormatado}${tempoTexto}.`);
   } else {
-    falarTexto('Nenhuma corrida aberta na tela para calcular distância.');
-  }
-}
-
-function cmdChecarRadarStatus() {
-  const chamadas = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
-  if (!chamadas || chamadas.length === 0) {
-    falarTexto('Nenhuma chamada no radar no momento. Estou monitorando.');
-    return;
-  }
-
-  const primeiroBtn = chamadas[0];
-  const dados = extrairDadosDoBotao(primeiroBtn);
-  const repasse = dados.repasse || (Number(dados.preco || 0) * 0.85).toFixed(2).replace('.', ',');
-  const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
-  const gatilho = obterCodigoAtivacaoMotorista();
-
-  falarTexto(`Temos uma chamada para ${destinoLimpo}, ganho de ${repasse} reais. Diga ${gatilho} visualizar para ver a rota.`);
-}
-
-function cmdAceitarChamada() {
-  const btnModalConfirmar = document.getElementById('btnConfirmarAceiteViagem') || 
-                            document.querySelector('button.btn-confirmar-aceite');
-
-  if (btnModalConfirmar && btnModalConfirmar.offsetParent !== null) {
-    falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
-    btnModalConfirmar.click();
-    return;
-  }
-
-  const primeiroBtn = document.querySelector('#listaChamadasPendentes .btn-accept-order');
-  if (primeiroBtn) {
-    const dados = extrairDadosDoBotao(primeiroBtn);
-    preVisualizarRotaPedido(dados);
-    setTimeout(() => {
-      const btnModal = document.getElementById('btnConfirmarAceiteViagem');
-      if (btnModal) {
-        falarTexto('Corrida aceita. Traçando trajeto até o passageiro.');
-        btnModal.click();
-      }
-    }, 400);
-    return;
-  }
-
-  falarTexto('Nenhuma chamada no radar para aceitar.');
-}
-
-function cmdDispensarChamada() {
-  const btnFecharModal = document.getElementById('btnCancelarPreviaRota');
-  if (btnFecharModal && btnFecharModal.offsetParent !== null) {
-    btnFecharModal.click();
-    falarTexto('Rota dispensada.');
-    return;
-  }
-
-  const primeiroDispensa = document.querySelector('#listaChamadasPendentes .btn-dispensar-pedido');
-  if (primeiroDispensa) {
-    primeiroDispensa.click();
-    falarTexto('Dispensada.');
-  } else {
-    falarTexto('Nenhuma chamada no radar.');
-  }
-}
-
-function cmdAvisarChegada() {
-  const btnNoLocal = document.getElementById('btnChegueiLocalEmbarque');
-  if (btnNoLocal && btnNoLocal.offsetParent !== null) {
-    falarTexto('Passageiro avisado que você chegou.');
-    btnNoLocal.click();
-  } else {
-    falarTexto('Disponível apenas próximo ao local de embarque.');
-  }
-}
-
-function cmdIniciarViagem() {
-  const btnIniciar = document.getElementById('btnIniciarCorridaAtiva');
-  if (btnIniciar && btnIniciar.offsetParent !== null) {
-    falarTexto('Viagem iniciada. Boa corrida.');
-    btnIniciar.click();
-  } else {
-    falarTexto('Nenhuma corrida aguardando início.');
-  }
-}
-
-function cmdFinalizarViagem() {
-  const btnConcluir = document.getElementById('btnConcluirCorrida');
-  if (btnConcluir && btnConcluir.offsetParent !== null) {
-    falarTexto('Abrindo recebimento.');
-    btnConcluir.click();
-  } else {
-    falarTexto('Nenhuma viagem ativa para finalizar.');
+    falarTexto('Nenhuma rota aberta no momento para calcular distância.');
   }
 }
 
