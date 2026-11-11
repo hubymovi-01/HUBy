@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Hands-Free com Tolerância Fonética Ampliada
+// js/ia/motorista-ia.js - Copiloto Hands-Free Estabilizado sem Loop de Reconhecimento
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { extrairDadosDoBotao, pararAlertaSonoroChamada } from '../motorista/motorista-radar.js';
@@ -6,9 +6,10 @@ import { preVisualizarRotaPedido } from '../motorista/motorista-corrida.js';
 import { notificar } from '../util/alertas-huby.js';
 
 let recognition = null;
-let escutaAtiva = false;
+let escutaDesejada = false;
 let sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 let processandoComando = false;
+let timeoutReinicio = null;
 let wakeLockSentinel = null;
 
 function normalizarTexto(txt = '') {
@@ -65,11 +66,11 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
       body: JSON.stringify({ codigo_voz: fraseLimpa })
     });
   } catch (e) {
-    console.warn('Persistência local mantida para o comando de ativação.');
+    console.warn('Comando salvo localmente.');
   }
 
-  falarTexto(`Comando ativado: ${fraseLimpa}`);
-  atualizarIndicadorUIVoz(escutaAtiva);
+  falarTexto(`Comando definido para: ${fraseLimpa}`);
+  atualizarIndicadorUIVoz(escutaDesejada);
   return true;
 }
 
@@ -111,6 +112,7 @@ export function inicializarCopilotoVoz() {
 
   if (recognition) {
     try { recognition.stop(); } catch (e) {}
+    recognition = null;
   }
 
   recognition = new SpeechRecognition();
@@ -119,42 +121,59 @@ export function inicializarCopilotoVoz() {
   recognition.interimResults = false;
 
   recognition.onstart = () => {
-    escutaAtiva = true;
     atualizarIndicadorUIVoz(true);
     requisitarWakeLock();
   };
 
   recognition.onend = () => {
     const online = estado.isOnline || localStorage.getItem('huby_motorista_online') === 'true';
-    if (escutaAtiva && online) {
-      try { recognition.start(); } catch (e) {}
+
+    // Evita loop agressivo: aguarda 600ms antes de reiniciar para não ser bloqueado pelo Android
+    if (escutaDesejada && online) {
+      if (timeoutReinicio) clearTimeout(timeoutReinicio);
+      timeoutReinicio = setTimeout(() => {
+        if (escutaDesejada && recognition) {
+          try {
+            recognition.start();
+          } catch (e) {}
+        }
+      }, 600);
     } else {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
     }
   };
 
+  recognition.onerror = (ev) => {
+    if (ev.error !== 'no-speech') {
+      console.warn('Status áudio:', ev.error);
+    }
+  };
+
   recognition.onresult = (ev) => {
-    const ultimoResultado = ev.results[ev.results.length - 1];
-    if (!ultimoResultado || !ultimoResultado[0]) return;
-    processarComandoVoz(ultimoResultado[0].transcript);
+    const ultimo = ev.results[ev.results.length - 1];
+    if (!ultimo || !ultimo[0]) return;
+    processarComandoVoz(ultimo[0].transcript);
   };
 
   return true;
 }
 
 export function ativarEscutaCopiloto() {
-  if (!recognition && !inicializarCopilotoVoz()) return;
-  escutaAtiva = true;
+  escutaDesejada = true;
+  if (!recognition) inicializarCopilotoVoz();
+
   try {
     recognition.start();
     const comandoAtual = obterCodigoAtivacaoMotorista();
-    notificar(`Copiloto ativo. Diga "${comandoAtual}"`, 'info', 2800);
+    notificar(`Copiloto ativo. Diga "${comandoAtual}"`, 'info', 2500);
   } catch (e) {}
 }
 
 export function desativarEscutaCopiloto() {
-  escutaAtiva = false;
+  escutaDesejada = false;
+  if (timeoutReinicio) clearTimeout(timeoutReinicio);
+
   if (recognition) {
     try { recognition.stop(); } catch (e) {}
   }
@@ -194,10 +213,10 @@ async function processarComandoVoz(fraseBruta) {
     .replace(/^(ok|ei|fala|e ai)\s+/i, '')
     .trim();
 
-  // 1. CHECAGEM DE RADAR
+  // 1. CHECAR RADAR
   if (
     acao.includes('tem rota') || acao.includes('tem corrida') || acao.includes('tem chamada') ||
-    acao.includes('alguma rota') || acao.includes('alguma corrida') || acao.includes('algum pedido')
+    acao.includes('alguma rota') || acao.includes('alguma corrida')
   ) {
     cmdChecarRadarStatus();
     return;
@@ -206,7 +225,7 @@ async function processarComandoVoz(fraseBruta) {
   // 2. VISUALIZAR ROTA NO MAPA
   if (
     acao.includes('ver rota') || acao.includes('visualizar') || acao.includes('mostrar rota') ||
-    acao.includes('olhar rota') || acao.includes('ver corrida') || acao.includes('exibir')
+    acao.includes('olhar rota') || acao.includes('ver corrida') || acao.includes('exibir rota')
   ) {
     cmdVerRotaNoMapa();
     return;
@@ -224,7 +243,7 @@ async function processarComandoVoz(fraseBruta) {
     return;
   }
 
-  // 5. CHEGOU AO EMBARQUE
+  // 5. CHEGADA AO EMBARQUE
   if (acao.includes('cheguei') || acao.includes('no local') || acao.includes('estou aqui')) {
     cmdAvisarChegada();
     return;
@@ -254,7 +273,7 @@ async function processarComandoVoz(fraseBruta) {
 function cmdChecarRadarStatus() {
   const chamadas = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
   if (!chamadas || chamadas.length === 0) {
-    falarTexto('Nenhuma chamada no radar no momento. Monitorando.');
+    falarTexto('Nenhuma chamada no radar no momento. Estou monitorando.');
     return;
   }
 
@@ -282,7 +301,7 @@ function cmdVerRotaNoMapa() {
   const destinoLimpo = dados.destino ? dados.destino.split(',')[0] : 'destino';
   const gatilho = obterCodigoAtivacaoMotorista();
 
-  falarTexto(`Rota na tela. Ganho de ${repasse} reais para ${destinoLimpo}. Diga ${gatilho} aceitar.`);
+  falarTexto(`Rota na tela. Ganho de ${repasse} reais para ${destinoLimpo}. Diga ${gatilho} aceitar para confirmar.`);
 }
 
 function cmdAceitarChamada() {
@@ -300,7 +319,7 @@ function cmdAceitarChamada() {
     setTimeout(() => {
       const btnModal = document.getElementById('btnConfirmarAceiteViagem');
       if (btnModal) {
-        falarTexto('Viagem aceita. Traçando trajeto.');
+        falarTexto('Viagem aceita. Traçando trajeto até o passageiro.');
         btnModal.click();
       }
     }, 400);
