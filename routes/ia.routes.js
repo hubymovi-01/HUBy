@@ -1,16 +1,14 @@
-// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Copiloto Conversacional Gemini
+// routes/ia.routes.js - Geocodificação Nacional, Flash Encomendas e Cérebro Semântico do Copiloto
 import express from 'express';
 
 const router = express.Router();
 
-// Modelos oficiais ativos da API Gemini (ordem de prioridade com fallback automático)
 const MODELOS_GEMINI = [
   'gemini-2.5-flash',
   'gemini-2.0-flash',
-  'gemini-1.5-flash-latest'
+  'gemini-1.5-flash'
 ];
 
-// Extrai JSON mesmo que o modelo envie texto ou blocos markdown ao redor
 function extrairJSONPuro(texto) {
   if (!texto) return null;
   const limpo = String(texto).replace(/```json/gi, '').replace(/```/g, '').trim();
@@ -25,27 +23,29 @@ function extrairJSONPuro(texto) {
   }
 }
 
-// Chama a API Gemini testando automaticamente os modelos ativos
-async function chamarGeminiAPI(prompt, apiKey, modoJSON = true, temperatura = 0.4) {
+function limparNomeParaFala(nomeBruto = '') {
+  return String(nomeBruto || 'parceiro')
+    .replace(/_cs$/i, '')
+    .replace(/[_.-]+/g, ' ')
+    .split(' ')[0]
+    .trim();
+}
+
+async function chamarGeminiAPI(prompt, apiKey, temperatura = 0.45) {
   if (!apiKey) return null;
 
   for (const modelo of MODELOS_GEMINI) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`;
-      const generationConfig = {
-        temperature: temperatura,
-        maxOutputTokens: 450
-      };
-      if (modoJSON) {
-        generationConfig.responseMimeType = 'application/json';
-      }
-
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig
+          generationConfig: {
+            temperature: temperatura,
+            maxOutputTokens: 350
+          }
         })
       });
 
@@ -57,13 +57,12 @@ async function chamarGeminiAPI(prompt, apiKey, modoJSON = true, temperatura = 0.
         }
       }
     } catch (err) {
-      console.warn(`⚠️ Tentativa com modelo ${modelo} falhou:`, err.message);
+      console.warn(`Tentativa com ${modelo} falhou:`, err.message);
     }
   }
   return null;
 }
 
-// Geocodificador Nominatim flexível no Brasil
 async function buscarNominatimBrasil(termo, lat = null, lng = null) {
   if (!termo || !String(termo).trim()) return null;
 
@@ -104,9 +103,7 @@ async function buscarNominatimBrasil(termo, lat = null, lng = null) {
           }
         }
       }
-    } catch (e) {
-      console.warn('Tentativa Nominatim falhou para:', busca, e.message);
-    }
+    } catch (e) {}
   }
 
   return null;
@@ -141,16 +138,10 @@ router.post('/localizar-referencia', async (req, res) => {
       const prompt = `Você é o geocodificador inteligente do aplicativo de mobilidade HUBy no Brasil.
 ${contextoGPS}
 O passageiro falou o destino: "${referencia}".
+Retorne APENAS um JSON válido no formato:
+{"nome_curto": "Nome do Local, UF", "termo_busca": "Nome Limpo", "lat": null, "lng": null}`;
 
-Extraia o nome real do local e retorne APENAS um JSON no formato:
-{
-  "nome_curto": "Nome do Local ou Cidade, UF",
-  "termo_busca": "Nome Limpo Para Busca",
-  "lat": -8.3582 ou null,
-  "lng": -42.2476 ou null
-}`;
-
-      const raw = await chamarGeminiAPI(prompt, apiKey, true, 0.1);
+      const raw = await chamarGeminiAPI(prompt, apiKey, 0.1);
       const parsed = extrairJSONPuro(raw);
 
       if (parsed) {
@@ -176,7 +167,7 @@ Extraia o nome real do local e retorne APENAS um JSON no formato:
     if (!resultadoFinal) {
       return res.status(200).json({
         sucesso: false,
-        erro: 'Não conseguimos identificar este local com precisão. Tente falar com mais detalhes.'
+        erro: 'Não conseguimos identificar este local com precisão.'
       });
     }
 
@@ -184,7 +175,6 @@ Extraia o nome real do local e retorne APENAS um JSON no formato:
       sucesso: true,
       resultado: resultadoFinal
     });
-
   } catch (err) {
     return res.status(200).json({
       sucesso: false,
@@ -194,7 +184,7 @@ Extraia o nome real do local e retorne APENAS um JSON no formato:
 });
 
 // ============================================================================
-// ENDPOINT 2: COPILOTO CONVERSACIONAL COM INTERAÇÃO LIVRE E COMANDOS DE TELA
+// ENDPOINT 2: COPILOTO COM RACIOCÍNIO LIVRE E ZERO REPETIÇÃO
 // ============================================================================
 router.post('/motorista-suporte', async (req, res) => {
   try {
@@ -206,73 +196,63 @@ router.post('/motorista-suporte', async (req, res) => {
       return res.status(200).json({
         sucesso: true,
         acao: 'NENHUMA',
-        resposta: 'Fala comigo, parceiro! O que você manda?'
+        resposta: 'Pode falar, estou ouvindo.'
       });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    const horaAtual = new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    const agora = new Date();
+    const horaAtual = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit' });
+    const nomeLimpo = limparNomeParaFala(ctx.nomeCondutor);
 
     const historicoFormatado = Array.isArray(historicoConversa) && historicoConversa.length > 0
-      ? historicoConversa.map(h => `Motorista: "${h.motorista}" | Você respondeu: "${h.ia}"`).join('\n')
-      : 'Início da conversa.';
+      ? historicoConversa.map(h => `Motorista: "${h.motorista}" -> Você: "${h.ia}"`).join('\n')
+      : 'Sem mensagens anteriores.';
 
-    const promptConversacional = `Você é o Copiloto de Inteligência Artificial do aplicativo HUBy, um parceiro inteligente, carismático, prestativo e articulado que conversa com o motorista enquanto ele trabalha.
-Você NÃO é limitado nem robótico. Você conversa de verdade, responde perguntas, dá dicas estratégicas, analisa corridas, tira dúvidas, troca ideia e também executa comandos na tela quando o motorista pede.
+    const promptIA = `Você é o Copiloto de Inteligência Artificial do aplicativo HUBy. Seu nome de código atual é "${ctx.codigoVoz || 'Zanix'}".
+Você está conversando por voz com o motorista ${nomeLimpo}.
+Seu raciocínio é livre, lógico, natural e inteligente, igual a um humano experiente conversando no carro.
 
-HORÁRIO ATUAL NO BRASIL: ${horaAtual}
+PROIBIDO REPETIR TEXTO PRONTO: Nunca repita resumo de horário + viagens + saldo a menos que o motorista pergunte especificamente por esses números! Responda SOMENTE ao assunto que ele falou, de forma direta, humana e inteligente.
 
-DADOS REAIS DA TELA DO MOTORISTA NESTE EXATO SEGUNDO:
-- Nome do Motorista: ${ctx.nomeCondutor || 'Parceiro'} (Nota: ${ctx.avaliacao || '5.0'})
-- Veículo: ${ctx.veiculo || 'Veículo cadastrado'}
-- Status no App: ${ctx.statusOnline ? 'Online' : 'Offline'} | Modo Pausa: ${ctx.emPausa ? 'Ativado' : 'Desativado'} | Modo Ir p/ Casa: ${ctx.modoCasaAtivo ? 'Ativado' : 'Desativado'}
-- Saldo Disponível na Carteira: ${ctx.saldo || 'R$ 0,00'}
-- Ganhos de Hoje: ${ctx.ganhosHoje || 'R$ 0,00'}
-- Quantidade de Corridas Feitas Hoje: ${ctx.corridasHoje || '0 viagens'}
-- Meta Diária: ${ctx.metaDiaria || 'R$ 200,00'}
-- Chamadas Pendentes no Radar Agora: ${ctx.qtdChamadasNoRadar || 0}
-${ctx.primeiraChamadaRadar ? `- Chamada Disponível no Radar: Buscar em "${ctx.primeiraChamadaRadar.origem}" para "${ctx.primeiraChamadaRadar.destino}". Distância: ${ctx.primeiraChamadaRadar.distanciaKm} km (~${ctx.primeiraChamadaRadar.duracaoMin} min). Ganho líquido do motorista (85%): R$ ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista}.` : '- Nenhuma chamada no radar neste instante.'}
-${ctx.rotaEmAnalise ? `- ROTA ABERTA NA TELA EM ANÁLISE: Origem "${ctx.rotaEmAnalise.origem}" -> Destino "${ctx.rotaEmAnalise.destino}", Distância: ${ctx.rotaEmAnalise.distanciaKm} km (~${ctx.rotaEmAnalise.duracaoMin} min), Ganho líquido: R$ ${ctx.rotaEmAnalise.ganhoLiquidoMotorista}.` : ''}
-${ctx.corridaAtiva ? `- CORRIDA EM ANDAMENTO: Etapa = "${ctx.corridaAtiva.etapa === 'a_caminho' ? 'Indo buscar passageiro' : 'Passageiro a bordo rumo ao destino'}". Destino: "${ctx.corridaAtiva.destino}", Distância: ${ctx.corridaAtiva.distanciaKm} km, Ganho líquido: R$ ${ctx.corridaAtiva.ganhoLiquidoMotorista}.` : ''}
+ESTADO ATUAL DA TELA DO MOTORISTA:
+- Horário atual: ${horaAtual}
+- Nome do motorista: ${nomeLimpo}
+- Status: ${ctx.statusOnline ? 'Online' : 'Offline'} | Pausa: ${ctx.emPausa ? 'Ativa' : 'Inativa'} | Mapa de Calor: ${ctx.heatmapAtivo ? 'Ligado' : 'Desligado'}
+- Saldo na carteira: ${ctx.saldo || 'R$ 0,00'} | Ganhos hoje: ${ctx.ganhosHoje || 'R$ 0,00'} | Viagens hoje: ${ctx.corridasHoje || '0 viagens'}
+- Chamadas no radar: ${ctx.qtdChamadasNoRadar || 0}
+${ctx.primeiraChamadaRadar ? `- Pedido no radar: De "${ctx.primeiraChamadaRadar.origem}" para "${ctx.primeiraChamadaRadar.destino}", distância ${ctx.primeiraChamadaRadar.distanciaKm} km (~${ctx.primeiraChamadaRadar.duracaoMin} min), pagando R$ ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} livres.` : '- Nenhum pedido no radar.'}
+${ctx.rotaEmAnalise ? `- Rota aberta no mapa em análise: De "${ctx.rotaEmAnalise.origem}" para "${ctx.rotaEmAnalise.destino}", ${ctx.rotaEmAnalise.distanciaKm} km, pagando R$ ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} livres.` : ''}
+${ctx.corridaAtiva ? `- Corrida em andamento (${ctx.corridaAtiva.etapa}): Destino "${ctx.corridaAtiva.destino}", ${ctx.corridaAtiva.distanciaKm} km, ganho R$ ${ctx.corridaAtiva.ganhoLiquidoMotorista}.` : ''}
 
 HISTÓRICO RECENTE DA CONVERSA:
 ${historicoFormatado}
 
-AÇÕES QUE VOCÊ PODE EXECUTAR NA TELA (use apenas se o motorista pedir para fazer uma ação):
-- "VISUALIZAR_ROTA": Mostrar/abrir a rota da chamada no mapa.
-- "ACEITAR_CORRIDA": Aceitar/confirmar a corrida.
-- "CANCELAR_ROTA": Cancelar, fechar a prévia da rota, voltar para o radar ou recusar a chamada.
-- "AVISAR_CHEGADA": Avisar que chegou no local de embarque.
-- "INICIAR_VIAGEM": Iniciar a viagem com o passageiro.
-- "FINALIZAR_CORRIDA": Finalizar/concluir a corrida no destino.
-- "PAGAR_DINHEIRO" | "PAGAR_MAQUININHA" | "PAGAR_PIX": Confirmar forma de pagamento.
-- "ABRIR_SAQUE": Abrir modal de saque Pix.
-- "ABRIR_PERFIL": Abrir menu lateral do perfil.
-- "ABRIR_EDICAO_PERFIL": Abrir edição de dados e foto.
-- "ABRIR_CHAT": Abrir chat com o passageiro.
-- "ABRIR_LOJA": Abrir loja/clube de vantagens HUBy.
-- "ALTERNAR_CALOR": Ativar/desativar mapa de calor.
-- "ALTERNAR_PAUSA": Ativar/desativar modo pausa.
-- "ALTERNAR_MODO_CASA": Ativar/desativar modo ir para casa.
-- "EXPORTAR_FECHAMENTO": Baixar fechamento do dia.
-- "FICAR_OFFLINE" | "FICAR_ONLINE": Mudar status online/offline.
-- "FECHAR_TELAS": Fechar janelas ou menus abertos.
-- "NENHUMA": Use "NENHUMA" quando o motorista estiver conversando, fazendo perguntas sobre corridas, melhores horários, ganhos, metas, dicas ou batendo papo.
+AÇÕES DISPONÍVEIS PARA VOCÊ ACIONAR NA TELA (campo "acao"):
+- "VISUALIZAR_ROTA": Para abrir/ver a rota do pedido no mapa ou checar visualmente o pedido que chegou.
+- "ACEITAR_CORRIDA": Para aceitar/pegar a corrida.
+- "DISPENSAR_PEDIDO_RADAR": Quando ele pedir para tirar o pedido da tela, limpar o pedido, recusar ou descartar a chamada da lista.
+- "CANCELAR_ROTA": Quando a rota estiver aberta em análise no mapa e ele pedir para voltar ou fechar a rota.
+- "ALTERNAR_CALOR": Quando ele pedir para ativar, ligar ou desligar o mapa de calor.
+- "ALTERNAR_PAUSA": Para ativar ou tirar a pausa de 15 minutos.
+- "ALTERNAR_MODO_CASA": Para ativar ou desativar o filtro de rota para casa.
+- "AVISAR_CHEGADA": Avisar o passageiro que chegou no local de embarque.
+- "INICIAR_VIAGEM": Iniciar a corrida após o embarque.
+- "FINALIZAR_CORRIDA": Concluir a corrida no destino.
+- "PAGAR_DINHEIRO" | "PAGAR_MAQUININHA" | "PAGAR_PIX": Confirmar pagamento.
+- "ABRIR_SAQUE": Abrir tela de saque Pix.
+- "ABRIR_PERFIL": Abrir gaveta de perfil.
+- "FECHAR_TELAS": Fechar janelas ou modais abertos.
+- "NENHUMA": Quando for conversa, dúvida, pergunta de horário, análise de corrida ou confirmação.
 
-FALA ATUAL DO MOTORISTA:
+O MOTORISTA FALOU AGORA:
 "${falaMotorista}"
 
-INSTRUÇÕES OBRIGATÓRIAS:
-1. Responda como um amigo e copiloto inteligente conversando por voz: seja natural, prestativo, responda exatamente o que ele perguntou e, quando fizer sentido, faça uma pergunta curta ou sugestão de volta para manter o diálogo vivo!
-2. Não use emojis, asteriscos (*) ou hashtags (#), pois o texto será falado em voz alta pelo celular.
-3. Responda SEMPRE em JSON válido no formato:
-{
-  "acao": "NOME_DA_ACAO_OU_NENHUMA",
-  "fala": "Sua resposta conversacional completa, natural e inteligente (2 a 3 frases fluidas)."
-}`;
+Retorne APENAS um JSON válido neste formato exato (sem markdown, sem emojis, sem asteriscos):
+{"acao": "NOME_DA_ACAO_OU_NENHUMA", "fala": "Sua resposta inteligente, variada e direta ao ponto"}`;
 
     if (apiKey) {
-      const raw = await chamarGeminiAPI(promptConversacional, apiKey, true, 0.45);
+      const raw = await chamarGeminiAPI(promptIA, apiKey, 0.45);
       const parsed = extrairJSONPuro(raw);
 
       if (parsed && parsed.fala) {
@@ -282,61 +262,186 @@ INSTRUÇÕES OBRIGATÓRIAS:
           resposta: String(parsed.fala).replace(/[*#_~`]/g, '').trim()
         });
       }
-
-      // Se o Gemini respondeu em texto puro sem JSON, aproveita o próprio texto
-      if (raw && !raw.startsWith('{')) {
-        return res.status(200).json({
-          sucesso: true,
-          acao: 'NENHUMA',
-          resposta: String(raw).replace(/[*#_~`]/g, '').trim()
-        });
-      }
     }
 
-    // Motor Conversacional Inteligente Nativo (caso o servidor esteja sem GEMINI_API_KEY configurada)
+    // Raciocínio Semântico Autônomo (Funciona mesmo sem GEMINI_API_KEY configurada no servidor)
+    const decisao = raciocinioSemanticoAutonomo(falaMotorista, ctx, horaAtual, nomeLimpo);
     return res.status(200).json({
       sucesso: true,
-      acao: 'NENHUMA',
-      resposta: gerarRespostaConversacionalNativa(falaMotorista, ctx, horaAtual)
+      acao: decisao.acao,
+      resposta: decisao.fala
     });
 
   } catch (err) {
-    console.error('❌ [IA Suporte] Erro:', err.message);
+    console.error('Erro no suporte de IA:', err.message);
     return res.status(200).json({
       sucesso: true,
       acao: 'NENHUMA',
-      resposta: 'Estou aqui com você, parceiro! Pode me perguntar sobre suas corridas, ganhos ou melhores horários.'
+      resposta: 'Entendido, parceiro. Pode mandar o próximo comando.'
     });
   }
 });
 
-// Resposta conversacional rica no servidor caso a chave da API externa não esteja definida
-function gerarRespostaConversacionalNativa(fala, ctx, horaAtual) {
-  const f = String(fala || '').toLowerCase();
+// Motor de Raciocínio Lógico para entender qualquer frase natural sem repetir texto
+function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
+  const f = String(falaBruta || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
 
-  if (f.includes('melhor horario') || f.includes('melhores horarios') || f.includes('horario bom') || f.includes('pico') || f.includes('movimento')) {
-    return `Os melhores horários para faturar alto são das 6 e meia às 9 da manhã, no horário de almoço entre 11 e meia e 2 da tarde, e no fim do expediente das 17 às 20 horas. Nos fins de semana, a noite a partir das 19 horas também bomba! Quer que eu ative o mapa de calor para vermos onde tem demanda agora?`;
+  // 1. Confirmações curtas ("certo", "ok", "beleza", "valeu", "entendi", "show")
+  if (/^(certo|ok|okay|beleza|blz|valeu|obrigado|entendi|show|perfeito|ta bom|tudo bem|positivo|fechou)$/.test(f)) {
+    const respostasCurtas = [
+      `Combinado, ${nome}! Qualquer coisa é só chamar.`,
+      `Show de bola! Seguimos atentos aqui.`,
+      `Beleza! Estou de olho no painel para você.`,
+      `Tranquilo, parceiro! Só falar se precisar.`
+    ];
+    return {
+      acao: 'NENHUMA',
+      fala: respostasCurtas[Math.floor(Math.random() * respostasCurtas.length)]
+    };
   }
-  if (f.includes('quantas corridas') || f.includes('quantas viagens')) {
-    return `Hoje você realizou ${ctx.corridasHoje || 'zero viagens'} até agora, acumulando ${ctx.ganhosHoje || 'zero reais'} de ganho líquido. Sua meta diária está em ${ctx.metaDiaria || 'duzentos reais'}. Vamos buscar a próxima?`;
+
+  // 2. Ativar / Desativar Mapa de Calor
+  if (f.includes('calor') || f.includes('demanda') || f.includes('zona quente') || f.includes('onde tem corrida')) {
+    const vaiLigar = !ctx.heatmapAtivo;
+    return {
+      acao: 'ALTERNAR_CALOR',
+      fala: vaiLigar
+        ? `Ativei o mapa de calor na tela, ${nome}. As manchas laranjas mostram onde estão chamando mais agora.`
+        : `Desativei o mapa de calor e deixei o mapa limpo para você.`
+    };
   }
-  if (f.includes('quanto ganhei') || f.includes('meus ganhos') || f.includes('faturei')) {
-    return `Seus ganhos de hoje estão em ${ctx.ganhosHoje || 'zero reais'} com ${ctx.corridasHoje || 'zero viagens'}, e seu saldo disponível na carteira é de ${ctx.saldo || 'zero reais'}. Lembre que no HUBy você fica com 85 por cento livre de cada corrida!`;
-  }
-  if (f.includes('saldo') || f.includes('carteira')) {
-    return `Você tem ${ctx.saldo || 'zero reais'} disponíveis na carteira para saque via Pix. Se quiser transferir agora, é só me dizer para abrir o saque!`;
-  }
-  if (f.includes('compensa') || f.includes('vale a pena') || f.includes('boa essa')) {
-    const alvo = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
-    if (alvo) {
-      const km = parseFloat(alvo.distanciaKm || 1);
-      const ganho = parseFloat(String(alvo.ganhoLiquidoMotorista || '0').replace(',', '.'));
-      const porKm = km > 0 ? (ganho / km).toFixed(2).replace('.', ',') : ganho;
-      return `Olha, essa corrida paga ${alvo.ganhoLiquidoMotorista} reais livres para rodar ${alvo.distanciaKm} quilômetros, o que dá cerca de ${porKm} reais por quilômetro. É um tiro curto e rápido, vale a pena pegar! Quer que eu aceite?`;
+
+  // 3. Tirar pedido da tela / Dispensar / Recusar / Cancelar pedido do radar
+  if (
+    f.includes('tirar pedido') || f.includes('tira esse pedido') || f.includes('tirar esse pedido') ||
+    f.includes('tira o pedido') || f.includes('tirar o pedido') || f.includes('tirar da tela') ||
+    f.includes('tira da tela') || f.includes('limpa a tela') || f.includes('dispensa') ||
+    f.includes('recusa') || f.includes('cancela esse pedido') || f.includes('cancelar pedido') ||
+    f.includes('nao quero')
+  ) {
+    if (ctx.telasAbertas?.previaRota || ctx.rotaEmAnalise) {
+      return {
+        acao: 'CANCELAR_ROTA',
+        fala: 'Fechei a prévia da rota e tirei da tela.'
+      };
     }
-    return `No momento não tem nenhuma chamada aberta na tela para eu calcular o ganho por quilômetro, mas assim que tocar uma eu já analiso para você!`;
+    if (ctx.qtdChamadasNoRadar > 0) {
+      return {
+        acao: 'DISPENSAR_PEDIDO_RADAR',
+        fala: 'Pronto, tirei esse pedido da sua tela. Aguardando uma chamada melhor.'
+      };
+    }
+    return {
+      acao: 'FECHAR_TELAS',
+      fala: 'A tela já está limpa, sem nenhum pedido pendente.'
+    };
   }
-  return `Tô aqui com você, ${ctx.nomeCondutor || 'parceiro'}! Agora são ${horaAtual}, você está com ${ctx.corridasHoje || '0 viagens'} hoje e ${ctx.saldo || 'R$ 0,00'} na carteira. O que você quer saber ou fazer agora?`;
+
+  // 4. Checar / Ver / Analisar pedido que acabou de chegar no radar
+  if (
+    f.includes('checa') || f.includes('checar') || f.includes('ve esse pedido') ||
+    f.includes('ver esse pedido') || f.includes('pedido que veio') || f.includes('chamada que veio') ||
+    f.includes('qual e a dessa') || f.includes('detalhes do pedido') || f.includes('fala desse pedido')
+  ) {
+    const p = ctx.primeiraChamadaRadar || ctx.rotaEmAnalise;
+    if (p) {
+      const distNum = parseFloat(p.distanciaKm || 0);
+      const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
+      return {
+        acao: 'VISUALIZAR_ROTA',
+        fala: `Checando agora: o embarque é em ${p.origem.split(',')[0]} indo para ${p.destino.split(',')[0]}. São ${distTxt} e paga ${p.ganhoLiquidoMotorista} reais livres. Já abri a rota no mapa para você ver!`
+      };
+    }
+    return {
+      acao: 'NENHUMA',
+      fala: 'Olhei aqui no radar e não tem nenhum pedido pendente neste segundo.'
+    };
+  }
+
+  // 5. Pergunta de Horário ("qual o horário agora?", "que horas são?")
+  if (f.includes('qual o horario') || f.includes('que horas') || f.includes('hora agora') || f.includes('horario agora')) {
+    const horaNum = parseInt(horaAtual.split(':')[0], 10);
+    let dicaTurno = 'O movimento está moderado neste horário.';
+    if (horaNum >= 6 && horaNum <= 9) dicaTurno = 'Estamos no pico da manhã, ótimo horário para corridas rápidas.';
+    else if (horaNum >= 11 && horaNum <= 14) dicaTurno = 'Horário de almoço e saída escolar, costuma tocar bastante no centro.';
+    else if (horaNum >= 17 && horaNum <= 20) dicaTurno = 'Horário de pico do fim de tarde, a demanda sobe forte agora.';
+    else if (horaNum >= 15 && horaNum < 17) dicaTurno = 'Finalzinho da tarde se aproximando, daqui a pouco começa o pico das 17 horas.';
+
+    return {
+      acao: 'NENHUMA',
+      fala: `Agora são ${horaAtual}, ${nome}. ${dicaTurno}`
+    };
+  }
+
+  // 6. Pergunta sobre Melhor Horário para rodar
+  if (f.includes('melhor horario') || f.includes('melhores horarios') || f.includes('horario bom') || f.includes('quando toca mais')) {
+    return {
+      acao: 'NENHUMA',
+      fala: `Os três melhores picos são das 6 e meia às 8 e meia da manhã, do meio-dia às 2 da tarde, e das 17 às 20 horas. Na sexta e no sábado à noite também gira muito bem.`
+    };
+  }
+
+  // 7. Pergunta se a corrida compensa / vale a pena
+  if (f.includes('compensa') || f.includes('vale a pena') || f.includes('e boa') || f.includes('o que voce acha')) {
+    const p = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
+    if (p) {
+      const km = parseFloat(p.distanciaKm || 0.5);
+      const ganho = parseFloat(String(p.ganhoLiquidoMotorista || '0').replace(',', '.'));
+      const reaisPorKm = km > 0 ? (ganho / km).toFixed(2).replace('.', ',') : ganho;
+      const avaliacaoCorrida = (ganho / Math.max(km, 0.3)) >= 2.0
+        ? 'O ganho por quilômetro está excelente, vale muito a pena pegar!'
+        : 'É uma corrida razoável para manter o giro.';
+      return {
+        acao: 'NENHUMA',
+        fala: `Essa corrida paga ${p.ganhoLiquidoMotorista} reais livres para ${p.distanciaKm} quilômetros, dando ${reaisPorKm} reais por quilômetro. ${avaliacaoCorrida} Quer que eu aceite?`
+      };
+    }
+    return {
+      acao: 'NENHUMA',
+      fala: 'Não tem nenhuma corrida aberta na tela agora, mas assim que tocar uma eu calculo na ponta do lápis se compensa!'
+    };
+  }
+
+  // 8. Pergunta sobre Corridas do Dia
+  if (f.includes('quantas corridas') || f.includes('quantas viagens') || f.includes('fiz hoje')) {
+    return {
+      acao: 'NENHUMA',
+      fala: `Hoje você fez ${ctx.corridasHoje || 'zero viagens'} e somou ${ctx.ganhosHoje || 'zero reais'} livres.`
+    };
+  }
+
+  // 9. Pergunta sobre Saldo / Carteira / Dinheiro
+  if (f.includes('saldo') || f.includes('carteira') || f.includes('quanto eu tenho') || f.includes('quanto ganhei')) {
+    return {
+      acao: 'NENHUMA',
+      fala: `Seu saldo atual na carteira é de ${ctx.saldo || 'zero reais'}, e os seus ganhos de hoje estão em ${ctx.ganhosHoje || 'zero reais'}.`
+    };
+  }
+
+  // 10. Modo Pausa
+  if (f.includes('pausa') || f.includes('descansar') || f.includes('parar um pouco') || f.includes('cafe') || f.includes('abastecer')) {
+    return {
+      acao: 'ALTERNAR_PAUSA',
+      fala: ctx.emPausa ? 'Desativei a pausa, já voltamos a receber corridas.' : 'Ativei o modo pausa de 15 minutos para você descansar tranquilo.'
+    };
+  }
+
+  // 11. Resposta conversacional aberta e inteligente (sem repetir dados decorados)
+  if (ctx.primeiraChamadaRadar) {
+    return {
+      acao: 'NENHUMA',
+      fala: `Entendi, ${nome}. Aproveitando, tem um pedido na tela pagando ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} reais. Quer que eu abra a rota ou dispense ele?`
+    };
+  }
+
+  return {
+    acao: 'NENHUMA',
+    fala: `Estou na escuta, ${nome}. Você pode me pedir para checar pedidos, ligar o mapa de calor, analisar se uma corrida compensa ou controlar toda a viagem por aqui.`
+  };
 }
 
 // ============================================================================
@@ -353,12 +458,8 @@ router.post('/flash-extrair', async (req, res) => {
     if (apiKey) {
       const prompt = `Extraia dados da ordem de entrega no Brasil: "${texto}".
 Retorne APENAS um JSON:
-{
-  "recebedor": "Nome e telefone",
-  "tipoItem": "documento" | "pequeno" | "medio" | "fragil",
-  "observacao": "Instrução curta ou null"
-}`;
-      const raw = await chamarGeminiAPI(prompt, apiKey, true, 0.2);
+{"recebedor": "Nome e telefone", "tipoItem": "pequeno", "observacao": "Instrução curta"}`;
+      const raw = await chamarGeminiAPI(prompt, apiKey, 0.2);
       const parsed = extrairJSONPuro(raw);
       if (parsed) return res.json({ sucesso: true, resultado: parsed });
     }
@@ -383,7 +484,7 @@ router.post('/motorista-respostas', async (req, res) => {
     if (apiKey && mensagem) {
       const prompt = `Gere exatamente 3 sugestões curtas de resposta no trânsito para o motorista à mensagem: "${mensagem}".
 Retorne APENAS um JSON: {"sugestoes": ["...", "...", "..."]}`;
-      const raw = await chamarGeminiAPI(prompt, apiKey, true, 0.3);
+      const raw = await chamarGeminiAPI(prompt, apiKey, 0.3);
       const parsed = extrairJSONPuro(raw);
       if (parsed && Array.isArray(parsed.sugestoes)) {
         return res.json({ sucesso: true, sugestoes: parsed.sugestoes.slice(0, 3) });
