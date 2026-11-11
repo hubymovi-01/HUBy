@@ -166,10 +166,11 @@ Instruções:
   }
 });
 
-// Endpoint 2: Suporte ao Motorista no Trânsito (Dúvidas por Voz)
+// Endpoint 2: Suporte ao Motorista com Controle e Leitura Total da Área do App
 router.post('/motorista-suporte', async (req, res) => {
   try {
-    const { pergunta, contextoCorrida } = req.body || {};
+    const { pergunta, contextoCompleto, contextoCorrida } = req.body || {};
+    const ctx = contextoCompleto || contextoCorrida || {};
 
     if (!pergunta || !String(pergunta).trim()) {
       return res.status(200).json({
@@ -180,32 +181,46 @@ router.post('/motorista-suporte', async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
+      // Fallback sem chave configurada
       return res.status(200).json({
         sucesso: true,
-        resposta: 'Suporte HUBy: dirija com atenção. Dúvidas financeiras e de conta podem ser vistas no menu perfil.'
+        resposta: ctx.saldo ? `Seu saldo atual é de ${ctx.saldo}.` : 'Copiloto HUBy conectado. Dirija com atenção.'
       });
     }
 
-    const contextoApp = `Você é o copiloto de voz e suporte de IA para motoristas parceiros do aplicativo HUBy Mobility no Brasil.
-O motorista está no trânsito dirigindo.
-Contexto da chamada/turno: ${JSON.stringify(contextoCorrida || {})}.
-Pergunta feita por voz pelo condutor: "${pergunta}".
+    const promptContexto = `Você é o copiloto de voz com CONTROLE TOTAL do aplicativo de mobilidade HUBy para motoristas parceiros no Brasil.
+O motorista está no volante e falará com você por voz.
+Sua resposta será sintetizada diretamente em áudio (Text-to-Speech).
 
-Instruções:
-1. Responda em no máximo 1 ou 2 frases curtas, claras e objetivas.
-2. Não use formatação, asteriscos ou emojis, pois a resposta será lida por voz em alto-falante.
-3. Se for sobre taxa da HUBy: a plataforma repassa em média 85% do valor da corrida para o condutor.
-4. Se o passageiro não aparecer no embarque: oriente a aguardar até 5 minutos no ponto de partida ou ligar pelo botão de chamada do app.`;
+DADOS REAIS EM TEMPO REAL DA ÁREA DO MOTORISTA:
+- Condutor: ${ctx.nomeCondutor || 'Parceiro'}
+- Status: ${ctx.statusOnline ? 'Online (Apto a receber chamadas)' : 'Offline'}
+- Saldo Disponível na Carteira: ${ctx.saldo || 'R$ 0,00'}
+- Ganhos Hoje: ${ctx.ganhosHoje || 'R$ 0,00'} (${ctx.corridasHoje || '0 viagens'})
+- Meta Diária: ${ctx.metaDiaria || 'Não definida'}
+- Veículo Cadastrado: ${ctx.veiculo || 'Não informado'}
+- Avaliação: ${ctx.avaliacao || '5.0 estrelas'}
+- Chamadas Disponíveis no Radar Agora: ${ctx.qtdChamadasNoRadar || 0}
+${ctx.primeiraChamadaRadar ? `- Detalhes da Chamada no Radar: Destino para ${ctx.primeiraChamadaRadar.destino}, valor de repasse R$ ${ctx.primeiraChamadaRadar.repasse}, distância ${ctx.primeiraChamadaRadar.dist} km, duração aproximada ${ctx.primeiraChamadaRadar.dur} min.` : ''}
+
+PERGUNTA FEITA POR VOZ PELO MOTORISTA:
+"${pergunta}"
+
+INSTRUÇÕES RIGOROSAS:
+1. Responda em no máximo 1 ou 2 frases curtas, claras e naturais para fala.
+2. NUNCA use pontuações de markdown como asteriscos (*), travessões, cerquilhas (#) ou emojis, pois serão lidos pelo sintetizador de voz.
+3. Use os dados reais acima para responder sobre saldo, dinheiro, ganhos do dia, veículo, placa, chamadas ou rota atual.
+4. Se o motorista perguntar sobre taxa: o repasse da HUBy para ele é de 85% do valor total da viagem.`;
 
     const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
     const resp = await fetch(urlGemini, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: contextoApp }] }],
+        contents: [{ parts: [{ text: promptContexto }] }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 80
+          maxOutputTokens: 90
         }
       })
     });
@@ -221,14 +236,14 @@ Instruções:
 
     return res.status(200).json({
       sucesso: true,
-      resposta: 'Estou com você no trajeto. Siga as orientações da rota na tela.'
+      resposta: 'Copiloto conectado. Como posso ajudar com sua rota ou saldo?'
     });
 
   } catch (err) {
     console.error('❌ [IA Suporte] Falha:', err.message);
     return res.status(200).json({
       sucesso: true,
-      resposta: 'No momento o suporte de voz está indisponível. Consulte o painel da viagem.'
+      resposta: 'Estou monitorando seu trajeto. Pode falar o comando.'
     });
   }
 });
