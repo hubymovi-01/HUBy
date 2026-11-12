@@ -1,9 +1,8 @@
-// js/motorista/motorista-radar.js - Radar de Chamadas e Gamificação Sonora HUBy
-import { API_URL, sonsHUBy } from '../config.js';
+// js/motorista/motorista-radar.js - Radar de Chamadas Sincronizado com Tarifas do Admin
+import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
 import { notificar } from '../util/alertas-huby.js';
-import { ativarEscutaCopiloto, desativarEscutaCopiloto } from '../ia/motorista-ia.js';
 
 let intervalAlertaChamada = null;
 let wakeLockSentinela = null;
@@ -17,9 +16,7 @@ async function requisitarWakeLock() {
       wakeLockSentinela.addEventListener('release', () => {
         wakeLockSentinela = null;
       });
-    } catch (err) {
-      console.warn('Wake Lock indisponível:', err.message);
-    }
+    } catch (err) {}
   }
 }
 
@@ -39,10 +36,17 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 export function extrairDadosDoBotao(btn) {
-  const precoTotal = parseFloat(btn.getAttribute('data-preco')) || 0;
-  const repasse = btn.getAttribute('data-repasse') || (precoTotal * 0.85).toFixed(2).replace('.', ',');
   const km = btn.getAttribute('data-dist') || btn.getAttribute('data-km') || '1.0';
   const dur = btn.getAttribute('data-dur') || Math.round(Number(km) * 2.2);
+  const cat = btn.getAttribute('data-cat') || 'carro';
+
+  let precoTotal = parseFloat(btn.getAttribute('data-preco')) || 0;
+  if (!precoTotal || precoTotal <= 0) {
+    precoTotal = calcularPreco(cat, parseFloat(km) || 1.0).valorTotal;
+  }
+
+  const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
+  const repasse = btn.getAttribute('data-repasse') || (precoTotal * fatorMotorista).toFixed(2).replace('.', ',');
 
   const latOrig = parseFloat(btn.getAttribute('data-lat-orig'));
   const lngOrig = parseFloat(btn.getAttribute('data-lng-orig'));
@@ -54,6 +58,7 @@ export function extrairDadosDoBotao(btn) {
 
   return {
     id: btn.getAttribute('data-id'),
+    categoria: cat,
     preco: precoTotal,
     valorTotal: precoTotal,
     repasse,
@@ -81,12 +86,17 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
-export async function alternarStatusOnline() {
+// Alterna o status Online com 1 único clique e NÃO liga a IA automaticamente
+export async function alternarStatusOnline(forcarEstado = null) {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnToggleStatusOnline');
 
-  estado.isOnline = !estado.isOnline;
-  estado.statusOnline = estado.isOnline;
+  const textoBotao = btn ? btn.textContent || '' : '';
+  const visualmenteOnline = textoBotao.includes('Online') && !textoBotao.includes('Ficar Online');
+  const novoStatus = typeof forcarEstado === 'boolean' ? forcarEstado : !visualmenteOnline;
+
+  estado.isOnline = novoStatus;
+  estado.statusOnline = novoStatus;
 
   if (btn) {
     if (estado.isOnline) {
@@ -96,49 +106,32 @@ export async function alternarStatusOnline() {
       btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
       
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
-      
-      ativarEscutaCopiloto();
       await requisitarWakeLock();
       
       iniciarRadarChamadas();
-      notificar('Você está online! Copiloto a postos.', 'sucesso');
+      notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
     } else {
       btn.style.background = '#1F2937';
       btn.style.borderColor = 'rgba(255,255,255,0.12)';
       btn.style.color = '#94A3B8';
       btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
       
-      desativarEscutaCopiloto();
       libertarWakeLock();
-      
       pararRadarChamadas();
       renderizarRadarOffline();
-      notificar('Você ficou offline. Copiloto pausado.', 'info');
+      notificar('⚪ Você ficou offline para corridas.', 'info');
     }
   }
 
   try {
-    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
+    await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
+      },
+      body: JSON.stringify({ online: novoStatus })
     });
-
-    if (resp.ok) {
-      const dados = await resp.json().catch(() => ({}));
-      if (dados.online !== undefined) {
-        estado.isOnline = Boolean(dados.online);
-        estado.statusOnline = estado.isOnline;
-        if (!estado.isOnline) {
-          desativarEscutaCopiloto();
-          libertarWakeLock();
-          pararRadarChamadas();
-          renderizarRadarOffline();
-        }
-      }
-    }
   } catch (err) {
     console.warn('Aviso de rede ao persistir status online:', err);
   }
@@ -169,6 +162,13 @@ export function iniciarRadarChamadas() {
         if (!estado.isOnline) return;
         if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise && estado.statusAprovacaoAtual === 'aprovado') {
           buscarChamadasPendentes(true);
+        }
+      });
+
+      estado.socketRadar.on('tarifas_atualizadas', (novasTarifas) => {
+        aplicarObjetoTarifas(novasTarifas);
+        if (estado.isOnline && !estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
+          buscarChamadasPendentes(false);
         }
       });
 
@@ -230,7 +230,8 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
   try {
     const cat = estado.categoriaMotorista || 'carro';
-    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}`, {
+    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&t=${Date.now()}`, {
+      cache: 'no-store',
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -238,7 +239,6 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     if (resp.status === 403) {
       estado.isOnline = false;
-      desativarEscutaCopiloto();
       libertarWakeLock();
       renderizarRadarOffline();
       pararRadarChamadas();
@@ -287,10 +287,17 @@ function renderizarRadar(pedidos) {
     return;
   }
 
+  const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
+
   feedEl.innerHTML = pedidos.map((p) => {
-    const valorBruto = Number(p.valor_total || 0);
+    const catPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
+    const distKm = parseFloat(p.distancia_km || p.distanciaKm || 1.0);
+    let valorBruto = Number(p.valor_total || 0);
+    if (!valorBruto || valorBruto <= 0) {
+      valorBruto = calcularPreco(catPedido, distKm).valorTotal;
+    }
     const valorFormatado = valorBruto.toFixed(2).replace('.', ',');
-    const repasse = (valorBruto * 0.85).toFixed(2).replace('.', ',');
+    const repasse = (valorBruto * fatorMotorista).toFixed(2).replace('.', ',');
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
@@ -319,18 +326,19 @@ function renderizarRadar(pedidos) {
           <span style="display: block;"><strong>Partida:</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
           <span style="display: block;"><strong>Destino:</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
           <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
-            📏 ${p.distancia_km || '1.5'} km • ⏱️ ${p.duracao_min || 5} min
+            📏 ${distKm.toFixed(1)} km • ⏱️ ${p.duracao_min || 5} min
           </small>
         </div>
         <button type="button" 
                 class="btn-accept-order" 
                 style="width: 100%; margin-top: 10px; background: #10B981; color: #022C22; border: none; border-radius: 10px; padding: 12px; font-weight: 900; font-size: 13px; cursor: pointer;"
                 data-id="${p.id}" 
-                data-preco="${p.valor_total}"
+                data-cat="${catPedido}"
+                data-preco="${valorBruto}"
                 data-repasse="${repasse}"
                 data-origem="${p.origem_endereco || 'Local do passageiro'}"
                 data-destino="${p.destino_endereco}"
-                data-dist="${p.distancia_km || '1.5'}"
+                data-dist="${distKm}"
                 data-dur="${p.duracao_min || 5}"
                 data-lat-orig="${latOrig}" 
                 data-lng-orig="${lngOrig}" 

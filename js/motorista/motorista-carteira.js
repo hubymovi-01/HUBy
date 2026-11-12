@@ -1,16 +1,15 @@
 // js/motorista/motorista-carteira.js
-import { API_URL } from '../config.js';
+import { API_URL, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { carregarPerfil } from './motorista-perfil.js';
+import { notificar } from '../util/alertas-huby.js';
 
-// ============================================================================
-// EXPORTAÇÃO DO FECHAMENTO / RESUMO DIÁRIO
-// ============================================================================
 export function exportarResumoDia() {
   const saldo = document.getElementById('saldoCarteiraValor')?.textContent || `R$ ${Number(estado.saldoCarteira || 0).toFixed(2).replace('.', ',')}`;
   const ganhosHoje = document.getElementById('lblGanhosHojeValor')?.textContent || 'R$ 0,00';
   const corridasHoje = document.getElementById('lblCorridasHojeQtd')?.textContent || '0 viagens';
   const dataHoje = new Date().toLocaleDateString('pt-BR');
+  const pctLiquido = Math.max(1, 100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15));
 
   const relatorio = `
 =========================================
@@ -19,7 +18,7 @@ export function exportarResumoDia() {
 Data: ${dataHoje}
 Condutor: ${estado.motoristaNome || 'Carol'}
 Viagens Realizadas Hoje: ${corridasHoje}
-Repasse Líquido Ganho (85%): ${ganhosHoje}
+Repasse Líquido Ganho (${pctLiquido}%): ${ganhosHoje}
 Saldo Disponível em Carteira: ${saldo}
 =========================================
 Emitido via Central do Motorista HUBy
@@ -33,9 +32,6 @@ Emitido via Central do Motorista HUBy
   URL.revokeObjectURL(link.href);
 }
 
-// ============================================================================
-// EVENTOS DE SAQUE PIX E RELATÓRIO
-// ============================================================================
 export function configurarEventosSaque() {
   const modalSaque = document.getElementById('modalSaquePix');
   const btnAbrir = document.getElementById('btnAbrirModalSaque');
@@ -49,10 +45,8 @@ export function configurarEventosSaque() {
   const btnSacarTudo = document.getElementById('btnSacarTudo');
   const btnExportarRelatorio = document.getElementById('btnExportarFechamentoDia') || document.getElementById('btnExportarResumoDia');
 
-  // Botão de exportação do fechamento diário
   btnExportarRelatorio?.addEventListener('click', exportarResumoDia);
 
-  // Botões de valor rápido (R$ 20, R$ 50, R$ 100)
   document.querySelectorAll('.btn-fast-val').forEach(btn => {
     btn.addEventListener('click', () => {
       const val = btn.getAttribute('data-val');
@@ -62,7 +56,6 @@ export function configurarEventosSaque() {
     });
   });
 
-  // Botão Sacar Tudo
   btnSacarTudo?.addEventListener('click', () => {
     if (inputValor) {
       inputValor.value = Math.max(0, estado.saldoCarteira).toFixed(2);
@@ -99,17 +92,17 @@ export function configurarEventosSaque() {
     const tipo = selectTipo?.value || 'pix';
 
     if (!chave) {
-      alert('Por favor, informe a chave Pix para recebimento.');
+      notificar('Por favor, informe a chave Pix para recebimento.', 'alerta');
       return;
     }
 
     if (!valor || valor <= 0) {
-      alert('Informe um valor de saque válido.');
+      notificar('Informe um valor de saque válido.', 'alerta');
       return;
     }
 
     if (valor > estado.saldoCarteira) {
-      alert(`Saldo insuficiente. O seu saldo disponível é de R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}.`);
+      notificar(`Saldo insuficiente. Disponível: R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}.`, 'erro');
       return;
     }
 
@@ -127,7 +120,7 @@ export function configurarEventosSaque() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
 
-      alert(`✅ ${data.mensagem || 'Solicitação de saque enviada para a administração!'}`);
+      notificar(data.mensagem || 'Solicitação de saque enviada com sucesso!', 'sucesso');
       localStorage.setItem('huby_motorista_pix', chave);
       fecharModal();
       if (inputValor) inputValor.value = '';
@@ -146,7 +139,7 @@ export function configurarEventosSaque() {
 
       carregarPerfil();
     } catch (err) {
-      alert(err.message);
+      notificar(err.message, 'erro');
     } finally {
       btnConfirmar.disabled = false;
       btnConfirmar.textContent = 'Confirmar Saque';

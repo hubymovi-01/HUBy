@@ -1,9 +1,8 @@
-// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Carteira Pré-Paga e Radar HUBy
-import { API_URL, calcularPreco, MULTIPLICADOR_PICO, sonsHUBy } from '../config.js';
+// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Carteira Pré-Paga e Radar HUBy Sincronizado
+import { API_URL, calcularPreco, sincronizarTarifasServidor, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
-import { carregarSaldoCarteiraCliente } from './cliente-ui-menu.js';
-import { resetarParadasIntermediarias } from './cliente-paradas.js';
+import { notificar } from '../util/alertas-huby.js';
 
 export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
@@ -26,7 +25,6 @@ export function atualizarResumoValores() {
   const lblPreco = document.getElementById('txtPrecoEstimado');
   const lblDistancia = document.getElementById('txtDistanciaEstimada');
 
-  // REGRA DE OURO: Sem destino e sem rota, NUNCA exibe preço
   if (!estadoCliente.coordsDestino || !estadoCliente.rotaAtual) {
     if (lblPreco) lblPreco.textContent = '--';
     if (lblDistancia) lblDistancia.textContent = '-- km';
@@ -34,7 +32,6 @@ export function atualizarResumoValores() {
     return;
   }
 
-  // Obtém a distância real da rota
   let distanciaKm = 0;
   if (estadoCliente.rotaAtual.distanciaKm) {
     distanciaKm = Number(estadoCliente.rotaAtual.distanciaKm);
@@ -43,32 +40,15 @@ export function atualizarResumoValores() {
   }
 
   const categoria = estadoCliente.categoriaSelecionada || 'carro';
-  let precoBase = 7.00;
-  let valorKm = 2.00;
-
-  if (categoria === 'moto') {
-    precoBase = 5.00;
-    valorKm = 1.40;
-  } else if (categoria === 'entrega') {
-    precoBase = 6.00;
-    valorKm = 1.60;
-  }
-
-  let precoFinal = 0;
-  if (estadoCliente.rotaAtual.preco && Number(estadoCliente.rotaAtual.preco) > 0) {
-    precoFinal = Number(estadoCliente.rotaAtual.preco);
-  } else if (distanciaKm > 0) {
-    precoFinal = precoBase + (distanciaKm * valorKm);
-  } else {
-    precoFinal = precoBase;
-  }
+  const calc = calcularPreco(categoria, Math.max(0.2, distanciaKm));
+  let precoFinal = calc.valorTotal;
 
   // Adicional por paradas intermediárias (R$ 2,50 cada)
   const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
-  precoFinal += (qtdParadas * 2.50);
+  precoFinal = Number((precoFinal + (qtdParadas * 2.50)).toFixed(2));
 
-  if (precoFinal < precoBase) precoFinal = precoBase;
   estadoCliente.precoFinalCalculado = precoFinal;
+  estadoCliente.rotaAtual.preco = precoFinal;
 
   if (lblPreco) {
     lblPreco.textContent = `R$ ${precoFinal.toFixed(2).replace('.', ',')}`;
@@ -82,34 +62,38 @@ export async function submeterPedido() {
   const token = localStorage.getItem('huby_token');
   
   if (!token || token === 'null' || token === 'undefined') {
-    alert('Sua sessão expirou ou você não está conectado. Faça login para chamar.');
+    notificar('Sua sessão expirou. Faça login para chamar.', 'alerta');
     window.location.replace('./login.html?perfil=cliente');
     return;
   }
 
   if (!estadoCliente.rotaAtual || !estadoCliente.coordsDestino) {
-    alert('Por favor, indique o destino da viagem no mapa ou pesquise.');
+    notificar('Por favor, indique o destino da viagem no mapa ou pesquise.', 'alerta');
     return;
   }
 
   if (estadoCliente.categoriaSelecionada === 'entrega') {
     const recebedorVal = document.getElementById('inputRecebedor')?.value.trim();
     if (!recebedorVal) {
-      alert('Para a segurança da sua entrega, informe quem irá receber a encomenda (Nome e Telefone).');
+      notificar('Informe quem irá receber a encomenda (Nome e Telefone).', 'alerta');
       return;
     }
   }
 
+  // Garante tarifas atualizadas no momento exato do pedido
+  await sincronizarTarifasServidor();
+  atualizarResumoValores();
+
   const clienteId = localStorage.getItem('huby_user_id');
   const novoId = 'ped_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
-  const kmTotal = Number(estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm || 1.5);
+  const kmTotal = Number(estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm || 1.0);
   const duracaoTotal = Number(estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin || 5);
-  const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada, kmTotal);
-  const precoDefinitivo = estadoCliente.precoFinalCalculado || precoInfo.valorTotal;
+  const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada || 'carro', kmTotal);
+  const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
+  const precoDefinitivo = Number((precoInfo.valorTotal + (qtdParadas * 2.50)).toFixed(2));
   const cupomCodigo = document.getElementById('inputCupomDesconto')?.value.trim().toUpperCase() || null;
 
-  // Extração estrita de coordenadas numéricas
   const coordsOrigemArr = estadoCliente.hubyMapa?.coordsOrigem || [-8.3582, -42.2476];
   const coordsDestinoArr = estadoCliente.coordsDestino;
 
@@ -136,7 +120,6 @@ export async function submeterPedido() {
 
   const notaMotorista = document.getElementById('txtNotaMotoristaBadge')?.textContent || '';
 
-  // Payload universal: atende os dois padrões de colunas do backend/DB
   const payload = {
     id: novoId,
     clienteId: clienteId || null,
@@ -197,7 +180,7 @@ export async function submeterPedido() {
     }
 
     if (dadosResposta.desconto > 0) {
-      alert(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`);
+      notificar(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`, 'sucesso');
     }
 
     estadoCliente.pedidoAtivoId = novoId;
@@ -208,7 +191,7 @@ export async function submeterPedido() {
     iniciarPollingStatus();
 
   } catch (err) {
-    alert(err.message);
+    notificar(err.message, 'erro');
     if (err.message.includes('Sessão expirada')) {
       window.location.replace('./login.html?perfil=cliente');
       return;
@@ -337,11 +320,11 @@ export function iniciarPollingStatus() {
         if (modal) {
           modal.style.display = 'flex';
         } else {
-          alert('Viagem concluída com sucesso!');
+          notificar('Viagem concluída com sucesso!', 'sucesso');
         }
       } else if (pedido.status === 'cancelado') {
         clearInterval(estadoCliente.intervalPolling);
-        alert('A corrida foi cancelada.');
+        notificar('A corrida foi cancelada.', 'alerta');
         resetarPainelCliente();
       }
     } catch (e) {

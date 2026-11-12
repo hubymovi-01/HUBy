@@ -1,5 +1,5 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Prévia Hands-Free e Liquidação HUBy
-import { API_URL, sonsHUBy } from '../config.js';
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Prévia Hands-Free e Liquidação Sincronizada HUBy
+import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
 import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
@@ -9,10 +9,36 @@ import { notificar } from '../util/alertas-huby.js';
 
 let processandoPagamento = false;
 
+// Calcula o valor bruto e o repasse líquido do motorista usando a tarifa e taxa reais do banco
+export function obterValoresSincronizadosPedido(dados = {}) {
+  const distKm = parseFloat(dados.dist || dados.distancia_km || dados.distanciaKm || 0);
+  const categoria = String(dados.categoria || dados.tipo || estado.categoriaVeiculo || 'carro').toLowerCase();
+
+  let valorBruto = Number(dados.preco || dados.valor_total || dados.valorTotal || 0);
+
+  // Se houver distância válida e o valor não estiver sincronizado ou for zero, calcula pela tabela oficial
+  if (distKm > 0 && (!valorBruto || valorBruto <= 0)) {
+    valorBruto = calcularPreco(categoria, distKm).valorTotal;
+  }
+
+  const taxaPct = Number(TAXA_PLATAFORMA_ATUAL ?? 15);
+  const fatorMotorista = Math.max(0.1, (100 - taxaPct) / 100);
+  const repasseNum = Number((valorBruto * fatorMotorista).toFixed(2));
+
+  return {
+    valorBruto,
+    repasseNum,
+    taxaPct,
+    valorBrutoFmt: valorBruto.toFixed(2).replace('.', ','),
+    repasseFmt: repasseNum.toFixed(2).replace('.', ',')
+  };
+}
+
 // ============================================================================
 // 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR (HANDS-FREE OU TOQUE)
 // ============================================================================
 export async function preVisualizarRotaPedido(dados) {
+  await sincronizarTarifasServidor();
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
   pararMonitoramentoDesvios();
@@ -36,8 +62,7 @@ export async function preVisualizarRotaPedido(dados) {
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
-  const valorTotal = Number(dados.preco || 0);
-  const repasseLiquido = (valorTotal * 0.85).toFixed(2).replace('.', ',');
+  const { valorBrutoFmt, repasseFmt } = obterValoresSincronizadosPedido(dados);
 
   container.innerHTML = `
     <div id="modalPreviaRotaCorrida" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
@@ -45,7 +70,10 @@ export async function preVisualizarRotaPedido(dados) {
         <span style="font-size: 11px; font-weight: 800; color: var(--amber); background: rgba(245,158,11,0.15); padding: 4px 10px; border-radius: 8px;">
           🔍 ROTA EM ANÁLISE
         </span>
-        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900;">R$ ${repasseLiquido}</strong>
+        <div style="text-align: right;">
+          <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; display: block;">R$ ${repasseFmt}</strong>
+          <small style="color: #94A3B8; font-size: 10px;">Total passageiro: R$ ${valorBrutoFmt}</small>
+        </div>
       </div>
 
       <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
@@ -143,7 +171,7 @@ async function iniciarFaseBuscarPassageiro(dados) {
 
   const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
-  const repasseLiquido = ((Number(dados.preco || 0)) * 0.85).toFixed(2).replace('.', ',');
+  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
@@ -154,7 +182,7 @@ async function iniciarFaseBuscarPassageiro(dados) {
         <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
           🚗 A CAMINHO DO PASSAGEIRO
         </span>
-        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseLiquido}</strong>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseFmt}</strong>
       </div>
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
@@ -231,7 +259,7 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
 
   const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
   const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
-  const repasseLiquido = ((Number(dados.preco || 0)) * 0.85).toFixed(2).replace('.', ',');
+  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
@@ -242,7 +270,7 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
         <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
           🚀 EM VIAGEM COM PASSAGEIRO
         </span>
-        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseLiquido}</strong>
+        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseFmt}</strong>
       </div>
 
       <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
@@ -280,9 +308,9 @@ export function abrirModalOpcoesPagamento(dados) {
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
   const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
 
-  const valorTotal = Number(dados.preco || dados.valorTotal || 0);
+  const { valorBrutoFmt } = obterValoresSincronizadosPedido(dados);
   if (lblValor) {
-    lblValor.textContent = `R$ ${valorTotal.toFixed(2).replace('.', ',')}`;
+    lblValor.textContent = `R$ ${valorBrutoFmt}`;
   }
 
   const btnDinheiro = document.getElementById('btnPagarDinheiro');
@@ -342,7 +370,8 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     if (formaPagamento === 'pix_mp') {
       exibirQrCodePixMotorista(data.pix);
     } else {
-      notificar('✅ Corrida encerrada com sucesso! Taxa de 15% atualizada na carteira.', 'sucesso');
+      const taxa = Number(TAXA_PLATAFORMA_ATUAL || 15);
+      notificar(`✅ Corrida encerrada com sucesso! Taxa de ${taxa}% atualizada na carteira.`, 'sucesso');
       if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
       concluirLimpezaPosCorrida();
     }

@@ -1,5 +1,5 @@
-// js/motorista/motorista-ganhos.js - Faturamento, Extrato e Fanfarra de Meta Diária
-import { API_URL, sonsHUBy } from '../config.js';
+// js/motorista/motorista-ganhos.js - Faturamento, Extrato e Fanfarra de Meta Diária Sincronizados
+import { API_URL, sonsHUBy, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 
 let metaComemorada = false;
@@ -26,11 +26,11 @@ export async function carregarGanhosHoje() {
 }
 
 export function configurarAjusteMetaDiaria() {
+  const modal = document.getElementById('modalMetaDiaria');
+  if (modal) return; // Já gerenciado pelo modal elegante do app-motorista.js
+
   const btnEditarMeta = document.getElementById('btnEditarMetaDiaria');
-  if (!btnEditarMeta) {
-    console.warn('Botão #btnEditarMetaDiaria não encontrado no DOM.');
-    return;
-  }
+  if (!btnEditarMeta) return;
 
   btnEditarMeta.addEventListener('click', (e) => {
     e.preventDefault();
@@ -42,10 +42,8 @@ export function configurarAjusteMetaDiaria() {
       if (!isNaN(valorNum) && valorNum > 0) {
         estado.metaDiaria = valorNum;
         localStorage.setItem('huby_meta_diaria', valorNum);
-        metaComemorada = false; // Permite comemorar novamente caso a nova meta seja alcançada
+        metaComemorada = false;
         renderizarCardGanhosHoje();
-      } else {
-        alert('Por favor, informe um valor numérico válido.');
       }
     }
   });
@@ -83,7 +81,6 @@ export function renderizarCardGanhosHoje() {
     }
   }
 
-  // Aciona a fanfarra triunfal ao alcançar a meta pela primeira vez no turno
   if (percentual >= 100 && !metaComemorada && ganhos > 0) {
     metaComemorada = true;
     sonsHUBy.tocarMetaBatida();
@@ -124,6 +121,7 @@ export async function carregarExtratoFinanceiro() {
       return;
     }
 
+    const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
     let html = '';
 
     saques.slice(0, 5).forEach(s => {
@@ -140,7 +138,7 @@ export async function carregarExtratoFinanceiro() {
     });
 
     corridas.slice(0, 8).forEach(c => {
-      const repasse = Number(c.repasse_liquido || (Number(c.valor_total || 0) * 0.85));
+      const repasse = Number(c.repasse_liquido || (Number(c.valor_total || 0) * fatorMotorista));
       const local = c.destino_endereco ? c.destino_endereco.split(',')[0].trim() : 'Viagem Concluída';
       html += `
         <div class="item-extrato" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 12px;">
@@ -155,7 +153,6 @@ export async function carregarExtratoFinanceiro() {
 
     listaEl.innerHTML = html;
   } catch (err) {
-    console.warn('Extrato indisponível no momento:', err);
     listaEl.innerHTML = '<div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 8px;">Sem movimentações no período.</div>';
   }
 }

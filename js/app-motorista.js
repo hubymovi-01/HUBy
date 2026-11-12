@@ -1,8 +1,9 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Estabilizada de Produção com Validação de Sessão, Meta Diária e Copiloto no Menu Lateral
+ * Versão Sincronizada em Tempo Real com Tarifas e Taxas do Painel Admin Master
  */
 
+import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { estado } from './motorista/motorista-estado.js';
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
 import { alternarStatusOnline, iniciarRadarChamadas } from './motorista/motorista-radar.js';
@@ -40,6 +41,17 @@ function validarAutenticacaoMotorista() {
   }
 
   return true;
+}
+
+export function atualizarTextosPercentualRepasse() {
+  const taxa = Number(TAXA_PLATAFORMA_ATUAL || 15);
+  const pctLiquido = Math.max(1, 100 - taxa);
+
+  const lblCarteira = document.querySelector('.wallet-meta small');
+  if (lblCarteira) lblCarteira.textContent = `Saldo Disponível (${pctLiquido}%)`;
+
+  const lblRepasseMeta = document.getElementById('lblRepassePctMotorista');
+  if (lblRepasseMeta) lblRepasseMeta.textContent = `${pctLiquido}% repasse líquido`;
 }
 
 export function atualizarBarraMetaDiaria(novoValorMeta = null) {
@@ -163,6 +175,20 @@ function configurarCodigoVozDireto() {
   }
 }
 
+function escutarAtualizacaoTarifasTempoReal() {
+  try {
+    const token = localStorage.getItem('huby_token') || '';
+    const socket = estado.socket || (window.io ? window.io(API_URL, { auth: { token } }) : null);
+    if (socket) {
+      socket.on('tarifas_atualizadas', (novasTarifas) => {
+        aplicarObjetoTarifas(novasTarifas);
+        atualizarTextosPercentualRepasse();
+        iniciarRadarChamadas();
+      });
+    }
+  } catch (e) {}
+}
+
 function registrarEventosUI() {
   const btnOnline = document.getElementById('btnToggleStatusOnline');
   if (btnOnline) {
@@ -203,7 +229,12 @@ function registrarEventosUI() {
 document.addEventListener('DOMContentLoaded', async () => {
   if (!validarAutenticacaoMotorista()) return;
 
+  // 1. Sincroniza tarifas e taxa da plataforma direto do banco antes de iniciar o radar
+  await sincronizarTarifasServidor();
+  atualizarTextosPercentualRepasse();
+
   inicializarSocket();
+  escutarAtualizacaoTarifasTempoReal();
   inicializarMapa();
   registrarEventosUI();
   await carregarPerfil();

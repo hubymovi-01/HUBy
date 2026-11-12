@@ -1,9 +1,10 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO BLINDADO - Renderização de Polilinha, Enquadramento e Retorno Completo
+ * CÓDIGO BLINDADO - Integrado às Tarifas Dinâmicas do Painel Admin Master
  * ============================================================================
  */
+import { calcularPreco } from './config.js';
 
 export class HubyMapa {
   constructor(containerId) {
@@ -203,7 +204,6 @@ export class HubyMapa {
     this.obterGPSReal(callbackSucesso);
   }
 
-  // Traçado explícito de geometria GeoJSON
   desenharRota(geometria, cor = '#38BDF8') {
     if (!this.map || !geometria) return;
 
@@ -233,7 +233,6 @@ export class HubyMapa {
   async calcularRota(origem, destino, cor = '#10B981', exibirLinha = true, pontosIntermediarios = []) {
     if (!origem || !destino) return null;
 
-    // Garante que o marcador de destino seja posicionado
     this.definirDestino(destino[0], destino[1]);
 
     const pontos = [origem, ...pontosIntermediarios, destino];
@@ -263,11 +262,11 @@ export class HubyMapa {
 
     if (data && data.routes && data.routes.length > 0) {
       const rota = data.routes[0];
-      const distanciaKm = Math.max(0.5, rota.distance / 1000);
+      const distanciaKm = Math.max(0.2, rota.distance / 1000);
       const duracaoMin = Math.max(2, Math.round(rota.duration / 60));
 
-      // Cálculo de preço base estimado
-      const precoEstimado = Math.max(6.0, 5.0 + (distanciaKm * 2.2) + (duracaoMin * 0.35));
+      // Usa a tarifa oficial sincronizada do banco de dados (config.js)
+      const precoEstimado = calcularPreco('carro', distanciaKm, duracaoMin).valorTotal;
 
       if (this.rotaLayer && this.map) {
         this.map.removeLayer(this.rotaLayer);
@@ -299,25 +298,23 @@ export class HubyMapa {
       }
 
       return {
-        distanciaKm: Number(distanciaKm.toFixed(1)),
+        distanciaKm: Number(distanciaKm.toFixed(2)),
         duracaoMin,
         preco: Number(precoEstimado.toFixed(2)),
         geometria: rota.geometry
       };
     }
 
-    // Fallback matemático se os servidores de rota oscilarem
     const lat1 = origem[0], lon1 = origem[1];
     const lat2 = destino[0], lon2 = destino[1];
     const rad = Math.PI / 180;
     const dLat = (lat2 - lat1) * rad;
     const dLon = (lon2 - lon1) * rad;
     const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
-    const distEstimada = Math.max(1.0, 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.3);
-    const duracaoEstimada = Math.max(3, Math.round(distEstimada * 2.2));
-    const precoEstimadoFallback = Math.max(6.0, 5.0 + (distEstimada * 2.2) + (duracaoEstimada * 0.35));
+    const distEstimada = Math.max(0.3, 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * 1.3);
+    const duracaoEstimada = Math.max(2, Math.round(distEstimada * 2.2));
+    const precoEstimadoFallback = calcularPreco('carro', distEstimada, duracaoEstimada).valorTotal;
 
-    // Traça linha reta de contingência se a malha OSRM estiver fora do ar
     if (exibirLinha && this.map) {
       if (this.rotaLayer) this.map.removeLayer(this.rotaLayer);
       this.rotaLayer = L.polyline([origem, destino], {
@@ -331,7 +328,7 @@ export class HubyMapa {
     }
 
     return {
-      distanciaKm: Number(distEstimada.toFixed(1)),
+      distanciaKm: Number(distEstimada.toFixed(2)),
       duracaoMin: duracaoEstimada,
       preco: Number(precoEstimadoFallback.toFixed(2)),
       geometria: null

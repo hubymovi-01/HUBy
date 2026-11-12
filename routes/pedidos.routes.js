@@ -1,11 +1,11 @@
-// routes/pedidos.routes.js - Gestão Completa de Pedidos HUBy
+// routes/pedidos.routes.js - Gestão Completa de Pedidos HUBy Sincronizada com Tarifas do Banco
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
+import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
 
-// Middleware de Autenticação Blindado
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader ? (authHeader.split(' ')[1] || authHeader) : req.query.token;
@@ -23,7 +23,6 @@ export function autenticarToken(req, res, next) {
   }
 }
 
-// Inicialização segura de todas as colunas de suporte na tabela pedidos
 async function inicializarColunasPedidos() {
   try {
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(50);`;
@@ -38,9 +37,6 @@ async function inicializarColunasPedidos() {
 }
 inicializarColunasPedidos();
 
-// ============================================================================
-// AUXILIARES DE SEGURANÇA E VALIDAÇÃO
-// ============================================================================
 function ehAdminToken(usuario) {
   const role = String(usuario?.role || usuario?.funcao || '').toLowerCase();
   return role === 'admin' || role === 'administrador';
@@ -59,34 +55,11 @@ function distanciaRetaKm(lat1, lng1, lat2, lng2) {
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-async function obterTarifasPlataforma() {
-  const padrao = {
-    carro: { base: 6.0, km: 2.2 },
-    moto: { base: 4.0, km: 1.4 },
-    entrega: { base: 5.0, km: 1.8 }
-  };
-  try {
-    const cfg = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-    return cfg[0]?.valor || padrao;
-  } catch (e) {
-    return padrao;
-  }
-}
-
-function valorMinimoPlausivel(tarifas, distKm) {
-  const opcoes = ['carro', 'moto', 'entrega']
-    .map((k) => tarifas?.[k])
-    .filter((t) => t && Number.isFinite(Number(t.base)) && Number.isFinite(Number(t.km)));
-  if (!opcoes.length) return 0;
-  const menor = Math.min(...opcoes.map((t) => Number(t.base) + Number(t.km) * distKm));
-  return menor * 0.4;
-}
-
 export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO
+  // 1. CRIAR PEDIDO (COM CÁLCULO OFICIAL PELAS TARIFAS DO BANCO)
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
@@ -106,9 +79,8 @@ export default function pedidosRouter(io) {
 
       const endOrigem = origem_endereco || origem;
       const endDestino = destino_endereco || destino;
-      const vTotalRecebido = valor_total !== undefined ? valor_total : valorTotal;
 
-      if (!vTotalRecebido || !endOrigem || !endDestino) {
+      if (!endOrigem || !endDestino) {
         return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
       }
 
@@ -116,11 +88,10 @@ export default function pedidosRouter(io) {
         ? id
         : 'ped_' + crypto.randomBytes(8).toString('hex');
 
-      const formatarNum = (val) => Number(String(val).replace(',', '.')) || 0;
-      let vTotal = formatarNum(vTotalRecebido);
+      const formatarNum = (val) => Number(String(val ?? '').replace(',', '.')) || 0;
       const vAdic = formatarNum(valor_adicionais !== undefined ? valor_adicionais : valorAdicionais);
-      const dKm = formatarNum(distancia_km !== undefined ? distancia_km : distanciaKm);
-      const dMin = formatarNum(duracao_min !== undefined ? duracao_min : duracaoMin);
+      const dKm = Math.max(0.2, formatarNum(distancia_km !== undefined ? distancia_km : distanciaKm));
+      const dMin = Math.max(2, formatarNum(duracao_min !== undefined ? duracao_min : duracaoMin));
 
       const origLat = Number(origem_lat !== undefined ? origem_lat : coordsOrigem?.[0]);
       const origLng = Number(origem_lng !== undefined ? origem_lng : coordsOrigem?.[1]);
@@ -135,15 +106,20 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Defina a origem e o destino no mapa.' });
       }
 
-      if (vTotal <= 0 || vTotal > 3000) {
-        return res.status(400).json({ erro: 'Valor da corrida inválido.' });
-      }
+      // Lê as tarifas reais configuradas pelo Admin no banco de dados
+      const tarifasBanco = await lerTarifasDoBanco();
+      const catChave = String(sub_tipo_id || subTipoId || tipo || 'carro').toLowerCase();
+      const cfgCat = tarifasBanco[catChave === 'flash' ? 'entrega' : catChave] || tarifasBanco.carro;
 
-      const distServidor = distanciaRetaKm(origLat, origLng, destLat, destLng);
-      const tarifas = await obterTarifasPlataforma();
-      if (vTotal < valorMinimoPlausivel(tarifas, distServidor)) {
-        return res.status(400).json({ erro: 'Valor da corrida inconsistente. Atualize o app e tente novamente.' });
-      }
+      const qtdParadas = Array.isArray(paradas) ? paradas.length : 0;
+      const valorCalculadoServidor = Number((
+        Number(cfgCat.base || 0) +
+        (dKm * Number(cfgCat.km || 0)) +
+        (qtdParadas * 2.50) +
+        vAdic
+      ).toFixed(2));
+
+      let vTotal = Math.max(0.50, valorCalculadoServidor);
 
       let descontoAplicado = 0;
       if (cupomCodigo) {
@@ -274,7 +250,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES (TRAVA MOTORISTA OFFLINE)
+  // 3. CONSULTA DE CHAMADAS PENDENTES
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
@@ -354,7 +330,6 @@ export default function pedidosRouter(io) {
 
       return res.json(pedidos[0]);
     } catch (err) {
-      console.error('Erro ao consultar viagem pública:', err);
       return res.status(500).json({ erro: 'Erro interno ao consultar dados da viagem.' });
     }
   });
@@ -401,7 +376,6 @@ export default function pedidosRouter(io) {
 
       res.json(ped);
     } catch (err) {
-      console.error('Erro ao consultar status:', err);
       res.status(500).json({ erro: 'Falha ao consultar estado da chamada.' });
     }
   });
@@ -512,13 +486,12 @@ export default function pedidosRouter(io) {
 
       res.json({ sucesso: true, pedido: payloadResposta });
     } catch (err) {
-      console.error('Erro ao aceitar pedido:', err);
       res.status(500).json({ erro: 'Falha ao aceitar pedido.' });
     }
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM (PADRÃO)
+  // 8. CONCLUIR VIAGEM (COM TAXA DINÂMICA DO BANCO)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -544,13 +517,8 @@ export default function pedidosRouter(io) {
       const pedido = pedidos[0];
       if (pedido.status === 'concluido') return res.status(400).json({ erro: 'Este pedido já foi finalizado.' });
 
-      let taxaPorcentagem = 15;
-      try {
-        const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-        if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
-          taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
-        }
-      } catch (e) { }
+      const tarifasBanco = await lerTarifasDoBanco();
+      const taxaPorcentagem = Number(tarifasBanco.taxa_plataforma ?? 15);
 
       const valorBruto = Number(pedido.valor_total) || 0;
       const taxaPlataforma = Number(((valorBruto * taxaPorcentagem) / 100).toFixed(2));
@@ -587,7 +555,6 @@ export default function pedidosRouter(io) {
         novoSaldoCarteira: condutorAtualizado[0]?.saldo_carteira || 0
       });
     } catch (err) {
-      console.error('Erro ao concluir corrida:', err);
       res.status(500).json({ erro: 'Falha interna ao processar valores.' });
     }
   });
@@ -613,14 +580,8 @@ export default function pedidosRouter(io) {
       const pedido = pedidos[0];
       const valorTotal = Number(pedido.valor_total || 0);
 
-      let taxaPorcentagem = 15;
-      try {
-        const config = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-        if (config.length > 0 && config[0].valor && config[0].valor.taxa_plataforma) {
-          taxaPorcentagem = Number(config[0].valor.taxa_plataforma) || 15;
-        }
-      } catch (e) { }
-
+      const tarifasBanco = await lerTarifasDoBanco();
+      const taxaPorcentagem = Number(tarifasBanco.taxa_plataforma ?? 15);
       const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
       const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
 
@@ -668,11 +629,12 @@ export default function pedidosRouter(io) {
 
         if (!accessToken) {
           const configGateway = await sql`
-            SELECT valor FROM configuracoes_plataforma 
+            SELECT valor::text AS valor_txt FROM configuracoes_plataforma 
             WHERE chave = 'gateway_mercadopago' 
             LIMIT 1;
           `;
-          accessToken = configGateway[0]?.valor?.access_token;
+          const gw = extrairObjetoJSONB(configGateway[0]?.valor_txt, {});
+          accessToken = gw.access_token;
         }
 
         if (!accessToken) {
@@ -725,7 +687,6 @@ export default function pedidosRouter(io) {
 
       return res.status(400).json({ erro: 'Forma de pagamento não suportada.' });
     } catch (err) {
-      console.error('Erro detalhado ao liquidar corrida:', err);
       res.status(500).json({ erro: err.message || 'Erro interno ao processar encerramento da corrida.' });
     }
   });
@@ -792,7 +753,6 @@ export default function pedidosRouter(io) {
         mensagem: 'Preferências salvas com sucesso!'
       });
     } catch (err) {
-      console.error('Erro ao salvar preferências:', err);
       return res.status(500).json({ erro: 'Erro ao gravar preferências no banco.' });
     }
   });
@@ -803,6 +763,7 @@ export default function pedidosRouter(io) {
   router.put('/motoristas/meu-status-online', autenticarToken, async (req, res) => {
     try {
       const usuarioId = req.usuario.id;
+      const onlineExplicito = req.body?.online;
 
       const mot = await sql`
         SELECT id, status_online FROM motoristas 
@@ -811,9 +772,11 @@ export default function pedidosRouter(io) {
         LIMIT 1;
       `;
 
-      let novoStatus = true;
+      let novoStatus = typeof onlineExplicito === 'boolean' ? onlineExplicito : true;
       if (mot.length > 0) {
-        novoStatus = !mot[0].status_online;
+        if (typeof onlineExplicito !== 'boolean') {
+          novoStatus = !mot[0].status_online;
+        }
         await sql`
           UPDATE motoristas 
           SET status_online = ${novoStatus} 
@@ -823,13 +786,12 @@ export default function pedidosRouter(io) {
 
       return res.json({ sucesso: true, online: novoStatus });
     } catch (err) {
-      console.error('Erro ao alternar status do motorista:', err);
       return res.json({ sucesso: true, online: true });
     }
   });
 
   // =========================================================================
-  // 12. CONSULTAR PERFIL DO CONDUTOR (COM CÓDIGO DE VOZ)
+  // 12. CONSULTAR PERFIL DO CONDUTOR
   // =========================================================================
   router.get('/motoristas/perfil', autenticarToken, async (req, res) => {
     try {
@@ -870,13 +832,12 @@ export default function pedidosRouter(io) {
 
       return res.json(motoristas[0]);
     } catch (err) {
-      console.error('Erro ao obter perfil do motorista:', err);
       return res.status(500).json({ erro: 'Falha ao carregar perfil.' });
     }
   });
 
   // =========================================================================
-  // 13. ATUALIZAR PERFIL DO MOTORISTA (PERSISTÊNCIA COMPLETA DE FOTO E VOZ)
+  // 13. ATUALIZAR PERFIL DO MOTORISTA
   // =========================================================================
   router.put('/motoristas/perfil/atualizar', autenticarToken, async (req, res) => {
     try {
@@ -951,7 +912,6 @@ export default function pedidosRouter(io) {
 
       return res.json({ sucesso: true, motorista: mot[0] || {} });
     } catch (err) {
-      console.error('Erro ao atualizar dados do motorista:', err);
       return res.status(500).json({ erro: err.message || 'Falha ao salvar dados do perfil.' });
     }
   });
