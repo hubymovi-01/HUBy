@@ -1,5 +1,5 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy
-import { API_URL } from './config.js';
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Sem Duplicações e Blindado contra XSS)
+import { API_URL, aplicarObjetoTarifas } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
 let chartFinanceiroInstance = null;
@@ -8,8 +8,18 @@ let motoristaFocadoModalId = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
+// Sanitizador Anti-XSS para proteger o Painel Admin contra injeção de scripts maliciosos
+function escaparHTML(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ============================================================================
-// SISTEMA DE NOTIFICAÇÃO TOAST EXECUTIVO (SEM BLOQUEAR A TELA)
+// SISTEMA DE NOTIFICAÇÃO TOAST EXECUTIVO
 // ============================================================================
 function notificarAdmin(mensagem, tipo = 'sucesso') {
   let container = document.getElementById('adminToastContainer');
@@ -43,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // 1. Registra eventos e navegação
   configurarNavegacaoAbas();
   configurarFiltroPeriodo(token);
   configurarFormZonasRisco(token);
@@ -60,21 +69,18 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('btnBaixarCSV')?.addEventListener('click', () => exportarRelatorioCSV(token));
 
-  // 2. Inicializa Radar
   try {
     inicializarRadarMaster(token);
   } catch (err) {
     console.warn('Radar inicializado em segundo plano:', err);
   }
 
-  // 3. Conexão Socket.IO
   try {
     conectarSocketAdmin();
   } catch (err) {
     console.warn('Socket indisponível:', err);
   }
 
-  // 4. Carrega todos os módulos
   sincronizarTudo(token);
 });
 
@@ -274,9 +280,9 @@ async function carregarDadosSocios(token) {
       } else {
         tbodyRetiradas.innerHTML = data.historicoRetiradas.map(r => `
           <tr>
-            <td><strong>#${r.id}</strong></td>
-            <td><strong>${r.socio_nome}</strong></td>
-            <td><code>${r.chave_pix}</code></td>
+            <td><strong>#${escaparHTML(r.id)}</strong></td>
+            <td><strong>${escaparHTML(r.socio_nome)}</strong></td>
+            <td><code>${escaparHTML(r.chave_pix)}</code></td>
             <td style="color: var(--primary); font-weight: 800;">R$ ${Number(r.valor).toFixed(2).replace('.', ',')}</td>
             <td>${new Date(r.criado_em).toLocaleString('pt-BR')}</td>
           </tr>
@@ -375,15 +381,15 @@ async function carregarTabelaMarketplace(token) {
 
     tbody.innerHTML = itens.map(i => `
       <tr>
-        <td><strong>${i.titulo}</strong><br><small style="color:var(--muted);">${i.empresa_nome}</small></td>
-        <td><span class="badge badge-aceito">${i.categoria}</span></td>
+        <td><strong>${escaparHTML(i.titulo)}</strong><br><small style="color:var(--muted);">${escaparHTML(i.empresa_nome)}</small></td>
+        <td><span class="badge badge-aceito">${escaparHTML(i.categoria)}</span></td>
         <td style="color:var(--rose); text-decoration:line-through;">R$ ${Number(i.preco_original).toFixed(2).replace('.', ',')}</td>
         <td style="color:var(--primary); font-weight:800;">R$ ${Number(i.preco_parceiro).toFixed(2).replace('.', ',')}</td>
         <td><span class="badge ${i.ativo ? 'badge-ativo' : 'badge-inativo'}">${i.ativo ? 'Disponível' : 'Oculto'}</span></td>
         <td>
           <div style="display:flex; gap:6px;">
-            <button class="btn-tbl alt" onclick="alternarStatusMarketplace('${i.id}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
-            <button class="btn-tbl rej" onclick="excluirItemMarketplace('${i.id}')">Excluir</button>
+            <button class="btn-tbl alt" onclick="alternarStatusMarketplace('${escaparHTML(i.id)}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
+            <button class="btn-tbl rej" onclick="excluirItemMarketplace('${escaparHTML(i.id)}')">Excluir</button>
           </div>
         </td>
       </tr>
@@ -502,35 +508,38 @@ async function carregarTabelaFrota(token) {
         recusado: 'badge-recusado'
       }[statusLimpo] || 'badge-pendente';
 
+      const nomeSeguro = escaparHTML(m.nome);
+      const idSeguro = escaparHTML(m.id);
+
       return `
         <tr>
           <td>
-            <strong>${m.nome}</strong><br>
-            <small style="color:var(--muted);">CNH: ${m.cnh || m.cnh_numero || '---'}</small>
+            <strong>${nomeSeguro}</strong><br>
+            <small style="color:var(--muted);">CNH: ${escaparHTML(m.cnh || m.cnh_numero || '---')}</small>
           </td>
           <td>
-            ${m.veiculo_modelo || 'Não inf.'}<br>
-            <small style="color:var(--blue); font-weight:700;">${(m.veiculo_placa || 'SEM PLACA').toUpperCase()}</small>
+            ${escaparHTML(m.veiculo_modelo || 'Não inf.')}<br>
+            <small style="color:var(--blue); font-weight:700;">${escaparHTML((m.veiculo_placa || 'SEM PLACA').toUpperCase())}</small>
           </td>
-          <td><span class="badge badge-aceito">${(m.categoria || m.categoria_veiculo || 'carro').toUpperCase()}</span></td>
+          <td><span class="badge badge-aceito">${escaparHTML((m.categoria || m.categoria_veiculo || 'carro').toUpperCase())}</span></td>
           <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
-          <td><span class="badge ${badgeStatus}">${statusLimpo.toUpperCase()}</span></td>
+          <td><span class="badge ${badgeStatus}">${escaparHTML(statusLimpo.toUpperCase())}</span></td>
           <td>
             <div style="display:flex; gap:4px; flex-wrap:wrap;">
-              ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.doc_crlv_url}', 'CRLV do Veículo - ${m.nome}', '${m.id}')">CRLV</button>` : ''}
-              ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${m.doc_cnh_url}', 'CNH - ${m.nome}', '${m.id}')">CNH</button>` : ''}
+              ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_crlv_url)}', 'CRLV do Veículo - ${nomeSeguro}', '${idSeguro}')">CRLV</button>` : ''}
+              ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_cnh_url)}', 'CNH - ${nomeSeguro}', '${idSeguro}')">CNH</button>` : ''}
               ${!m.doc_crlv_url && !m.doc_cnh_url ? '<small style="color:var(--muted);">Sem doc</small>' : ''}
             </div>
           </td>
           <td>
             <div style="display:flex; gap:4px;">
               ${statusLimpo !== 'aprovado' ? `
-                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovar')">Aprovar</button>
+                <button class="btn-tbl app" onclick="alterarStatusCondutor('${idSeguro}', 'aprovar')">Aprovar</button>
               ` : ''}
               ${statusLimpo !== 'recusado' && statusLimpo !== 'bloqueado' ? `
-                <button class="btn-tbl rej" onclick="alterarStatusCondutor('${m.id}', 'recusar')">Recusar</button>
+                <button class="btn-tbl rej" onclick="alterarStatusCondutor('${idSeguro}', 'recusar')">Recusar</button>
               ` : `
-                <button class="btn-tbl app" onclick="alterarStatusCondutor('${m.id}', 'aprovar')">Liberar</button>
+                <button class="btn-tbl app" onclick="alterarStatusCondutor('${idSeguro}', 'aprovar')">Liberar</button>
               `}
             </div>
           </td>
@@ -563,11 +572,11 @@ async function carregarTabelaZonasRisco(token) {
 
     tbody.innerHTML = zonas.map(z => `
       <tr>
-        <td><strong>${z.nome}</strong><br><small style="color:var(--muted);">${z.descricao || 'Área demarcada'}</small></td>
-        <td><span class="badge ${z.nivel_risco === 'alto' ? 'badge-recusado' : 'badge-pendente'}">${(z.nivel_risco || 'ALTO').toUpperCase()}</span></td>
-        <td>${z.raio_metros || 500}m</td>
-        <td><code style="color:var(--blue);">${z.horario_inicio || '20:00'} às ${z.horario_fim || '05:00'}</code></td>
-        <td><button class="btn-tbl rej" onclick="excluirZonaRisco(${z.id})">Remover</button></td>
+        <td><strong>${escaparHTML(z.nome)}</strong><br><small style="color:var(--muted);">${escaparHTML(z.descricao || 'Área demarcada')}</small></td>
+        <td><span class="badge ${z.nivel_risco === 'alto' ? 'badge-recusado' : 'badge-pendente'}">${escaparHTML((z.nivel_risco || 'ALTO').toUpperCase())}</span></td>
+        <td>${Number(z.raio_metros || 500)}m</td>
+        <td><code style="color:var(--blue);">${escaparHTML(z.horario_inicio || '20:00')} às ${escaparHTML(z.horario_fim || '05:00')}</code></td>
+        <td><button class="btn-tbl rej" onclick="excluirZonaRisco(${Number(z.id)})">Remover</button></td>
       </tr>
     `).join('');
   } catch (e) {
@@ -626,14 +635,14 @@ async function carregarTabelaCupons(token) {
 
     tbody.innerHTML = cupons.map(c => `
       <tr>
-        <td><strong>${c.codigo}</strong></td>
-        <td>${c.tipo === 'porcentagem' ? `${c.valor}%` : `R$ ${Number(c.valor).toFixed(2).replace('.', ',')}`}</td>
-        <td>${c.usos_atuais || 0} / ${c.limite_usos || '∞'}</td>
+        <td><strong>${escaparHTML(c.codigo)}</strong></td>
+        <td>${c.tipo === 'porcentagem' ? `${Number(c.valor)}%` : `R$ ${Number(c.valor).toFixed(2).replace('.', ',')}`}</td>
+        <td>${Number(c.usos_atuais || 0)} / ${escaparHTML(c.limite_usos || '∞')}</td>
         <td><span class="badge ${c.ativo ? 'badge-ativo' : 'badge-inativo'}">${c.ativo ? 'Ativo' : 'Pausado'}</span></td>
         <td>
           <div style="display:flex; gap:6px;">
-            <button class="btn-tbl alt" onclick="alternarCupom('${c.id}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
-            <button class="btn-tbl rej" onclick="excluirCupom('${c.id}')">Excluir</button>
+            <button class="btn-tbl alt" onclick="alternarCupom('${escaparHTML(c.id)}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
+            <button class="btn-tbl rej" onclick="excluirCupom('${escaparHTML(c.id)}')">Excluir</button>
           </div>
         </td>
       </tr>
@@ -692,12 +701,12 @@ async function carregarTabelaSeguranca(token) {
 
     tbody.innerHTML = incidentes.map(i => `
       <tr>
-        <td>#${String(i.id).slice(-4)}</td>
-        <td><span class="badge ${i.tipo_alerta === 'sos' ? 'badge-sos' : 'badge-pendente'}">${(i.tipo_alerta || 'ALERTA').toUpperCase()}</span></td>
-        <td>${i.descricao || 'Alerta reportado'}</td>
+        <td>#${escaparHTML(String(i.id).slice(-4))}</td>
+        <td><span class="badge ${i.tipo_alerta === 'sos' ? 'badge-sos' : 'badge-pendente'}">${escaparHTML((i.tipo_alerta || 'ALERTA').toUpperCase())}</span></td>
+        <td>${escaparHTML(i.descricao || 'Alerta reportado')}</td>
         <td>${new Date(i.criado_em).toLocaleString('pt-BR')}</td>
         <td><span class="badge ${i.resolvido ? 'badge-concluido' : 'badge-pendente'}">${i.resolvido ? 'Resolvido' : 'Pendente'}</span></td>
-        <td>${!i.resolvido ? `<button class="btn-tbl app" onclick="resolverIncidente(${i.id})">Resolver</button>` : '---'}</td>
+        <td>${!i.resolvido ? `<button class="btn-tbl app" onclick="resolverIncidente(${Number(i.id)})">Resolver</button>` : '---'}</td>
       </tr>
     `).join('');
   } catch (e) {
@@ -728,32 +737,33 @@ async function carregarTabelaSaques(token) {
     tbody.innerHTML = saques.map(s => {
       const badgeClass = s.status === 'pago' ? 'badge-pago' : (s.status === 'recusado' ? 'badge-recusado' : 'badge-pendente');
       const dataFormatada = s.criado_em ? new Date(s.criado_em).toLocaleDateString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--';
+      const chaveSegura = escaparHTML(s.chave_pix);
 
       return `
         <tr>
-          <td><strong>#${s.id}</strong></td>
+          <td><strong>#${Number(s.id)}</strong></td>
           <td>
-            <strong>${s.motorista_nome || 'Condutor'}</strong><br>
+            <strong>${escaparHTML(s.motorista_nome || 'Condutor')}</strong><br>
             <small style="color:var(--muted);">${dataFormatada}</small>
           </td>
           <td>
             <div style="display:flex; align-items:center; gap:6px;">
               <code style="background:rgba(255,255,255,0.06); padding:3px 6px; border-radius:4px; font-family:monospace; color:#38BDF8;">
-                ${s.chave_pix}
+                ${chaveSegura}
               </code>
-              <button type="button" class="btn-copiar-chave-pix" data-chave="${s.chave_pix}" title="Copiar Chave Pix" 
+              <button type="button" class="btn-copiar-chave-pix" data-chave="${chaveSegura}" title="Copiar Chave Pix" 
                 style="background:transparent; border:none; cursor:pointer; color:var(--muted); font-size:13px;">
                 📋
               </button>
             </div>
           </td>
           <td style="font-weight: 800; color: var(--primary);">R$ ${Number(s.valor).toFixed(2).replace('.', ',')}</td>
-          <td><span class="badge ${badgeClass}">${s.status.toUpperCase()}</span></td>
+          <td><span class="badge ${badgeClass}">${escaparHTML(s.status.toUpperCase())}</span></td>
           <td>
             ${s.status === 'pendente' ? `
               <div style="display:flex; gap:6px;">
-                <button class="btn-tbl app" onclick="processarSaqueMaster(${s.id}, 'pago')">Pagar Pix</button>
-                <button class="btn-tbl rej" onclick="processarSaqueMaster(${s.id}, 'recusado')">Recusar</button>
+                <button class="btn-tbl app" onclick="processarSaqueMaster(${Number(s.id)}, 'pago')">Pagar Pix</button>
+                <button class="btn-tbl rej" onclick="processarSaqueMaster(${Number(s.id)}, 'recusado')">Recusar</button>
               </div>
             ` : `<small style="color:var(--muted);">${s.status === 'pago' ? 'Liquidado' : 'Estornado'}</small>`}
           </td>
@@ -797,13 +807,13 @@ async function carregarTabelaViagens(token) {
       const taxa = Number(c.valor_total || 0) * 0.15;
       return `
         <tr>
-          <td><strong>#${String(c.id).slice(-4)}</strong></td>
-          <td>${c.sub_tipo_label || c.tipo || 'HUBy'}</td>
-          <td>${c.distancia_km || '0.0'} km</td>
+          <td><strong>#${escaparHTML(String(c.id).slice(-4))}</strong></td>
+          <td>${escaparHTML(c.sub_tipo_label || c.tipo || 'HUBy')}</td>
+          <td>${escaparHTML(c.distancia_km || '0.0')} km</td>
           <td style="font-weight:800; color:#FFF;">R$ ${Number(c.valor_total || 0).toFixed(2).replace('.', ',')}</td>
           <td style="color:var(--blue); font-weight:700;">R$ ${taxa.toFixed(2).replace('.', ',')}</td>
-          <td>${c.motorista_nome || 'Aguardando...'}</td>
-          <td><span class="badge ${c.status === 'concluido' ? 'badge-concluido' : (c.status === 'cancelado' ? 'badge-recusado' : 'badge-aceito')}">${(c.status || 'pendente').toUpperCase()}</span></td>
+          <td>${escaparHTML(c.motorista_nome || 'Aguardando...')}</td>
+          <td><span class="badge ${c.status === 'concluido' ? 'badge-concluido' : (c.status === 'cancelado' ? 'badge-recusado' : 'badge-aceito')}">${escaparHTML((c.status || 'pendente').toUpperCase())}</span></td>
         </tr>
       `;
     }).join('');
@@ -812,35 +822,48 @@ async function carregarTabelaViagens(token) {
   }
 }
 
-// 10. Parâmetros e Tarifas Dinâmicas (Sincronizado com os 9 campos do HTML)
+// 10. Parâmetros e Tarifas Dinâmicas
 async function carregarTarifasConfig(token) {
-  try {
-    const res = await fetch(`${API_URL}/api/admin/tarifas`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!res.ok) return;
-    const cfg = await res.json();
-
+  const preencherInputs = (cfg) => {
+    if (!cfg || typeof cfg !== 'object') return;
     if (cfg.taxa_plataforma !== undefined) {
       document.getElementById('cfgTaxaPlataforma').value = cfg.taxa_plataforma;
     }
-
     if (cfg.carro) {
       if (cfg.carro.base !== undefined) document.getElementById('tarifaCarroBase').value = Number(cfg.carro.base).toFixed(2);
       if (cfg.carro.km !== undefined) document.getElementById('tarifaCarroKm').value = Number(cfg.carro.km).toFixed(2);
       if (cfg.carro.min !== undefined) document.getElementById('tarifaCarroMin').value = Number(cfg.carro.min).toFixed(2);
     }
-
     if (cfg.moto) {
       if (cfg.moto.base !== undefined) document.getElementById('tarifaMotoBase').value = Number(cfg.moto.base).toFixed(2);
       if (cfg.moto.km !== undefined) document.getElementById('tarifaMotoKm').value = Number(cfg.moto.km).toFixed(2);
       if (cfg.moto.min !== undefined) document.getElementById('tarifaMotoMin').value = Number(cfg.moto.min).toFixed(2);
     }
-
     if (cfg.entrega) {
       if (cfg.entrega.base !== undefined) document.getElementById('tarifaFlashBase').value = Number(cfg.entrega.base).toFixed(2);
       if (cfg.entrega.km !== undefined) document.getElementById('tarifaFlashKm').value = Number(cfg.entrega.km).toFixed(2);
       if (cfg.entrega.min !== undefined) document.getElementById('tarifaFlashMin').value = Number(cfg.entrega.min).toFixed(2);
+    }
+  };
+
+  try {
+    const cacheLocal = localStorage.getItem('huby_tarifas_cache');
+    if (cacheLocal) preencherInputs(JSON.parse(cacheLocal));
+  } catch (e) {}
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/tarifas?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    let cfg = await res.json();
+    while (typeof cfg === 'string') {
+      try { cfg = JSON.parse(cfg); } catch (e) { break; }
+    }
+    if (cfg && typeof cfg === 'object' && cfg.carro) {
+      aplicarObjetoTarifas(cfg);
+      preencherInputs(cfg);
     }
   } catch (e) {}
 }
@@ -848,24 +871,31 @@ async function carregarTarifasConfig(token) {
 function configurarFormTarifas(token) {
   document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const lerCampo = (id, padrao) => {
+      const val = parseFloat(String(document.getElementById(id)?.value ?? '').replace(',', '.'));
+      return Number.isFinite(val) && val >= 0 ? val : padrao;
+    };
+
     const payload = {
-      taxa_plataforma: Number(document.getElementById('cfgTaxaPlataforma').value) || 15,
+      taxa_plataforma: lerCampo('cfgTaxaPlataforma', 15),
       carro: {
-        base: Number(document.getElementById('tarifaCarroBase').value) || 6.0,
-        km: Number(document.getElementById('tarifaCarroKm').value) || 2.2,
-        min: Number(document.getElementById('tarifaCarroMin').value) || 0.30
+        base: lerCampo('tarifaCarroBase', 6.0),
+        km: lerCampo('tarifaCarroKm', 2.2),
+        min: lerCampo('tarifaCarroMin', 0.30)
       },
       moto: {
-        base: Number(document.getElementById('tarifaMotoBase').value) || 4.0,
-        km: Number(document.getElementById('tarifaMotoKm').value) || 1.4,
-        min: Number(document.getElementById('tarifaMotoMin').value) || 0.20
+        base: lerCampo('tarifaMotoBase', 4.0),
+        km: lerCampo('tarifaMotoKm', 1.4),
+        min: lerCampo('tarifaMotoMin', 0.20)
       },
       entrega: {
-        base: Number(document.getElementById('tarifaFlashBase').value) || 5.0,
-        km: Number(document.getElementById('tarifaFlashKm').value) || 1.8,
-        min: Number(document.getElementById('tarifaFlashMin').value) || 0.25
+        base: lerCampo('tarifaFlashBase', 5.0),
+        km: lerCampo('tarifaFlashKm', 1.8),
+        min: lerCampo('tarifaFlashMin', 0.25)
       }
     };
+
+    aplicarObjetoTarifas(payload);
 
     try {
       const res = await fetch(`${API_URL}/api/admin/tarifas`, {
@@ -874,9 +904,11 @@ function configurarFormTarifas(token) {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        notificarAdmin('Tabela tarifária dinâmica atualizada no banco!', 'sucesso');
+        const respData = await res.json().catch(() => null);
+        if (respData?.tarifas) aplicarObjetoTarifas(respData.tarifas);
+        notificarAdmin('Tabela tarifária dinâmica salva no banco e aplicada no mapa!', 'sucesso');
       } else {
-        notificarAdmin('Falha ao atualizar tabela tarifária.', 'erro');
+        notificarAdmin('Falha ao atualizar tabela tarifária no servidor.', 'erro');
       }
     } catch (err) {
       notificarAdmin('Erro de conexão ao salvar tarifas.', 'erro');
@@ -884,7 +916,7 @@ function configurarFormTarifas(token) {
   });
 }
 
-// 11. Gateway de Pagamento (Mercado Pago)
+// 11. Gateway de Pagamento (Mercado Pago - Exibe Token Mascarado por Segurança)
 async function carregarGatewayConfig(token) {
   try {
     const res = await fetch(`${API_URL}/api/admin/gateway/mercadopago`, {
@@ -892,7 +924,11 @@ async function carregarGatewayConfig(token) {
     });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.access_token) document.getElementById('mpAccessToken').value = data.access_token;
+    const inputToken = document.getElementById('mpAccessToken');
+    if (inputToken && (data.access_token_mascarado || data.access_token)) {
+      inputToken.placeholder = data.access_token_mascarado || 'Token configurado com segurança';
+      inputToken.value = '';
+    }
     if (data.public_key) document.getElementById('mpPublicKey').value = data.public_key;
     if (data.taxa_percentual) document.getElementById('mpTaxaPercentual').value = data.taxa_percentual;
   } catch (e) {}
@@ -912,9 +948,11 @@ function configurarFormMercadoPago(token) {
         body: JSON.stringify({ access_token, public_key, taxa_percentual })
       });
       if (res.ok) {
-        notificarAdmin('Credenciais do Mercado Pago salvas com sucesso!', 'sucesso');
+        notificarAdmin('Credenciais do Mercado Pago salvas com segurança!', 'sucesso');
+        await carregarGatewayConfig(token);
       } else {
-        notificarAdmin('Falha ao salvar chaves do Mercado Pago.', 'erro');
+        const d = await res.json().catch(() => ({}));
+        notificarAdmin(d.erro || 'Falha ao salvar chaves do Mercado Pago.', 'erro');
       }
     } catch (err) {
       notificarAdmin('Erro de conexão ao salvar gateway.', 'erro');
@@ -1022,6 +1060,7 @@ function configurarNavegacaoAbas() {
         if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
         if (tabAlvoId === 'tabCupons') carregarTabelaCupons(token);
         if (tabAlvoId === 'tabViagens') carregarTabelaViagens(token);
+        if (tabAlvoId === 'tabConfig') carregarTarifasConfig(token);
         if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token);
 
         if (tabAlvoId.toLowerCase().includes('radar')) {

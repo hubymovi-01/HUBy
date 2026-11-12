@@ -1,11 +1,11 @@
-// routes/admin.routes.js - Métricas, Frota, DRE dos Sócios, Saque Automático e Gestão Master HUBy
+// routes/admin.routes.js - Métricas, Frota, DRE dos Sócios, Saque Blindado e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 
-// Middleware: aceita 'admin' e 'administrador'
+// Middleware: aceita exclusivamente 'admin' e 'administrador'
 function verificarAdmin(req, res, next) {
-  const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase();
+  const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase().trim();
   if (role !== 'admin' && role !== 'administrador') {
     return res.status(403).json({ erro: 'Acesso restrito à administração.' });
   }
@@ -18,6 +18,65 @@ function autenticarCsv(req, res, next) {
     req.headers.authorization = `Bearer ${tokenUrl}`;
   }
   return autenticarToken(req, res, next);
+}
+
+// Função utilitária que desempacota qualquer valor vindo do Postgres (mesmo que tenha sido salvo como string dentro de JSONB)
+export function extrairObjetoJSONB(raw, fallback = {}) {
+  if (!raw) return fallback;
+  let atual = raw;
+  for (let i = 0; i < 3; i++) {
+    if (typeof atual === 'string') {
+      try {
+        atual = JSON.parse(atual);
+      } catch (e) {
+        return fallback;
+      }
+    } else {
+      break;
+    }
+  }
+  return (atual && typeof atual === 'object') ? atual : fallback;
+}
+
+export const TARIFAS_PADRAO_SISTEMA = {
+  taxa_plataforma: 15,
+  carro: { base: 6.0, km: 2.2, min: 0.30 },
+  moto: { base: 4.0, km: 1.4, min: 0.20 },
+  entrega: { base: 5.0, km: 1.8, min: 0.25 }
+};
+
+export async function lerTarifasDoBanco() {
+  try {
+    const config = await sql`
+      SELECT valor::text AS valor_txt FROM configuracoes_plataforma 
+      WHERE chave = 'tarifas' LIMIT 1;
+    `;
+    if (!config.length || !config[0].valor_txt) {
+      return TARIFAS_PADRAO_SISTEMA;
+    }
+    const obj = extrairObjetoJSONB(config[0].valor_txt, TARIFAS_PADRAO_SISTEMA);
+    return {
+      taxa_plataforma: Number(obj.taxa_plataforma ?? 15),
+      carro: {
+        base: Number(obj.carro?.base ?? 6.0),
+        km: Number(obj.carro?.km ?? 2.2),
+        min: Number(obj.carro?.min ?? 0.30)
+      },
+      moto: {
+        base: Number(obj.moto?.base ?? 4.0),
+        km: Number(obj.moto?.km ?? 1.4),
+        min: Number(obj.moto?.min ?? 0.20)
+      },
+      entrega: {
+        base: Number(obj.entrega?.base ?? 5.0),
+        km: Number(obj.entrega?.km ?? 1.8),
+        min: Number(obj.entrega?.min ?? 0.25)
+      }
+    };
+  } catch (err) {
+    console.warn('Erro ao ler tarifas do banco:', err.message);
+    return TARIFAS_PADRAO_SISTEMA;
+  }
 }
 
 async function inicializarTabelasAdmin() {
@@ -40,7 +99,7 @@ async function inicializarTabelasAdmin() {
 
     await sql`
       CREATE TABLE IF NOT EXISTS configuracoes_plataforma (
-        chave VARCHAR(50) PRIMARY KEY,
+        chave TEXT PRIMARY KEY,
         valor JSONB NOT NULL,
         atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -121,7 +180,7 @@ export default function adminRoutes(io) {
       statsCat.forEach(c => {
         const nome = String(c.cat).toLowerCase();
         if (nome.includes('moto')) distribuicao_categorias.moto += Number(c.qtd);
-        else if (nome.includes('entrega') || nome.includes('frete')) distribuicao_categorias.entrega += Number(c.qtd);
+        else if (nome.includes('entrega') || nome.includes('frete') || nome.includes('flash')) distribuicao_categorias.entrega += Number(c.qtd);
         else distribuicao_categorias.carro += Number(c.qtd);
       });
 
@@ -232,7 +291,7 @@ export default function adminRoutes(io) {
       }
 
       const novoStatus = acao === 'aprovar' ? 'aprovado' : 'recusado';
-      const motivoRecusa = acao === 'recusar' ? (motivo || 'Documentação ou perfil em desacordo.') : null;
+      const motivoRecusa = acao === 'recusar' ? String(motivo || 'Documentação ou perfil em desacordo.').slice(0, 200) : null;
 
       const mot = await sql`
         UPDATE motoristas
@@ -251,176 +310,51 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 4. SAQUE AUTOMÁTICO INSTANTÂNEO PIX & AUDITORIA
+  // 4. SAQUE AUTOMÁTICO BLINDADO CONTRA DUPLO CLIQUE (ATOMIC UPDATE)
   // =========================================================================
-
-  // A) SAQUE PARA OS SÓCIOS (Faltava esta rota! Resolve o erro no painel)
-  router.post('/saques/automatico', autenticarToken, verificarAdmin, async (req, res) => {
-    const { valor, chavePix, tipoChave } = req.body;
-    const valorSaque = Number(valor);
-
-    if (!valorSaque || valorSaque <= 0) {
-      return res.status(400).json({ erro: 'Informe um valor válido para saque.' });
-    }
-    if (!chavePix) {
-      return res.status(400).json({ erro: 'Chave Pix de destino é obrigatória.' });
-    }
-
-    try {
-      const accessToken = process.env.MP_ACCESS_TOKEN;
-      if (!accessToken) {
-        throw new Error('Configuração MP_ACCESS_TOKEN ausente nas variáveis de ambiente.');
-      }
-
-      // Requisição de saque via Mercado Pago
-      const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          'X-Idempotency-Key': `saque-socio-${Date.now()}`
-        },
-        body: JSON.stringify({
-          transaction_amount: valorSaque,
-          description: `Repasse de Lucros HUBy (Sócio)`,
-          payment_method_id: 'pix',
-          payer: {
-            email: req.usuario?.email || 'diretoria@huby.app',
-            identification: {
-              type: 'OUTRO',
-              number: chavePix.replace(/\D/g, '') || '00000000000'
-            }
-          }
-        })
-      });
-
-      const mpData = await mpResponse.json();
-
-      if (!mpResponse.ok) {
-        return res.status(400).json({ erro: `Falha na transferência bancária: ${mpData.message || 'Verifique a chave Pix'}` });
-      }
-
-      // Auditoria do saque
-      await sql`
-        INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
-        VALUES (${'saque_socio_' + Date.now()}, ${JSON.stringify({ valor: valorSaque, chave: chavePix })}::jsonb, CURRENT_TIMESTAMP);
-      `;
-
-      res.json({
-        sucesso: true,
-        mensagem: 'Transferência Pix para o Sócio processada com sucesso!',
-        valorTransferido: valorSaque
-      });
-
-    } catch (err) {
-      console.error('Erro no saque da diretoria:', err);
-      res.status(500).json({ erro: err.message || 'Erro interno ao processar saque.' });
-    }
-  });
-
-  // B) SAQUE PARA OS MOTORISTAS
   router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
-    const motoristaId = req.usuario?.id;
+    const motoristaId = String(req.usuario?.id || '');
     const { valor, chavePix, tipoChave } = req.body;
-    const valorSaque = Number(valor);
+    const valorSaque = Math.round((Number(valor) || 0) * 100) / 100;
 
     if (!valorSaque || valorSaque <= 0) {
       return res.status(400).json({ erro: 'Informe um valor válido para saque.' });
     }
-    if (!chavePix) {
+    if (!chavePix || String(chavePix).trim().length < 3) {
       return res.status(400).json({ erro: 'Chave Pix de destino é obrigatória.' });
     }
 
     try {
-      let saqueIdCriado = null;
-
-      await sql.begin(async (sqlTx) => {
-        const mot = await sqlTx`
-          SELECT id, nome, saldo_carteira, status_aprovacao 
-          FROM motoristas 
-          WHERE id = ${motoristaId} 
-          FOR UPDATE;
-        `;
-
-        if (mot.length === 0) throw new Error('Motorista não encontrado.');
-        if (mot[0].status_aprovacao !== 'aprovado') throw new Error('Cadastro do condutor não aprovado.');
-        if (Number(mot[0].saldo_carteira) < valorSaque) throw new Error('Saldo insuficiente para realizar este saque.');
-
-        await sqlTx`
-          UPDATE motoristas 
-          SET saldo_carteira = saldo_carteira - ${valorSaque} 
-          WHERE id = ${motoristaId};
-        `;
-
-        const reg = await sqlTx`
-          INSERT INTO saques_motoristas (motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, solicitado_em)
-          VALUES (${motoristaId}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'cpf'}, ${valorSaque}, 'processando', CURRENT_TIMESTAMP)
-          RETURNING id;
-        `;
-        saqueIdCriado = reg[0].id;
-      });
-
-      const accessToken = process.env.MP_ACCESS_TOKEN;
-      if (!accessToken) {
-        throw new Error('Configuração MP_ACCESS_TOKEN ausente nas variáveis de ambiente.');
-      }
-
-      const mpResponse = await fetch('https://api.mercadopago.com/v1/payments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          'X-Idempotency-Key': `saque-${saqueIdCriado}-${Date.now()}`
-        },
-        body: JSON.stringify({
-          transaction_amount: valorSaque,
-          description: `Repasse Automático HUBy #${motoristaId}`,
-          payment_method_id: 'pix',
-          payer: {
-            email: req.usuario?.email || 'motorista@huby.app',
-            identification: {
-              type: tipoChave === 'cpf' ? 'CPF' : 'OUTRO',
-              number: chavePix.replace(/\D/g, '') || '00000000000'
-            }
-          }
-        })
-      });
-
-      const mpData = await mpResponse.json();
-
-      if (!mpResponse.ok) {
-        await sql`
-          UPDATE motoristas SET saldo_carteira = saldo_carteira + ${valorSaque} WHERE id = ${motoristaId};
-        `;
-        await sql`
-          UPDATE saques_motoristas 
-          SET status = 'falha', motivo_recusa = ${mpData.message || 'Recusado pela API Pix'} 
-          WHERE id = ${saqueIdCriado};
-        `;
-        return res.status(400).json({ erro: `Falha na transferência bancária: ${mpData.message || 'Verifique sua chave Pix'}` });
-      }
-
-      await sql`
-        UPDATE saques_motoristas 
-        SET status = 'pago', pago_em = CURRENT_TIMESTAMP 
-        WHERE id = ${saqueIdCriado};
+      // Débito atômico: impede race condition de múltiplos saques simultâneos
+      const debitado = await sql`
+        UPDATE motoristas
+        SET saldo_carteira = saldo_carteira - ${valorSaque}
+        WHERE (id::text = ${motoristaId} OR usuario_id::text = ${motoristaId})
+          AND status_aprovacao = 'aprovado'
+          AND COALESCE(saldo_carteira, 0) >= ${valorSaque}
+        RETURNING id, nome, saldo_carteira;
       `;
 
-      await sql`
-        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-        VALUES (${motoristaId}, 'motorista', 'saque_pix_automatico', ${valorSaque}, ${saqueIdCriado});
+      if (!debitado.length) {
+        return res.status(400).json({ erro: 'Saldo insuficiente ou cadastro pendente de aprovação.' });
+      }
+
+      const mot = debitado[0];
+      const reg = await sql`
+        INSERT INTO saques_motoristas (motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, solicitado_em)
+        VALUES (${mot.id}, ${mot.nome}, ${String(chavePix).trim()}, ${String(tipoChave || 'cpf').slice(0, 20)}, ${valorSaque}, 'pendente', CURRENT_TIMESTAMP)
+        RETURNING id;
       `;
 
       res.json({
         sucesso: true,
-        mensagem: 'Transferência Pix realizada e liquidada com sucesso!',
-        saqueId: saqueIdCriado,
+        mensagem: 'Solicitação de saque registrada com segurança!',
+        saqueId: reg[0].id,
         valorTransferido: valorSaque
       });
-
     } catch (err) {
-      console.error('Erro no saque automático:', err);
-      res.status(500).json({ erro: err.message || 'Erro ao processar saque automático.' });
+      console.error('Erro no saque:', err);
+      res.status(500).json({ erro: 'Erro ao processar solicitação de saque.' });
     }
   });
 
@@ -437,7 +371,6 @@ export default function adminRoutes(io) {
       `;
       res.json(saques);
     } catch (err) {
-      console.error('Erro ao listar saques:', err);
       res.status(500).json({ erro: 'Falha ao listar histórico de saques.' });
     }
   });
@@ -460,69 +393,49 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS
+  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS (CORRIGIDO E SINCRONIZADO)
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    try {
-      const config = await sql`
-        SELECT valor FROM configuracoes_plataforma 
-        WHERE chave = 'tarifas' LIMIT 1;
-      `;
-
-      const tarifasPadrao = {
-        taxa_plataforma: 15,
-        carro: { base: 6.0, km: 2.2, min: 0.30 },
-        moto: { base: 4.0, km: 1.4, min: 0.20 },
-        entrega: { base: 5.0, km: 1.8, min: 0.25 }
-      };
-
-      if (!config.length || !config[0].valor) {
-        return res.json(tarifasPadrao);
-      }
-
-      const raw = config[0].valor;
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-
-      res.json({
-        ...tarifasPadrao,
-        ...parsed
-      });
-    } catch (err) {
-      console.error('Erro ao ler tarifas:', err);
-      res.status(500).json({ erro: 'Falha ao buscar configurações tarifárias.' });
-    }
+    const tarifas = await lerTarifasDoBanco();
+    res.json(tarifas);
   });
 
   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const body = req.body || {};
+
+      const lerNum = (val, padrao) => {
+        const n = Number(String(val ?? '').replace(',', '.'));
+        return Number.isFinite(n) && n >= 0 ? Number(n.toFixed(2)) : padrao;
+      };
+
       const novasTarifas = {
-        taxa_plataforma: Number(body.taxa_plataforma ?? 15),
+        taxa_plataforma: lerNum(body.taxa_plataforma, 15),
         carro: {
-          base: Number(body.carro?.base ?? 6.0),
-          km: Number(body.carro?.km ?? 2.2),
-          min: Number(body.carro?.min ?? 0.30)
+          base: lerNum(body.carro?.base, 6.0),
+          km: lerNum(body.carro?.km, 2.2),
+          min: lerNum(body.carro?.min, 0.30)
         },
         moto: {
-          base: Number(body.moto?.base ?? 4.0),
-          km: Number(body.moto?.km ?? 1.4),
-          min: Number(body.moto?.min ?? 0.20)
+          base: lerNum(body.moto?.base, 4.0),
+          km: lerNum(body.moto?.km, 1.4),
+          min: lerNum(body.moto?.min, 0.20)
         },
         entrega: {
-          base: Number(body.entrega?.base ?? 5.0),
-          km: Number(body.entrega?.km ?? 1.8),
-          min: Number(body.entrega?.min ?? 0.25)
+          base: lerNum(body.entrega?.base, 5.0),
+          km: lerNum(body.entrega?.km, 1.8),
+          min: lerNum(body.entrega?.min, 0.25)
         }
       };
 
-      const jsonStr = JSON.stringify(novasTarifas);
+      const jsonTexto = JSON.stringify(novasTarifas);
 
       await sql`
         INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
-        VALUES ('tarifas', ${jsonStr}::jsonb, CURRENT_TIMESTAMP)
+        VALUES ('tarifas', (${jsonTexto}::text)::jsonb, CURRENT_TIMESTAMP)
         ON CONFLICT (chave) DO UPDATE
-        SET valor = ${jsonStr}::jsonb, atualizado_em = CURRENT_TIMESTAMP;
+        SET valor = (${jsonTexto}::text)::jsonb, atualizado_em = CURRENT_TIMESTAMP;
       `;
 
       const socket = req.io || io;
@@ -530,15 +443,18 @@ export default function adminRoutes(io) {
         socket.emit('tarifas_atualizadas', novasTarifas);
       }
 
-      res.json({ sucesso: true, tarifas: novasTarifas, mensagem: 'Tarifas atualizadas com sucesso no banco de dados!' });
+      res.json({
+        sucesso: true,
+        tarifas: novasTarifas,
+        mensagem: 'Tarifas atualizadas com sucesso no banco de dados!'
+      });
     } catch (err) {
       console.error('Erro ao atualizar tarifas:', err);
       res.status(500).json({ erro: 'Falha ao atualizar tarifas no banco.' });
     }
   });
-
   // =========================================================================
-  // 7. GATEWAY MERCADO PAGO
+  // 7. GATEWAY MERCADO PAGO (BLINDADO: NÃO VAZA ACCESS TOKEN NO GET)
   // =========================================================================
   router.get('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -548,11 +464,21 @@ export default function adminRoutes(io) {
         LIMIT 1;
       `;
       if (!config.length || !config[0].valor) {
-        return res.json({ access_token: '', public_key: '', taxa_percentual: 0.99 });
+        return res.json({ configurado: false, access_token_mascarado: '', public_key: '', taxa_percentual: 0.99 });
       }
-      res.json(config[0].valor);
+      const val = extrairObjetoJSONB(config[0].valor, {});
+      const tokenReal = String(val.access_token || '');
+      const mascarado = tokenReal.length > 12
+        ? `${tokenReal.slice(0, 10)}••••••••••••${tokenReal.slice(-4)}`
+        : (tokenReal ? '••••••••' : '');
+
+      res.json({
+        configurado: Boolean(tokenReal),
+        access_token_mascarado: mascarado,
+        public_key: val.public_key || '',
+        taxa_percentual: val.taxa_percentual ?? 0.99
+      });
     } catch (err) {
-      console.error('Erro ao buscar credenciais do gateway:', err);
       res.status(500).json({ erro: 'Falha ao consultar configurações do gateway.' });
     }
   });
@@ -560,8 +486,8 @@ export default function adminRoutes(io) {
   router.put('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
     const { access_token, public_key, taxa_percentual } = req.body;
 
-    if (!access_token || !access_token.trim()) {
-      return res.status(400).json({ erro: 'O Access Token é obrigatório.' });
+    if (!access_token || !access_token.trim() || access_token.includes('••••')) {
+      return res.status(400).json({ erro: 'Insira um Access Token válido para atualizar.' });
     }
 
     try {
@@ -573,14 +499,13 @@ export default function adminRoutes(io) {
 
       await sql`
         INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
-        VALUES ('gateway_mercadopago', ${JSON.stringify(dados)}::jsonb, CURRENT_TIMESTAMP)
+        VALUES ('gateway_mercadopago', ${dados}, CURRENT_TIMESTAMP)
         ON CONFLICT (chave) 
-        DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = CURRENT_TIMESTAMP;
+        DO UPDATE SET valor = ${dados}, atualizado_em = CURRENT_TIMESTAMP;
       `;
 
-      res.json({ sucesso: true, mensagem: 'Credenciais do Mercado Pago salvas com sucesso!' });
+      res.json({ sucesso: true, mensagem: 'Credenciais do Mercado Pago salvas com segurança!' });
     } catch (err) {
-      console.error('Erro ao salvar credenciais:', err);
       res.status(500).json({ erro: 'Falha ao salvar credenciais no banco.' });
     }
   });
@@ -597,7 +522,6 @@ export default function adminRoutes(io) {
       `;
       res.json(cupons);
     } catch (err) {
-      console.error('Erro ao listar cupons:', err);
       res.status(500).json({ erro: 'Falha ao listar cupons.' });
     }
   });
@@ -609,10 +533,10 @@ export default function adminRoutes(io) {
         return res.status(400).json({ erro: 'Código e valor são obrigatórios.' });
       }
 
-      const codigoLimpo = String(codigo).trim().toUpperCase();
+      const codigoLimpo = String(codigo).replace(/[^A-Z0-9_-]/gi, '').trim().toUpperCase().slice(0, 25);
       const tipoCupom = tipo === 'porcentagem' ? 'porcentagem' : 'fixo';
-      const valorNum = Number(valor) || 0;
-      const limiteNum = Number(limite_usos) || 100;
+      const valorNum = Math.max(0.5, Number(valor) || 0);
+      const limiteNum = Math.max(1, parseInt(limite_usos, 10) || 100);
       const expiraData = expira_em ? new Date(expira_em) : null;
 
       const novoCupom = await sql`
@@ -696,7 +620,7 @@ export default function adminRoutes(io) {
       const { nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim } = req.body;
       const novaZona = await sql`
         INSERT INTO zonas_risco (nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim, ativo)
-        VALUES (${nome}, ${descricao || 'Área demarcada'}, ${nivel_risco || 'alto'}, ${Number(raio_metros) || 500}, ${Number(lat)}, ${Number(lng)}, ${horario_inicio || '20:00:00'}, ${horario_fim || '05:00:00'}, TRUE)
+        VALUES (${String(nome || '').slice(0, 90)}, ${String(descricao || 'Área demarcada').slice(0, 200)}, ${nivel_risco || 'alto'}, ${Number(raio_metros) || 500}, ${Number(lat)}, ${Number(lng)}, ${horario_inicio || '20:00:00'}, ${horario_fim || '05:00:00'}, TRUE)
         RETURNING *;
       `;
       res.status(201).json({ sucesso: true, zona: novaZona[0] });
@@ -716,8 +640,34 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 10. RELATÓRIO EXECUTIVO CSV
+  // 10. NOTIFICAÇÕES BROADCAST & RELATÓRIO CSV
   // =========================================================================
+  router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const { publico, titulo, mensagem } = req.body;
+      if (!titulo || !mensagem) {
+        return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
+      }
+      const pubLimpo = ['todos', 'motoristas', 'passageiros'].includes(publico) ? publico : 'todos';
+      const titLimpo = String(titulo).trim().slice(0, 110);
+      const msgLimpa = String(mensagem).trim().slice(0, 500);
+
+      await sql`
+        INSERT INTO notificacoes_globais (titulo, mensagem, publico)
+        VALUES (${titLimpo}, ${msgLimpa}, ${pubLimpo});
+      `;
+
+      const socket = req.io || io;
+      if (socket) {
+        socket.emit('broadcast_alerta', { publico: pubLimpo, titulo: titLimpo, mensagem: msgLimpa });
+      }
+
+      res.json({ sucesso: true });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao disparar broadcast.' });
+    }
+  });
+
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
       const registros = await sql`
