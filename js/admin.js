@@ -8,13 +8,38 @@ let motoristaFocadoModalId = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
+// ============================================================================
+// SISTEMA DE NOTIFICAÇÃO TOAST EXECUTIVO (SEM BLOQUEAR A TELA)
+// ============================================================================
+function notificarAdmin(mensagem, tipo = 'sucesso') {
+  let container = document.getElementById('adminToastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'adminToastContainer';
+    container.className = 'admin-toast-container';
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement('div');
+  toast.className = `admin-toast ${tipo}`;
+  toast.textContent = mensagem;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(20px)';
+    toast.style.transition = 'all 0.25s ease';
+    setTimeout(() => toast.remove(), 260);
+  }, 3600);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem('huby_token');
   const role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
 
   if (!token || (role !== 'admin' && role !== 'administrador')) {
-    alert('Acesso restrito ao Painel Administrativo Master.');
-    window.location.replace('./login.html');
+    notificarAdmin('Acesso restrito ao Painel Administrativo Master.', 'erro');
+    setTimeout(() => window.location.replace('./login.html'), 900);
     return;
   }
 
@@ -27,9 +52,12 @@ document.addEventListener('DOMContentLoaded', () => {
   configurarFormTarifas(token);
   configurarFormMercadoPago(token);
   configurarModalDocumentos(token);
-  configurarFormMarketplace(token); // <-- Nova configuração do Clube
+  configurarFormMarketplace(token);
 
-  document.getElementById('btnSincronizar')?.addEventListener('click', () => sincronizarTudo(token));
+  document.getElementById('btnSincronizar')?.addEventListener('click', async () => {
+    await sincronizarTudo(token);
+    notificarAdmin('Dados sincronizados com o servidor!', 'sucesso');
+  });
   document.getElementById('btnBaixarCSV')?.addEventListener('click', () => exportarRelatorioCSV(token));
 
   // 2. Inicializa Radar
@@ -46,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('Socket indisponível:', err);
   }
 
-  // 4. Carrega tudo
+  // 4. Carrega todos os módulos
   sincronizarTudo(token);
 });
 
@@ -58,23 +86,17 @@ async function sincronizarTudo(token) {
 
   const periodoAtual = document.getElementById('selectFiltroPeriodo')?.value || 'total';
 
-  // 1. Carrega primeiro a frota
   await carregarTabelaFrota(token);
-
-  // 2. Carrega as métricas com o fallback
   await carregarMetricasECards(token, periodoAtual);
-
-  // 3. Carrega a divisão dos sócios
   await carregarDadosSocios(token);
 
-  // 4. Carrega o restante em segundo plano
   Promise.allSettled([
     carregarTabelaZonasRisco(token),
     carregarTabelaCupons(token),
     carregarTabelaSeguranca(token),
     carregarTabelaSaques(token),
     carregarTabelaViagens(token),
-    carregarTabelaMarketplace(token), // <-- Carregamento da Loja Parceira
+    carregarTabelaMarketplace(token),
     carregarTarifasConfig(token),
     carregarGatewayConfig(token)
   ]);
@@ -106,7 +128,6 @@ async function carregarMetricasECards(token, periodo = 'total') {
     let viagensConcluidas = Number(dados.viagensConcluidas || 0);
     let incidentesAtivos = Number(dados.alertasSeguranca || 0);
 
-    // Fallback garantido se as corridas no banco ainda não tiverem sido salvas como 'concluido'
     if (faturamentoBruto === 0 && window._ultimoSaldoAcumuladoFrota > 0) {
       repasseMotoristas = Number(window._ultimoSaldoAcumuladoFrota.toFixed(2));
       faturamentoBruto = Number((repasseMotoristas / 0.85).toFixed(2));
@@ -220,6 +241,7 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
 // 3. DIVISÃO DOS SÓCIOS (50% / 50%)
 // ============================================================================
 async function carregarDadosSocios(token) {
+  const tbodyRetiradas = document.getElementById('tabelaRetiradasSociosBody');
   try {
     const res = await fetch(`${API_URL}/api/socios/saldo-divisao`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -246,10 +268,9 @@ async function carregarDadosSocios(token) {
       window._socio2Max = Number(socios[1].saldoDisponivel);
     }
 
-    const tbodyRetiradas = document.getElementById('tabelaRetiradasSociosBody');
     if (tbodyRetiradas && data.historicoRetiradas) {
       if (!data.historicoRetiradas.length) {
-        tbodyRetiradas.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--muted);">Nenhuma retirada registrada até o momento.</td></tr>';
+        tbodyRetiradas.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma retirada registrada até o momento.</td></tr>';
       } else {
         tbodyRetiradas.innerHTML = data.historicoRetiradas.map(r => `
           <tr>
@@ -263,7 +284,9 @@ async function carregarDadosSocios(token) {
       }
     }
   } catch (e) {
-    console.warn('Erro ao carregar dados dos sócios:', e);
+    if (tbodyRetiradas) {
+      tbodyRetiradas.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma retirada registrada até o momento.</td></tr>';
+    }
   }
 }
 
@@ -281,11 +304,13 @@ window.editarDadosSocio = async (socioId) => {
       body: JSON.stringify({ nome, chave_pix })
     });
     if (res.ok) {
-      alert('✅ Dados do sócio atualizados com sucesso!');
+      notificarAdmin('Dados do sócio atualizados com sucesso!', 'sucesso');
       carregarDadosSocios(token);
+    } else {
+      notificarAdmin('Erro ao atualizar dados do sócio.', 'erro');
     }
   } catch (e) {
-    alert('Erro ao atualizar dados do sócio.');
+    notificarAdmin('Erro de conexão ao atualizar dados do sócio.', 'erro');
   }
 };
 
@@ -294,7 +319,7 @@ window.solicitarSaqueSocio = async (socioId) => {
   const maxDisponivel = socioId === 1 ? (window._socio1Max || 0) : (window._socio2Max || 0);
 
   if (maxDisponivel <= 0) {
-    alert('Não há saldo disponível para retirada no momento.');
+    notificarAdmin('Não há saldo disponível para retirada no momento.', 'aviso');
     return;
   }
 
@@ -303,7 +328,7 @@ window.solicitarSaqueSocio = async (socioId) => {
 
   const valor = parseFloat(valorStr);
   if (!valor || valor <= 0 || valor > maxDisponivel) {
-    alert('Valor inválido ou superior ao saldo disponível.');
+    notificarAdmin('Valor inválido ou superior ao saldo disponível.', 'erro');
     return;
   }
 
@@ -316,18 +341,18 @@ window.solicitarSaqueSocio = async (socioId) => {
 
     const data = await res.json();
     if (res.ok) {
-      alert(data.mensagem || 'Retirada registrada com sucesso!');
+      notificarAdmin(data.mensagem || 'Retirada registrada com sucesso!', 'sucesso');
       carregarDadosSocios(token);
     } else {
-      alert(data.erro || 'Falha ao registrar retirada.');
+      notificarAdmin(data.erro || 'Falha ao registrar retirada.', 'erro');
     }
   } catch (e) {
-    alert('Erro de conexão ao processar retirada.');
+    notificarAdmin('Erro de conexão ao processar retirada.', 'erro');
   }
 };
 
 // ============================================================================
-// GESTÃO DO CLUBE HUBy / MARKETPLACE (NOVIDADE)
+// GESTÃO DO CLUBE HUBy / MARKETPLACE
 // ============================================================================
 async function carregarTabelaMarketplace(token) {
   const tbody = document.getElementById('tabelaMarketplaceBody');
@@ -337,43 +362,54 @@ async function carregarTabelaMarketplace(token) {
     const res = await fetch(`${API_URL}/api/marketplace/admin/itens`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhuma parceria cadastrada no momento.</td></tr>';
+      return;
+    }
     const itens = await res.json();
 
-    if (!itens.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:15px;">Nenhum benefício ou parceria cadastrada no momento.</td></tr>';
+    if (!Array.isArray(itens) || !itens.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum benefício ou parceria cadastrada no momento.</td></tr>';
       return;
     }
 
     tbody.innerHTML = itens.map(i => `
       <tr>
         <td><strong>${i.titulo}</strong><br><small style="color:var(--muted);">${i.empresa_nome}</small></td>
-        <td><span class="badge badge-aceito" style="text-transform:uppercase;">${i.categoria}</span></td>
+        <td><span class="badge badge-aceito">${i.categoria}</span></td>
         <td style="color:var(--rose); text-decoration:line-through;">R$ ${Number(i.preco_original).toFixed(2).replace('.', ',')}</td>
         <td style="color:var(--primary); font-weight:800;">R$ ${Number(i.preco_parceiro).toFixed(2).replace('.', ',')}</td>
         <td><span class="badge ${i.ativo ? 'badge-ativo' : 'badge-inativo'}">${i.ativo ? 'Disponível' : 'Oculto'}</span></td>
         <td>
-          <button class="btn-tbl alt" onclick="alternarStatusMarketplace('${i.id}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
-          <button class="btn-tbl rej" onclick="excluirItemMarketplace('${i.id}')">Excluir</button>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-tbl alt" onclick="alternarStatusMarketplace('${i.id}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
+            <button class="btn-tbl rej" onclick="excluirItemMarketplace('${i.id}')">Excluir</button>
+          </div>
         </td>
       </tr>
     `).join('');
   } catch (e) {
-    console.warn('Falha ao listar itens do Marketplace.');
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhuma parceria cadastrada no momento.</td></tr>';
   }
 }
 
 function configurarFormMarketplace(token) {
   document.getElementById('formNovoMarketplace')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btnSubmit = e.target.querySelector('button[type="submit"]');
+    if (btnSubmit) {
+      btnSubmit.disabled = true;
+      btnSubmit.textContent = 'Publicando...';
+    }
+
     const titulo = document.getElementById('mkpTitulo').value.trim();
     const empresa_nome = document.getElementById('mkpEmpresa').value.trim();
     const categoria = document.getElementById('mkpCategoria').value;
     const descricao = document.getElementById('mkpDescricao').value.trim();
-    const preco_original = document.getElementById('mkpPrecoDe').value;
-    const preco_parceiro = document.getElementById('mkpPrecoPor').value;
+    const preco_original = parseFloat(document.getElementById('mkpPrecoDe').value) || 0;
+    const preco_parceiro = parseFloat(document.getElementById('mkpPrecoPor').value) || 0;
     const whatsapp_contato = document.getElementById('mkpWhatsapp').value.replace(/\D/g, '');
-    const imagem_url = document.getElementById('mkpImagemUrl').value.trim();
+    const imagem_url = document.getElementById('mkpImagemUrl').value.trim() || null;
 
     try {
       const res = await fetch(`${API_URL}/api/marketplace/admin/itens`, {
@@ -381,18 +417,25 @@ function configurarFormMarketplace(token) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ 
           titulo, empresa_nome, categoria, descricao, 
-          preco_original, preco_parceiro, whatsapp_contato, imagem_url 
+          preco_original, preco_parceiro, whatsapp_contato, imagem_url,
+          endereco: 'Atendimento Local'
         })
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        alert('✅ Nova parceria adicionada com sucesso ao Clube HUBy!');
+        notificarAdmin('Nova parceria adicionada com sucesso ao Clube HUBy!', 'sucesso');
         e.target.reset();
-        carregarTabelaMarketplace(token);
+        await carregarTabelaMarketplace(token);
       } else {
-        alert('Erro ao guardar a parceria.');
+        notificarAdmin(data.erro || 'Erro ao guardar a parceria.', 'erro');
       }
     } catch (err) {
-      alert('Falha de conexão.');
+      notificarAdmin('Falha de conexão ao salvar parceria.', 'erro');
+    } finally {
+      if (btnSubmit) {
+        btnSubmit.disabled = false;
+        btnSubmit.textContent = 'Publicar Parceria no App';
+      }
     }
   });
 }
@@ -404,19 +447,25 @@ window.alternarStatusMarketplace = async (id) => {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) carregarTabelaMarketplace(token);
+    if (res.ok) {
+      notificarAdmin('Visibilidade da oferta atualizada.', 'sucesso');
+      carregarTabelaMarketplace(token);
+    }
   } catch (e) {}
 };
 
 window.excluirItemMarketplace = async (id) => {
-  if (!confirm('Tem a certeza de que deseja remover esta oferta permanentemente?')) return;
+  if (!confirm('Tem certeza de que deseja remover esta oferta permanentemente?')) return;
   const token = localStorage.getItem('huby_token');
   try {
     const res = await fetch(`${API_URL}/api/marketplace/admin/itens/${id}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) carregarTabelaMarketplace(token);
+    if (res.ok) {
+      notificarAdmin('Oferta removida do Clube HUBy.', 'aviso');
+      carregarTabelaMarketplace(token);
+    }
   } catch (e) {}
 };
 
@@ -431,11 +480,14 @@ async function carregarTabelaFrota(token) {
     const res = await fetch(`${API_URL}/api/admin/motoristas`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhum parceiro cadastrado.</td></tr>';
+      return;
+    }
     const motoristas = await res.json();
 
-    if (!motoristas.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">Nenhum parceiro cadastrado.</td></tr>';
+    if (!Array.isArray(motoristas) || !motoristas.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhum parceiro cadastrado.</td></tr>';
       return;
     }
 
@@ -485,7 +537,9 @@ async function carregarTabelaFrota(token) {
         </tr>
       `;
     }).join('');
-  } catch (e) {}
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhum parceiro cadastrado.</td></tr>';
+  }
 }
 
 // 5. Zonas de Risco
@@ -497,10 +551,13 @@ async function carregarTabelaZonasRisco(token) {
     const res = await fetch(`${API_URL}/api/admin/seguranca/zonas-risco`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma zona de risco cadastrada.</td></tr>';
+      return;
+    }
     const zonas = await res.json();
-    if (!zonas.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Nenhuma zona de risco cadastrada.</td></tr>';
+    if (!Array.isArray(zonas) || !zonas.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma zona de risco cadastrada.</td></tr>';
       return;
     }
 
@@ -513,7 +570,9 @@ async function carregarTabelaZonasRisco(token) {
         <td><button class="btn-tbl rej" onclick="excluirZonaRisco(${z.id})">Remover</button></td>
       </tr>
     `).join('');
-  } catch (e) {}
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma zona de risco cadastrada.</td></tr>';
+  }
 }
 
 function configurarFormZonasRisco(token) {
@@ -534,12 +593,14 @@ function configurarFormZonasRisco(token) {
         body: JSON.stringify({ nome, nivel_risco, lat, lng, raio_metros, horario_inicio, horario_fim })
       });
       if (res.ok) {
-        alert('Zona de risco delimitada com sucesso!');
+        notificarAdmin('Zona de risco delimitada com sucesso!', 'sucesso');
         e.target.reset();
         carregarTabelaZonasRisco(token);
+      } else {
+        notificarAdmin('Erro ao registrar zona de risco.', 'erro');
       }
     } catch (err) {
-      alert('Falha ao registrar zona.');
+      notificarAdmin('Falha de conexão ao registrar zona.', 'erro');
     }
   });
 }
@@ -553,10 +614,13 @@ async function carregarTabelaCupons(token) {
     const res = await fetch(`${API_URL}/api/admin/cupons`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhum cupom promocional cadastrado.</td></tr>';
+      return;
+    }
     const cupons = await res.json();
-    if (!cupons.length) {
-      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--muted);">Nenhum cupom cadastrado.</td></tr>';
+    if (!Array.isArray(cupons) || !cupons.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhum cupom promocional cadastrado.</td></tr>';
       return;
     }
 
@@ -567,12 +631,16 @@ async function carregarTabelaCupons(token) {
         <td>${c.usos_atuais || 0} / ${c.limite_usos || '∞'}</td>
         <td><span class="badge ${c.ativo ? 'badge-ativo' : 'badge-inativo'}">${c.ativo ? 'Ativo' : 'Pausado'}</span></td>
         <td>
-          <button class="btn-tbl alt" onclick="alternarCupom('${c.id}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
-          <button class="btn-tbl rej" onclick="excluirCupom('${c.id}')">Excluir</button>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-tbl alt" onclick="alternarCupom('${c.id}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
+            <button class="btn-tbl rej" onclick="excluirCupom('${c.id}')">Excluir</button>
+          </div>
         </td>
       </tr>
     `).join('');
-  } catch (e) {}
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhum cupom promocional cadastrado.</td></tr>';
+  }
 }
 
 function configurarFormCupons(token) {
@@ -591,11 +659,15 @@ function configurarFormCupons(token) {
         body: JSON.stringify({ codigo, tipo, valor, limite_usos, expira_em })
       });
       if (res.ok) {
-        alert('Cupom cadastrado com sucesso!');
+        notificarAdmin('Cupom cadastrado com sucesso!', 'sucesso');
         e.target.reset();
         carregarTabelaCupons(token);
+      } else {
+        notificarAdmin('Erro ao salvar cupom promocional.', 'erro');
       }
-    } catch (err) {}
+    } catch (err) {
+      notificarAdmin('Falha de conexão ao salvar cupom.', 'erro');
+    }
   });
 }
 
@@ -608,10 +680,13 @@ async function carregarTabelaSeguranca(token) {
     const res = await fetch(`${API_URL}/api/admin/seguranca/incidentes`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Sem incidentes pendentes. Frota segura!</td></tr>';
+      return;
+    }
     const incidentes = await res.json();
-    if (!incidentes.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted);">Sem incidentes pendentes. Frota segura!</td></tr>';
+    if (!Array.isArray(incidentes) || !incidentes.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Sem incidentes pendentes. Frota segura!</td></tr>';
       return;
     }
 
@@ -625,10 +700,12 @@ async function carregarTabelaSeguranca(token) {
         <td>${!i.resolvido ? `<button class="btn-tbl app" onclick="resolverIncidente(${i.id})">Resolver</button>` : '---'}</td>
       </tr>
     `).join('');
-  } catch (e) {}
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Sem incidentes pendentes. Frota segura!</td></tr>';
+  }
 }
 
-// 8. Moderação de Saques dos Motoristas
+// 8. Moderação e Extrato de Saques dos Motoristas
 async function carregarTabelaSaques(token) {
   const tbody = document.getElementById('tabelaSaquesBody');
   if (!tbody) return;
@@ -637,11 +714,14 @@ async function carregarTabelaSaques(token) {
     const res = await fetch(`${API_URL}/api/carteira/admin/saques`, {
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum pedido de saque registrado até o momento.</td></tr>';
+      return;
+    }
     const saques = await res.json();
 
-    if (!saques.length) {
-      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--muted); padding:18px;">Nenhum pedido de saque registrado.</td></tr>';
+    if (!Array.isArray(saques) || !saques.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum pedido de saque registrado até o momento.</td></tr>';
       return;
     }
 
@@ -672,8 +752,8 @@ async function carregarTabelaSaques(token) {
           <td>
             ${s.status === 'pendente' ? `
               <div style="display:flex; gap:6px;">
-                <button class="btn-tbl app" onclick="processarSaqueMaster(${s.id}, 'pago')" title="Marcar como Pago">Pagar Pix</button>
-                <button class="btn-tbl rej" onclick="processarSaqueMaster(${s.id}, 'recusado')" title="Recusar e Devolver Saldo">Recusar</button>
+                <button class="btn-tbl app" onclick="processarSaqueMaster(${s.id}, 'pago')">Pagar Pix</button>
+                <button class="btn-tbl rej" onclick="processarSaqueMaster(${s.id}, 'recusado')">Recusar</button>
               </div>
             ` : `<small style="color:var(--muted);">${s.status === 'pago' ? 'Liquidado' : 'Estornado'}</small>`}
           </td>
@@ -685,13 +765,12 @@ async function carregarTabelaSaques(token) {
       btn.addEventListener('click', () => {
         const chave = btn.getAttribute('data-chave');
         navigator.clipboard.writeText(chave);
-        btn.textContent = '✅';
-        setTimeout(() => { btn.textContent = '📋'; }, 1500);
+        notificarAdmin('Chave Pix copiada!', 'sucesso');
       });
     });
 
   } catch (e) {
-    console.warn('Erro ao listar saques:', e);
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum pedido de saque registrado até o momento.</td></tr>';
   }
 }
 
@@ -704,41 +783,105 @@ async function carregarTabelaViagens(token) {
     const res = await fetch(`${API_URL}/api/admin/pedidos`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) return;
+    if (!res.ok) {
+      tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhuma viagem registrada no histórico.</td></tr>';
+      return;
+    }
     const corridas = await res.json();
-    if (!corridas.length) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--muted);">Nenhuma corrida realizada.</td></tr>';
+    if (!Array.isArray(corridas) || !corridas.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhuma viagem registrada no histórico.</td></tr>';
       return;
     }
 
-    tbody.innerHTML = corridas.slice(0, 15).map(c => {
-      const taxa = Number(c.valor_total) * 0.15;
+    tbody.innerHTML = corridas.slice(0, 25).map(c => {
+      const taxa = Number(c.valor_total || 0) * 0.15;
       return `
         <tr>
-          <td>#${String(c.id).slice(-4)}</td>
+          <td><strong>#${String(c.id).slice(-4)}</strong></td>
           <td>${c.sub_tipo_label || c.tipo || 'HUBy'}</td>
-          <td>${c.distancia_km} km</td>
-          <td style="font-weight:800; color:#FFF;">R$ ${Number(c.valor_total).toFixed(2).replace('.', ',')}</td>
+          <td>${c.distancia_km || '0.0'} km</td>
+          <td style="font-weight:800; color:#FFF;">R$ ${Number(c.valor_total || 0).toFixed(2).replace('.', ',')}</td>
           <td style="color:var(--blue); font-weight:700;">R$ ${taxa.toFixed(2).replace('.', ',')}</td>
           <td>${c.motorista_nome || 'Aguardando...'}</td>
-          <td><span class="badge ${c.status === 'concluido' ? 'badge-concluido' : (c.status === 'cancelado' ? 'badge-recusado' : 'badge-aceito')}">${c.status.toUpperCase()}</span></td>
+          <td><span class="badge ${c.status === 'concluido' ? 'badge-concluido' : (c.status === 'cancelado' ? 'badge-recusado' : 'badge-aceito')}">${(c.status || 'pendente').toUpperCase()}</span></td>
         </tr>
       `;
     }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhuma viagem registrada no histórico.</td></tr>';
+  }
+}
+
+// 10. Parâmetros e Tarifas Dinâmicas (Sincronizado com os 9 campos do HTML)
+async function carregarTarifasConfig(token) {
+  try {
+    const res = await fetch(`${API_URL}/api/admin/tarifas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const cfg = await res.json();
+
+    if (cfg.taxa_plataforma !== undefined) {
+      document.getElementById('cfgTaxaPlataforma').value = cfg.taxa_plataforma;
+    }
+
+    if (cfg.carro) {
+      if (cfg.carro.base !== undefined) document.getElementById('tarifaCarroBase').value = Number(cfg.carro.base).toFixed(2);
+      if (cfg.carro.km !== undefined) document.getElementById('tarifaCarroKm').value = Number(cfg.carro.km).toFixed(2);
+      if (cfg.carro.min !== undefined) document.getElementById('tarifaCarroMin').value = Number(cfg.carro.min).toFixed(2);
+    }
+
+    if (cfg.moto) {
+      if (cfg.moto.base !== undefined) document.getElementById('tarifaMotoBase').value = Number(cfg.moto.base).toFixed(2);
+      if (cfg.moto.km !== undefined) document.getElementById('tarifaMotoKm').value = Number(cfg.moto.km).toFixed(2);
+      if (cfg.moto.min !== undefined) document.getElementById('tarifaMotoMin').value = Number(cfg.moto.min).toFixed(2);
+    }
+
+    if (cfg.entrega) {
+      if (cfg.entrega.base !== undefined) document.getElementById('tarifaFlashBase').value = Number(cfg.entrega.base).toFixed(2);
+      if (cfg.entrega.km !== undefined) document.getElementById('tarifaFlashKm').value = Number(cfg.entrega.km).toFixed(2);
+      if (cfg.entrega.min !== undefined) document.getElementById('tarifaFlashMin').value = Number(cfg.entrega.min).toFixed(2);
+    }
   } catch (e) {}
 }
 
-// 10. Parâmetros e Tarifas
-async function carregarTarifasConfig(token) {
-  try {
-    const res = await fetch(`${API_URL}/api/config`);
-    if (!res.ok) return;
-    const cfg = await res.json();
-    if (cfg.taxa_plataforma) document.getElementById('cfgTaxaPlataforma').value = cfg.taxa_plataforma;
-    if (cfg.km_carro) document.getElementById('cfgKmCarro').value = cfg.km_carro;
-    if (cfg.km_moto) document.getElementById('cfgKmMoto').value = cfg.km_moto;
-    if (cfg.km_entrega) document.getElementById('cfgKmEntrega').value = cfg.km_entrega;
-  } catch (e) {}
+function configurarFormTarifas(token) {
+  document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      taxa_plataforma: Number(document.getElementById('cfgTaxaPlataforma').value) || 15,
+      carro: {
+        base: Number(document.getElementById('tarifaCarroBase').value) || 6.0,
+        km: Number(document.getElementById('tarifaCarroKm').value) || 2.2,
+        min: Number(document.getElementById('tarifaCarroMin').value) || 0.30
+      },
+      moto: {
+        base: Number(document.getElementById('tarifaMotoBase').value) || 4.0,
+        km: Number(document.getElementById('tarifaMotoKm').value) || 1.4,
+        min: Number(document.getElementById('tarifaMotoMin').value) || 0.20
+      },
+      entrega: {
+        base: Number(document.getElementById('tarifaFlashBase').value) || 5.0,
+        km: Number(document.getElementById('tarifaFlashKm').value) || 1.8,
+        min: Number(document.getElementById('tarifaFlashMin').value) || 0.25
+      }
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/tarifas`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        notificarAdmin('Tabela tarifária dinâmica atualizada no banco!', 'sucesso');
+      } else {
+        notificarAdmin('Falha ao atualizar tabela tarifária.', 'erro');
+      }
+    } catch (err) {
+      notificarAdmin('Erro de conexão ao salvar tarifas.', 'erro');
+    }
+  });
 }
 
 // 11. Gateway de Pagamento (Mercado Pago)
@@ -769,12 +912,12 @@ function configurarFormMercadoPago(token) {
         body: JSON.stringify({ access_token, public_key, taxa_percentual })
       });
       if (res.ok) {
-        alert('✅ Credenciais do Mercado Pago salvas com sucesso!');
+        notificarAdmin('Credenciais do Mercado Pago salvas com sucesso!', 'sucesso');
       } else {
-        alert('Falha ao salvar chaves do Mercado Pago.');
+        notificarAdmin('Falha ao salvar chaves do Mercado Pago.', 'erro');
       }
     } catch (err) {
-      alert('Erro de conexão ao salvar gateway.');
+      notificarAdmin('Erro de conexão ao salvar gateway.', 'erro');
     }
   });
 }
@@ -793,29 +936,14 @@ function configurarFormBroadcast(token) {
         body: JSON.stringify({ publico, titulo, mensagem })
       });
       if (res.ok) {
-        alert('📢 Notificação transmitida com sucesso!');
+        notificarAdmin('Notificação Push transmitida para a frota!', 'sucesso');
         e.target.reset();
+      } else {
+        notificarAdmin('Erro ao enviar broadcast.', 'erro');
       }
-    } catch (err) {}
-  });
-}
-
-function configurarFormTarifas(token) {
-  document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const taxa_plataforma = Number(document.getElementById('cfgTaxaPlataforma').value);
-    const km_carro = Number(document.getElementById('cfgKmCarro').value);
-    const km_moto = Number(document.getElementById('cfgKmMoto').value);
-    const km_entrega = Number(document.getElementById('cfgKmEntrega').value);
-
-    try {
-      const res = await fetch(`${API_URL}/api/admin/tarifas`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ taxa_plataforma, km_carro, km_moto, km_entrega })
-      });
-      if (res.ok) alert('Parâmetros e tarifas atualizados com sucesso!');
-    } catch (err) {}
+    } catch (err) {
+      notificarAdmin('Falha de conexão ao disparar alerta.', 'erro');
+    }
   });
 }
 
@@ -892,7 +1020,9 @@ function configurarNavegacaoAbas() {
 
         if (tabAlvoId === 'tabSocios') carregarDadosSocios(token);
         if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
-        if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token); // <-- Renderiza a tabela da loja
+        if (tabAlvoId === 'tabCupons') carregarTabelaCupons(token);
+        if (tabAlvoId === 'tabViagens') carregarTabelaViagens(token);
+        if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token);
 
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
@@ -914,7 +1044,7 @@ function conectarSocketAdmin() {
   });
 
   socket.on('alerta_sos', (dados) => {
-    alert(`🚨 ALERTA SOS EM TEMPO REAL!\n\nViagem: #${dados.pedidoId}\nDescrição: ${dados.relato || 'Emergência reportada!'}`);
+    notificarAdmin(`🚨 ALERTA SOS: Viagem #${dados.pedidoId} - ${dados.relato || 'Emergência reportada!'}`, 'erro');
     const token = localStorage.getItem('huby_token');
     carregarTabelaSeguranca(token);
     carregarMetricasECards(token);
@@ -930,7 +1060,10 @@ window.excluirZonaRisco = async (id) => {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) carregarTabelaZonasRisco(token);
+    if (res.ok) {
+      notificarAdmin('Zona de risco removida.', 'aviso');
+      carregarTabelaZonasRisco(token);
+    }
   } catch (e) {}
 };
 
@@ -941,7 +1074,10 @@ window.alternarCupom = async (id) => {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) carregarTabelaCupons(token);
+    if (res.ok) {
+      notificarAdmin('Status do cupom alterado.', 'sucesso');
+      carregarTabelaCupons(token);
+    }
   } catch (e) {}
 };
 
@@ -953,7 +1089,10 @@ window.excluirCupom = async (id) => {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (res.ok) carregarTabelaCupons(token);
+    if (res.ok) {
+      notificarAdmin('Cupom excluído.', 'aviso');
+      carregarTabelaCupons(token);
+    }
   } catch (e) {}
 };
 
@@ -966,13 +1105,13 @@ window.alterarStatusCondutor = async (id, acao) => {
       body: JSON.stringify({ acao })
     });
     if (res.ok) {
+      notificarAdmin(acao === 'aprovar' ? 'Condutor aprovado e liberado!' : 'Condutor recusado/bloqueado.', acao === 'aprovar' ? 'sucesso' : 'aviso');
       await carregarTabelaFrota(token);
       await carregarMetricasECards(token);
     }
   } catch (e) {}
 };
 
-// LIQUIDAÇÃO DE SAQUE PIX COM RETORNO DE SALDO EM CASO DE RECUSA
 window.processarSaqueMaster = async (id, status) => {
   const token = localStorage.getItem('huby_token');
   let motivo = '';
@@ -997,11 +1136,11 @@ window.processarSaqueMaster = async (id, status) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
 
-    alert(status === 'pago' ? '✅ Saque marcado como PAGO!' : '⚠️ Saque recusado e valor estornado com sucesso.');
+    notificarAdmin(status === 'pago' ? 'Saque marcado como PAGO!' : 'Saque recusado e valor estornado.', status === 'pago' ? 'sucesso' : 'aviso');
     await carregarTabelaSaques(token);
     await carregarMetricasECards(token);
   } catch (e) {
-    alert(e.message);
+    notificarAdmin(e.message, 'erro');
   }
 };
 
@@ -1013,6 +1152,7 @@ window.resolverIncidente = async (id) => {
       headers: { Authorization: `Bearer ${token}` }
     });
     if (res.ok) {
+      notificarAdmin('Incidente marcado como resolvido.', 'sucesso');
       await carregarTabelaSeguranca(token);
       await carregarMetricasECards(token);
     }

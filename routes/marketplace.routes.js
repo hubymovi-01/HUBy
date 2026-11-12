@@ -110,24 +110,47 @@ router.get('/admin/itens', autenticarToken, verificarAdmin, async (req, res) => 
 // Criar nova parceria/benefício
 router.post('/admin/itens', autenticarToken, verificarAdmin, async (req, res) => {
   try {
-    const { categoria, titulo, empresa_nome, descricao, preco_original, preco_parceiro, imagem_url, whatsapp_contato, endereco } = req.body;
-    
-    // Calcula desconto automático
-    let desconto = 0;
-    if (preco_original > 0 && preco_parceiro < preco_original) {
-      desconto = Math.round(((preco_original - preco_parceiro) / preco_original) * 100);
+    const {
+      categoria,
+      titulo,
+      empresa_nome,
+      descricao,
+      preco_original,
+      preco_parceiro,
+      imagem_url,
+      whatsapp_contato,
+      endereco
+    } = req.body;
+
+    if (!titulo || !empresa_nome || !whatsapp_contato) {
+      return res.status(400).json({ erro: 'Título, empresa e WhatsApp são obrigatórios.' });
     }
+
+    const precoOrigNum = Number(preco_original) || 0;
+    const precoParcNum = Number(preco_parceiro) || 0;
+
+    let desconto = 0;
+    if (precoOrigNum > 0 && precoParcNum < precoOrigNum) {
+      desconto = Math.round(((precoOrigNum - precoParcNum) / precoOrigNum) * 100);
+    }
+
+    const imgSegura = imagem_url && String(imagem_url).trim() ? String(imagem_url).trim() : null;
+    const endSeguro = endereco && String(endereco).trim() ? String(endereco).trim() : 'Atendimento Local';
+    const catSegura = String(categoria || 'oficina').trim();
+    const descSegura = String(descricao || '').trim();
+    const whatsSeguro = String(whatsapp_contato).replace(/\D/g, '');
 
     const novo = await sql`
       INSERT INTO marketplace_parceiros 
         (categoria, titulo, empresa_nome, descricao, preco_original, preco_parceiro, desconto_percentual, imagem_url, whatsapp_contato, endereco)
       VALUES
-        (${categoria}, ${titulo}, ${empresa_nome}, ${descricao}, ${Number(preco_original) || 0}, ${Number(preco_parceiro)}, ${desconto}, ${imagem_url}, ${whatsapp_contato}, ${endereco})
+        (${catSegura}, ${String(titulo).trim()}, ${String(empresa_nome).trim()}, ${descSegura}, ${precoOrigNum}, ${precoParcNum}, ${desconto}, ${imgSegura}, ${whatsSeguro}, ${endSeguro})
       RETURNING *;
     `;
     res.status(201).json({ sucesso: true, item: formatarItens(novo)[0] });
   } catch (err) {
-    res.status(500).json({ erro: 'Erro ao cadastrar novo item.' });
+    console.error('Erro ao cadastrar parceria:', err);
+    res.status(500).json({ erro: 'Erro ao cadastrar novo item no banco de dados.' });
   }
 });
 
