@@ -71,13 +71,16 @@ export let CATEGORIAS = {
 
 export let MULTIPLICADOR_PICO = 1.0;
 
-// Sincronização segura de tarifas em tempo real
+// Sincronização segura de tarifas em tempo real (sem cache)
 export async function sincronizarTarifasServidor() {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000); // Timeout de segurança contra travamentos
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-    let resp = await fetch(`${API_URL}/api/admin/tarifas`, { signal: controller.signal });
+    const resp = await fetch(`${API_URL}/api/admin/tarifas?t=${Date.now()}`, {
+      cache: 'no-store',
+      signal: controller.signal
+    });
     clearTimeout(timeoutId);
 
     if (!resp.ok) return;
@@ -86,20 +89,26 @@ export async function sincronizarTarifasServidor() {
     if (dados && typeof dados === 'object') {
       ['carro', 'moto', 'entrega'].forEach(chave => {
         if (dados[chave] && CATEGORIAS[chave]) {
-          CATEGORIAS[chave].base = Number(dados[chave].base) || CATEGORIAS[chave].base;
-          CATEGORIAS[chave].km = Number(dados[chave].km) || CATEGORIAS[chave].km;
-          CATEGORIAS[chave].min = Number(dados[chave].min) || CATEGORIAS[chave].min;
+          if (dados[chave].base !== undefined) CATEGORIAS[chave].base = Number(dados[chave].base);
+          if (dados[chave].km !== undefined) CATEGORIAS[chave].km = Number(dados[chave].km);
+          if (dados[chave].min !== undefined) CATEGORIAS[chave].min = Number(dados[chave].min);
         }
       });
-      if (dados.multiplicador_pico) {
+
+      if (dados.entrega && CATEGORIAS.flash_moto) {
+        CATEGORIAS.flash_moto.base = CATEGORIAS.entrega.base;
+        CATEGORIAS.flash_moto.km = CATEGORIAS.entrega.km;
+        CATEGORIAS.flash_moto.min = CATEGORIAS.entrega.min;
+      }
+
+      if (dados.multiplicador_pico !== undefined) {
         MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
       }
     }
   } catch (err) {
-    // Mantém fallback silencioso sem expor detalhes sensíveis da infraestrutura no console
+    // Mantém fallback silencioso
   }
 }
-
 // Cálculo seguro de preços com validação numérica estrita
 export function calcularPreco(catId, distanciaKm) {
   const chave = String(catId || 'carro').toLowerCase();
