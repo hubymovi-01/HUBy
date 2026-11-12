@@ -1,5 +1,5 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Sem Duplicações e Blindado contra XSS)
-import { API_URL, aplicarObjetoTarifas } from './config.js';
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Blindado contra XSS e Sincronizado em Tempo Real)
+import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
 let chartFinanceiroInstance = null;
@@ -92,6 +92,7 @@ async function sincronizarTudo(token) {
 
   const periodoAtual = document.getElementById('selectFiltroPeriodo')?.value || 'total';
 
+  await carregarTarifasConfig(token);
   await carregarTabelaFrota(token);
   await carregarMetricasECards(token, periodoAtual);
   await carregarDadosSocios(token);
@@ -103,7 +104,6 @@ async function sincronizarTudo(token) {
     carregarTabelaSaques(token),
     carregarTabelaViagens(token),
     carregarTabelaMarketplace(token),
-    carregarTarifasConfig(token),
     carregarGatewayConfig(token)
   ]);
 }
@@ -119,7 +119,8 @@ function configurarFiltroPeriodo(token) {
 
 async function carregarMetricasECards(token, periodo = 'total') {
   try {
-    const res = await fetch(`${API_URL}/api/admin/metricas?periodo=${periodo}`, {
+    const res = await fetch(`${API_URL}/api/admin/metricas?periodo=${periodo}&t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
 
@@ -134,10 +135,13 @@ async function carregarMetricasECards(token, periodo = 'total') {
     let viagensConcluidas = Number(dados.viagensConcluidas || 0);
     let incidentesAtivos = Number(dados.alertasSeguranca || 0);
 
+    const pctTaxa = Number(TAXA_PLATAFORMA_ATUAL || 15) / 100;
+    const pctMotorista = 1 - pctTaxa;
+
     if (faturamentoBruto === 0 && window._ultimoSaldoAcumuladoFrota > 0) {
       repasseMotoristas = Number(window._ultimoSaldoAcumuladoFrota.toFixed(2));
-      faturamentoBruto = Number((repasseMotoristas / 0.85).toFixed(2));
-      lucroLiquido = Number((faturamentoBruto * 0.15).toFixed(2));
+      faturamentoBruto = Number((repasseMotoristas / pctMotorista).toFixed(2));
+      lucroLiquido = Number((faturamentoBruto * pctTaxa).toFixed(2));
       if (viagensConcluidas === 0) viagensConcluidas = 1;
     }
 
@@ -169,6 +173,9 @@ async function carregarMetricasECards(token, periodo = 'total') {
 function renderizarGraficos(bruto, lucro, repasse, categorias) {
   if (typeof Chart === 'undefined') return;
 
+  const taxaPct = Number(TAXA_PLATAFORMA_ATUAL || 15);
+  const motPct = Math.max(1, 100 - taxaPct);
+
   const canvasFin = document.getElementById('chartFinanceiro');
   const ctxFin = canvasFin?.getContext('2d');
   if (ctxFin) {
@@ -177,13 +184,13 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
       chartFinanceiroInstance = null;
     }
 
-    const valRepasse = repasse > 0 ? repasse : 85;
-    const valLucro = lucro > 0 ? lucro : 15;
+    const valRepasse = repasse > 0 ? repasse : motPct;
+    const valLucro = lucro > 0 ? lucro : taxaPct;
 
     chartFinanceiroInstance = new Chart(ctxFin, {
       type: 'doughnut',
       data: {
-        labels: ['Repasse Condutores (85%)', 'Taxa HUBy (15%)'],
+        labels: [`Repasse Condutores (${motPct}%)`, `Taxa HUBy (${taxaPct}%)`],
         datasets: [{
           data: [valRepasse, valLucro],
           backgroundColor: ['#F59E0B', '#38BDF8'],
@@ -249,7 +256,8 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
 async function carregarDadosSocios(token) {
   const tbodyRetiradas = document.getElementById('tabelaRetiradasSociosBody');
   try {
-    const res = await fetch(`${API_URL}/api/socios/saldo-divisao`, {
+    const res = await fetch(`${API_URL}/api/socios/saldo-divisao?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) return;
@@ -257,21 +265,25 @@ async function carregarDadosSocios(token) {
     const socios = data.socios || [];
 
     if (socios[0]) {
+      const disp1 = Number(socios[0].saldoDisponivel ?? socios[0].saldo_disponivel ?? 0);
+      const sac1 = Number(socios[0].jaSacado ?? socios[0].total_retirado ?? 0);
       document.getElementById('socio1Nome').textContent = `${socios[0].nome} (${socios[0].porcentagem}%)`;
-      document.getElementById('socio1Chave').textContent = `Chave Pix: ${socios[0].chave_pix}`;
-      document.getElementById('socio1Saldo').textContent = `R$ ${Number(socios[0].saldoDisponivel).toFixed(2).replace('.', ',')}`;
+      document.getElementById('socio1Chave').textContent = `Chave Pix: ${socios[0].chave_pix || 'Não cadastrada'}`;
+      document.getElementById('socio1Saldo').textContent = `R$ ${disp1.toFixed(2).replace('.', ',')}`;
       const elSacado1 = document.getElementById('socio1TotalSacado');
-      if (elSacado1) elSacado1.textContent = `Total já retirado: R$ ${Number(socios[0].jaSacado).toFixed(2).replace('.', ',')}`;
-      window._socio1Max = Number(socios[0].saldoDisponivel);
+      if (elSacado1) elSacado1.textContent = `Total já retirado: R$ ${sac1.toFixed(2).replace('.', ',')}`;
+      window._socio1Max = disp1;
     }
 
     if (socios[1]) {
+      const disp2 = Number(socios[1].saldoDisponivel ?? socios[1].saldo_disponivel ?? 0);
+      const sac2 = Number(socios[1].jaSacado ?? socios[1].total_retirado ?? 0);
       document.getElementById('socio2Nome').textContent = `${socios[1].nome} (${socios[1].porcentagem}%)`;
-      document.getElementById('socio2Chave').textContent = `Chave Pix: ${socios[1].chave_pix}`;
-      document.getElementById('socio2Saldo').textContent = `R$ ${Number(socios[1].saldoDisponivel).toFixed(2).replace('.', ',')}`;
+      document.getElementById('socio2Chave').textContent = `Chave Pix: ${socios[1].chave_pix || 'Não cadastrada'}`;
+      document.getElementById('socio2Saldo').textContent = `R$ ${disp2.toFixed(2).replace('.', ',')}`;
       const elSacado2 = document.getElementById('socio2TotalSacado');
-      if (elSacado2) elSacado2.textContent = `Total já retirado: R$ ${Number(socios[1].jaSacado).toFixed(2).replace('.', ',')}`;
-      window._socio2Max = Number(socios[1].saldoDisponivel);
+      if (elSacado2) elSacado2.textContent = `Total já retirado: R$ ${sac2.toFixed(2).replace('.', ',')}`;
+      window._socio2Max = disp2;
     }
 
     if (tbodyRetiradas && data.historicoRetiradas) {
@@ -332,7 +344,7 @@ window.solicitarSaqueSocio = async (socioId) => {
   const valorStr = prompt(`Informe o valor da retirada (Disponível: R$ ${maxDisponivel.toFixed(2).replace('.', ',')}):`, maxDisponivel.toFixed(2));
   if (!valorStr) return;
 
-  const valor = parseFloat(valorStr);
+  const valor = parseFloat(valorStr.replace(',', '.'));
   if (!valor || valor <= 0 || valor > maxDisponivel) {
     notificarAdmin('Valor inválido ou superior ao saldo disponível.', 'erro');
     return;
@@ -342,7 +354,7 @@ window.solicitarSaqueSocio = async (socioId) => {
     const res = await fetch(`${API_URL}/api/socios/retirar/${socioId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ valor })
+      body: JSON.stringify({ socio_id: socioId, valor })
     });
 
     const data = await res.json();
@@ -365,7 +377,8 @@ async function carregarTabelaMarketplace(token) {
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/marketplace/admin/itens`, {
+    const res = await fetch(`${API_URL}/api/marketplace/admin/itens?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -483,7 +496,8 @@ async function carregarTabelaFrota(token) {
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/motoristas`, {
+    const res = await fetch(`${API_URL}/api/admin/motoristas?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -720,7 +734,8 @@ async function carregarTabelaSaques(token) {
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/carteira/admin/saques`, {
+    const res = await fetch(`${API_URL}/api/carteira/admin/saques?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
     });
     if (!res.ok) {
@@ -790,7 +805,8 @@ async function carregarTabelaViagens(token) {
   if (!tbody) return;
 
   try {
-    const res = await fetch(`${API_URL}/api/admin/pedidos`, {
+    const res = await fetch(`${API_URL}/api/admin/pedidos?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
     if (!res.ok) {
@@ -803,8 +819,10 @@ async function carregarTabelaViagens(token) {
       return;
     }
 
+    const pctTaxa = Number(TAXA_PLATAFORMA_ATUAL || 15) / 100;
+
     tbody.innerHTML = corridas.slice(0, 25).map(c => {
-      const taxa = Number(c.valor_total || 0) * 0.15;
+      const taxa = Number(c.valor_total || 0) * pctTaxa;
       return `
         <tr>
           <td><strong>#${escaparHTML(String(c.id).slice(-4))}</strong></td>
@@ -1080,6 +1098,19 @@ function conectarSocketAdmin() {
   const socket = ioClient(API_URL);
   socket.on('posicao_motorista', (dados) => {
     atualizarPosicaoCondutorNoMapa(dados);
+  });
+
+  socket.on('corrida_finalizada', () => {
+    const token = localStorage.getItem('huby_token');
+    const periodo = document.getElementById('selectFiltroPeriodo')?.value || 'total';
+    carregarTabelaFrota(token);
+    carregarMetricasECards(token, periodo);
+    carregarDadosSocios(token);
+    carregarTabelaViagens(token);
+  });
+
+  socket.on('tarifas_atualizadas', (novasTarifas) => {
+    aplicarObjetoTarifas(novasTarifas);
   });
 
   socket.on('alerta_sos', (dados) => {

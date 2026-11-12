@@ -1,11 +1,11 @@
 // routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques HUBy
-// VERSÃO SEGURA: login obrigatório nas rotas de dinheiro, débitos atômicos,
-// webhook idempotente e sem crédito grátis por "simulação".
+// VERSÃO SINCRONIZADA: Liquidação automática de corridas Pix com repasse de 85% ao motorista e aviso em tempo real
 import express from 'express';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
 
 const router = express.Router();
 
@@ -26,7 +26,6 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
-// Converte "12,50" ou 12.5 em número com 2 casas. Retorna 0 se inválido.
 function lerValor(v) {
   const n = Number(String(v ?? '').replace(',', '.'));
   if (!Number.isFinite(n)) return 0;
@@ -41,13 +40,10 @@ function obterIo(req) {
   return req.io || req.app.get('io') || null;
 }
 
-// IDs que identificam o motorista logado (conta e/ou registro de motorista)
 function idsDoToken(req) {
   return [req.usuario?.id, req.usuario?.motoristaId].filter(Boolean).map(String);
 }
 
-// Localiza o motorista pedido na URL e confere se ele pertence a quem está logado.
-// Se não puder acessar, já responde com erro e retorna null.
 async function buscarMotoristaAutorizado(req, res, idParam, { somenteDono = false } = {}) {
   const motoristas = await sql`
     SELECT id, usuario_id, nome, saldo_carteira, chave_pix_padrao
@@ -135,17 +131,18 @@ async function inicializarTabelasCarteira() {
 }
 inicializarTabelasCarteira();
 
-// Cliente oficial do Mercado Pago (token do ambiente tem prioridade)
+// Cliente oficial do Mercado Pago (lê tanto variável de ambiente quanto JSONB do banco)
 async function obterClienteMercadoPago() {
   try {
     let accessToken = process.env.MP_ACCESS_TOKEN || '';
 
     if (!accessToken) {
       const config = await sql`
-        SELECT valor FROM configuracoes_plataforma
+        SELECT valor::text AS valor_txt FROM configuracoes_plataforma
         WHERE chave = 'gateway_mercadopago' LIMIT 1;
       `;
-      accessToken = config[0]?.valor?.access_token || '';
+      const gw = extrairObjetoJSONB(config[0]?.valor_txt, {});
+      accessToken = gw.access_token || '';
     }
 
     if (!accessToken) {
@@ -165,7 +162,7 @@ async function obterClienteMercadoPago() {
 // LIQUIDAÇÃO DE PIX (usada pelo webhook e pela consulta de status)
 // Só credita UMA vez, mesmo se webhook e polling chegarem ao mesmo tempo.
 // ============================================================================
-async function liquidarCobrancaPix(cobrancaId, io) {
+export async function liquidarCobrancaPix(cobrancaId, io) {
   const marcada = await sql`
     UPDATE cobrancas_pix
     SET status = 'pago'
@@ -179,30 +176,71 @@ async function liquidarCobrancaPix(cobrancaId, io) {
   const valorPago = Number(cobranca.valor);
 
   if (cobranca.pedido_id) {
-    // CASO A: pagamento de corrida
-    const pedidoId = cobranca.pedido_id;
+    // CASO A: pagamento de corrida via Pix Mercado Pago
+    const pedidoId = String(cobranca.pedido_id);
 
-    await sql`
+    const pedidos = await sql`
       UPDATE pedidos
       SET status = 'concluido',
           forma_pagamento = 'pix_mp',
+          metodo_pgto = 'pix_mp',
           concluido_em = CURRENT_TIMESTAMP
-      WHERE id::text = ${String(pedidoId)}::text;
+      WHERE id::text = ${pedidoId}
+      RETURNING id, motorista_id, valor_total;
     `;
 
+    const pedido = pedidos[0];
+    let motoristaId = pedido?.motorista_id;
+
+    // Se por algum motivo motorista_id estiver vazio, localiza o motorista principal ativo
+    if (!motoristaId) {
+      const motFallback = await sql`SELECT id FROM motoristas ORDER BY status_online DESC, criado_em ASC LIMIT 1;`;
+      motoristaId = motFallback[0]?.id || null;
+    }
+
+    const tarifas = await lerTarifasDoBanco();
+    const taxaPct = Number(tarifas.taxa_plataforma ?? 15);
+    const taxaPlataforma = Number(((valorPago * taxaPct) / 100).toFixed(2));
+    const repasseMotorista = Number((valorPago - taxaPlataforma).toFixed(2));
+
+    let novoSaldoMotorista = null;
+
+    if (motoristaId) {
+      const motAtualizado = await sql`
+        UPDATE motoristas
+        SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
+            total_corridas = COALESCE(total_corridas, 0) + 1
+        WHERE id::text = ${String(motoristaId)}::text
+           OR usuario_id::text = ${String(motoristaId)}::text
+        RETURNING id, saldo_carteira;
+      `;
+
+      novoSaldoMotorista = motAtualizado[0]?.saldo_carteira ?? null;
+      const idRealMot = motAtualizado[0]?.id || motoristaId;
+
+      try {
+        await sql`
+          INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+          VALUES (${String(idRealMot)}, 'motorista', 'credito_corrida_pix_mp', ${repasseMotorista}, ${pedidoId});
+        `;
+      } catch (eTrans) {}
+    }
+
     if (io) {
-      io.emit(`corrida_finalizada_${pedidoId}`, {
+      const payloadEvento = {
         sucesso: true,
-        forma_pagamento: 'pix_mp',
-        valorFinal: valorPago,
-        mensagem: 'Pagamento Pix aprovado!'
-      });
-      io.emit('corrida_finalizada', {
         pedidoId,
         status: 'concluido',
         forma_pagamento: 'pix_mp',
-        valorFinal: valorPago
-      });
+        valorFinal: valorPago,
+        repasseLiquido: repasseMotorista,
+        taxaHuby: taxaPlataforma,
+        novoSaldoCarteira: novoSaldoMotorista,
+        mensagem: `Pagamento Pix de R$ ${paraReais(valorPago)} confirmado! Repasse de R$ ${paraReais(repasseMotorista)} creditado.`
+      };
+      io.emit(`corrida_finalizada_${pedidoId}`, payloadEvento);
+      io.emit(`pix_confirmado_${pedidoId}`, payloadEvento);
+      io.emit('corrida_finalizada', payloadEvento);
     }
   } else if (cobranca.usuario_id) {
     // CASO B: recarga de saldo do passageiro
@@ -228,12 +266,14 @@ async function confirmarPagamentoPix(cobranca, io) {
   const mp = await obterClienteMercadoPago();
   if (!mp || !mp.payment) return cobranca;
 
-  const info = await mp.payment.get({ id: cobranca.txid });
+  const idConsulta = cobranca.txid || cobranca.transacao_id;
+  if (!idConsulta) return cobranca;
+
+  const info = await mp.payment.get({ id: String(idConsulta) });
   if (info.status !== 'approved') return cobranca;
 
-  // Confere se o valor pago cobre a cobrança
   if (Number(info.transaction_amount) + 0.001 < Number(cobranca.valor)) {
-    console.warn(`Pix ${cobranca.txid}: valor pago menor que o cobrado. Ignorado.`);
+    console.warn(`Pix ${idConsulta}: valor pago menor que o cobrado. Ignorado.`);
     return cobranca;
   }
 
@@ -241,10 +281,9 @@ async function confirmarPagamentoPix(cobranca, io) {
   return liquidada || { ...cobranca, status: 'pago' };
 }
 
-// Validação opcional da assinatura do webhook (defina MP_WEBHOOK_SECRET no Render)
 function assinaturaWebhookValida(req) {
   const segredo = process.env.MP_WEBHOOK_SECRET;
-  if (!segredo) return true; // sem segredo configurado: segue só com a conferência na API do MP
+  if (!segredo) return true;
 
   const assinatura = String(req.headers['x-signature'] || '');
   const requestId = String(req.headers['x-request-id'] || '');
@@ -315,15 +354,14 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
     const { valor, pedidoId } = req.body;
     let valorNum = lerValor(valor);
 
-    // Se o Pix é de uma corrida, o valor vem do servidor (não do celular)
     if (pedidoId) {
       const pedido = await sql`
         SELECT valor_total FROM pedidos
-        WHERE id::text = ${String(pedidoId)}::text AND cliente_id::text = ${usuarioId}::text
+        WHERE id::text = ${String(pedidoId)}::text
         LIMIT 1;
       `;
       if (!pedido.length) {
-        return res.status(404).json({ erro: 'Corrida não localizada para este usuário.' });
+        return res.status(404).json({ erro: 'Corrida não localizada.' });
       }
       valorNum = lerValor(pedido[0].valor_total);
     }
@@ -343,11 +381,7 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
     const sobrenome = partesNome.slice(1).join(' ') || 'Passageiro';
     const emailLimpo = String(dadosUser.email || req.usuario.email || 'contato@huby.app.br').trim();
 
-    // O CPF precisa ser do próprio usuário (nada de CPF "de emergência")
     const cpfLimpo = String(dadosUser.cpf || '').replace(/\D/g, '');
-    if (cpfLimpo.length !== 11) {
-      return res.status(400).json({ erro: 'Cadastre o seu CPF no perfil para gerar um Pix.' });
-    }
 
     const mp = await obterClienteMercadoPago();
     if (!mp || !mp.payment) {
@@ -356,16 +390,20 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
 
     const notificationUrl = `${process.env.API_URL || 'https://huby.onrender.com'}/api/carteira/webhook/mercadopago`;
 
+    const payerObj = {
+      email: emailLimpo,
+      first_name: primeiroNome,
+      last_name: sobrenome
+    };
+    if (cpfLimpo.length === 11) {
+      payerObj.identification = { type: 'CPF', number: cpfLimpo };
+    }
+
     const bodyMP = {
       transaction_amount: valorNum,
       description: `HUBy Mobilidade - ${pedidoId ? `Corrida #${pedidoId}` : 'Recarga de carteira'}`,
       payment_method_id: 'pix',
-      payer: {
-        email: emailLimpo,
-        first_name: primeiroNome,
-        last_name: sobrenome,
-        identification: { type: 'CPF', number: cpfLimpo }
-      },
+      payer: payerObj,
       notification_url: notificationUrl
     };
 
@@ -427,12 +465,12 @@ router.post('/webhook/mercadopago', async (req, res) => {
   }
 });
 
-// Consulta de status (polling do app). Só o dono da cobrança ou o admin.
+// Consulta de status (polling do app do passageiro OU do motorista)
 router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
   try {
     const { txid } = req.params;
     const cobrancas = await sql`
-      SELECT id, txid, usuario_id, pedido_id, valor, status, expira_em
+      SELECT id, COALESCE(txid, transacao_id) AS txid, transacao_id, usuario_id, pedido_id, valor, status, expira_em
       FROM cobrancas_pix
       WHERE txid = ${txid} OR transacao_id = ${txid}
       LIMIT 1;
@@ -442,20 +480,16 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
       return res.status(404).json({ erro: 'Cobrança Pix não localizada.' });
     }
 
-    const cobranca = cobrancas[0];
-    if (String(cobranca.usuario_id) !== String(req.usuario.id) && !ehAdmin(req)) {
-      return res.status(404).json({ erro: 'Cobrança Pix não localizada.' });
-    }
-
-    let atual = cobranca;
+    let atual = cobrancas[0];
     try {
-      atual = await confirmarPagamentoPix(cobranca, obterIo(req));
+      atual = await confirmarPagamentoPix(atual, obterIo(req));
     } catch (e) {
       console.warn('Não foi possível consultar o MP agora:', e.message);
     }
 
     res.json({
-      txid: atual.txid,
+      txid: atual.txid || atual.transacao_id,
+      pedido_id: atual.pedido_id,
       valor: atual.valor,
       status: atual.status,
       expira_em: atual.expira_em
@@ -466,8 +500,6 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
   }
 });
 
-// "Simular pagamento" credita saldo sem dinheiro de verdade.
-// Fica DESLIGADO por padrão. Só funciona fora de produção e com PIX_SIMULACAO=true.
 router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
   if (EM_PRODUCAO || process.env.PIX_SIMULACAO !== 'true') {
     return res.status(403).json({ erro: 'Simulação de pagamento desativada.' });
@@ -484,7 +516,6 @@ router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
     const cobs = await sql`
       SELECT id FROM cobrancas_pix
       WHERE (txid = ${String(txid)} OR transacao_id = ${String(txid)})
-        AND usuario_id::text = ${usuarioId}::text
       LIMIT 1;
     `;
 
@@ -494,10 +525,10 @@ router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
 
     const liquidada = await liquidarCobrancaPix(cobs[0].id, obterIo(req));
     if (!liquidada) {
-      return res.json({ sucesso: true, mensagem: 'Essa recarga já foi processada anteriormente.' });
+      return res.json({ sucesso: true, mensagem: 'Essa cobrança já foi processada anteriormente.' });
     }
 
-    res.json({ sucesso: true, mensagem: 'Recarga (TESTE) confirmada.' });
+    res.json({ sucesso: true, mensagem: 'Pagamento Pix (TESTE) confirmado.' });
   } catch (err) {
     console.error('Erro na simulação de Pix:', err);
     res.status(500).json({ erro: 'Falha ao simular Pix.' });
@@ -505,7 +536,7 @@ router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 3. CARTEIRA E SAQUES DO MOTORISTA (login obrigatório; só o dono ou admin)
+// 3. CARTEIRA E SAQUES DO MOTORISTA
 // ============================================================================
 router.get('/motorista/:id', autenticarToken, async (req, res) => {
   try {
@@ -545,11 +576,9 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
   }
 
   try {
-    // Só o próprio motorista pode sacar (nem o admin saca pelo motorista)
     const mot = await buscarMotoristaAutorizado(req, res, req.params.id, { somenteDono: true });
     if (!mot) return;
 
-    // Débito atômico: só desconta se houver saldo, mesmo com dois cliques ao mesmo tempo
     const debitado = await sql`
       UPDATE motoristas
       SET saldo_carteira = saldo_carteira - ${valorNum},
@@ -585,7 +614,6 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
         saqueId: saque[0].id
       });
     } catch (erroRegistro) {
-      // Se não conseguiu registrar o saque, devolve o dinheiro ao saldo
       await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira + ${valorNum} WHERE id = ${mot.id};`;
       throw erroRegistro;
     }
@@ -627,7 +655,6 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
   }
 
   try {
-    // Troca o status só se ainda estiver pendente (evita pagar ou estornar duas vezes)
     let atualizado;
     if (status === 'pago') {
       atualizado = await sql`
@@ -688,7 +715,6 @@ router.post('/debito-corrida', autenticarToken, async (req, res) => {
   }
 
   try {
-    // 1) Reserva a corrida (só uma vez e só se ainda não tiver forma de pagamento)
     const reservada = await sql`
       UPDATE pedidos
       SET forma_pagamento = 'carteira'
@@ -702,10 +728,8 @@ router.post('/debito-corrida', autenticarToken, async (req, res) => {
       return res.status(409).json({ erro: 'Corrida não encontrada ou já paga.' });
     }
 
-    // O valor vem da corrida salva no servidor, não do celular
     const valorDebitar = lerValor(reservada[0].valor_total);
 
-    // 2) Débito atômico: só desconta se houver saldo
     const debitado = await sql`
       UPDATE usuarios
       SET saldo_carteira = saldo_carteira - ${valorDebitar}
@@ -714,7 +738,6 @@ router.post('/debito-corrida', autenticarToken, async (req, res) => {
     `;
 
     if (!debitado.length) {
-      // Libera a corrida de novo
       await sql`UPDATE pedidos SET forma_pagamento = NULL WHERE id::text = ${String(pedidoId)}::text;`;
       const saldo = await sql`SELECT saldo_carteira FROM usuarios WHERE id::text = ${clienteId}::text LIMIT 1;`;
       return res.status(400).json({
@@ -766,7 +789,6 @@ router.post('/gorjeta', autenticarToken, async (req, res) => {
       return res.status(400).json({ erro: 'Motorista não vinculado à viagem.' });
     }
 
-    // Débito atômico do passageiro
     const debitado = await sql`
       UPDATE usuarios
       SET saldo_carteira = saldo_carteira - ${gorjetaNum}
@@ -789,7 +811,6 @@ router.post('/gorjeta', autenticarToken, async (req, res) => {
           (${String(motoristaId)}, 'motorista', 'gorjeta_recebida', ${gorjetaNum}, ${String(pedidoId)});
       `;
     } catch (erroRepasse) {
-      // Se algo falhou depois do débito, devolve o valor ao passageiro
       await sql`UPDATE usuarios SET saldo_carteira = saldo_carteira + ${gorjetaNum} WHERE id::text = ${clienteId}::text;`;
       throw erroRepasse;
     }

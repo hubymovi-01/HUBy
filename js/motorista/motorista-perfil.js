@@ -2,6 +2,7 @@
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { notificar } from '../util/alertas-huby.js';
+import { carregarGanhosHoje, carregarExtratoFinanceiro } from './motorista-ganhos.js';
 import { 
   obterCodigoAtivacaoMotorista, 
   definirCodigoAtivacaoMotorista, 
@@ -10,7 +11,8 @@ import {
 
 export async function carregarPerfil() {
   try {
-    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil`, {
+    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil?t=${Date.now()}`, {
+      cache: 'no-store',
       headers: obterHeaders()
     });
 
@@ -105,6 +107,10 @@ export async function carregarPerfil() {
     if (editCor) editCor.value = motorista.veiculo_cor || '';
     if (editAno) editAno.value = motorista.veiculo_ano || '';
     if (prevFoto && motorista.foto_perfil_url) prevFoto.src = motorista.foto_perfil_url;
+
+    // Atualiza também o card de Ganhos de Hoje e o Extrato Lateral
+    carregarGanhosHoje();
+    carregarExtratoFinanceiro();
 
     return motorista;
   } catch (err) {

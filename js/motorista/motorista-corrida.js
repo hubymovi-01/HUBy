@@ -1,22 +1,22 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Prévia Hands-Free e Liquidação Sincronizada HUBy
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Prévia Hands-Free e Confirmação Automática Pix HUBy
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
 import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
+import { carregarGanhosHoje, carregarExtratoFinanceiro } from './motorista-ganhos.js';
 import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motorista-rotas.js';
 import { notificar } from '../util/alertas-huby.js';
 
 let processandoPagamento = false;
+let intervalPollingPixMotorista = null;
 
-// Calcula o valor bruto e o repasse líquido do motorista usando a tarifa e taxa reais do banco
 export function obterValoresSincronizadosPedido(dados = {}) {
   const distKm = parseFloat(dados.dist || dados.distancia_km || dados.distanciaKm || 0);
-  const categoria = String(dados.categoria || dados.tipo || estado.categoriaVeiculo || 'carro').toLowerCase();
+  const categoria = String(dados.categoria || dados.tipo || estado.categoriaMotorista || 'carro').toLowerCase();
 
   let valorBruto = Number(dados.preco || dados.valor_total || dados.valorTotal || 0);
 
-  // Se houver distância válida e o valor não estiver sincronizado ou for zero, calcula pela tabela oficial
   if (distKm > 0 && (!valorBruto || valorBruto <= 0)) {
     valorBruto = calcularPreco(categoria, distKm).valorTotal;
   }
@@ -35,7 +35,7 @@ export function obterValoresSincronizadosPedido(dados = {}) {
 }
 
 // ============================================================================
-// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR (HANDS-FREE OU TOQUE)
+// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR
 // ============================================================================
 export async function preVisualizarRotaPedido(dados) {
   await sincronizarTarifasServidor();
@@ -373,7 +373,7 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
       const taxa = Number(TAXA_PLATAFORMA_ATUAL || 15);
       notificar(`✅ Corrida encerrada com sucesso! Taxa de ${taxa}% atualizada na carteira.`, 'sucesso');
       if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
-      concluirLimpezaPosCorrida();
+      await concluirLimpezaPosCorrida();
     }
   } catch (err) {
     notificar(err.message || 'Erro ao finalizar corrida.', 'erro');
@@ -393,22 +393,101 @@ export function exibirQrCodePixMotorista(pix) {
 
   if (modalPix) modalPix.style.display = 'flex';
 
-  if (btnFechar) {
-    btnFechar.onclick = () => {
+  const txid = pix.txid || pix.transacao_id;
+  const pedidoId = pix.pedido_id || estado.pedidoAtivo?.id;
+  let jaConfirmado = false;
+
+  const limparMonitoramento = () => {
+    if (intervalPollingPixMotorista) {
+      clearInterval(intervalPollingPixMotorista);
+      intervalPollingPixMotorista = null;
+    }
+  };
+
+  const concluirAoConfirmarPix = async () => {
+    if (jaConfirmado) return;
+    jaConfirmado = true;
+    limparMonitoramento();
+
+    const taxaPct = Number(TAXA_PLATAFORMA_ATUAL ?? 15);
+    const repasse = Number((Number(pix.valor || 0) * ((100 - taxaPct) / 100)).toFixed(2));
+    const repasseFmt = repasse.toFixed(2).replace('.', ',');
+
+    if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
+
+    // Mostra confirmação visual grande dentro do próprio modal por 1.8s antes de fechar
+    if (lblValor) {
+      lblValor.innerHTML = `<span style="color:#10B981;">✅ PIX CONFIRMADO! (+R$ ${repasseFmt})</span>`;
+    }
+
+    notificar(`🎉 Pagamento Pix confirmado! +R$ ${repasseFmt} (${100 - taxaPct}%) creditados na sua carteira!`, 'sucesso', 5000);
+
+    setTimeout(async () => {
       if (modalPix) modalPix.style.display = 'none';
-      concluirLimpezaPosCorrida();
+      await concluirLimpezaPosCorrida();
+    }, 1500);
+  };
+
+  // 1. Escuta confirmação em tempo real via Socket.IO
+  const socketAtivo = estado.socket || estado.socketRadar;
+  if (socketAtivo && pedidoId) {
+    socketAtivo.once(`corrida_finalizada_${pedidoId}`, concluirAoConfirmarPix);
+    socketAtivo.once(`pix_confirmado_${pedidoId}`, concluirAoConfirmarPix);
+  }
+
+  // 2. Polling automático a cada 2.5 segundos consultando o status do Pix e da Corrida
+  limparMonitoramento();
+  intervalPollingPixMotorista = setInterval(async () => {
+    try {
+      if (txid) {
+        const res = await fetch(`${API_URL}/api/carteira/pix/status/${txid}?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: obterHeaders()
+        });
+        if (res.ok) {
+          const statusData = await res.json();
+          if (statusData.status === 'pago') {
+            await concluirAoConfirmarPix();
+            return;
+          }
+        }
+      }
+      if (pedidoId) {
+        const resPed = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: obterHeaders()
+        });
+        if (resPed.ok) {
+          const p = await resPed.json();
+          if (p.status === 'concluido') {
+            await concluirAoConfirmarPix();
+          }
+        }
+      }
+    } catch (e) {}
+  }, 2500);
+
+  if (btnFechar) {
+    btnFechar.onclick = async () => {
+      limparMonitoramento();
+      if (modalPix) modalPix.style.display = 'none';
+      await concluirLimpezaPosCorrida();
     };
   }
 }
 
 export function fecharModaisPagamento() {
+  if (intervalPollingPixMotorista) {
+    clearInterval(intervalPollingPixMotorista);
+    intervalPollingPixMotorista = null;
+  }
   const modal1 = document.getElementById('modalEscolhaPagamentoMotorista');
   const modal2 = document.getElementById('modalExibicaoPixMotorista');
   if (modal1) modal1.style.display = 'none';
   if (modal2) modal2.style.display = 'none';
 }
 
-export function concluirLimpezaPosCorrida() {
+export async function concluirLimpezaPosCorrida() {
   pararMonitoramentoDesvios();
   limparRotasMapa();
   const btnChat = document.getElementById('btnAbrirChat');
@@ -417,6 +496,10 @@ export function concluirLimpezaPosCorrida() {
   estado.pedidoAceitoAtual = null;
   estado.pedidoAtivo = null;
   estado.etapaCorridaAtual = 'a_caminho';
-  carregarPerfil();
+
+  // Atualiza saldo da carteira, ganhos de hoje e extrato imediatamente
+  await carregarPerfil();
+  await carregarGanhosHoje();
+  await carregarExtratoFinanceiro();
   iniciarRadarChamadas();
 }
