@@ -754,22 +754,36 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 10. DEFINIR META DIÁRIA ("definir meta", "mudar meta", "meta para 300")
-  if (fala.includes('definir meta') || fala.includes('mudar meta') || fala.includes('alterar meta') || fala.includes('nova meta')) {
+  // 10. DEFINIR META DIÁRIA ("definir meta", "editar meta", "mudar meta", "meta para 300")
+  if (
+    fala.includes('definir meta') || fala.includes('editar meta') ||
+    fala.includes('mudar meta') || fala.includes('alterar meta') ||
+    fala.includes('nova meta') || fala.includes('minha meta')
+  ) {
     const matchValor = fala.match(/(\d+)/);
     if (matchValor) {
       const novoValor = Number(matchValor[1]);
       if (novoValor >= 10) {
         estado.metaDiaria = novoValor;
         localStorage.setItem('huby_meta_diaria', String(novoValor));
+        const ganhosTxt = document.getElementById('lblGanhosHojeValor')?.textContent || 'R$ 0,00';
+        const ganhosNum = Number(ganhosTxt.replace(/[^\d,-]/g, '').replace(',', '.')) || 0;
+        const pct = Math.min(100, Math.round((ganhosNum / novoValor) * 100));
+
+        const barra = document.getElementById('barraProgressoMeta');
         const lblMeta = document.getElementById('lblMetaDiariaTxt');
-        if (lblMeta) lblMeta.textContent = `Meta: R$ ${novoValor.toFixed(2).replace('.', ',')} (0%)`;
+        if (barra) {
+          barra.style.width = `${pct}%`;
+          barra.style.background = pct >= 100 ? '#10B981' : '#38BDF8';
+        }
+        if (lblMeta) lblMeta.textContent = `Meta: R$ ${novoValor.toFixed(2).replace('.', ',')} (${pct}%)`;
+
         falarTexto(`Meta diária atualizada para ${novoValor} reais, ${nome}!`, fala);
         return true;
       }
     }
     await executarAcaoNoApp('DEFINIR_META', ctx);
-    falarTexto(`Abri a definição de meta diária na tela, ${nome}.`, fala);
+    falarTexto(`Abri a tela para definir sua meta diária, ${nome}.`, fala);
     return true;
   }
 
@@ -1115,11 +1129,15 @@ async function executarAcaoNoApp(acao, ctx) {
       document.getElementById('btnAbrirMarketplaceDrawer')?.click();
       break;
 
-    case 'DEFINIR_META':
+    case 'DEFINIR_META': {
       document.getElementById('btnFecharDrawerPerfil')?.click();
-      document.getElementById('btnEditarMetaDiaria')?.click();
+      const modalMeta = document.getElementById('modalMetaDiaria');
+      const inputMeta = document.getElementById('inputValorMetaDiaria');
+      const metaAtual = Number(estado.metaDiaria || localStorage.getItem('huby_meta_diaria') || 200);
+      if (inputMeta) inputMeta.value = metaAtual.toFixed(2);
+      if (modalMeta) modalMeta.style.display = 'flex';
       break;
-
+    }
     case 'ALTERNAR_CALOR':
       document.getElementById('btnToggleHeatmap')?.click();
       break;
@@ -1164,6 +1182,8 @@ async function executarAcaoNoApp(acao, ctx) {
       document.getElementById('btnFecharMarketplace')?.click();
       document.getElementById('btnFecharChat')?.click();
       fecharModaisPagamento();
+      const modalMeta = document.getElementById('modalMetaDiaria');
+      if (modalMeta) modalMeta.style.display = 'none';
       break;
   }
 }

@@ -1,8 +1,9 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Estabilizada de Produção com Validação de Sessão e Copiloto no Menu Lateral
+ * Versão Estabilizada de Produção com Validação de Sessão, Meta Diária e Copiloto no Menu Lateral
  */
 
+import { estado } from './motorista/motorista-estado.js';
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
 import { alternarStatusOnline, iniciarRadarChamadas } from './motorista/motorista-radar.js';
 import { 
@@ -39,6 +40,90 @@ function validarAutenticacaoMotorista() {
   }
 
   return true;
+}
+
+export function atualizarBarraMetaDiaria(novoValorMeta = null) {
+  if (novoValorMeta !== null && !isNaN(Number(novoValorMeta)) && Number(novoValorMeta) >= 10) {
+    estado.metaDiaria = Number(novoValorMeta);
+    localStorage.setItem('huby_meta_diaria', String(estado.metaDiaria));
+  }
+
+  const meta = Number(estado.metaDiaria || localStorage.getItem('huby_meta_diaria') || 200);
+  const ganhosTexto = document.getElementById('lblGanhosHojeValor')?.textContent || 'R$ 0,00';
+  const ganhosNumerico = Number(
+    ganhosTexto.replace(/[^\d,-]/g, '').replace(',', '.')
+  ) || Number(estado.ganhosHoje || 0);
+
+  const percentual = meta > 0 ? Math.min(100, Math.round((ganhosNumerico / meta) * 100)) : 0;
+
+  const barra = document.getElementById('barraProgressoMeta');
+  const lblMeta = document.getElementById('lblMetaDiariaTxt');
+
+  if (barra) {
+    barra.style.width = `${percentual}%`;
+    barra.style.background = percentual >= 100 ? '#10B981' : '#38BDF8';
+  }
+  if (lblMeta) {
+    lblMeta.textContent = `Meta: R$ ${meta.toFixed(2).replace('.', ',')} (${percentual}%)`;
+  }
+}
+
+function configurarMetaDiaria() {
+  const btnAbrir = document.getElementById('btnEditarMetaDiaria');
+  const modal = document.getElementById('modalMetaDiaria');
+  const btnFechar = document.getElementById('btnFecharModalMeta');
+  const btnCancelar = document.getElementById('btnCancelarModalMeta');
+  const btnSalvar = document.getElementById('btnSalvarMetaDiaria');
+  const inputValor = document.getElementById('inputValorMetaDiaria');
+
+  const abrirModalMeta = () => {
+    if (!modal) return;
+    const metaAtual = Number(estado.metaDiaria || localStorage.getItem('huby_meta_diaria') || 200);
+    if (inputValor) inputValor.value = metaAtual.toFixed(2);
+    modal.style.display = 'flex';
+  };
+
+  const fecharModalMeta = () => {
+    if (modal) modal.style.display = 'none';
+  };
+
+  if (btnAbrir) {
+    btnAbrir.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      abrirModalMeta();
+    };
+  }
+
+  if (btnFechar) btnFechar.onclick = fecharModalMeta;
+  if (btnCancelar) btnCancelar.onclick = fecharModalMeta;
+
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) fecharModalMeta();
+  });
+
+  document.querySelectorAll('.btn-fast-meta').forEach((btn) => {
+    btn.onclick = () => {
+      const val = btn.getAttribute('data-meta');
+      if (val && inputValor) inputValor.value = Number(val).toFixed(2);
+    };
+  });
+
+  if (btnSalvar) {
+    btnSalvar.onclick = () => {
+      const valorDigitado = parseFloat(inputValor?.value);
+      if (!valorDigitado || valorDigitado < 10) {
+        notificar('Informe uma meta diária a partir de R$ 10,00.', 'alerta');
+        return;
+      }
+
+      atualizarBarraMetaDiaria(valorDigitado);
+      fecharModalMeta();
+      notificar(`🎯 Meta diária atualizada para R$ ${valorDigitado.toFixed(2).replace('.', ',')}!`, 'sucesso');
+    };
+  }
+
+  atualizarBarraMetaDiaria();
 }
 
 function configurarCodigoVozDireto() {
@@ -79,12 +164,15 @@ function configurarCodigoVozDireto() {
 }
 
 function registrarEventosUI() {
-  // Alternar Online / Offline
-  document.getElementById('btnToggleStatusOnline')?.addEventListener('click', async () => {
-    await alternarStatusOnline();
-  });
+  const btnOnline = document.getElementById('btnToggleStatusOnline');
+  if (btnOnline) {
+    btnOnline.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await alternarStatusOnline();
+    };
+  }
 
-  // Drawer Lateral
   const drawer = document.getElementById('driverDrawer');
   const overlay = document.getElementById('drawerOverlay');
 
@@ -101,7 +189,6 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
-  // Módulos especializados
   if (typeof configurarChatMotorista === 'function') configurarChatMotorista();
   if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
   if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
@@ -109,7 +196,7 @@ function registrarEventosUI() {
   if (typeof configurarMarketplace === 'function') configurarMarketplace();
   if (typeof configurarModosInteligentes === 'function') configurarModosInteligentes();
   
-  // Registro dos eventos de voz no menu lateral
+  configurarMetaDiaria();
   configurarCodigoVozDireto();
 }
 
@@ -120,10 +207,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   inicializarMapa();
   registrarEventosUI();
   await carregarPerfil();
+  atualizarBarraMetaDiaria();
   iniciarRadarChamadas();
   inicializarPushNotifications();
 
-  // Inicializa os controles do copiloto no menu lateral e restaura a preferência salva
   inicializarCopilotoVoz();
   restaurarPreferenciaCopiloto();
 });

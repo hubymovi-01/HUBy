@@ -571,6 +571,44 @@
       </div>
     </div>
   </div>
+  <!-- MODAL DEFINIR META DIÁRIA -->
+  <div id="modalMetaDiaria" class="modal-backdrop-custom" style="z-index: 10012;">
+    <div class="modal-box-edit" style="max-width: 360px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; font-size: 16px; color: #FFF; font-weight: 800;">🎯 Definir Meta Diária</h3>
+        <button type="button" id="btnFecharModalMeta"
+          style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+      </div>
+
+      <p style="color: var(--text-sec); font-size: 12px; margin: 0 0 12px;">
+        Defina quanto você pretende faturar líquido hoje:
+      </p>
+
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px;">
+        <button type="button" class="btn-fast-meta" data-meta="100"
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 100</button>
+        <button type="button" class="btn-fast-meta" data-meta="150"
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 150</button>
+        <button type="button" class="btn-fast-meta" data-meta="200"
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 200</button>
+        <button type="button" class="btn-fast-meta" data-meta="300"
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 300</button>
+      </div>
+
+      <div class="form-group-driver">
+        <label>Valor da Meta (R$)</label>
+        <input type="number" step="5" min="10" id="inputValorMetaDiaria" placeholder="200.00"
+          style="color: #38BDF8; font-weight: 900; font-size: 18px;">
+      </div>
+
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
+        <button type="button" id="btnCancelarModalMeta"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnSalvarMetaDiaria"
+          style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Meta</button>
+      </div>
+    </div>
+  </div>
 
   <!-- SCRIPTS GLOBAIS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
