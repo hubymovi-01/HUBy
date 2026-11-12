@@ -5,33 +5,28 @@
  * ============================================================================
  */
 
-// 1. DOMÍNIOS OFICIALMENTE AUTORIZADOS A EXECUTAR O CLIENTE HUBy
 const DOMINIOS_AUTORIZADOS = [
   'hubymovi-01.github.io',
   'localhost',
   '127.0.0.1'
 ];
 
-// 2. VALIDAÇÃO DE SEGURANÇA DA ORIGEM DA PÁGINA
 function validarOrigemSegura() {
-  if (typeof window === 'undefined') return true; // Se rodar em ambiente Node/SSR
+  if (typeof window === 'undefined') return true;
   
   const hostAtual = window.location.hostname;
   const protocoloAtual = window.location.protocol;
 
-  // Em produção, obriga o uso estrito de HTTPS (exceto para localhost)
   if (hostAtual !== 'localhost' && hostAtual !== '127.0.0.1' && protocoloAtual !== 'https:') {
     console.error('🚨 SEGURANÇA HUBy: Conexão não encriptada rejeitada.');
     window.location.replace('https://' + window.location.hostname + window.location.pathname);
     return false;
   }
 
-  // Verifica se o host atual faz parte da lista de domínios confiáveis
   const autorizado = DOMINIOS_AUTORIZADOS.some(dominio => hostAtual === dominio || hostAtual.endsWith('.' + dominio));
   
   if (!autorizado) {
     console.warn('⚠️ ALERTA DE SEGURANÇA: Tentativa de execução em domínio não autorizado (' + hostAtual + ').');
-    // Limpa vestígios de sessão para evitar roubo de tokens em clones maliciosos
     try {
       localStorage.removeItem('huby_token');
       localStorage.removeItem('huby_user_id');
@@ -42,36 +37,75 @@ function validarOrigemSegura() {
   return true;
 }
 
-// Executa a barreira de segurança imediatamente ao carregar o script
 if (!validarOrigemSegura()) {
   throw new Error('Acesso bloqueado por razões de segurança do HUBy 2.0.');
 }
 
-// 3. DEFINIÇÃO BLINDADA DO ENDPOINT DA API OFICIAL
 export const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
-// DESPERTADOR SEGURO: Envia um ping assíncrono estrito apenas para acordar a instância no Render
 try {
   fetch(`${API_URL}/`, { method: 'HEAD', mode: 'no-cors' }).catch(() => {});
 } catch (e) {}
 
-// Opções pré-definidas para recarga de saldo na Carteira Digital Pix
 export const OPCOES_RECARGA_PIX = [1.00, 10.00, 20.00, 50.00, 100.00];
 
-// Tabela de categorias protegida contra injeções
 export let CATEGORIAS = {
-  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 1.0, km: 1.0, min: 1.0 },
-  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 1.0, km: 0.8, min: 1.0 },
-  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 1.0, km: 1.0, min: 1.0 },
-  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 1.0, km: 1.0, min: 1.0 },
+  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.0, km: 2.2, min: 0.30 },
+  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.4, min: 0.20 },
+  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 5.0, km: 1.8, min: 0.25 },
+  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 5.0, km: 1.8, min: 0.25 },
   cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 10.0, km: 2.0, min: 10.0 }
 };
 
 export let MULTIPLICADOR_PICO = 1.0;
 
-// Sincronização segura de tarifas em tempo real (sem cache)
+export function aplicarObjetoTarifas(raw) {
+  if (!raw) return;
+  let dados = raw;
+  if (typeof dados === 'string') {
+    try { dados = JSON.parse(dados); } catch (e) { return; }
+  }
+  if (!dados || typeof dados !== 'object') return;
+
+  ['carro', 'moto', 'entrega'].forEach(chave => {
+    if (dados[chave] && CATEGORIAS[chave]) {
+      const b = Number(dados[chave].base);
+      const k = Number(dados[chave].km);
+      const m = Number(dados[chave].min);
+      if (Number.isFinite(b) && b >= 0) CATEGORIAS[chave].base = b;
+      if (Number.isFinite(k) && k >= 0) CATEGORIAS[chave].km = k;
+      if (Number.isFinite(m) && m >= 0) CATEGORIAS[chave].min = m;
+    }
+  });
+
+  if (CATEGORIAS.entrega && CATEGORIAS.flash_moto) {
+    CATEGORIAS.flash_moto.base = CATEGORIAS.entrega.base;
+    CATEGORIAS.flash_moto.km = CATEGORIAS.entrega.km;
+    CATEGORIAS.flash_moto.min = CATEGORIAS.entrega.min;
+  }
+
+  if (dados.multiplicador_pico !== undefined) {
+    MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
+  }
+
+  try {
+    localStorage.setItem('huby_tarifas_cache', JSON.stringify({
+      taxa_plataforma: dados.taxa_plataforma ?? 15,
+      carro: { base: CATEGORIAS.carro.base, km: CATEGORIAS.carro.km, min: CATEGORIAS.carro.min },
+      moto: { base: CATEGORIAS.moto.base, km: CATEGORIAS.moto.km, min: CATEGORIAS.moto.min },
+      entrega: { base: CATEGORIAS.entrega.base, km: CATEGORIAS.entrega.km, min: CATEGORIAS.entrega.min }
+    }));
+  } catch (e) {}
+}
+
+// Carrega imediatamente do cache local enquanto busca a versão mais recente do servidor
+try {
+  const salvo = localStorage.getItem('huby_tarifas_cache');
+  if (salvo) aplicarObjetoTarifas(JSON.parse(salvo));
+} catch (e) {}
+
 export async function sincronizarTarifasServidor() {
   try {
     const controller = new AbortController();
@@ -85,31 +119,10 @@ export async function sincronizarTarifasServidor() {
 
     if (!resp.ok) return;
     const dados = await resp.json();
-
-    if (dados && typeof dados === 'object') {
-      ['carro', 'moto', 'entrega'].forEach(chave => {
-        if (dados[chave] && CATEGORIAS[chave]) {
-          if (dados[chave].base !== undefined) CATEGORIAS[chave].base = Number(dados[chave].base);
-          if (dados[chave].km !== undefined) CATEGORIAS[chave].km = Number(dados[chave].km);
-          if (dados[chave].min !== undefined) CATEGORIAS[chave].min = Number(dados[chave].min);
-        }
-      });
-
-      if (dados.entrega && CATEGORIAS.flash_moto) {
-        CATEGORIAS.flash_moto.base = CATEGORIAS.entrega.base;
-        CATEGORIAS.flash_moto.km = CATEGORIAS.entrega.km;
-        CATEGORIAS.flash_moto.min = CATEGORIAS.entrega.min;
-      }
-
-      if (dados.multiplicador_pico !== undefined) {
-        MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
-      }
-    }
-  } catch (err) {
-    // Mantém fallback silencioso
-  }
+    aplicarObjetoTarifas(dados);
+  } catch (err) {}
 }
-// Cálculo seguro de preços com validação numérica estrita
+
 export function calcularPreco(catId, distanciaKm) {
   const chave = String(catId || 'carro').toLowerCase();
   const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
@@ -133,9 +146,6 @@ export function calcularPreco(catId, distanciaKm) {
 
 sincronizarTarifasServidor();
 
-// ============================================================================
-// EFEITOS SONOROS COM WEB AUDIO API (Isolados e Seguros)
-// ============================================================================
 class AudioEfeitosHUBy {
   constructor() {
     this.ctx = null;

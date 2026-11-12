@@ -9,8 +9,7 @@ import { sql, JWT_SECRET } from './db.js';
 import authRoutes from './routes/auth.routes.js';
 import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter from './routes/pedidos.routes.js';
-import adminRoutes from './routes/admin.routes.js';
-import carteiraRoutes from './routes/carteira.routes.js';
+import adminRoutes, { lerTarifasDoBanco } from './routes/admin.routes.js'; import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
@@ -374,25 +373,7 @@ app.get('/', (req, res) => {
 
 app.get('/api/config/tarifas', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  const padrao = {
-    taxa_plataforma: 15,
-    carro: { base: 6.0, km: 2.2, min: 0.30 },
-    moto: { base: 4.0, km: 1.4, min: 0.20 },
-    entrega: { base: 5.0, km: 1.8, min: 0.25 }
-  };
-
-  let tarifas = padrao;
-  try {
-    const cfg = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-    if (cfg[0]?.valor) {
-      const parsed = typeof cfg[0].valor === 'string' ? JSON.parse(cfg[0].valor) : cfg[0].valor;
-      if (parsed && typeof parsed === 'object') {
-        tarifas = { ...padrao, ...parsed };
-      }
-    }
-  } catch (err) {
-    console.warn('Tarifas: usando valores padrão.', err.message);
-  }
+  const tarifas = await lerTarifasDoBanco();
 
   res.json({
     ...tarifas,
