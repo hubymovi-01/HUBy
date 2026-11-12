@@ -373,6 +373,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/api/config/tarifas', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   const padrao = {
     taxa_plataforma: 15,
     carro: { base: 6.0, km: 2.2, min: 0.30 },
@@ -383,7 +384,12 @@ app.get('/api/config/tarifas', async (req, res) => {
   let tarifas = padrao;
   try {
     const cfg = await sql`SELECT valor FROM configuracoes_plataforma WHERE chave = 'tarifas' LIMIT 1;`;
-    if (cfg[0]?.valor) tarifas = cfg[0].valor;
+    if (cfg[0]?.valor) {
+      const parsed = typeof cfg[0].valor === 'string' ? JSON.parse(cfg[0].valor) : cfg[0].valor;
+      if (parsed && typeof parsed === 'object') {
+        tarifas = { ...padrao, ...parsed };
+      }
+    }
   } catch (err) {
     console.warn('Tarifas: usando valores padrão.', err.message);
   }

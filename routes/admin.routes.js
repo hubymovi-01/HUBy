@@ -253,7 +253,7 @@ export default function adminRoutes(io) {
   // =========================================================================
   // 4. SAQUE AUTOMÁTICO INSTANTÂNEO PIX & AUDITORIA
   // =========================================================================
-  
+
   // A) SAQUE PARA OS SÓCIOS (Faltava esta rota! Resolve o erro no painel)
   router.post('/saques/automatico', autenticarToken, verificarAdmin, async (req, res) => {
     const { valor, chavePix, tipoChave } = req.body;
@@ -463,6 +463,7 @@ export default function adminRoutes(io) {
   // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
       const config = await sql`
         SELECT valor FROM configuracoes_plataforma 
@@ -476,11 +477,17 @@ export default function adminRoutes(io) {
         entrega: { base: 5.0, km: 1.8, min: 0.25 }
       };
 
-      if (config.length === 0 || !config[0].valor) {
+      if (!config.length || !config[0].valor) {
         return res.json(tarifasPadrao);
       }
 
-      res.json(config[0].valor);
+      const raw = config[0].valor;
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+
+      res.json({
+        ...tarifasPadrao,
+        ...parsed
+      });
     } catch (err) {
       console.error('Erro ao ler tarifas:', err);
       res.status(500).json({ erro: 'Falha ao buscar configurações tarifárias.' });
@@ -489,13 +496,33 @@ export default function adminRoutes(io) {
 
   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
-      const novasTarifas = req.body;
+      const body = req.body || {};
+      const novasTarifas = {
+        taxa_plataforma: Number(body.taxa_plataforma ?? 15),
+        carro: {
+          base: Number(body.carro?.base ?? 6.0),
+          km: Number(body.carro?.km ?? 2.2),
+          min: Number(body.carro?.min ?? 0.30)
+        },
+        moto: {
+          base: Number(body.moto?.base ?? 4.0),
+          km: Number(body.moto?.km ?? 1.4),
+          min: Number(body.moto?.min ?? 0.20)
+        },
+        entrega: {
+          base: Number(body.entrega?.base ?? 5.0),
+          km: Number(body.entrega?.km ?? 1.8),
+          min: Number(body.entrega?.min ?? 0.25)
+        }
+      };
+
+      const jsonStr = JSON.stringify(novasTarifas);
 
       await sql`
         INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
-        VALUES ('tarifas', ${JSON.stringify(novasTarifas)}::jsonb, CURRENT_TIMESTAMP)
+        VALUES ('tarifas', ${jsonStr}::jsonb, CURRENT_TIMESTAMP)
         ON CONFLICT (chave) DO UPDATE
-        SET valor = ${JSON.stringify(novasTarifas)}::jsonb, atualizado_em = CURRENT_TIMESTAMP;
+        SET valor = ${jsonStr}::jsonb, atualizado_em = CURRENT_TIMESTAMP;
       `;
 
       const socket = req.io || io;
@@ -503,7 +530,7 @@ export default function adminRoutes(io) {
         socket.emit('tarifas_atualizadas', novasTarifas);
       }
 
-      res.json({ sucesso: true, mensagem: 'Tarifas atualizadas com sucesso no banco de dados!' });
+      res.json({ sucesso: true, tarifas: novasTarifas, mensagem: 'Tarifas atualizadas com sucesso no banco de dados!' });
     } catch (err) {
       console.error('Erro ao atualizar tarifas:', err);
       res.status(500).json({ erro: 'Falha ao atualizar tarifas no banco.' });
