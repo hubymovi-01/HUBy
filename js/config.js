@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Configuração Central de Segurança e Endpoint da API (js/config.js)
- * Versão Blindada e Protegida contra Modificações e Roubo de Sessão
+ * Versão Blindada e Sincronizada em Tempo Real com o Painel Admin Master
  * ============================================================================
  */
 
@@ -51,11 +51,13 @@ try {
 
 export const OPCOES_RECARGA_PIX = [1.00, 10.00, 20.00, 50.00, 100.00];
 
+export let TAXA_PLATAFORMA_ATUAL = 15;
+
 export let CATEGORIAS = {
-  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.0, km: 2.2, min: 0.30 },
-  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.4, min: 0.20 },
-  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 5.0, km: 1.8, min: 0.25 },
-  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 5.0, km: 1.8, min: 0.25 },
+  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 1.0, km: 1.0, min: 0.30 },
+  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 1.0, km: 0.8, min: 0.20 },
+  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 1.0, km: 1.0, min: 0.25 },
+  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 1.0, km: 1.0, min: 0.25 },
   cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 10.0, km: 2.0, min: 10.0 }
 };
 
@@ -64,10 +66,23 @@ export let MULTIPLICADOR_PICO = 1.0;
 export function aplicarObjetoTarifas(raw) {
   if (!raw) return;
   let dados = raw;
-  if (typeof dados === 'string') {
-    try { dados = JSON.parse(dados); } catch (e) { return; }
+  for (let i = 0; i < 3; i++) {
+    if (typeof dados === 'string') {
+      try { dados = JSON.parse(dados); } catch (e) { return; }
+    } else {
+      break;
+    }
   }
   if (!dados || typeof dados !== 'object') return;
+
+  if (dados.tarifas && typeof dados.tarifas === 'object') {
+    dados = { ...dados, ...dados.tarifas };
+  }
+
+  if (dados.taxa_plataforma !== undefined) {
+    const t = Number(dados.taxa_plataforma);
+    if (Number.isFinite(t) && t >= 0) TAXA_PLATAFORMA_ATUAL = t;
+  }
 
   ['carro', 'moto', 'entrega'].forEach(chave => {
     if (dados[chave] && CATEGORIAS[chave]) {
@@ -92,7 +107,7 @@ export function aplicarObjetoTarifas(raw) {
 
   try {
     localStorage.setItem('huby_tarifas_cache', JSON.stringify({
-      taxa_plataforma: dados.taxa_plataforma ?? 15,
+      taxa_plataforma: TAXA_PLATAFORMA_ATUAL,
       carro: { base: CATEGORIAS.carro.base, km: CATEGORIAS.carro.km, min: CATEGORIAS.carro.min },
       moto: { base: CATEGORIAS.moto.base, km: CATEGORIAS.moto.km, min: CATEGORIAS.moto.min },
       entrega: { base: CATEGORIAS.entrega.base, km: CATEGORIAS.entrega.km, min: CATEGORIAS.entrega.min }
@@ -123,15 +138,17 @@ export async function sincronizarTarifasServidor() {
   } catch (err) {}
 }
 
+// Cálculo oficial sincronizado com Base + (DistânciaKm * PreçoKm) + (MinutosEstimados * PreçoMin)
 export function calcularPreco(catId, distanciaKm) {
-  const chave = String(catId || 'carro').toLowerCase();
+  let chave = String(catId || 'carro').toLowerCase();
+  if (chave === 'flash') chave = 'entrega';
   const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
   
   const dist = Math.max(0.1, Number(distanciaKm) || 1.0);
-  const custoBaseMaisKm = cat.base + (dist * cat.km);
-  const valorComMinimo = Math.max(cat.min, custoBaseMaisKm);
-  const valorFinal = Number((valorComMinimo * MULTIPLICADOR_PICO).toFixed(2));
   const minutosChegadaEstimada = Math.max(2, Math.round(dist * 1.8));
+
+  const custoBaseMaisKm = Number(cat.base || 0) + (dist * Number(cat.km || 0));
+  const valorFinal = Number(Math.max(0.50, custoBaseMaisKm * MULTIPLICADOR_PICO).toFixed(2));
 
   return {
     categoria: cat.nome,

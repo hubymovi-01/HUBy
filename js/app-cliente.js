@@ -1,5 +1,5 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Interface Limpa e Alertas Elegantes)
-import { API_URL, sonsHUBy, sincronizarTarifasServidor } from './config.js';
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Tarifas 100% Sincronizadas com o Admin)
+import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
@@ -42,6 +42,57 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// Extrai a distância real em KM de qualquer objeto de rota retornado pelo OSRM / Leaflet
+function extrairDistanciaKmDaRota(rota) {
+  if (!rota) return 0;
+  const bruta = Number(
+    rota.distanciaKm ??
+    rota.distancia_km ??
+    rota.distancia ??
+    (rota.distance ? rota.distance / 1000 : 0)
+  );
+  if (Number.isFinite(bruta) && bruta > 0) {
+    return bruta;
+  }
+  if (estadoCliente.coordsOrigem && estadoCliente.coordsDestino) {
+    const m = calcularDistanciaMetros(
+      estadoCliente.coordsOrigem[0],
+      estadoCliente.coordsOrigem[1],
+      estadoCliente.coordsDestino[0],
+      estadoCliente.coordsDestino[1]
+    );
+    return Math.max(0.2, Number(((m / 1000) * 1.3).toFixed(2)));
+  }
+  return 0;
+}
+
+// Recalcula o objeto rotaAtual e todos os cards da interface usando as tarifas oficiais do banco
+function sincronizarPrecosDaRotaAtual() {
+  if (!estadoCliente.rotaAtual && !estadoCliente.coordsDestino) {
+    atualizarValoresCardsPro(0);
+    return;
+  }
+
+  const distKm = extrairDistanciaKmDaRota(estadoCliente.rotaAtual);
+  if (!distKm || distKm <= 0) {
+    atualizarValoresCardsPro(0);
+    return;
+  }
+
+  const catSelecionada = estadoCliente.categoriaSelecionada || 'carro';
+  const calcSelecionada = calcularPreco(catSelecionada, distKm);
+
+  if (estadoCliente.rotaAtual) {
+    estadoCliente.rotaAtual.distanciaKm = distKm;
+    estadoCliente.rotaAtual.distancia = distKm;
+    estadoCliente.rotaAtual.preco = calcSelecionada.valorTotal;
+    estadoCliente.rotaAtual.valorTotal = calcSelecionada.valorTotal;
+  }
+
+  atualizarResumoValores();
+  atualizarValoresCardsPro(calcSelecionada.valorTotal, distKm);
+}
+
 export function alternarModoVisualViagemAtiva(emViagem = false) {
   const elementosParaEsconder = [
     document.getElementById('sliderCategorias'),
@@ -73,13 +124,16 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
   }
 }
 
-function atualizarValoresCardsPro(precoBase) {
+// Calcula cada categoria (Carro, Moto e Flash) diretamente com as tarifas salvas no banco (config.js)
+function atualizarValoresCardsPro(precoBase, distanciaForcadaKm = null) {
   const lblCarro = document.getElementById('priceEstCarro');
   const lblMoto = document.getElementById('priceEstMoto');
   const lblEntrega = document.getElementById('priceEstEntrega');
   const lblPrincipal = document.getElementById('txtPrecoEstimado');
 
-  if (!precoBase || precoBase <= 0) {
+  const distKm = distanciaForcadaKm ?? extrairDistanciaKmDaRota(estadoCliente.rotaAtual);
+
+  if ((!precoBase || precoBase <= 0) && (!distKm || distKm <= 0)) {
     if (lblCarro) lblCarro.textContent = '--';
     if (lblMoto) lblMoto.textContent = '--';
     if (lblEntrega) lblEntrega.textContent = '--';
@@ -88,18 +142,42 @@ function atualizarValoresCardsPro(precoBase) {
   }
 
   const fatorDesconto = estadoRecursos.descontoPercentual > 0 ? (1 - estadoRecursos.descontoPercentual) : 1;
+  const paradasExtras = (estadoCliente.paradasIntermediarias?.length || 0) * 3.00;
 
-  const valCarro = (precoBase * 1.0 * fatorDesconto).toFixed(2).replace('.', ',');
-  const valMoto = (precoBase * 0.65 * fatorDesconto).toFixed(2).replace('.', ',');
-  const valEntrega = (precoBase * 0.75 * fatorDesconto).toFixed(2).replace('.', ',');
+  let numCarro, numMoto, numEntrega;
+
+  if (distKm > 0) {
+    numCarro = (calcularPreco('carro', distKm).valorTotal + paradasExtras) * fatorDesconto;
+    numMoto = (calcularPreco('moto', distKm).valorTotal + paradasExtras) * fatorDesconto;
+    numEntrega = (calcularPreco('entrega', distKm).valorTotal + paradasExtras) * fatorDesconto;
+  } else {
+    numCarro = precoBase * fatorDesconto;
+    numMoto = precoBase * 0.65 * fatorDesconto;
+    numEntrega = precoBase * 0.75 * fatorDesconto;
+  }
+
+  const valCarro = numCarro.toFixed(2).replace('.', ',');
+  const valMoto = numMoto.toFixed(2).replace('.', ',');
+  const valEntrega = numEntrega.toFixed(2).replace('.', ',');
 
   if (lblCarro) lblCarro.textContent = `R$ ${valCarro}`;
   if (lblMoto) lblMoto.textContent = `R$ ${valMoto}`;
   if (lblEntrega) lblEntrega.textContent = `R$ ${valEntrega}`;
 
   let valAtual = valCarro;
-  if (estadoCliente.categoriaSelecionada === 'moto') valAtual = valMoto;
-  if (estadoCliente.categoriaSelecionada === 'entrega') valAtual = valEntrega;
+  let numAtual = numCarro;
+  if (estadoCliente.categoriaSelecionada === 'moto') {
+    valAtual = valMoto;
+    numAtual = numMoto;
+  } else if (estadoCliente.categoriaSelecionada === 'entrega') {
+    valAtual = valEntrega;
+    numAtual = numEntrega;
+  }
+
+  if (estadoCliente.rotaAtual) {
+    estadoCliente.rotaAtual.preco = Number(numAtual.toFixed(2));
+    estadoCliente.rotaAtual.valorTotal = Number(numAtual.toFixed(2));
+  }
 
   if (lblPrincipal) lblPrincipal.textContent = `R$ ${valAtual}`;
 }
@@ -146,16 +224,14 @@ function configurarParadasIntermediariasSemPrompt() {
             const index = estadoCliente.paradasIntermediarias.findIndex(p => p.endereco === enderecoParada);
             if (index > -1) estadoCliente.paradasIntermediarias.splice(index, 1);
             item.remove();
-            atualizarResumoValores();
-            if (estadoCliente.rotaAtual?.preco) atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
+            sincronizarPrecosDaRotaAtual();
           });
 
           container.appendChild(item);
         }
 
         notificar(`Parada adicionada: ${enderecoParada}`, 'sucesso');
-        atualizarResumoValores();
-        if (estadoCliente.rotaAtual?.preco) atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
+        sincronizarPrecosDaRotaAtual();
       }
     });
   });
@@ -192,7 +268,6 @@ function configurarBarraPesquisaAnimada() {
 
   inputPesquisa?.addEventListener('input', atualizarVisibilidadeLimpar);
 
-  // O teclado SÓ sobe se o usuário clicar diretamente no campo de texto para digitar
   inputPesquisa?.addEventListener('click', (e) => {
     e.stopPropagation();
     searchBox?.classList.add('active');
@@ -207,7 +282,6 @@ function configurarBarraPesquisaAnimada() {
     atualizarVisibilidadeLimpar();
   });
 
-  // Clique no container não foca o input se tocar no microfone ou botão limpar
   searchBox?.addEventListener('click', (e) => {
     if (
       e.target === btnLimpar || btnLimpar?.contains(e.target) ||
@@ -405,6 +479,7 @@ function configurarLocaisFavoritosMenu() {
     const coords = JSON.parse(coordsSalvas);
     if (estadoCliente.pedidoAtivoId) return;
 
+    await sincronizarTarifasServidor();
     estadoCliente.coordsDestino = coords;
     const txtDestino = document.getElementById('txtDestinoSelecionado');
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
@@ -420,8 +495,7 @@ function configurarLocaisFavoritosMenu() {
                      [-8.3582, -42.2476];
       const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
       estadoCliente.rotaAtual = rota;
-      atualizarResumoValores();
-      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+      sincronizarPrecosDaRotaAtual();
     }
     notificar(`Destino: ${label}`, 'sucesso');
   }
@@ -444,11 +518,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 400);
   }
 
+  // 1. Garante tarifas atualizadas do banco logo ao abrir
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
   atualizarValoresCardsPro(0);
 
-  // 1. Inicializa o Mapa
+  // 2. Inicializa o Mapa
   try {
     if (!estadoCliente.hubyMapa) {
       estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
@@ -456,6 +531,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     estadoCliente.hubyMapa.inicializar(async (rota, coords) => {
       if (estadoCliente.pedidoAtivoId) return;
+
+      await sincronizarTarifasServidor();
       estadoCliente.coordsDestino = [coords.lat, coords.lng];
       estadoCliente.rotaAtual = rota;
 
@@ -478,8 +555,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         listaResultados.style.display = 'none';
       }
 
-      atualizarResumoValores();
-      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+      sincronizarPrecosDaRotaAtual();
     });
 
     estadoCliente.hubyMapa.obterGPS?.((pos) => {
@@ -497,9 +573,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('Aviso no mapa:', err);
   }
 
-  // 2. Pesquisa de locais
+  // 3. Pesquisa de locais
   if (estadoCliente.hubyMapa) {
-    configurarPesquisaLocal(estadoCliente.hubyMapa, (rota, coords, nomeCurto) => {
+    configurarPesquisaLocal(estadoCliente.hubyMapa, async (rota, coords, nomeCurto) => {
+      await sincronizarTarifasServidor();
       estadoCliente.rotaAtual = rota;
       estadoCliente.coordsDestino = coords;
 
@@ -520,12 +597,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         listaResultados.style.display = 'none';
       }
 
-      atualizarResumoValores();
-      if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+      sincronizarPrecosDaRotaAtual();
     });
   }
 
-  // 3. Ativação dos controles
+  // 4. Ativação dos controles
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
@@ -535,7 +611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 3.2. Escuta IA (Voz/Gemini) - Um Único Alerta Final
+  // 5. Escuta IA (Voz/Gemini)
   const processarDestinoIA = async (e) => {
     const dados = e.detail || {};
     const nome = dados.nome || 'Destino Selecionado';
@@ -548,10 +624,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (!coordsDestino || isNaN(coordsDestino[0]) || isNaN(coordsDestino[1])) {
-      console.warn('⚠️ Coordenadas inválidas da IA:', dados);
       return;
     }
 
+    await sincronizarTarifasServidor();
     estadoCliente.coordsDestino = coordsDestino;
 
     const txtDestino = document.getElementById('txtDestinoSelecionado');
@@ -568,7 +644,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (inputPesquisa) {
       inputPesquisa.value = nome;
-      inputPesquisa.blur(); // Garante o teclado recolhido
+      inputPesquisa.blur();
       if (btnLimpar) btnLimpar.style.display = 'flex';
     }
 
@@ -610,10 +686,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           estadoCliente.hubyMapa.desenharRota(rota.geometria, '#38BDF8');
         }
 
-        atualizarResumoValores();
-        if (rota?.preco) {
-          atualizarValoresCardsPro(Number(rota.preco));
-        }
+        sincronizarPrecosDaRotaAtual();
 
         setTimeout(() => {
           if (estadoCliente.hubyMapa.map) {
@@ -621,7 +694,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
         }, 150);
 
-        // ÚNICO alerta emitido ao concluir a rota
         notificar(`Rota traçada: ${nome}`, 'sucesso');
       } catch (errRota) {
         console.error('❌ Erro ao traçar rota no mapa:', errRota);
@@ -629,11 +701,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   };
 
-  // Garante registro único do ouvinte
   window.removeEventListener('huby_local_selecionado_ia', processarDestinoIA);
   window.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
 
-  // 4. Centralização GPS
+  // 6. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
@@ -647,8 +718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (estadoCliente.coordsDestino) {
             estadoCliente.hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], estadoCliente.coordsDestino, '#F59E0B', true).then(rota => {
               estadoCliente.rotaAtual = rota;
-              atualizarResumoValores();
-              if (rota?.preco) atualizarValoresCardsPro(Number(rota.preco));
+              sincronizarPrecosDaRotaAtual();
             });
           }
         });
@@ -656,7 +726,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 5. Drawer e Menus
+  // 7. Drawer e Menus
   configurarDrawerMenu();
   verificarAcessoAdminMenu();
 
@@ -670,7 +740,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modal) modal.style.display = 'none';
   });
 
-  // 6. Seletor de Categorias Estilo Uber
+  // 8. Seletor de Categorias
   const cardsPro = document.querySelectorAll('.category-card-pro');
   cardsPro.forEach(card => {
     card.addEventListener('click', () => {
@@ -687,15 +757,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       const btnText = document.querySelector('.pro-btn .btn-text');
       if (btnText) btnText.textContent = `Confirmar HUBy ${nomeExibicao}`;
 
-      if (estadoCliente.rotaAtual) {
-        atualizarResumoValores();
-        atualizarValoresCardsPro(Number(estadoCliente.rotaAtual.preco));
+      if (estadoCliente.rotaAtual || estadoCliente.coordsDestino) {
+        sincronizarPrecosDaRotaAtual();
       }
     });
   });
 
-  // 7. Botão Chamar
-  document.getElementById('btnPedirHuby')?.addEventListener('click', () => {
+  // 9. Botão Chamar (Garante envio do valor sincronizado)
+  document.getElementById('btnPedirHuby')?.addEventListener('click', async () => {
     if (estadoCliente.pedidoAtivoId) {
       cancelarBusca();
     } else {
@@ -703,17 +772,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         notificar('Selecione primeiro o destino final no mapa.', 'alerta');
         return;
       }
+      sincronizarPrecosDaRotaAtual();
       submeterPedido();
     }
   });
 
-  // 8. Modais e Chat
+  // 10. Modais e Chat
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
   configurarFluxoPagamentoMercadoPago();
   configurarChatPassageiro();
 
-  // 9. Conexão Socket e Polling
+  // 11. Conexão Socket e Polling
   conectarSocketEPollingCliente();
 
   if ('serviceWorker' in navigator) {
@@ -758,11 +828,6 @@ function configurarFluxoPagamentoMercadoPago() {
     cardPix.classList.add('active-method');
     cardDinheiro?.classList.remove('active-method');
     if (areaPixMP) areaPixMP.style.display = 'block';
-
-    let valorRecarga = 15.00;
-    if (estadoCliente.rotaAtual?.preco) {
-      valorRecarga = Number(estadoCliente.rotaAtual.preco);
-    }
 
     abrirPromptParada({
       titulo: '💳 Recarga Pix Mercado Pago',
@@ -885,7 +950,7 @@ function iniciarMonitoramentoPix(txid, valor) {
 }
 
 function exibirModalPixCorridaCliente(pix) {
-  document.getElementById('modalPixCorrivaAtivaCliente')?.remove();
+  document.getElementById('modalPixCorridaAtivaCliente')?.remove();
 
   const modalHTML = `
     <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
@@ -943,6 +1008,12 @@ function conectarSocketEPollingCliente() {
   }) : null;
 
   if (socket) {
+    // Escuta em tempo real qualquer mudança de tarifa feita no Painel Admin Master
+    socket.on('tarifas_atualizadas', (novasTarifas) => {
+      aplicarObjetoTarifas(novasTarifas);
+      sincronizarPrecosDaRotaAtual();
+    });
+
     socket.on('corrida_aceita', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {

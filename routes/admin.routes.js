@@ -3,7 +3,6 @@ import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 
-// Middleware: aceita exclusivamente 'admin' e 'administrador'
 function verificarAdmin(req, res, next) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase().trim();
   if (role !== 'admin' && role !== 'administrador') {
@@ -20,7 +19,6 @@ function autenticarCsv(req, res, next) {
   return autenticarToken(req, res, next);
 }
 
-// Função utilitária que desempacota qualquer valor vindo do Postgres (mesmo que tenha sido salvo como string dentro de JSONB)
 export function extrairObjetoJSONB(raw, fallback = {}) {
   if (!raw) return fallback;
   let atual = raw;
@@ -150,16 +148,20 @@ export default function adminRoutes(io) {
       const repasseFrota = Number(saldoMotoristas[0]?.repasse_acumulado || 0);
       const corridasFrota = Number(saldoMotoristas[0]?.corridas_frota || 0);
 
+      const tarifasAtuais = await lerTarifasDoBanco();
+      const pctTaxa = Number(tarifasAtuais.taxa_plataforma || 15) / 100;
+      const pctMotorista = 1 - pctTaxa;
+
       let repasseMotoristas = 0;
       let lucroHuby = 0;
 
       if (faturamentoBruto > 0) {
-        repasseMotoristas = Number((faturamentoBruto * 0.85).toFixed(2));
-        lucroHuby = Number((faturamentoBruto * 0.15).toFixed(2));
+        repasseMotoristas = Number((faturamentoBruto * pctMotorista).toFixed(2));
+        lucroHuby = Number((faturamentoBruto * pctTaxa).toFixed(2));
       } else if (repasseFrota > 0) {
         repasseMotoristas = repasseFrota;
-        faturamentoBruto = Number((repasseFrota / 0.85).toFixed(2));
-        lucroHuby = Number((faturamentoBruto * 0.15).toFixed(2));
+        faturamentoBruto = Number((repasseFrota / pctMotorista).toFixed(2));
+        lucroHuby = Number((faturamentoBruto * pctTaxa).toFixed(2));
         totalViagens = corridasFrota > 0 ? corridasFrota : 1;
       }
 
@@ -325,7 +327,6 @@ export default function adminRoutes(io) {
     }
 
     try {
-      // Débito atômico: impede race condition de múltiplos saques simultâneos
       const debitado = await sql`
         UPDATE motoristas
         SET saldo_carteira = saldo_carteira - ${valorSaque}
@@ -453,20 +454,21 @@ export default function adminRoutes(io) {
       res.status(500).json({ erro: 'Falha ao atualizar tarifas no banco.' });
     }
   });
+
   // =========================================================================
-  // 7. GATEWAY MERCADO PAGO (BLINDADO: NÃO VAZA ACCESS TOKEN NO GET)
+  // 7. GATEWAY MERCADO PAGO (BLINDADO E COM CAST JSONB SEGURO)
   // =========================================================================
   router.get('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const config = await sql`
-        SELECT valor FROM configuracoes_plataforma 
+        SELECT valor::text AS valor_txt FROM configuracoes_plataforma 
         WHERE chave = 'gateway_mercadopago' 
         LIMIT 1;
       `;
-      if (!config.length || !config[0].valor) {
+      if (!config.length || !config[0].valor_txt) {
         return res.json({ configurado: false, access_token_mascarado: '', public_key: '', taxa_percentual: 0.99 });
       }
-      const val = extrairObjetoJSONB(config[0].valor, {});
+      const val = extrairObjetoJSONB(config[0].valor_txt, {});
       const tokenReal = String(val.access_token || '');
       const mascarado = tokenReal.length > 12
         ? `${tokenReal.slice(0, 10)}••••••••••••${tokenReal.slice(-4)}`
@@ -497,11 +499,13 @@ export default function adminRoutes(io) {
         taxa_percentual: Number(taxa_percentual) || 0.99
       };
 
+      const jsonGw = JSON.stringify(dados);
+
       await sql`
         INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
-        VALUES ('gateway_mercadopago', ${dados}, CURRENT_TIMESTAMP)
+        VALUES ('gateway_mercadopago', (${jsonGw}::text)::jsonb, CURRENT_TIMESTAMP)
         ON CONFLICT (chave) 
-        DO UPDATE SET valor = ${dados}, atualizado_em = CURRENT_TIMESTAMP;
+        DO UPDATE SET valor = (${jsonGw}::text)::jsonb, atualizado_em = CURRENT_TIMESTAMP;
       `;
 
       res.json({ sucesso: true, mensagem: 'Credenciais do Mercado Pago salvas com segurança!' });
