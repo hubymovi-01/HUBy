@@ -1,7 +1,12 @@
-// js/ia/motorista-ia.js - Copiloto Inteligente HUBy controlado pelo Menu Lateral (Drawer)
+// js/ia/motorista-ia.js - Copiloto Inteligente HUBy controlado exclusivamente pelo Menu Lateral (Drawer)
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
-import { extrairDadosDoBotao, pararAlertaSonoroChamada, iniciarRadarChamadas } from '../motorista/motorista-radar.js';
+import { 
+  extrairDadosDoBotao, 
+  pararAlertaSonoroChamada, 
+  alternarStatusOnline, 
+  iniciarRadarChamadas 
+} from '../motorista/motorista-radar.js';
 import { 
   preVisualizarRotaPedido, 
   aceitarCorrida, 
@@ -15,6 +20,8 @@ import { limparRotasMapa } from '../motorista/motorista-mapa.js';
 import { pararMonitoramentoDesvios } from '../motorista/motorista-rotas.js';
 import { notificar } from '../util/alertas-huby.js';
 
+const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
+
 let recognition = null;
 let escutaDesejada = localStorage.getItem('huby_ia_ativa') === 'true';
 let reconhecimentoRodando = false;
@@ -23,10 +30,14 @@ let processandoRequisicao = false;
 let timeoutReinicio = null;
 let wakeLockSentinel = null;
 
+// Janela de conversa contínua (35s): permite conversar fluidamente sem repetir o gatilho a cada frase
 let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
 const historicoConversa = [];
 
+// ============================================================================
+// PREFERÊNCIAS DE VOZ DO COPILOTO (CONFIGURADAS NO MENU LATERAL)
+// ============================================================================
 function vozesDisponiveis() {
   const todas = sintetizador ? sintetizador.getVoices() : [];
   const pt = todas.filter((v) => /^pt([-_]|$)/i.test(v.lang));
@@ -51,8 +62,6 @@ function obterVelocidadeVoz() {
   const v = Number(localStorage.getItem('huby_ia_velocidade'));
   return v >= 0.7 && v <= 1.6 ? v : 1.05;
 }
-
-const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
 function normalizarTexto(txt = '') {
   return String(txt || '')
@@ -204,7 +213,7 @@ function liberarWakeLock() {
 }
 
 // ============================================================================
-// MICROFONE ESTÁVEL SEM LOOP (DESACOPLADO DO STATUS ONLINE)
+// MICROFONE ESTÁVEL SEM LOOP (DESACOPLADO DO BOTÃO ONLINE)
 // ============================================================================
 function agendarReinicioMicrofone(delayMs = 600) {
   if (timeoutReinicio) {
@@ -212,7 +221,7 @@ function agendarReinicioMicrofone(delayMs = 600) {
     timeoutReinicio = null;
   }
 
-  // Mantém escutando se o copiloto estiver ativo no menu, independentemente de estar online ou offline
+  // O copiloto funciona sempre que estiver ativado no menu lateral, independente do status Online
   if (!escutaDesejada || falandoAgora) return;
 
   timeoutReinicio = setTimeout(() => {
@@ -225,6 +234,13 @@ function agendarReinicioMicrofone(delayMs = 600) {
 }
 
 export function inicializarCopilotoVoz() {
+  // Remove qualquer resquício de botão flutuante antigo caso exista no DOM
+  document.getElementById('badgeCopilotoVozStatus')?.remove();
+  document.getElementById('btnConfigCopiloto')?.remove();
+  document.getElementById('painelCopilotoConfig')?.remove();
+
+  configurarControlesCopilotoDrawer();
+
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return false;
 
@@ -246,7 +262,7 @@ export function inicializarCopilotoVoz() {
     reconhecimentoRodando = false;
     if (escutaDesejada && !falandoAgora) {
       agendarReinicioMicrofone(650);
-    } else {
+    } else if (!escutaDesejada) {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
     }
@@ -272,7 +288,7 @@ export function inicializarCopilotoVoz() {
     }
   };
 
-  atualizarIndicadorUIVoz(false);
+  atualizarIndicadorUIVoz(escutaDesejada);
   return true;
 }
 
@@ -289,7 +305,7 @@ export function ativarEscutaCopiloto() {
   }
 
   const comandoAtual = obterCodigoAtivacaoMotorista();
-  notificar(`🎙️ Copiloto ativo! Fale com "${comandoAtual}"`, 'sucesso', 2500);
+  notificar(`🎙️ Copiloto ativo! Chame por "${comandoAtual}"`, 'sucesso', 2500);
 }
 
 export function desativarEscutaCopiloto() {
@@ -312,13 +328,97 @@ export function desativarEscutaCopiloto() {
   reconhecimentoRodando = false;
   atualizarIndicadorUIVoz(false);
   liberarWakeLock();
-  notificar('Copiloto de voz pausado pelo menu.', 'info');
+  notificar('Copiloto de voz desativado no menu.', 'info', 2000);
 }
 
 export function restaurarPreferenciaCopiloto() {
-  atualizarIndicadorUIVoz(false);
+  configurarControlesCopilotoDrawer();
   if (localStorage.getItem('huby_ia_ativa') === 'true') {
     ativarEscutaCopiloto();
+  } else {
+    atualizarIndicadorUIVoz(false);
+  }
+}
+
+// ============================================================================
+// CONTROLES DO COPILOTO EMBUTIDOS NO MENU DO MOTORISTA (DRAWER)
+// ============================================================================
+function configurarControlesCopilotoDrawer() {
+  const chk = document.getElementById('chkCopilotoAtivo');
+  const selVoz = document.getElementById('selVozCopiloto');
+  const selTom = document.getElementById('selTomCopiloto');
+  const rng = document.getElementById('rngVelocidadeCopiloto');
+
+  if (chk && !chk.dataset.configurado) {
+    chk.dataset.configurado = 'true';
+    chk.checked = escutaDesejada;
+    chk.addEventListener('change', () => {
+      if (chk.checked) {
+        ativarEscutaCopiloto();
+      } else {
+        desativarEscutaCopiloto();
+      }
+    });
+  }
+
+  if (selTom && !selTom.dataset.configurado) {
+    selTom.dataset.configurado = 'true';
+    const tomSalvo = obterTomVoz();
+    selTom.value = tomSalvo <= 0.9 ? '0.75' : (tomSalvo >= 1.15 ? '1.3' : '1');
+    selTom.addEventListener('change', () => {
+      localStorage.setItem('huby_ia_tom', selTom.value);
+    });
+  }
+
+  if (rng && !rng.dataset.configurado) {
+    rng.dataset.configurado = 'true';
+    rng.value = String(obterVelocidadeVoz());
+    rng.addEventListener('input', () => {
+      localStorage.setItem('huby_ia_velocidade', rng.value);
+    });
+  }
+
+  if (selVoz && !selVoz.dataset.configurado) {
+    selVoz.dataset.configurado = 'true';
+    const preencherVozes = () => {
+      const lista = vozesDisponiveis();
+      const atual = obterVozEscolhida();
+      selVoz.innerHTML = lista.length
+        ? lista.map((v) => `<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join('')
+        : '<option value="">Voz padrão do aparelho</option>';
+      if (atual) selVoz.value = atual.voiceURI;
+    };
+    preencherVozes();
+    if (sintetizador) {
+      sintetizador.onvoiceschanged = preencherVozes;
+    }
+    selVoz.addEventListener('change', () => {
+      localStorage.setItem('huby_ia_voz', selVoz.value);
+    });
+  }
+}
+
+function atualizarIndicadorUIVoz(ativo) {
+  // Garante que nenhum botão flutuante apareça na frente do mapa
+  document.getElementById('badgeCopilotoVozStatus')?.remove();
+  document.getElementById('btnConfigCopiloto')?.remove();
+
+  const gatilho = obterCodigoAtivacaoMotorista();
+  const chkAtivo = document.getElementById('chkCopilotoAtivo');
+  const lblStatus = document.getElementById('lblStatusCopilotoDrawer');
+
+  if (chkAtivo) {
+    chkAtivo.checked = Boolean(ativo);
+  }
+
+  if (lblStatus) {
+    if (ativo) {
+      lblStatus.style.color = '#10B981';
+      lblStatus.textContent = `🟢 Ativo • Escutando "${gatilho}"`;
+    } else {
+      lblStatus.style.color = '#94A3B8';
+      lblStatus.textContent = '⚪ Desativado • Ligue para usar por voz';
+    }
   }
 }
 
@@ -860,48 +960,5 @@ async function executarAcaoNoApp(acao, ctx) {
       document.getElementById('btnFecharChat')?.click();
       fecharModaisPagamento();
       break;
-  }
-}
-
-function atualizarIndicadorUIVoz(ativo) {
-  let badge = document.getElementById('badgeCopilotoVozStatus');
-  if (!badge) {
-    badge = document.createElement('div');
-    badge.id = 'badgeCopilotoVozStatus';
-    badge.style.position = 'fixed';
-    badge.style.bottom = '22px';
-    badge.style.right = '18px';
-    badge.style.zIndex = '9999';
-    badge.style.padding = '8px 14px';
-    badge.style.borderRadius = '24px';
-    badge.style.fontSize = '12px';
-    badge.style.fontWeight = '800';
-    badge.style.backdropFilter = 'blur(12px)';
-    badge.style.webkitBackdropFilter = 'blur(12px)';
-    badge.style.boxShadow = '0 8px 24px rgba(0,0,0,0.5)';
-    badge.style.transition = 'all 0.25s ease';
-    badge.style.cursor = 'pointer';
-    badge.title = 'Toque para ativar ou pausar o Copiloto';
-    badge.addEventListener('click', () => {
-      if (escutaDesejada) {
-        desativarEscutaCopiloto();
-      } else {
-        ativarEscutaCopiloto();
-      }
-    });
-    document.body.appendChild(badge);
-  }
-
-  const gatilho = obterCodigoAtivacaoMotorista();
-  if (ativo) {
-    badge.style.background = 'rgba(16, 185, 129, 0.22)';
-    badge.style.border = '1px solid #10B981';
-    badge.style.color = '#10B981';
-    badge.innerHTML = `🎙️ "${gatilho}" Ativo`;
-  } else {
-    badge.style.background = 'rgba(15, 23, 42, 0.88)';
-    badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
-    badge.style.color = '#94A3B8';
-    badge.innerHTML = `🎙️ "${gatilho}" Pausado`;
   }
 }

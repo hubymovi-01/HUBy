@@ -101,7 +101,7 @@
     </div>
   </section>
 
-  <!-- DRAWER LATERAL -->
+  <!-- DRAWER LATERAL (MENU DO MOTORISTA) -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
   <aside class="driver-drawer" id="driverDrawer">
     <div class="drawer-header">
@@ -126,6 +126,65 @@
     </div>
 
     <div class="drawer-content">
+      <!-- CENTRAL DO COPILOTO POR VOZ IA (DENTRO DO MENU DO MOTORISTA) -->
+      <div class="drawer-section-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <div>
+            <h4 style="margin: 0; display: flex; align-items: center; gap: 6px;">
+              🎙️ Copiloto de Voz IA
+            </h4>
+            <small id="lblStatusCopilotoDrawer" style="font-size: 11px; color: #94A3B8; font-weight: 700;">
+              Desativado • Ligue para usar por voz
+            </small>
+          </div>
+          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+            <input type="checkbox" id="chkCopilotoAtivo"
+              style="width: 22px; height: 22px; accent-color: #10B981; cursor: pointer;">
+          </label>
+        </div>
+
+        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 8px;">
+          Palavra-chave para chamar a IA (funciona independente do botão Online):
+        </p>
+        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+          <input type="text" id="drawerInputCodigoVoz" placeholder="Ex: Zanix, Zank, Falcão"
+            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 8px; padding: 8px 10px; color: #38BDF8; font-weight: 800; font-size: 12px; outline: none;">
+          <button type="button" id="btnSalvarCodigoVoz"
+            style="background: #10B981; border: none; border-radius: 8px; color: #02261C; font-weight: 900; font-size: 11px; padding: 0 12px; cursor: pointer;">Salvar</button>
+        </div>
+
+        <!-- CONFIGURAÇÕES DE VOZ, TOM E VELOCIDADE -->
+        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+          <div>
+            <label style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Voz do Assistente</label>
+            <select id="selVozCopiloto"
+              style="width: 100%; padding: 8px; border-radius: 8px; background: #090D16; color: #FFF; border: 1px solid var(--border-dark); font-size: 12px; outline: none;"></select>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center;">
+            <div>
+              <label style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Tom da Voz</label>
+              <select id="selTomCopiloto"
+                style="width: 100%; padding: 8px; border-radius: 8px; background: #090D16; color: #FFF; border: 1px solid var(--border-dark); font-size: 12px; outline: none;">
+                <option value="0.75">Grave</option>
+                <option value="1">Normal</option>
+                <option value="1.3">Aguda</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Velocidade</label>
+              <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05"
+                style="width: 100%; accent-color: #38BDF8; cursor: pointer;">
+            </div>
+          </div>
+        </div>
+
+        <button type="button" id="btnTestarCodigoVoz"
+          style="width: 100%; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); color: #38BDF8; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🔊 Testar Voz do Copiloto
+        </button>
+      </div>
+
       <!-- FERRAMENTAS INTELIGENTES DO MOTORISTA -->
       <div class="drawer-section-card">
         <h4>⚡ Modos e Ferramentas</h4>
@@ -208,24 +267,6 @@
             <div class="placa-mercosul-body" id="drawerCarroPlaca">ABC1D23</div>
           </div>
         </div>
-      </div>
-
-      <!-- COPILOTO POR VOZ (PALAVRA-CHAVE PESSOAL) -->
-      <div class="drawer-section-card">
-        <h4>🎙️ Código de Voz do Copiloto</h4>
-        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 10px;">
-          Defina o seu código ou palavra-chave para ativar o copiloto por voz sem tocar na tela:
-        </p>
-        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-          <input type="text" id="drawerInputCodigoVoz" placeholder="Ex: Zank, Falcão, Águia"
-            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 8px; padding: 8px 10px; color: #38BDF8; font-weight: 800; font-size: 12px; outline: none;">
-          <button type="button" id="btnSalvarCodigoVoz"
-            style="background: #10B981; border: none; border-radius: 8px; color: #02261C; font-weight: 900; font-size: 11px; padding: 0 12px; cursor: pointer;">Salvar</button>
-        </div>
-        <button type="button" id="btnTestarCodigoVoz"
-          style="width: 100%; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); color: #38BDF8; padding: 8px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          🔊 Testar Resposta por Voz
-        </button>
       </div>
 
       <!-- EXTRATO & GANHOS -->
@@ -535,7 +576,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=10.5.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=10.6.0"></script>
 </body>
 
 </html>

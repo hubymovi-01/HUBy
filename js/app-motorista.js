@@ -1,6 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Estabilizada de Produção com Validação de Sessão e Copiloto Hands-Free
+ * Versão Estabilizada de Produção com Validação de Sessão e Copiloto no Menu Lateral
  */
 
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
@@ -41,7 +41,6 @@ function validarAutenticacaoMotorista() {
   return true;
 }
 
-// Configuração vinculada aos IDs exatos do motorista.html (drawerInputCodigoVoz)
 function configurarCodigoVozDireto() {
   const inputComando = document.getElementById('drawerInputCodigoVoz') || document.getElementById('inputCodigoVozMotorista');
   const btnSalvarComando = document.getElementById('btnSalvarCodigoVoz');
@@ -59,7 +58,7 @@ function configurarCodigoVozDireto() {
       const valorDigitado = (inputComando.value || '').trim();
 
       if (!valorDigitado) {
-        notificar('Digite uma frase para ativar seu copiloto (Ex: OK HUBy, Zanki, Gavião).', 'alerta');
+        notificar('Digite uma palavra-chave para ativar seu copiloto (Ex: Zanix, Zank, Falcão).', 'alerta');
         inputComando.focus();
         return;
       }
@@ -74,7 +73,7 @@ function configurarCodigoVozDireto() {
       e.preventDefault();
       e.stopPropagation();
       const comandoAtual = (inputComando.value || '').trim() || obterCodigoAtivacaoMotorista();
-      falarTexto(`Copiloto pronto. Pode falar ${comandoAtual} seguido da ação que deseja.`);
+      falarTexto(`Olá parceiro! Essa é a minha voz configurada. Basta me chamar por ${comandoAtual}.`);
     });
   }
 }
@@ -110,7 +109,7 @@ function registrarEventosUI() {
   if (typeof configurarMarketplace === 'function') configurarMarketplace();
   if (typeof configurarModosInteligentes === 'function') configurarModosInteligentes();
   
-  // Registro direto dos eventos de voz
+  // Registro dos eventos de voz no menu lateral
   configurarCodigoVozDireto();
 }
 
@@ -124,7 +123,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   iniciarRadarChamadas();
   inicializarPushNotifications();
 
-  // Inicializa o copiloto de voz e restaura a escolha do motorista (ligado/desligado)
+  // Inicializa os controles do copiloto no menu lateral e restaura a preferência salva
   inicializarCopilotoVoz();
   restaurarPreferenciaCopiloto();
 });

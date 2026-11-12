@@ -4,6 +4,12 @@ import { autenticarToken } from './pedidos.routes.js';
 
 const router = express.Router();
 
+const MODELOS_GEMINI = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-flash'
+];
+
 // Só usuário logado usa a IA
 router.use(autenticarToken);
 
@@ -65,17 +71,17 @@ const ACOES_PERMITIDAS = new Set([
   'FECHAR_TELAS', 'NENHUMA'
 ]);
 
-// Ações que mexem com corrida, dinheiro ou status só valem se o motorista pediu com a própria fala
+// Validação flexível para garantir que apenas comandos falados pelo próprio motorista disparem ações críticas
 const FRASE_EXIGIDA = {
-  ACEITAR_CORRIDA: /aceit|pega|bora/,
-  INICIAR_VIAGEM: /inici|comec|embarc|bora/,
-  FINALIZAR_CORRIDA: /finaliz|encerr|conclu|termin/,
-  PAGAR_DINHEIRO: /dinheiro|especie/,
+  ACEITAR_CORRIDA: /aceit|pega|bora|confirm|fazer|fechou|quero/,
+  INICIAR_VIAGEM: /inici|comec|embarc|bora|partiu|entrou|rodar/,
+  FINALIZAR_CORRIDA: /finaliz|encerr|conclu|termin|chegamos|destino/,
+  PAGAR_DINHEIRO: /dinheiro|especie|mao/,
   PAGAR_MAQUININHA: /maquin|cartao|credito|debito/,
-  PAGAR_PIX: /pix/,
-  ABRIR_SAQUE: /saq|retir/,
-  FICAR_ONLINE: /online|conect|comec|trabalh/,
-  FICAR_OFFLINE: /offline|desconect|sair|parar|encerr/
+  PAGAR_PIX: /pix|qr/,
+  ABRIR_SAQUE: /saq|retir|transfer/,
+  FICAR_ONLINE: /online|conect|comec|trabalh|ligar/,
+  FICAR_OFFLINE: /offline|desconect|sair|parar|encerr|deslig/
 };
 
 function validarAcao(acao, fala) {
@@ -89,12 +95,6 @@ function validarAcao(acao, fala) {
   }
   return nome;
 }
-
-const MODELOS_GEMINI = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-flash'
-];
 
 function extrairJSONPuro(texto) {
   if (!texto) return null;
@@ -135,7 +135,6 @@ async function chamarGeminiAPI(prompt, apiKey, temperatura = 0.45) {
           generationConfig: {
             temperature: temperatura,
             maxOutputTokens: 600,
-            // O 2.5 gasta o limite "pensando" e devolve vazio; aqui desligamos isso
             ...(modelo.startsWith('gemini-2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {})
           }
         })
@@ -393,7 +392,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     .replace(/[\u0300-\u036f]/g, '')
     .trim();
 
-  // 1. Confirmações curtas ("certo", "ok", "beleza", "valeu", "entendi", "show")
   if (/^(certo|ok|okay|beleza|blz|valeu|obrigado|entendi|show|perfeito|ta bom|tudo bem|positivo|fechou)$/.test(f)) {
     const respostasCurtas = [
       `Combinado, ${nome}! Qualquer coisa é só chamar.`,
@@ -407,7 +405,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 2. Ativar / Desativar Mapa de Calor
   if (f.includes('calor') || f.includes('demanda') || f.includes('zona quente') || f.includes('onde tem corrida')) {
     const vaiLigar = !ctx.heatmapAtivo;
     return {
@@ -418,7 +415,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 3. Tirar pedido da tela / Dispensar / Recusar / Cancelar pedido do radar
   if (
     f.includes('tirar pedido') || f.includes('tira esse pedido') || f.includes('tirar esse pedido') ||
     f.includes('tira o pedido') || f.includes('tirar o pedido') || f.includes('tirar da tela') ||
@@ -444,7 +440,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 4. Checar / Ver / Analisar pedido que acabou de chegar no radar
   if (
     f.includes('checa') || f.includes('checar') || f.includes('ve esse pedido') ||
     f.includes('ver esse pedido') || f.includes('pedido que veio') || f.includes('chamada que veio') ||
@@ -465,7 +460,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 5. Pergunta de Horário ("qual o horário agora?", "que horas são?")
   if (f.includes('qual o horario') || f.includes('que horas') || f.includes('hora agora') || f.includes('horario agora')) {
     const horaNum = parseInt(horaAtual.split(':')[0], 10);
     let dicaTurno = 'O movimento está moderado neste horário.';
@@ -480,7 +474,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 6. Pergunta sobre Melhor Horário para rodar
   if (f.includes('melhor horario') || f.includes('melhores horarios') || f.includes('horario bom') || f.includes('quando toca mais')) {
     return {
       acao: 'NENHUMA',
@@ -488,7 +481,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 7. Pergunta se a corrida compensa / vale a pena
   if (f.includes('compensa') || f.includes('vale a pena') || f.includes('e boa') || f.includes('o que voce acha')) {
     const p = ctx.rotaEmAnalise || ctx.primeiraChamadaRadar;
     if (p) {
@@ -509,7 +501,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 8. Pergunta sobre Corridas do Dia
   if (f.includes('quantas corridas') || f.includes('quantas viagens') || f.includes('fiz hoje')) {
     return {
       acao: 'NENHUMA',
@@ -517,7 +508,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 9. Pergunta sobre Saldo / Carteira / Dinheiro
   if (f.includes('saldo') || f.includes('carteira') || f.includes('quanto eu tenho') || f.includes('quanto ganhei')) {
     return {
       acao: 'NENHUMA',
@@ -525,7 +515,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 10. Modo Pausa
   if (f.includes('pausa') || f.includes('descansar') || f.includes('parar um pouco') || f.includes('cafe') || f.includes('abastecer')) {
     return {
       acao: 'ALTERNAR_PAUSA',
@@ -533,7 +522,6 @@ function raciocinioSemanticoAutonomo(falaBruta, ctx, horaAtual, nome) {
     };
   }
 
-  // 11. Resposta conversacional aberta e inteligente (sem repetir dados decorados)
   if (ctx.primeiraChamadaRadar) {
     return {
       acao: 'NENHUMA',
