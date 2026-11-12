@@ -589,7 +589,8 @@ export default function pedidosRouter(io) {
         await sql`
           UPDATE pedidos
           SET status = 'concluido', 
-              forma_pagamento = ${forma_pagamento}, 
+              forma_pagamento = ${forma_pagamento},
+              metodo_pgto = ${forma_pagamento},
               concluido_em = CURRENT_TIMESTAMP
           WHERE id::text = ${String(id)}::text;
         `;
@@ -614,6 +615,7 @@ export default function pedidosRouter(io) {
         if (io) {
           io.emit(`corrida_finalizada_${id}`, {
             sucesso: true,
+            pedidoId: id,
             forma_pagamento,
             valorTotal,
             mensagem: 'Viagem finalizada e acertada com o motorista!'
@@ -643,11 +645,13 @@ export default function pedidosRouter(io) {
 
         const client = new MercadoPagoConfig({ accessToken });
         const payment = new Payment(client);
+        const notificationUrl = `${process.env.API_URL || 'https://huby.onrender.com'}/api/carteira/webhook/mercadopago`;
 
         const dadosCobranca = {
           transaction_amount: valorTotal,
           description: `HUBy - Corrida #${id}`,
           payment_method_id: 'pix',
+          notification_url: notificationUrl,
           payer: {
             email: 'passageiro@huby.app',
             first_name: pedido.motorista_nome || 'Passageiro',
@@ -657,6 +661,7 @@ export default function pedidosRouter(io) {
 
         const respostaMP = await payment.create({ body: dadosCobranca });
         const pixData = respostaMP.point_of_interaction?.transaction_data;
+        const txidGerado = String(respostaMP.id);
 
         if (!pixData) {
           return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
@@ -664,15 +669,19 @@ export default function pedidosRouter(io) {
 
         try {
           await sql`
-            INSERT INTO cobrancas_pix (transacao_id, pedido_id, valor, status, qr_code, qr_code_base64)
-            VALUES (${String(respostaMP.id)}, ${String(id)}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code_base64})
-            ON CONFLICT (transacao_id) DO NOTHING;
+            INSERT INTO cobrancas_pix (txid, transacao_id, pedido_id, usuario_id, valor, status, pix_copia_cola, qr_code, qr_code_base64)
+            VALUES (${txidGerado}, ${txidGerado}, ${String(id)}, ${pedido.cliente_id ? String(pedido.cliente_id) : null}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code}, ${pixData.qr_code_base64})
+            ON CONFLICT (transacao_id) DO UPDATE
+            SET txid = EXCLUDED.txid, pedido_id = EXCLUDED.pedido_id, valor = EXCLUDED.valor;
           `;
-        } catch (ePix) { }
+        } catch (ePix) {
+          console.warn('Aviso ao gravar cobrancas_pix:', ePix.message);
+        }
 
         const payloadPix = {
           pedido_id: id,
-          transacao_id: respostaMP.id,
+          txid: txidGerado,
+          transacao_id: txidGerado,
           valor: valorTotal,
           qr_code: pixData.qr_code,
           qr_code_base64: pixData.qr_code_base64

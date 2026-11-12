@@ -1,11 +1,11 @@
-// routes/motorista.routes.js
+// routes/motorista.routes.js - Módulos de Suporte ao Motorista HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+import { lerTarifasDoBanco } from './admin.routes.js';
 
 const router = express.Router();
 
-// Garante colunas de suporte para pausa, rota inteligente e código de voz
 async function garantirColunasSuporte() {
   try {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;
@@ -293,7 +293,7 @@ router.put('/chave-pix', autenticarToken, async (req, res) => {
 });
 
 // =========================================================================
-// 6. EXTRATO FINANCEIRO COMPLETO
+// 6. EXTRATO FINANCEIRO COMPLETO (Sincronizado com a taxa do banco)
 // =========================================================================
 router.get('/extrato', autenticarToken, async (req, res) => {
   try {
@@ -305,6 +305,9 @@ router.get('/extrato', autenticarToken, async (req, res) => {
       ORDER BY saldo_carteira DESC LIMIT 1;
     `;
     const motoristaIdReal = mot[0]?.id || usuarioId;
+
+    const tarifas = await lerTarifasDoBanco();
+    const fatorMotorista = Math.max(0.1, (100 - Number(tarifas.taxa_plataforma ?? 15)) / 100);
 
     const saques = await sql`
       SELECT id, valor, chave_pix, tipo_chave, status, criado_em
@@ -318,13 +321,13 @@ router.get('/extrato', autenticarToken, async (req, res) => {
     const corridas = await sql`
       SELECT 
         id, valor_total, 
-        COALESCE(valor_total * 0.85, 0) AS repasse_liquido,
+        ROUND(COALESCE(valor_total, 0) * ${fatorMotorista}, 2) AS repasse_liquido,
         valor_adicionais, concluido_em, criado_em, origem_endereco, destino_endereco
       FROM pedidos
-      WHERE status = 'concluido'
+      WHERE LOWER(status) = 'concluido'
         AND (motorista_id::text = ${motoristaIdReal}::text 
              OR motorista_id::text = ${usuarioId}::text)
-      ORDER BY criado_em DESC
+      ORDER BY COALESCE(concluido_em, criado_em) DESC
       LIMIT 20;
     `;
 
@@ -336,7 +339,7 @@ router.get('/extrato', autenticarToken, async (req, res) => {
 });
 
 // =========================================================================
-// 7. GANHOS DE HOJE E TURNO
+// 7. GANHOS DE HOJE E TURNO (Sincronizado com a taxa do banco)
 // =========================================================================
 router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
   try {
@@ -349,13 +352,16 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
     `;
     const motoristaIdReal = mot[0]?.id || usuarioId;
 
+    const tarifas = await lerTarifasDoBanco();
+    const fatorMotorista = Math.max(0.1, (100 - Number(tarifas.taxa_plataforma ?? 15)) / 100);
+
     const corridasHoje = await sql`
       SELECT 
         COUNT(*)::int AS total_corridas,
-        COALESCE(SUM(valor_total * 0.85), 0) AS ganhos_liquidos
+        COALESCE(SUM(valor_total * ${fatorMotorista}), 0) AS ganhos_liquidos
       FROM pedidos
-      WHERE status = 'concluido'
-        AND DATE(criado_em AT TIME ZONE 'America/Sao_Paulo') = DATE(NOW() AT TIME ZONE 'America/Sao_Paulo')
+      WHERE LOWER(status) = 'concluido'
+        AND COALESCE(concluido_em, criado_em) >= CURRENT_DATE
         AND (motorista_id::text = ${motoristaIdReal}::text 
              OR motorista_id::text = ${usuarioId}::text);
     `;
@@ -364,8 +370,8 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
 
     res.json({
       sucesso: true,
-      corridasHoje: dados.total_corridas,
-      ganhosHoje: Number(dados.ganhos_liquidos)
+      corridasHoje: Number(dados.total_corridas || 0),
+      ganhosHoje: Number(Number(dados.ganhos_liquidos || 0).toFixed(2))
     });
   } catch (err) {
     console.error('Erro ao calcular ganhos do dia:', err);
@@ -432,7 +438,7 @@ router.post('/saque', autenticarToken, async (req, res) => {
       INSERT INTO saques_motoristas (
         motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status
       ) VALUES (
-        ${mot[0].id}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'cpf'}, ${valorNum}, 'pendente'
+        ${mot[0].id}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'pix'}, ${valorNum}, 'pendente'
       );
     `;
 
