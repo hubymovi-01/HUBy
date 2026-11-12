@@ -1,7 +1,7 @@
-// js/ia/motorista-ia.js - Copiloto Inteligente com Raciocínio Lógico, Zero Repetição e Controle Total
+// js/ia/motorista-ia.js - Copiloto Inteligente HUBy controlado pelo Menu Lateral (Drawer)
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
-import { extrairDadosDoBotao, pararAlertaSonoroChamada, alternarStatusOnline, iniciarRadarChamadas } from '../motorista/motorista-radar.js';
+import { extrairDadosDoBotao, pararAlertaSonoroChamada, iniciarRadarChamadas } from '../motorista/motorista-radar.js';
 import { 
   preVisualizarRotaPedido, 
   aceitarCorrida, 
@@ -16,22 +16,17 @@ import { pararMonitoramentoDesvios } from '../motorista/motorista-rotas.js';
 import { notificar } from '../util/alertas-huby.js';
 
 let recognition = null;
-let escutaDesejada = false;
+let escutaDesejada = localStorage.getItem('huby_ia_ativa') === 'true';
 let reconhecimentoRodando = false;
 let falandoAgora = false;
 let processandoRequisicao = false;
 let timeoutReinicio = null;
 let wakeLockSentinel = null;
 
-// Janela de conversa contínua (30s): permite conversar fluidamente sem repetir "Zanix" a cada frase
 let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
-
 const historicoConversa = [];
 
-// ============================================================================
-// PREFERÊNCIAS DO COPILOTO (guardadas no aparelho do motorista)
-// ============================================================================
 function vozesDisponiveis() {
   const todas = sintetizador ? sintetizador.getVoices() : [];
   const pt = todas.filter((v) => /^pt([-_]|$)/i.test(v.lang));
@@ -56,6 +51,7 @@ function obterVelocidadeVoz() {
   const v = Number(localStorage.getItem('huby_ia_velocidade'));
   return v >= 0.7 && v <= 1.6 ? v : 1.05;
 }
+
 const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
 function normalizarTexto(txt = '') {
@@ -102,7 +98,7 @@ function saoPalavrasParecidas(p1, p2) {
 
 export function obterCodigoAtivacaoMotorista() {
   const salvo = localStorage.getItem('huby_codigo_voz_motorista');
-  return salvo && salvo.trim() ? salvo.trim() : 'Zank';
+  return salvo && salvo.trim() ? salvo.trim() : 'Zanix';
 }
 
 export async function definirCodigoAtivacaoMotorista(novaFrase) {
@@ -123,7 +119,7 @@ export async function definirCodigoAtivacaoMotorista(novaFrase) {
   return true;
 }
 
-function renovarJanelaConversa(segundos = 30) {
+function renovarJanelaConversa(segundos = 35) {
   janelaConversaAtiva = true;
   if (timerJanelaConversa) clearTimeout(timerJanelaConversa);
   timerJanelaConversa = setTimeout(() => {
@@ -175,7 +171,7 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
 
     const finalizarFala = () => {
       falandoAgora = false;
-      renovarJanelaConversa(30);
+      renovarJanelaConversa(35);
       agendarReinicioMicrofone(550);
     };
 
@@ -208,7 +204,7 @@ function liberarWakeLock() {
 }
 
 // ============================================================================
-// MICROFONE ESTÁVEL SEM LOOP
+// MICROFONE ESTÁVEL SEM LOOP (DESACOPLADO DO STATUS ONLINE)
 // ============================================================================
 function agendarReinicioMicrofone(delayMs = 600) {
   if (timeoutReinicio) {
@@ -216,8 +212,8 @@ function agendarReinicioMicrofone(delayMs = 600) {
     timeoutReinicio = null;
   }
 
-  const online = estado.isOnline || estado.statusOnline || localStorage.getItem('huby_motorista_online') === 'true';
-  if (!escutaDesejada || !online || falandoAgora) return;
+  // Mantém escutando se o copiloto estiver ativo no menu, independentemente de estar online ou offline
+  if (!escutaDesejada || falandoAgora) return;
 
   timeoutReinicio = setTimeout(() => {
     if (!escutaDesejada || falandoAgora || reconhecimentoRodando) return;
@@ -248,12 +244,8 @@ export function inicializarCopilotoVoz() {
 
   recognition.onend = () => {
     reconhecimentoRodando = false;
-    const online = estado.isOnline || estado.statusOnline || localStorage.getItem('huby_motorista_online') === 'true';
-
-    if (escutaDesejada && online) {
-      if (!falandoAgora) {
-        agendarReinicioMicrofone(650);
-      }
+    if (escutaDesejada && !falandoAgora) {
+      agendarReinicioMicrofone(650);
     } else {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
@@ -264,6 +256,7 @@ export function inicializarCopilotoVoz() {
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       escutaDesejada = false;
       reconhecimentoRodando = false;
+      localStorage.setItem('huby_ia_ativa', 'false');
       atualizarIndicadorUIVoz(false);
       notificar('Permissão de microfone bloqueada no navegador.', 'alerta');
     }
@@ -319,6 +312,14 @@ export function desativarEscutaCopiloto() {
   reconhecimentoRodando = false;
   atualizarIndicadorUIVoz(false);
   liberarWakeLock();
+  notificar('Copiloto de voz pausado pelo menu.', 'info');
+}
+
+export function restaurarPreferenciaCopiloto() {
+  atualizarIndicadorUIVoz(false);
+  if (localStorage.getItem('huby_ia_ativa') === 'true') {
+    ativarEscutaCopiloto();
+  }
 }
 
 // ============================================================================
@@ -337,6 +338,11 @@ function capturarContextoCompletoApp() {
   const placaVeiculo = document.getElementById('drawerCarroPlaca')?.textContent?.trim() || 'ABC1D23';
   const detalhesVeiculo = document.getElementById('drawerCarroDetalhes')?.textContent?.trim() || '';
   const avaliacao = document.getElementById('drawerAvaliacaoTxt')?.textContent?.trim() || '⭐ 5.0';
+
+  const modaisVisiveis = Array.from(document.querySelectorAll('.modal, [id*="modal"], [class*="modal"]'))
+    .filter(el => el.style.display === 'flex' || el.style.display === 'block' || window.getComputedStyle(el).display !== 'none')
+    .map(el => el.id || el.className)
+    .slice(0, 5);
 
   const botoesRadar = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
   const chamadasRadar = Array.from(botoesRadar).map((btn, idx) => {
@@ -395,6 +401,7 @@ function capturarContextoCompletoApp() {
     metaDiaria: metaDiariaTxt,
     veiculo: `${modeloVeiculo} (${detalhesVeiculo}) Placa ${placaVeiculo}`,
     avaliacao,
+    modaisAtivosNaTela: modaisVisiveis,
     qtdChamadasNoRadar: chamadasRadar.length,
     primeiraChamadaRadar: chamadasRadar[0] || null,
     todasChamadasRadar: chamadasRadar,
@@ -451,13 +458,12 @@ async function processarEntradaVoz(fraseBruta) {
 
   const ctx = capturarContextoCompletoApp();
 
-  // Caso tenha chamado apenas o nome ("Zanix" / "Ok Zanix")
   if (!intencaoLimpa || ['ola', 'oi', 'opa', 'ta ai', 'escuta'].includes(intencaoLimpa)) {
-    renovarJanelaConversa(30);
+    renovarJanelaConversa(35);
     if (ctx.rotaEmAnalise) {
-      falarTexto(`Na escuta, ${ctx.nomeCondutor}! Rota de ${ctx.rotaEmAnalise.distanciaKm} quilômetros pagando ${ctx.rotaEmAnalise.ganhoLiquidoMotorista} reais na tela. Aceita ou cancela?`);
+      falarTexto(`Na escuta, ${ctx.nomeCondutor}! Rota de ${ctx.rotaEmAnalise.distanciaKm} quilômetros pagando R$ ${ctx.rotaEmAnalise.ganhoLiquidoMotorista}. Aceita ou cancela?`);
     } else if (ctx.primeiraChamadaRadar) {
-      falarTexto(`Oi, ${ctx.nomeCondutor}! Tem pedido no radar pagando ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista} reais. Quer visualizar ou tirar da tela?`);
+      falarTexto(`Oi, ${ctx.nomeCondutor}! Tem pedido no radar pagando R$ ${ctx.primeiraChamadaRadar.ganhoLiquidoMotorista}. Quer visualizar ou tirar da tela?`);
     } else {
       falarTexto(`Diga lá, ${ctx.nomeCondutor}! Estou ouvindo.`);
     }
@@ -465,17 +471,15 @@ async function processarEntradaVoz(fraseBruta) {
   }
 
   processandoRequisicao = true;
-  renovarJanelaConversa(30);
+  renovarJanelaConversa(35);
 
   try {
-    // 1. Verifica comandos operacionais e perguntas diretas com resposta instantânea (Zero latência)
     const resolveuInstantaneo = await resolverIntencaoSemanticaLocal(intencaoLimpa, ctx);
     if (resolveuInstantaneo) {
       processandoRequisicao = false;
       return;
     }
 
-    // 2. Conversa aberta / Raciocínio livre com o Gemini no Backend
     const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
       method: 'POST',
       headers: obterHeaders(),
@@ -506,12 +510,11 @@ async function processarEntradaVoz(fraseBruta) {
 }
 
 // ============================================================================
-// CÉREBRO SEMÂNTICO LOCAL (ENTENDE TODAS AS VARIAÇÕES DE FALA NA HORA)
+// CÉREBRO SEMÂNTICO LOCAL
 // ============================================================================
 async function resolverIntencaoSemanticaLocal(fala, ctx) {
   const nome = ctx.nomeCondutor;
 
-  // 1. CONFIRMAÇÕES CURTAS ("certo", "beleza", "ok", "valeu", "tá bom") -> Responde curto sem repetir nada!
   if (/^(certo|ok|okay|beleza|blz|valeu|obrigado|entendi|show|perfeito|ta bom|tudo bem|positivo|fechou)$/.test(fala)) {
     const respostas = [
       `Combinado, ${nome}!`,
@@ -523,19 +526,17 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 2. ATIVAR / DESATIVAR MAPA DE CALOR ("ativar mapa calor", "ligar calor", "mapa de calor")
   if (fala.includes('calor') || fala.includes('demanda') || fala.includes('zona quente')) {
     const estavaAtivo = ctx.heatmapAtivo;
     await executarAcaoNoApp('ALTERNAR_CALOR', ctx);
     if (!estavaAtivo || fala.includes('ativar') || fala.includes('ligar')) {
-      falarTexto(`Mapa de calor ativado na tela, ${nome}! Agora você consegue ver as regiões com mais pedidos.`, fala);
+      falarTexto(`Mapa de calor ativado na tela, ${nome}!`, fala);
     } else {
       falarTexto(`Mapa de calor desativado.`, fala);
     }
     return true;
   }
 
-  // 3. TIRAR PEDIDO DA TELA / DISPENSAR / CANCELAR PEDIDO ("tirar pedido da tela", "tira esse pedido", "cancela esse pedido")
   if (
     fala.includes('tirar pedido') || fala.includes('tirar o pedido') || fala.includes('tirar esse pedido') ||
     fala.includes('tira esse pedido') || fala.includes('tira o pedido') || fala.includes('tirar da tela') ||
@@ -544,7 +545,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     fala.includes('cancelar') || fala.includes('cancela') || fala.includes('voltar') ||
     fala.includes('volta') || fala.includes('nao quero')
   ) {
-    // Se a rota estiver aberta em análise no mapa, fecha a prévia e se ele pediu pra "tirar pedido da tela", também dispensa do radar!
     if (ctx.telasAbertas.previaRota || ctx.rotaEmAnalise) {
       await executarAcaoNoApp('CANCELAR_ROTA', ctx);
       if (fala.includes('tirar') || fala.includes('tira') || fala.includes('dispens') || fala.includes('recus') || fala.includes('pedido')) {
@@ -558,7 +558,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
       return true;
     }
 
-    // Se estiver no radar com pedido na tela
     if (ctx.qtdChamadasNoRadar > 0) {
       await executarAcaoNoApp('DISPENSAR_PEDIDO_RADAR', ctx);
       falarTexto('Pedido retirado da tela! Seguimos aguardando uma chamada melhor.', fala);
@@ -575,7 +574,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 4. CHECAR PEDIDO QUE VEIO AGORA / VER ROTA / VISUALIZAR ("checa esse pedido que veio agora", "visualizar rota", "ver rota")
   if (
     fala.includes('visualizar') || fala.includes('visualiza') ||
     fala.includes('ver rota') || fala.includes('ver a rota') ||
@@ -590,45 +588,35 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
       const c = ctx.primeiraChamadaRadar;
       const distNum = parseFloat(c.distanciaKm || 0);
       const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
-      falarTexto(`Abri a rota no mapa! É de ${c.origem.split(',')[0]} para ${c.destino.split(',')[0]}, dando ${distTxt} e pagando ${c.ganhoLiquidoMotorista} reais livres. Quer aceitar ou tirar da tela?`, fala);
+      falarTexto(`Abri a rota no mapa! É de ${c.origem.split(',')[0]} para ${c.destino.split(',')[0]}, dando ${distTxt} e pagando R$ ${c.ganhoLiquidoMotorista}. Quer aceitar ou tirar da tela?`, fala);
       return true;
     }
     if (ctx.rotaEmAnalise) {
       const r = ctx.rotaEmAnalise;
       const distNum = parseFloat(r.distanciaKm || 0);
       const distTxt = distNum < 1 ? `${Math.round(distNum * 1000)} metros` : `${distNum.toFixed(1).replace('.', ',')} quilômetros`;
-      falarTexto(`O pedido já está aberto no mapa: são ${distTxt} até ${r.destino.split(',')[0]}, pagando ${r.ganhoLiquidoMotorista} reais livres. Quer aceitar ou cancelar?`, fala);
+      falarTexto(`O pedido já está aberto no mapa: são ${distTxt} até ${r.destino.split(',')[0]}, pagando R$ ${r.ganhoLiquidoMotorista}. Quer aceitar ou cancelar?`, fala);
       return true;
     }
     falarTexto(`Olhei aqui no radar e não tem nenhum pedido na tela neste momento, ${nome}.`, fala);
     return true;
   }
 
-  // 5. QUAL O HORÁRIO AGORA / QUE HORAS SÃO ("qual o horário agora?", "que horas são?")
   if (
     (fala.includes('qual o horario') || fala.includes('qual e o horario') || fala.includes('que horas') || fala.includes('hora agora') || fala.includes('horario agora')) &&
     !fala.includes('melhor')
   ) {
     const agora = new Date();
     const horaFormatada = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    const h = agora.getHours();
-    let comentario = 'Bom momento para ficar atento às chamadas próximas.';
-    if (h >= 6 && h < 9) comentario = 'Estamos na faixa de pico da manhã!';
-    else if (h >= 11 && h < 14) comentario = 'Horário de almoço, costuma ter bastante saída.';
-    else if (h >= 15 && h < 17) comentario = 'Movimento de tarde tranquilo, logo mais às 17 horas começa o pico forte.';
-    else if (h >= 17 && h <= 20) comentario = 'Estamos no pico do fim de tarde, hora de faturar!';
-
-    falarTexto(`Agora são exatamente ${horaFormatada}, ${nome}. ${comentario}`, fala);
+    falarTexto(`Agora são exatamente ${horaFormatada}, ${nome}.`, fala);
     return true;
   }
 
-  // 6. MELHOR HORÁRIO PARA CORRIDA
   if (fala.includes('melhor horario') || fala.includes('melhores horarios') || fala.includes('horario bom') || fala.includes('horario para corrida')) {
     falarTexto(`Os horários que mais tocam corrida são das 6 e meia às 9 da manhã, no almoço entre 11 e meia e 2 da tarde, e no pico das 17 às 20 horas, ${nome}.`, fala);
     return true;
   }
 
-  // 7. ACEITAR CORRIDA
   if (
     fala.includes('aceitar') || fala.includes('aceita') ||
     fala.includes('confirmar corrida') || fala.includes('pegar corrida') ||
@@ -643,7 +631,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 8. MODAL DE PAGAMENTO ABERTO
   if (ctx.telasAbertas.modalLiquidacaoPagamento) {
     if (fala.includes('dinheiro') || fala.includes('especie')) {
       await executarAcaoNoApp('PAGAR_DINHEIRO', ctx);
@@ -662,7 +649,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     }
   }
 
-  // 9. CHEGADA E VIAGEM ATIVA
   if (fala.includes('cheguei') || fala.includes('no local') || fala.includes('encostei')) {
     if (ctx.corridaAtiva) {
       await executarAcaoNoApp('AVISAR_CHEGADA', ctx);
@@ -682,7 +668,7 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
   if (fala.includes('finalizar') || fala.includes('finaliza') || fala.includes('concluir') || fala.includes('encerrar')) {
     if (ctx.corridaAtiva) {
       await executarAcaoNoApp('FINALIZAR_CORRIDA', ctx);
-      falarTexto(`Corrida concluída! O total deu ${ctx.corridaAtiva.valorBruto} reais. Foi dinheiro, maquininha ou Pix?`, fala);
+      falarTexto(`Corrida concluída! O total deu R$ ${ctx.corridaAtiva.valorBruto}. Foi dinheiro, maquininha ou Pix?`, fala);
       return true;
     }
   }
@@ -726,7 +712,6 @@ async function executarAcaoNoApp(acao, ctx) {
 
     case 'DISPENSAR_PEDIDO_RADAR': {
       pararAlertaSonoroChamada();
-      // Se estiver na prévia, primeiro volta pro radar e depois clica em dispensar
       const btnCancelarPrevia = document.getElementById('btnCancelarPreviaRota');
       if (btnCancelarPrevia) {
         btnCancelarPrevia.click();
@@ -736,7 +721,6 @@ async function executarAcaoNoApp(acao, ctx) {
         if (btnDispensar) {
           btnDispensar.click();
         } else {
-          // Caso o card use atributo data-id no botão de aceitar, adiciona aos ignorados e remove o card da tela
           const btnAceitar = document.querySelector('#listaChamadasPendentes .btn-accept-order');
           if (btnAceitar) {
             const idPed = btnAceitar.getAttribute('data-id');
@@ -880,7 +864,6 @@ async function executarAcaoNoApp(acao, ctx) {
 }
 
 function atualizarIndicadorUIVoz(ativo) {
-  criarBotaoConfigCopiloto();
   let badge = document.getElementById('badgeCopilotoVozStatus');
   if (!badge) {
     badge = document.createElement('div');
@@ -910,8 +893,6 @@ function atualizarIndicadorUIVoz(ativo) {
   }
 
   const gatilho = obterCodigoAtivacaoMotorista();
-  const chkAtivo = document.getElementById('chkCopilotoAtivo');
-  if (chkAtivo) chkAtivo.checked = Boolean(ativo);
   if (ativo) {
     badge.style.background = 'rgba(16, 185, 129, 0.22)';
     badge.style.border = '1px solid #10B981';
@@ -922,108 +903,5 @@ function atualizarIndicadorUIVoz(ativo) {
     badge.style.border = '1px solid rgba(255, 255, 255, 0.15)';
     badge.style.color = '#94A3B8';
     badge.innerHTML = `🎙️ "${gatilho}" Pausado`;
-  }
-}
-
-
-// ============================================================================
-// PAINEL DE CONFIGURAÇÃO DO COPILOTO (ativar, voz, tom e velocidade)
-// ============================================================================
-function criarBotaoConfigCopiloto() {
-  if (document.getElementById('btnConfigCopiloto')) return;
-
-  const gear = document.createElement('button');
-  gear.id = 'btnConfigCopiloto';
-  gear.type = 'button';
-  gear.textContent = '⚙️';
-  gear.title = 'Configurar Copiloto';
-  gear.style.cssText = 'position:fixed;bottom:66px;right:18px;z-index:9999;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,0.15);background:rgba(15,23,42,0.88);color:#fff;font-size:17px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,0.5);';
-  gear.addEventListener('click', abrirPainelCopiloto);
-  document.body.appendChild(gear);
-}
-
-function abrirPainelCopiloto() {
-  const existente = document.getElementById('painelCopilotoConfig');
-  if (existente) { existente.remove(); return; }
-
-  const estiloRotulo = 'display:block;font-size:11px;font-weight:800;color:#94A3B8;margin:10px 0 4px;text-transform:uppercase;';
-  const estiloCampo = 'width:100%;padding:9px;border-radius:8px;background:#090D16;color:#fff;border:1px solid rgba(255,255,255,0.15);font-size:13px;';
-
-  const painel = document.createElement('div');
-  painel.id = 'painelCopilotoConfig';
-  painel.style.cssText = 'position:fixed;bottom:114px;right:18px;z-index:10000;width:290px;max-width:calc(100vw - 36px);background:rgba(15,23,42,0.97);border:1px solid rgba(255,255,255,0.12);border-radius:16px;padding:14px;color:#fff;font-size:13px;box-shadow:0 12px 32px rgba(0,0,0,0.6);';
-  painel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <strong style="font-size:14px;">🎙️ Copiloto IA</strong>
-      <button type="button" id="btnFecharPainelCopiloto" style="background:none;border:none;color:#94A3B8;font-size:18px;cursor:pointer;">✕</button>
-    </div>
-
-    <label style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-weight:700;">
-      <span>Copiloto ativado</span>
-      <input type="checkbox" id="chkCopilotoAtivo" style="width:22px;height:22px;">
-    </label>
-
-    <label style="${estiloRotulo}">Voz</label>
-    <select id="selVozCopiloto" style="${estiloCampo}"></select>
-
-    <label style="${estiloRotulo}">Tom da voz</label>
-    <select id="selTomCopiloto" style="${estiloCampo}">
-      <option value="0.75">Grave (mais masculina)</option>
-      <option value="1">Normal</option>
-      <option value="1.3">Aguda (mais feminina)</option>
-    </select>
-
-    <label style="${estiloRotulo}">Velocidade</label>
-    <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05" style="width:100%;">
-
-    <button type="button" id="btnTestarVozCopiloto" style="width:100%;margin-top:14px;padding:11px;border:none;border-radius:10px;background:#10B981;color:#032017;font-weight:900;font-size:13px;cursor:pointer;">▶ Testar voz</button>
-  `;
-  document.body.appendChild(painel);
-
-  const chk = painel.querySelector('#chkCopilotoAtivo');
-  const selVoz = painel.querySelector('#selVozCopiloto');
-  const selTom = painel.querySelector('#selTomCopiloto');
-  const rng = painel.querySelector('#rngVelocidadeCopiloto');
-
-  chk.checked = escutaDesejada;
-  rng.value = String(obterVelocidadeVoz());
-
-  // Tom: escolhe a opção mais próxima do valor salvo
-  const tomSalvo = obterTomVoz();
-  selTom.value = tomSalvo <= 0.9 ? '0.75' : (tomSalvo >= 1.15 ? '1.3' : '1');
-
-  // As vozes do aparelho às vezes demoram a carregar
-  const preencherVozes = () => {
-    const lista = vozesDisponiveis();
-    const atual = obterVozEscolhida();
-    selVoz.innerHTML = lista.length
-      ? lista.map((v) => `<option value="${v.voiceURI}">${v.name} (${v.lang})</option>`).join('')
-      : '<option value="">Voz padrão do aparelho</option>';
-    if (atual) selVoz.value = atual.voiceURI;
-  };
-  preencherVozes();
-  if (sintetizador) sintetizador.onvoiceschanged = preencherVozes;
-
-  chk.addEventListener('change', () => {
-    if (chk.checked) ativarEscutaCopiloto();
-    else desativarEscutaCopiloto();
-  });
-
-  selVoz.addEventListener('change', () => localStorage.setItem('huby_ia_voz', selVoz.value));
-  selTom.addEventListener('change', () => localStorage.setItem('huby_ia_tom', selTom.value));
-  rng.addEventListener('input', () => localStorage.setItem('huby_ia_velocidade', rng.value));
-
-  painel.querySelector('#btnTestarVozCopiloto').addEventListener('click', () => {
-    falarTexto('Olá parceiro! Essa é a minha voz. Como posso te ajudar hoje?');
-  });
-
-  painel.querySelector('#btnFecharPainelCopiloto').addEventListener('click', () => painel.remove());
-}
-
-// Chamar uma vez quando a tela do motorista abrir
-export function restaurarPreferenciaCopiloto() {
-  atualizarIndicadorUIVoz(false);
-  if (localStorage.getItem('huby_ia_ativa') === 'true') {
-    ativarEscutaCopiloto();
   }
 }
