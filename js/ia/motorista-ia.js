@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto Inteligente HUBy controlado exclusivamente pelo Menu Lateral (Drawer)
+// js/ia/motorista-ia.js - Copiloto HUBy com Controle 100% pelo Botão do Menu e Todos os Comandos da Tela
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { 
@@ -23,20 +23,20 @@ import { notificar } from '../util/alertas-huby.js';
 const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
 
 let recognition = null;
-let escutaDesejada = localStorage.getItem('huby_ia_ativa') === 'true';
+// A IA só fica ativa se o motorista ligou explicitamente o switch no menu do copiloto
+let escutaDesejada = localStorage.getItem('huby_copiloto_menu_ativo') === 'true';
 let reconhecimentoRodando = false;
 let falandoAgora = false;
 let processandoRequisicao = false;
 let timeoutReinicio = null;
 let wakeLockSentinel = null;
 
-// Janela de conversa contínua (35s): permite conversar fluidamente sem repetir o gatilho a cada frase
 let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
 const historicoConversa = [];
 
 // ============================================================================
-// PREFERÊNCIAS DE VOZ DO COPILOTO (CONFIGURADAS NO MENU LATERAL)
+// PREFERÊNCIAS DE VOZ DO COPILOTO
 // ============================================================================
 function vozesDisponiveis() {
   const todas = sintetizador ? sintetizador.getVoices() : [];
@@ -76,6 +76,7 @@ function normalizarTexto(txt = '') {
 function limparNomeCondutorParaVoz(nomeBruto = '') {
   return String(nomeBruto || 'parceiro')
     .replace(/_cs$/i, '')
+    .replace(/\s+c$/i, '')
     .replace(/[_.-]+/g, ' ')
     .split(' ')[0]
     .trim();
@@ -107,7 +108,7 @@ function saoPalavrasParecidas(p1, p2) {
 
 export function obterCodigoAtivacaoMotorista() {
   const salvo = localStorage.getItem('huby_codigo_voz_motorista');
-  return salvo && salvo.trim() ? salvo.trim() : 'Zanix';
+  return salvo && salvo.trim() ? salvo.trim() : 'Jarvis';
 }
 
 export async function definirCodigoAtivacaoMotorista(novaFrase) {
@@ -180,8 +181,10 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
 
     const finalizarFala = () => {
       falandoAgora = false;
-      renovarJanelaConversa(35);
-      agendarReinicioMicrofone(550);
+      if (escutaDesejada) {
+        renovarJanelaConversa(35);
+        agendarReinicioMicrofone(550);
+      }
     };
 
     utter.onend = finalizarFala;
@@ -190,7 +193,7 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
     sintetizador.speak(utter);
   } catch (err) {
     falandoAgora = false;
-    agendarReinicioMicrofone(550);
+    if (escutaDesejada) agendarReinicioMicrofone(550);
   }
 }
 
@@ -213,7 +216,7 @@ function liberarWakeLock() {
 }
 
 // ============================================================================
-// MICROFONE ESTÁVEL SEM LOOP (DESACOPLADO DO BOTÃO ONLINE)
+// CONTROLE DO MICROFONE (SÓ LIGA PELO BOTÃO DO MENU DO COPILOTO)
 // ============================================================================
 function agendarReinicioMicrofone(delayMs = 600) {
   if (timeoutReinicio) {
@@ -221,7 +224,6 @@ function agendarReinicioMicrofone(delayMs = 600) {
     timeoutReinicio = null;
   }
 
-  // O copiloto funciona sempre que estiver ativado no menu lateral, independente do status Online
   if (!escutaDesejada || falandoAgora) return;
 
   timeoutReinicio = setTimeout(() => {
@@ -234,7 +236,6 @@ function agendarReinicioMicrofone(delayMs = 600) {
 }
 
 export function inicializarCopilotoVoz() {
-  // Remove qualquer resquício de botão flutuante antigo caso exista no DOM
   document.getElementById('badgeCopilotoVozStatus')?.remove();
   document.getElementById('btnConfigCopiloto')?.remove();
   document.getElementById('painelCopilotoConfig')?.remove();
@@ -272,14 +273,14 @@ export function inicializarCopilotoVoz() {
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       escutaDesejada = false;
       reconhecimentoRodando = false;
-      localStorage.setItem('huby_ia_ativa', 'false');
+      localStorage.setItem('huby_copiloto_menu_ativo', 'false');
       atualizarIndicadorUIVoz(false);
       notificar('Permissão de microfone bloqueada no navegador.', 'alerta');
     }
   };
 
   recognition.onresult = (ev) => {
-    if (falandoAgora) return;
+    if (falandoAgora || !escutaDesejada) return;
     const ultimo = ev.results[ev.results.length - 1];
     if (!ultimo || !ultimo[0]) return;
     const transcricao = ultimo[0].transcript;
@@ -292,9 +293,19 @@ export function inicializarCopilotoVoz() {
   return true;
 }
 
-export function ativarEscutaCopiloto() {
+/**
+ * IMPORTANTE: Se `origemMenu` não for `true`, significa que foi chamado automaticamente
+ * pelo `motorista-radar.js` quando o motorista clicou em "Ficar Online".
+ * Nesse caso, NÃO ligamos a IA a menos que o motorista já tenha deixado o botão do Copiloto ligado no menu!
+ */
+export function ativarEscutaCopiloto(origemMenu = false) {
+  if (!origemMenu && localStorage.getItem('huby_copiloto_menu_ativo') !== 'true') {
+    atualizarIndicadorUIVoz(false);
+    return;
+  }
+
   escutaDesejada = true;
-  localStorage.setItem('huby_ia_ativa', 'true');
+  localStorage.setItem('huby_copiloto_menu_ativo', 'true');
   if (!recognition) inicializarCopilotoVoz();
 
   atualizarIndicadorUIVoz(true);
@@ -304,13 +315,20 @@ export function ativarEscutaCopiloto() {
     } catch (e) {}
   }
 
-  const comandoAtual = obterCodigoAtivacaoMotorista();
-  notificar(`🎙️ Copiloto ativo! Chame por "${comandoAtual}"`, 'sucesso', 2500);
+  if (origemMenu) {
+    const comandoAtual = obterCodigoAtivacaoMotorista();
+    notificar(`🎙️ Copiloto ligado! Chame por "${comandoAtual}"`, 'sucesso', 2500);
+  }
 }
 
-export function desativarEscutaCopiloto() {
+export function desativarEscutaCopiloto(origemMenu = false) {
+  // Se foi chamado pelo botão "Ficar Offline" da corrida, mas o motorista quer o copiloto ligado no menu, não desliga!
+  if (!origemMenu && localStorage.getItem('huby_copiloto_menu_ativo') === 'true') {
+    return;
+  }
+
   escutaDesejada = false;
-  localStorage.setItem('huby_ia_ativa', 'false');
+  localStorage.setItem('huby_copiloto_menu_ativo', 'false');
   janelaConversaAtiva = false;
 
   if (timeoutReinicio) {
@@ -328,13 +346,16 @@ export function desativarEscutaCopiloto() {
   reconhecimentoRodando = false;
   atualizarIndicadorUIVoz(false);
   liberarWakeLock();
-  notificar('Copiloto de voz desativado no menu.', 'info', 2000);
+
+  if (origemMenu) {
+    notificar('Copiloto de voz desligado.', 'info', 2000);
+  }
 }
 
 export function restaurarPreferenciaCopiloto() {
   configurarControlesCopilotoDrawer();
-  if (localStorage.getItem('huby_ia_ativa') === 'true') {
-    ativarEscutaCopiloto();
+  if (localStorage.getItem('huby_copiloto_menu_ativo') === 'true') {
+    ativarEscutaCopiloto(false);
   } else {
     atualizarIndicadorUIVoz(false);
   }
@@ -354,9 +375,9 @@ function configurarControlesCopilotoDrawer() {
     chk.checked = escutaDesejada;
     chk.addEventListener('change', () => {
       if (chk.checked) {
-        ativarEscutaCopiloto();
+        ativarEscutaCopiloto(true);
       } else {
-        desativarEscutaCopiloto();
+        desativarEscutaCopiloto(true);
       }
     });
   }
@@ -399,7 +420,6 @@ function configurarControlesCopilotoDrawer() {
 }
 
 function atualizarIndicadorUIVoz(ativo) {
-  // Garante que nenhum botão flutuante apareça na frente do mapa
   document.getElementById('badgeCopilotoVozStatus')?.remove();
   document.getElementById('btnConfigCopiloto')?.remove();
 
@@ -417,7 +437,7 @@ function atualizarIndicadorUIVoz(ativo) {
       lblStatus.textContent = `🟢 Ativo • Escutando "${gatilho}"`;
     } else {
       lblStatus.style.color = '#94A3B8';
-      lblStatus.textContent = '⚪ Desativado • Ligue para usar por voz';
+      lblStatus.textContent = '⚪ Desativado • Ligue na chave ao lado para usar';
     }
   }
 }
@@ -438,11 +458,6 @@ function capturarContextoCompletoApp() {
   const placaVeiculo = document.getElementById('drawerCarroPlaca')?.textContent?.trim() || 'ABC1D23';
   const detalhesVeiculo = document.getElementById('drawerCarroDetalhes')?.textContent?.trim() || '';
   const avaliacao = document.getElementById('drawerAvaliacaoTxt')?.textContent?.trim() || '⭐ 5.0';
-
-  const modaisVisiveis = Array.from(document.querySelectorAll('.modal, [id*="modal"], [class*="modal"]'))
-    .filter(el => el.style.display === 'flex' || el.style.display === 'block' || window.getComputedStyle(el).display !== 'none')
-    .map(el => el.id || el.className)
-    .slice(0, 5);
 
   const botoesRadar = document.querySelectorAll('#listaChamadasPendentes .btn-accept-order');
   const chamadasRadar = Array.from(botoesRadar).map((btn, idx) => {
@@ -484,15 +499,22 @@ function capturarContextoCompletoApp() {
   const previaRotaAberta = Boolean(estado.pedidoEmAnalise || document.getElementById('btnConfirmarAceiteViagem'));
   const modalPagamentoAberto = document.getElementById('modalEscolhaPagamentoMotorista')?.style.display === 'flex';
   const modalSaqueAberto = document.getElementById('modalSaquePix')?.style.display === 'flex';
+  const modalEdicaoAberto = document.getElementById('modalEdicaoPerfil')?.style.display === 'flex';
+  const modalLojaAberto = document.getElementById('modalMarketplace')?.style.display === 'flex';
   const drawerAberto = Boolean(document.getElementById('driverDrawer')?.classList.contains('active'));
   const heatmapAtivo = Boolean(document.getElementById('btnToggleHeatmap')?.classList.contains('active'));
+  const pausaAtiva = Boolean(estado.emPausa || document.getElementById('btnModoPausa')?.classList.contains('active'));
+  const modoCasaAtivo = Boolean(estado.destinoCasaAtivo || document.getElementById('btnModoDestino')?.classList.contains('active'));
+
+  const btnOnlineTexto = document.getElementById('btnToggleStatusOnline')?.textContent || '';
+  const estaOnlineReal = Boolean(estado.isOnline || estado.statusOnline || (btnOnlineTexto.includes('Online') && !btnOnlineTexto.includes('Ficar Online')));
 
   return {
     codigoVoz: obterCodigoAtivacaoMotorista(),
     nomeCondutor,
-    statusOnline: Boolean(estado.isOnline || estado.statusOnline),
-    emPausa: Boolean(estado.emPausa),
-    modoCasaAtivo: Boolean(estado.destinoCasaAtivo),
+    statusOnline: estaOnlineReal,
+    emPausa: pausaAtiva,
+    modoCasaAtivo,
     destinoCasa: estado.destinoCasaNome || null,
     heatmapAtivo,
     saldo: saldoTxt,
@@ -501,7 +523,6 @@ function capturarContextoCompletoApp() {
     metaDiaria: metaDiariaTxt,
     veiculo: `${modeloVeiculo} (${detalhesVeiculo}) Placa ${placaVeiculo}`,
     avaliacao,
-    modaisAtivosNaTela: modaisVisiveis,
     qtdChamadasNoRadar: chamadasRadar.length,
     primeiraChamadaRadar: chamadasRadar[0] || null,
     todasChamadasRadar: chamadasRadar,
@@ -511,16 +532,18 @@ function capturarContextoCompletoApp() {
       previaRota: previaRotaAberta,
       modalLiquidacaoPagamento: modalPagamentoAberto,
       modalSaquePix: modalSaqueAberto,
+      modalEdicaoPerfil: modalEdicaoAberto,
+      modalLoja: modalLojaAberto,
       drawerPerfil: drawerAberto
     }
   };
 }
 
 // ============================================================================
-// INTERPRETADOR DE VOZ COM COMPREENSÃO NATURAL E CONVERSA ABERTA
+// INTERPRETADOR DE VOZ COM COMPREENSÃO TOTAL DE TODOS OS BOTÕES DA TELA
 // ============================================================================
 async function processarEntradaVoz(fraseBruta) {
-  if (processandoRequisicao || falandoAgora) return;
+  if (processandoRequisicao || falandoAgora || !escutaDesejada) return;
 
   const fraseNormalizada = normalizarTexto(fraseBruta);
   if (!fraseNormalizada || fraseNormalizada.length < 2) return;
@@ -536,10 +559,12 @@ async function processarEntradaVoz(fraseBruta) {
     for (const p of palavrasFaladas) {
       if (
         saoPalavrasParecidas(p, palavraChave) ||
+        saoPalavrasParecidas(p, 'jarvis') ||
+        saoPalavrasParecidas(p, 'javis') ||
+        saoPalavrasParecidas(p, 'chaves') ||
         saoPalavrasParecidas(p, 'huby') ||
         saoPalavrasParecidas(p, 'zank') ||
         saoPalavrasParecidas(p, 'zanix') ||
-        saoPalavrasParecidas(p, 'xanix') ||
         saoPalavrasParecidas(p, 'zenix')
       ) {
         chamouGatilho = true;
@@ -552,7 +577,7 @@ async function processarEntradaVoz(fraseBruta) {
 
   let intencaoLimpa = fraseNormalizada
     .replace(gatilhoCadastrado, '')
-    .replace(new RegExp(`\\b(${palavraChave}|huby|zank|zanix|zenix|zanki|xanix|xanax|xanx)\\b`, 'gi'), '')
+    .replace(new RegExp(`\\b(${palavraChave}|jarvis|javis|chaves|huby|zank|zanix|zenix|zanki|xanix|xanax|xanx)\\b`, 'gi'), '')
     .replace(/^(ok|okay|ei|oi|fala|e ai|entao|por favor)\s+/i, '')
     .trim();
 
@@ -574,12 +599,14 @@ async function processarEntradaVoz(fraseBruta) {
   renovarJanelaConversa(35);
 
   try {
+    // 1. Executa imediatamente qualquer comando da interface do motorista (0ms de atraso)
     const resolveuInstantaneo = await resolverIntencaoSemanticaLocal(intencaoLimpa, ctx);
     if (resolveuInstantaneo) {
       processandoRequisicao = false;
       return;
     }
 
+    // 2. Conversas abertas e perguntas livres vão para o Gemini no servidor
     const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
       method: 'POST',
       headers: obterHeaders(),
@@ -600,21 +627,22 @@ async function processarEntradaVoz(fraseBruta) {
     if (data && data.resposta) {
       falarTexto(data.resposta, intencaoLimpa);
     } else {
-      falarTexto(`Entendido, ${ctx.nomeCondutor}. Seguimos monitorando!`, intencaoLimpa);
+      falarTexto(`Pronto, ${ctx.nomeCondutor}.`, intencaoLimpa);
     }
   } catch (err) {
-    falarTexto(`Combinado, ${ctx.nomeCondutor}. Tô atento aqui no painel.`, intencaoLimpa);
+    falarTexto(`Combinado, ${ctx.nomeCondutor}.`, intencaoLimpa);
   } finally {
     processandoRequisicao = false;
   }
 }
 
 // ============================================================================
-// CÉREBRO SEMÂNTICO LOCAL
+// CÉREBRO SEMÂNTICO LOCAL (COBRE 100% DOS BOTÕES E FUNÇÕES DA TELA)
 // ============================================================================
 async function resolverIntencaoSemanticaLocal(fala, ctx) {
   const nome = ctx.nomeCondutor;
 
+  // 1. CONFIRMAÇÕES CURTAS
   if (/^(certo|ok|okay|beleza|blz|valeu|obrigado|entendi|show|perfeito|ta bom|tudo bem|positivo|fechou)$/.test(fala)) {
     const respostas = [
       `Combinado, ${nome}!`,
@@ -626,6 +654,152 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
+  // 2. FICAR OFFLINE / DESCONECTAR CARRO
+  if (
+    fala.includes('ficar offline') || fala.includes('fica offline') ||
+    fala.includes('sair do online') || fala.includes('desconectar') ||
+    fala.includes('parar de receber') || fala === 'offline'
+  ) {
+    await executarAcaoNoApp('FICAR_OFFLINE', ctx);
+    falarTexto(`Pronto, ${nome}! Coloquei você offline para corridas.`, fala);
+    return true;
+  }
+
+  // 3. FICAR ONLINE / CONECTAR CARRO
+  if (
+    fala.includes('ficar online') || fala.includes('fica online') ||
+    fala.includes('entrar online') || fala.includes('conectar') ||
+    fala.includes('receber corrida') || fala === 'online'
+  ) {
+    await executarAcaoNoApp('FICAR_ONLINE', ctx);
+    falarTexto(`Você está online para receber chamadas, ${nome}! Boas corridas.`, fala);
+    return true;
+  }
+
+  // 4. MODO PAUSA (Ativar ou Desativar)
+  if (fala.includes('pausa') || fala.includes('descansar') || fala.includes('cafe') || fala.includes('abastecer')) {
+    const querDesativar = fala.includes('desativa') || fala.includes('sair da pausa') || fala.includes('tirar pausa') || fala.includes('encerrar pausa');
+    const querAtivar = fala.includes('ativa') || fala.includes('ligar') || fala.includes('entrar');
+
+    if ((querDesativar && ctx.emPausa) || (querAtivar && !ctx.emPausa) || (!querDesativar && !querAtivar)) {
+      await executarAcaoNoApp('ALTERNAR_PAUSA', ctx);
+    }
+
+    const ficouEmPausa = Boolean(document.getElementById('btnModoPausa')?.classList.contains('active'));
+    if (ficouEmPausa) {
+      falarTexto(`Modo pausa de 15 minutos ativado, ${nome}.`, fala);
+    } else {
+      falarTexto(`Modo pausa desativado! Radar de corridas restabelecido.`, fala);
+    }
+    return true;
+  }
+
+  // 5. HUBY LOJA / CLUBE DE VANTAGENS (Cobre "huby loja", "ubi loja", "abrir loja", "clube", "descontos")
+  if (
+    fala.includes('loja') || fala.includes('ubi loja') || fala.includes('huby loja') ||
+    fala.includes('clube') || fala.includes('vantagens') || fala.includes('desconto') ||
+    fala.includes('marketplace') || fala.includes('oficina') || fala.includes('guincho')
+  ) {
+    await executarAcaoNoApp('ABRIR_LOJA', ctx);
+    falarTexto(`Abri a HUBy Loja e Clube de Vantagens na sua tela, ${nome}!`, fala);
+    return true;
+  }
+
+  // 6. IR PARA CASA / MODO DESTINO ("ir para casa", "modo casa", "rota para casa")
+  if (
+    fala.includes('ir para casa') || fala.includes('ir pra casa') ||
+    fala.includes('modo casa') || fala.includes('modo destino') ||
+    fala.includes('rota para casa') || fala.includes('voltar para casa')
+  ) {
+    await executarAcaoNoApp('ALTERNAR_MODO_CASA', ctx);
+    if (ctx.modoCasaAtivo) {
+      falarTexto(`Modo ir para casa desativado, ${nome}. Recebendo corridas para qualquer direção.`, fala);
+    } else {
+      falarTexto(`Acionei o modo ir para casa na tela, ${nome}. Informe ou confirme o seu bairro de destino.`, fala);
+    }
+    return true;
+  }
+
+  // 7. EDITAR DADOS E FOTO ("editar dados", "editar foto", "mudar foto", "editar perfil")
+  if (
+    fala.includes('editar dados') || fala.includes('editar foto') ||
+    fala.includes('dados e foto') || fala.includes('mudar foto') ||
+    fala.includes('editar perfil') || fala.includes('alterar dados')
+  ) {
+    await executarAcaoNoApp('ABRIR_EDICAO_PERFIL', ctx);
+    falarTexto(`Abri a tela de editar dados e foto do seu perfil, ${nome}.`, fala);
+    return true;
+  }
+
+  // 8. ABRIR PERFIL / MENU LATERAL ("abrir perfil", "abrir menu", "meu perfil")
+  if (
+    fala.includes('abrir perfil') || fala.includes('abre o perfil') ||
+    fala.includes('abrir menu') || fala.includes('abre o menu') ||
+    fala.includes('meu perfil') || fala.includes('ver perfil')
+  ) {
+    await executarAcaoNoApp('ABRIR_PERFIL', ctx);
+    falarTexto(`Menu do perfil aberto na tela, ${nome}.`, fala);
+    return true;
+  }
+
+  // 9. FECHAR PERFIL / FECHAR MENU / FECHAR JANELA
+  if (
+    fala.includes('fechar perfil') || fala.includes('fecha o perfil') ||
+    fala.includes('fechar menu') || fala.includes('fecha o menu') ||
+    fala.includes('fechar tela') || fala.includes('fechar janela') ||
+    fala.includes('fechar loja') || fala.includes('fechar saque')
+  ) {
+    await executarAcaoNoApp('FECHAR_TELAS', ctx);
+    falarTexto(`Pronto, fechei e voltei para o mapa principal.`, fala);
+    return true;
+  }
+
+  // 10. DEFINIR META DIÁRIA ("definir meta", "mudar meta", "meta para 300")
+  if (fala.includes('definir meta') || fala.includes('mudar meta') || fala.includes('alterar meta') || fala.includes('nova meta')) {
+    const matchValor = fala.match(/(\d+)/);
+    if (matchValor) {
+      const novoValor = Number(matchValor[1]);
+      if (novoValor >= 10) {
+        estado.metaDiaria = novoValor;
+        localStorage.setItem('huby_meta_diaria', String(novoValor));
+        const lblMeta = document.getElementById('lblMetaDiariaTxt');
+        if (lblMeta) lblMeta.textContent = `Meta: R$ ${novoValor.toFixed(2).replace('.', ',')} (0%)`;
+        falarTexto(`Meta diária atualizada para ${novoValor} reais, ${nome}!`, fala);
+        return true;
+      }
+    }
+    await executarAcaoNoApp('DEFINIR_META', ctx);
+    falarTexto(`Abri a definição de meta diária na tela, ${nome}.`, fala);
+    return true;
+  }
+
+  // 11. SOLICITAR SAQUE PIX / ABRIR SAQUE ("solicitar saque", "saque pix", "sacar")
+  if (
+    fala.includes('solicitar saque') || fala.includes('saque pix') ||
+    fala.includes('abrir saque') || fala.includes('quero sacar') ||
+    fala.includes('fazer saque') || fala.includes('retirar dinheiro') ||
+    fala === 'sacar' || fala === 'saque'
+  ) {
+    await executarAcaoNoApp('ABRIR_SAQUE', ctx);
+    falarTexto(`Abri a tela de solicitação de saque Pix, ${nome}. Seu saldo atual é de ${ctx.saldo}.`, fala);
+    return true;
+  }
+
+  // 12. DESCARREGAR FECHAMENTO DO DIA
+  if (fala.includes('fechamento') || fala.includes('relatorio do dia') || fala.includes('exportar resumo') || fala.includes('descarregar fechamento')) {
+    await executarAcaoNoApp('EXPORTAR_FECHAMENTO', ctx);
+    falarTexto(`Baixando o relatório de fechamento do dia no seu aparelho, ${nome}.`, fala);
+    return true;
+  }
+
+  // 13. REPORTAR PROBLEMA OU OBJETO ESQUECIDO
+  if (fala.includes('reportar problema') || fala.includes('objeto esquecido') || fala.includes('abrir incidente')) {
+    document.getElementById('btnAbrirModalIncidente')?.click();
+    falarTexto(`Abri a tela para reportar problema ou objeto esquecido, ${nome}.`, fala);
+    return true;
+  }
+
+  // 14. ATIVAR / DESATIVAR MAPA DE CALOR
   if (fala.includes('calor') || fala.includes('demanda') || fala.includes('zona quente')) {
     const estavaAtivo = ctx.heatmapAtivo;
     await executarAcaoNoApp('ALTERNAR_CALOR', ctx);
@@ -637,6 +811,7 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
+  // 15. TIRAR PEDIDO DA TELA / DISPENSAR / CANCELAR ROTA
   if (
     fala.includes('tirar pedido') || fala.includes('tirar o pedido') || fala.includes('tirar esse pedido') ||
     fala.includes('tira esse pedido') || fala.includes('tira o pedido') || fala.includes('tirar da tela') ||
@@ -664,7 +839,13 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
       return true;
     }
 
-    if (ctx.telasAbertas.drawerPerfil || ctx.telasAbertas.modalSaquePix || ctx.telasAbertas.modalLiquidacaoPagamento) {
+    if (
+      ctx.telasAbertas.drawerPerfil ||
+      ctx.telasAbertas.modalSaquePix ||
+      ctx.telasAbertas.modalEdicaoPerfil ||
+      ctx.telasAbertas.modalLoja ||
+      ctx.telasAbertas.modalLiquidacaoPagamento
+    ) {
       await executarAcaoNoApp('FECHAR_TELAS', ctx);
       falarTexto('Fechei a janela para você.', fala);
       return true;
@@ -674,6 +855,7 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
+  // 16. CHECAR PEDIDO / VISUALIZAR ROTA
   if (
     fala.includes('visualizar') || fala.includes('visualiza') ||
     fala.includes('ver rota') || fala.includes('ver a rota') ||
@@ -702,6 +884,7 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
+  // 17. HORÁRIO ATUAL E MELHOR HORÁRIO
   if (
     (fala.includes('qual o horario') || fala.includes('qual e o horario') || fala.includes('que horas') || fala.includes('hora agora') || fala.includes('horario agora')) &&
     !fala.includes('melhor')
@@ -717,6 +900,7 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
+  // 18. ACEITAR CORRIDA
   if (
     fala.includes('aceitar') || fala.includes('aceita') ||
     fala.includes('confirmar corrida') || fala.includes('pegar corrida') ||
@@ -731,6 +915,7 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
+  // 19. PAGAMENTO, CHEGADA, INÍCIO E FIM DE CORRIDA
   if (ctx.telasAbertas.modalLiquidacaoPagamento) {
     if (fala.includes('dinheiro') || fala.includes('especie')) {
       await executarAcaoNoApp('PAGAR_DINHEIRO', ctx);
@@ -907,6 +1092,7 @@ async function executarAcaoNoApp(acao, ctx) {
     }
 
     case 'ABRIR_SAQUE':
+      document.getElementById('btnFecharDrawerPerfil')?.click();
       document.getElementById('btnAbrirModalSaque')?.click();
       break;
 
@@ -915,17 +1101,23 @@ async function executarAcaoNoApp(acao, ctx) {
       break;
 
     case 'ABRIR_EDICAO_PERFIL':
-      document.getElementById('btnAbrirDrawerPerfil')?.click();
-      setTimeout(() => document.getElementById('btnAbrirModalEdicaoPerfil')?.click(), 200);
+      document.getElementById('btnFecharDrawerPerfil')?.click();
+      document.getElementById('btnAbrirModalEdicaoPerfil')?.click();
       break;
 
     case 'ABRIR_CHAT':
+      document.getElementById('btnFecharDrawerPerfil')?.click();
       document.getElementById('btnAbrirChat')?.click();
       break;
 
     case 'ABRIR_LOJA':
-      document.getElementById('btnAbrirDrawerPerfil')?.click();
-      setTimeout(() => document.getElementById('btnAbrirMarketplaceDrawer')?.click(), 200);
+      document.getElementById('btnFecharDrawerPerfil')?.click();
+      document.getElementById('btnAbrirMarketplaceDrawer')?.click();
+      break;
+
+    case 'DEFINIR_META':
+      document.getElementById('btnFecharDrawerPerfil')?.click();
+      document.getElementById('btnEditarMetaDiaria')?.click();
       break;
 
     case 'ALTERNAR_CALOR':
@@ -937,6 +1129,7 @@ async function executarAcaoNoApp(acao, ctx) {
       break;
 
     case 'ALTERNAR_MODO_CASA':
+      document.getElementById('btnFecharDrawerPerfil')?.click();
       document.getElementById('btnModoDestino')?.click();
       break;
 
@@ -944,13 +1137,25 @@ async function executarAcaoNoApp(acao, ctx) {
       exportarResumoDia();
       break;
 
-    case 'FICAR_OFFLINE':
-      if (estado.isOnline) await alternarStatusOnline();
+    case 'FICAR_OFFLINE': {
+      const btnOnline = document.getElementById('btnToggleStatusOnline');
+      const estaOn = estado.isOnline || estado.statusOnline || (btnOnline && !btnOnline.textContent.includes('Ficar Online'));
+      if (estaOn) {
+        if (btnOnline) btnOnline.click();
+        else await alternarStatusOnline();
+      }
       break;
+    }
 
-    case 'FICAR_ONLINE':
-      if (!estado.isOnline) await alternarStatusOnline();
+    case 'FICAR_ONLINE': {
+      const btnOnline = document.getElementById('btnToggleStatusOnline');
+      const estaOn = estado.isOnline || estado.statusOnline || (btnOnline && !btnOnline.textContent.includes('Ficar Online'));
+      if (!estaOn) {
+        if (btnOnline) btnOnline.click();
+        else await alternarStatusOnline();
+      }
       break;
+    }
 
     case 'FECHAR_TELAS':
       document.getElementById('btnFecharDrawerPerfil')?.click();
