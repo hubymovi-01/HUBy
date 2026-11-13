@@ -650,6 +650,7 @@ export default function pedidosRouter(io) {
         const dadosCobranca = {
           transaction_amount: valorTotal,
           description: `HUBy - Corrida #${id}`,
+          external_reference: String(id),
           payment_method_id: 'pix',
           notification_url: notificationUrl,
           payer: {
@@ -667,15 +668,23 @@ export default function pedidosRouter(io) {
           return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
         }
 
+        // Salva o txid direto no pedido (garante vínculo mesmo se cobrancas_pix falhar)
         try {
+          await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
+          await sql`UPDATE pedidos SET pix_txid = ${txidGerado} WHERE id::text = ${String(id)}::text;`;
+        } catch (ePed) {}
+
+        try {
+          await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS txid VARCHAR(64);`;
+          await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS pedido_id TEXT;`;
+          await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
+          await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS pix_copia_cola TEXT;`;
           await sql`
             INSERT INTO cobrancas_pix (txid, transacao_id, pedido_id, usuario_id, valor, status, pix_copia_cola, qr_code, qr_code_base64)
-            VALUES (${txidGerado}, ${txidGerado}, ${String(id)}, ${pedido.cliente_id ? String(pedido.cliente_id) : null}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code}, ${pixData.qr_code_base64})
-            ON CONFLICT (transacao_id) DO UPDATE
-            SET txid = EXCLUDED.txid, pedido_id = EXCLUDED.pedido_id, valor = EXCLUDED.valor;
+            VALUES (${txidGerado}, ${txidGerado}, ${String(id)}, ${pedido.cliente_id ? String(pedido.cliente_id) : null}, ${valorTotal}, 'pendente', ${pixData.qr_code}, ${pixData.qr_code}, ${pixData.qr_code_base64});
           `;
         } catch (ePix) {
-          console.warn('Aviso ao gravar cobrancas_pix:', ePix.message);
+          console.warn('Aviso cobrancas_pix:', ePix.message);
         }
 
         const payloadPix = {

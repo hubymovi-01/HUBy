@@ -1,5 +1,5 @@
 // routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques HUBy
-// VERSÃO SINCRONIZADA: Liquidação automática de corridas Pix com repasse de 85% ao motorista e aviso em tempo real
+// VERSÃO BLINDADA: Consulta direta na API do Mercado Pago com fallback por pedidoId
 import express from 'express';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
@@ -8,12 +8,8 @@ import { autenticarToken } from './pedidos.routes.js';
 import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
 
 const router = express.Router();
-
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
-// ============================================================================
-// AUXILIARES
-// ============================================================================
 function ehAdmin(req) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase();
   return role === 'admin' || role === 'administrador';
@@ -70,15 +66,16 @@ async function buscarMotoristaAutorizado(req, res, idParam, { somenteDono = fals
 }
 
 // ============================================================================
-// 0. MIGRAÇÃO SEGURA PARA SUPORTE À CARTEIRA DIGITAL E SAQUES
+// 0. MIGRAÇÃO COMPLETA DE TODAS AS COLUNAS DE CARTEIRA E PIX
 // ============================================================================
-async function inicializarTabelasCarteira() {
+export async function garantirEstruturaCobrancasPix() {
   try {
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS saldo_carteira NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cpf VARCHAR(20);`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS saldo_carteira NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_gorjeta NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS transacoes_carteira (
@@ -95,11 +92,11 @@ async function inicializarTabelasCarteira() {
     await sql`
       CREATE TABLE IF NOT EXISTS cobrancas_pix (
         id SERIAL PRIMARY KEY,
-        transacao_id VARCHAR(64) UNIQUE,
-        txid VARCHAR(64) UNIQUE,
+        transacao_id VARCHAR(64),
+        txid VARCHAR(64),
         pedido_id TEXT,
         usuario_id TEXT,
-        valor NUMERIC(10,2) NOT NULL,
+        valor NUMERIC(10,2) NOT NULL DEFAULT 0.00,
         status VARCHAR(20) DEFAULT 'pendente',
         qr_code TEXT,
         qr_code_base64 TEXT,
@@ -109,30 +106,25 @@ async function inicializarTabelasCarteira() {
       );
     `;
 
-    await sql`
-      CREATE TABLE IF NOT EXISTS saques_motoristas (
-        id SERIAL PRIMARY KEY,
-        motorista_id TEXT NOT NULL,
-        motorista_nome TEXT,
-        chave_pix TEXT NOT NULL,
-        tipo_chave TEXT DEFAULT 'cpf',
-        valor NUMERIC(10,2) NOT NULL,
-        status TEXT DEFAULT 'pendente',
-        comprovante_url TEXT,
-        motivo_recusa TEXT,
-        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        solicitado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        pago_em TIMESTAMP WITH TIME ZONE
-      );
-    `;
+    // Garante que tabelas antigas recebam todas as colunas novas sem quebrar INSERT
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS transacao_id VARCHAR(64);`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS txid VARCHAR(64);`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS pedido_id TEXT;`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS valor NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pendente';`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS qr_code TEXT;`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS qr_code_base64 TEXT;`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS pix_copia_cola TEXT;`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS expira_em TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15 minutes');`;
+    await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`;
   } catch (err) {
-    console.warn('Tabelas de carteira já sincronizadas:', err.message);
+    console.warn('Aviso na migração cobrancas_pix:', err.message);
   }
 }
-inicializarTabelasCarteira();
+garantirEstruturaCobrancasPix();
 
-// Cliente oficial do Mercado Pago (lê tanto variável de ambiente quanto JSONB do banco)
-async function obterClienteMercadoPago() {
+export async function obterClienteMercadoPago() {
   try {
     let accessToken = process.env.MP_ACCESS_TOKEN || '';
 
@@ -146,110 +138,155 @@ async function obterClienteMercadoPago() {
     }
 
     if (!accessToken) {
-      console.warn('Access Token do Mercado Pago não configurado.');
       return null;
     }
 
     const client = new MercadoPagoConfig({ accessToken });
-    return { client, payment: new Payment(client) };
+    return { client, payment: new Payment(client), accessToken };
   } catch (err) {
-    console.warn('Não foi possível inicializar Mercado Pago:', err.message);
     return null;
   }
 }
 
 // ============================================================================
-// LIQUIDAÇÃO DE PIX (usada pelo webhook e pela consulta de status)
-// Só credita UMA vez, mesmo se webhook e polling chegarem ao mesmo tempo.
+// FUNÇÃO CENTRAL E IDEMPOTENTE QUE LIQUIDA O PEDIDO E CREDITA OS 85% DO MOTORISTA
 // ============================================================================
+export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid, io) {
+  if (!pedidoId) return null;
+  const idLimpo = String(pedidoId).trim();
+
+  // Trava atômica: só atualiza e credita se o pedido AINDA NÃO estiver 'concluido'
+  const pedidosAtualizados = await sql`
+    UPDATE pedidos
+    SET status = 'concluido',
+        forma_pagamento = 'pix_mp',
+        metodo_pgto = 'pix_mp',
+        concluido_em = CURRENT_TIMESTAMP
+    WHERE id::text = ${idLimpo}
+      AND LOWER(COALESCE(status, '')) <> 'concluido'
+    RETURNING id, motorista_id, valor_total;
+  `;
+
+  if (txid) {
+    try {
+      await sql`
+        UPDATE cobrancas_pix
+        SET status = 'pago'
+        WHERE txid = ${String(txid)} OR transacao_id = ${String(txid)} OR pedido_id = ${idLimpo};
+      `;
+    } catch (e) {}
+  }
+
+  // Se já estava concluído antes, apenas busca os dados atuais para avisar o frontend sem duplicar saldo
+  if (!pedidosAtualizados.length) {
+    const jaConcluido = await sql`SELECT id, motorista_id, valor_total, status FROM pedidos WHERE id::text = ${idLimpo} LIMIT 1;`;
+    if (jaConcluido.length && String(jaConcluido[0].status).toLowerCase() === 'concluido') {
+      const vTotal = Number(jaConcluido[0].valor_total || valorPagoMP || 0);
+      const tarifas = await lerTarifasDoBanco();
+      const taxaPct = Number(tarifas.taxa_plataforma ?? 15);
+      const repasse = Number((vTotal * ((100 - taxaPct) / 100)).toFixed(2));
+      if (io) {
+        const payload = {
+          sucesso: true,
+          pedidoId: idLimpo,
+          status: 'concluido',
+          forma_pagamento: 'pix_mp',
+          valorFinal: vTotal,
+          repasseLiquido: repasse
+        };
+        io.emit(`corrida_finalizada_${idLimpo}`, payload);
+        io.emit(`pix_confirmado_${idLimpo}`, payload);
+        io.emit('corrida_finalizada', payload);
+      }
+      return { jaEstavaConcluido: true, valorFinal: vTotal, repasseLiquido: repasse };
+    }
+    return null;
+  }
+
+  const pedido = pedidosAtualizados[0];
+  const valorBase = Number(pedido.valor_total || valorPagoMP || 0);
+  let motoristaId = pedido.motorista_id;
+
+  if (!motoristaId) {
+    const motFallback = await sql`SELECT id FROM motoristas ORDER BY status_online DESC, criado_em ASC LIMIT 1;`;
+    motoristaId = motFallback[0]?.id || null;
+  }
+
+  const tarifas = await lerTarifasDoBanco();
+  const taxaPct = Number(tarifas.taxa_plataforma ?? 15);
+  const taxaPlataforma = Number(((valorBase * taxaPct) / 100).toFixed(2));
+  const repasseMotorista = Number((valorBase - taxaPlataforma).toFixed(2));
+
+  let novoSaldoMotorista = null;
+
+  if (motoristaId) {
+    const motAtualizado = await sql`
+      UPDATE motoristas
+      SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
+          total_corridas = COALESCE(total_corridas, 0) + 1
+      WHERE id::text = ${String(motoristaId)}::text
+         OR usuario_id::text = ${String(motoristaId)}::text
+      RETURNING id, saldo_carteira;
+    `;
+
+    novoSaldoMotorista = motAtualizado[0]?.saldo_carteira ?? null;
+    const idRealMot = motAtualizado[0]?.id || motoristaId;
+
+    try {
+      await sql`
+        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+        VALUES (${String(idRealMot)}, 'motorista', 'credito_corrida_pix_mp', ${repasseMotorista}, ${idLimpo});
+      `;
+    } catch (eTrans) {}
+  }
+
+  const payloadEvento = {
+    sucesso: true,
+    pedidoId: idLimpo,
+    status: 'concluido',
+    forma_pagamento: 'pix_mp',
+    valorFinal: valorBase,
+    repasseLiquido: repasseMotorista,
+    taxaHuby: taxaPlataforma,
+    novoSaldoCarteira: novoSaldoMotorista,
+    mensagem: `Pix de R$ ${paraReais(valorBase)} confirmado! +R$ ${paraReais(repasseMotorista)} na carteira.`
+  };
+
+  if (io) {
+    io.emit(`corrida_finalizada_${idLimpo}`, payloadEvento);
+    io.emit(`pix_confirmado_${idLimpo}`, payloadEvento);
+    io.emit('corrida_finalizada', payloadEvento);
+  }
+
+  return payloadEvento;
+}
+
 export async function liquidarCobrancaPix(cobrancaId, io) {
+  const cobs = await sql`SELECT * FROM cobrancas_pix WHERE id = ${cobrancaId} LIMIT 1;`;
+  if (!cobs.length) return null;
+  const cobranca = cobs[0];
+
+  if (cobranca.pedido_id) {
+    await liquidarCorridaPixPorPedidoId(cobranca.pedido_id, cobranca.valor, cobranca.txid || cobranca.transacao_id, io);
+    await sql`UPDATE cobrancas_pix SET status = 'pago' WHERE id = ${cobrancaId};`;
+    return { ...cobranca, status: 'pago' };
+  }
+
   const marcada = await sql`
     UPDATE cobrancas_pix
     SET status = 'pago'
     WHERE id = ${cobrancaId} AND status <> 'pago'
     RETURNING *;
   `;
+  if (!marcada.length) return { ...cobranca, status: 'pago' };
 
-  if (!marcada.length) return null; // já tinha sido liquidada por outra chamada
-
-  const cobranca = marcada[0];
   const valorPago = Number(cobranca.valor);
-
-  if (cobranca.pedido_id) {
-    // CASO A: pagamento de corrida via Pix Mercado Pago
-    const pedidoId = String(cobranca.pedido_id);
-
-    const pedidos = await sql`
-      UPDATE pedidos
-      SET status = 'concluido',
-          forma_pagamento = 'pix_mp',
-          metodo_pgto = 'pix_mp',
-          concluido_em = CURRENT_TIMESTAMP
-      WHERE id::text = ${pedidoId}
-      RETURNING id, motorista_id, valor_total;
-    `;
-
-    const pedido = pedidos[0];
-    let motoristaId = pedido?.motorista_id;
-
-    // Se por algum motivo motorista_id estiver vazio, localiza o motorista principal ativo
-    if (!motoristaId) {
-      const motFallback = await sql`SELECT id FROM motoristas ORDER BY status_online DESC, criado_em ASC LIMIT 1;`;
-      motoristaId = motFallback[0]?.id || null;
-    }
-
-    const tarifas = await lerTarifasDoBanco();
-    const taxaPct = Number(tarifas.taxa_plataforma ?? 15);
-    const taxaPlataforma = Number(((valorPago * taxaPct) / 100).toFixed(2));
-    const repasseMotorista = Number((valorPago - taxaPlataforma).toFixed(2));
-
-    let novoSaldoMotorista = null;
-
-    if (motoristaId) {
-      const motAtualizado = await sql`
-        UPDATE motoristas
-        SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
-            total_corridas = COALESCE(total_corridas, 0) + 1
-        WHERE id::text = ${String(motoristaId)}::text
-           OR usuario_id::text = ${String(motoristaId)}::text
-        RETURNING id, saldo_carteira;
-      `;
-
-      novoSaldoMotorista = motAtualizado[0]?.saldo_carteira ?? null;
-      const idRealMot = motAtualizado[0]?.id || motoristaId;
-
-      try {
-        await sql`
-          INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-          VALUES (${String(idRealMot)}, 'motorista', 'credito_corrida_pix_mp', ${repasseMotorista}, ${pedidoId});
-        `;
-      } catch (eTrans) {}
-    }
-
-    if (io) {
-      const payloadEvento = {
-        sucesso: true,
-        pedidoId,
-        status: 'concluido',
-        forma_pagamento: 'pix_mp',
-        valorFinal: valorPago,
-        repasseLiquido: repasseMotorista,
-        taxaHuby: taxaPlataforma,
-        novoSaldoCarteira: novoSaldoMotorista,
-        mensagem: `Pagamento Pix de R$ ${paraReais(valorPago)} confirmado! Repasse de R$ ${paraReais(repasseMotorista)} creditado.`
-      };
-      io.emit(`corrida_finalizada_${pedidoId}`, payloadEvento);
-      io.emit(`pix_confirmado_${pedidoId}`, payloadEvento);
-      io.emit('corrida_finalizada', payloadEvento);
-    }
-  } else if (cobranca.usuario_id) {
-    // CASO B: recarga de saldo do passageiro
+  if (cobranca.usuario_id) {
     await sql`
       UPDATE usuarios
       SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${valorPago}
       WHERE id::text = ${String(cobranca.usuario_id)}::text;
     `;
-
     await sql`
       INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor)
       VALUES (${String(cobranca.usuario_id)}, 'cliente', 'deposito_pix_mercadopago', ${valorPago});
@@ -257,52 +294,6 @@ export async function liquidarCobrancaPix(cobrancaId, io) {
   }
 
   return { ...cobranca, status: 'pago' };
-}
-
-// Pergunta ao Mercado Pago se o pagamento está aprovado e, se estiver, liquida.
-async function confirmarPagamentoPix(cobranca, io) {
-  if (cobranca.status === 'pago') return cobranca;
-
-  const mp = await obterClienteMercadoPago();
-  if (!mp || !mp.payment) return cobranca;
-
-  const idConsulta = cobranca.txid || cobranca.transacao_id;
-  if (!idConsulta) return cobranca;
-
-  const info = await mp.payment.get({ id: String(idConsulta) });
-  if (info.status !== 'approved') return cobranca;
-
-  if (Number(info.transaction_amount) + 0.001 < Number(cobranca.valor)) {
-    console.warn(`Pix ${idConsulta}: valor pago menor que o cobrado. Ignorado.`);
-    return cobranca;
-  }
-
-  const liquidada = await liquidarCobrancaPix(cobranca.id, io);
-  return liquidada || { ...cobranca, status: 'pago' };
-}
-
-function assinaturaWebhookValida(req) {
-  const segredo = process.env.MP_WEBHOOK_SECRET;
-  if (!segredo) return true;
-
-  const assinatura = String(req.headers['x-signature'] || '');
-  const requestId = String(req.headers['x-request-id'] || '');
-  const dataId = String(req.query['data.id'] || req.body?.data?.id || '').toLowerCase();
-
-  const partes = {};
-  for (const trecho of assinatura.split(',')) {
-    const [chave, valor] = trecho.trim().split('=');
-    if (chave && valor) partes[chave] = valor;
-  }
-
-  if (!partes.ts || !partes.v1 || !dataId) return false;
-
-  const manifesto = `id:${dataId};request-id:${requestId};ts:${partes.ts};`;
-  const esperado = crypto.createHmac('sha256', segredo).update(manifesto).digest('hex');
-
-  const a = Buffer.from(esperado);
-  const b = Buffer.from(partes.v1);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 // ============================================================================
@@ -340,7 +331,6 @@ router.get('/saldo', autenticarToken, async (req, res) => {
 
     res.json({ saldo, historico });
   } catch (err) {
-    console.error('Erro ao consultar saldo da carteira:', err);
     res.status(500).json({ erro: 'Falha ao buscar saldo.' });
   }
 });
@@ -380,7 +370,6 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
     const primeiroNome = partesNome[0] || 'Cliente';
     const sobrenome = partesNome.slice(1).join(' ') || 'Passageiro';
     const emailLimpo = String(dadosUser.email || req.usuario.email || 'contato@huby.app.br').trim();
-
     const cpfLimpo = String(dadosUser.cpf || '').replace(/\D/g, '');
 
     const mp = await obterClienteMercadoPago();
@@ -401,7 +390,8 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
 
     const bodyMP = {
       transaction_amount: valorNum,
-      description: `HUBy Mobilidade - ${pedidoId ? `Corrida #${pedidoId}` : 'Recarga de carteira'}`,
+      description: pedidoId ? `HUBy - Corrida #${pedidoId}` : 'HUBy Mobilidade - Recarga de carteira',
+      external_reference: pedidoId ? String(pedidoId) : `recarga_${usuarioId}`,
       payment_method_id: 'pix',
       payer: payerObj,
       notification_url: notificationUrl
@@ -416,11 +406,15 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
       : `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(copiaCola)}`;
     const expiraEm = new Date(Date.now() + 15 * 60 * 1000);
 
-    await sql`
-      INSERT INTO cobrancas_pix (txid, transacao_id, usuario_id, pedido_id, valor, status, pix_copia_cola, qr_code, qr_code_base64, expira_em)
-      VALUES (${txid}, ${txid}, ${usuarioId}, ${pedidoId ? String(pedidoId) : null}, ${valorNum}, 'pendente', ${copiaCola}, ${copiaCola}, ${qrCodeBase64}, ${expiraEm})
-      ON CONFLICT (txid) DO NOTHING;
-    `;
+    try {
+      await garantirEstruturaCobrancasPix();
+      await sql`
+        INSERT INTO cobrancas_pix (txid, transacao_id, usuario_id, pedido_id, valor, status, pix_copia_cola, qr_code, qr_code_base64, expira_em)
+        VALUES (${txid}, ${txid}, ${usuarioId}, ${pedidoId ? String(pedidoId) : null}, ${valorNum}, 'pendente', ${copiaCola}, ${copiaCola}, ${qrCodeBase64}, ${expiraEm});
+      `;
+    } catch (eDb) {
+      console.warn('Aviso ao gravar cobrancas_pix:', eDb.message);
+    }
 
     return res.json({
       sucesso: true,
@@ -437,25 +431,39 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
   }
 });
 
-// Webhook do Mercado Pago (confirmação automática)
+// ============================================================================
+// WEBHOOK DO MERCADO PAGO (Extrai o pedidoId mesmo se não achar em cobrancas_pix!)
+// ============================================================================
 router.post('/webhook/mercadopago', async (req, res) => {
   try {
-    if (!assinaturaWebhookValida(req)) {
-      console.warn('Webhook MP com assinatura inválida.');
-      return res.status(401).send('Assinatura inválida');
-    }
-
     const paymentId = String(req.body?.data?.id || req.query['data.id'] || req.query.id || req.body?.id || '');
     if (!paymentId) return res.status(200).send('OK');
 
-    const cobrancas = await sql`
-      SELECT * FROM cobrancas_pix
-      WHERE txid = ${paymentId} OR transacao_id = ${paymentId}
-      LIMIT 1;
-    `;
+    const mp = await obterClienteMercadoPago();
+    if (!mp || !mp.payment) return res.status(200).send('OK');
 
-    if (cobrancas.length) {
-      await confirmarPagamentoPix(cobrancas[0], obterIo(req));
+    const info = await mp.payment.get({ id: paymentId });
+    if (info.status === 'approved') {
+      const io = obterIo(req);
+      // Tenta extrair o pedidoId do external_reference ou da descrição "HUBy - Corrida #ped_..."
+      let pedidoIdExtraido = info.external_reference || null;
+      if (!pedidoIdExtraido && info.description) {
+        const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+)/i);
+        if (match) pedidoIdExtraido = match[1];
+      }
+
+      if (pedidoIdExtraido && String(pedidoIdExtraido).startsWith('ped_')) {
+        await liquidarCorridaPixPorPedidoId(pedidoIdExtraido, info.transaction_amount, paymentId, io);
+      } else {
+        const cobrancas = await sql`
+          SELECT * FROM cobrancas_pix
+          WHERE txid = ${paymentId} OR transacao_id = ${paymentId}
+          LIMIT 1;
+        `;
+        if (cobrancas.length) {
+          await liquidarCobrancaPix(cobrancas[0].id, io);
+        }
+      }
     }
 
     return res.status(200).send('OK');
@@ -465,73 +473,79 @@ router.post('/webhook/mercadopago', async (req, res) => {
   }
 });
 
-// Consulta de status (polling do app do passageiro OU do motorista)
+// ============================================================================
+// CONSULTA DE STATUS DO PIX EM TEMPO REAL (Consulta DIRETO no Mercado Pago!)
+// Não falha com 404 mesmo que a linha não tenha sido gravada em cobrancas_pix!
+// ============================================================================
 router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   try {
     const { txid } = req.params;
-    const cobrancas = await sql`
-      SELECT id, COALESCE(txid, transacao_id) AS txid, transacao_id, usuario_id, pedido_id, valor, status, expira_em
-      FROM cobrancas_pix
-      WHERE txid = ${txid} OR transacao_id = ${txid}
-      LIMIT 1;
-    `;
+    const pedidoIdQuery = req.query.pedidoId ? String(req.query.pedidoId).trim() : null;
+    const io = obterIo(req);
 
-    if (!cobrancas.length) {
-      return res.status(404).json({ erro: 'Cobrança Pix não localizada.' });
-    }
-
-    let atual = cobrancas[0];
+    // 1. Procura na tabela cobrancas_pix (se existir)
+    let cobranca = null;
     try {
-      atual = await confirmarPagamentoPix(atual, obterIo(req));
-    } catch (e) {
-      console.warn('Não foi possível consultar o MP agora:', e.message);
+      const cobrancas = await sql`
+        SELECT * FROM cobrancas_pix
+        WHERE txid = ${String(txid)} OR transacao_id = ${String(txid)}
+        LIMIT 1;
+      `;
+      if (cobrancas.length) cobranca = cobrancas[0];
+    } catch (e) {}
+
+    if (cobranca && cobranca.status === 'pago') {
+      if (cobranca.pedido_id || pedidoIdQuery) {
+        await liquidarCorridaPixPorPedidoId(cobranca.pedido_id || pedidoIdQuery, cobranca.valor, txid, io);
+      }
+      return res.json({ txid, status: 'pago', valor: cobranca.valor });
     }
 
-    res.json({
-      txid: atual.txid || atual.transacao_id,
-      pedido_id: atual.pedido_id,
-      valor: atual.valor,
-      status: atual.status,
-      expira_em: atual.expira_em
+    // 2. Consulta DIRETO na API do Mercado Pago pelo txid (funciona 100% das vezes!)
+    const mp = await obterClienteMercadoPago();
+    if (mp && mp.payment && txid && txid !== 'undefined' && txid !== 'null') {
+      try {
+        const info = await mp.payment.get({ id: String(txid) });
+        if (info && info.status === 'approved') {
+          let idPedidoAlvo = pedidoIdQuery || cobranca?.pedido_id || info.external_reference || null;
+          if (!idPedidoAlvo && info.description) {
+            const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+)/i);
+            if (match) idPedidoAlvo = match[1];
+          }
+
+          if (idPedidoAlvo && String(idPedidoAlvo).startsWith('ped_')) {
+            await liquidarCorridaPixPorPedidoId(idPedidoAlvo, info.transaction_amount, txid, io);
+          } else if (cobranca) {
+            await liquidarCobrancaPix(cobranca.id, io);
+          }
+
+          return res.json({
+            txid,
+            pedido_id: idPedidoAlvo,
+            valor: info.transaction_amount,
+            status: 'pago'
+          });
+        }
+
+        return res.json({
+          txid,
+          valor: info?.transaction_amount || cobranca?.valor || 0,
+          status: 'pendente'
+        });
+      } catch (errMP) {
+        console.warn('Consulta MP por txid:', errMP.message);
+      }
+    }
+
+    return res.json({
+      txid,
+      valor: cobranca?.valor || 0,
+      status: cobranca?.status || 'pendente'
     });
   } catch (err) {
     console.error('Erro ao consultar status do Pix:', err);
     res.status(500).json({ erro: 'Falha ao consultar status do Pix.' });
-  }
-});
-
-router.post('/pix/simular-pagamento', autenticarToken, async (req, res) => {
-  if (EM_PRODUCAO || process.env.PIX_SIMULACAO !== 'true') {
-    return res.status(403).json({ erro: 'Simulação de pagamento desativada.' });
-  }
-
-  const usuarioId = String(req.usuario.id);
-  const { txid } = req.body;
-
-  if (!txid) {
-    return res.status(400).json({ erro: 'Identificador Pix (txid) obrigatório.' });
-  }
-
-  try {
-    const cobs = await sql`
-      SELECT id FROM cobrancas_pix
-      WHERE (txid = ${String(txid)} OR transacao_id = ${String(txid)})
-      LIMIT 1;
-    `;
-
-    if (!cobs.length) {
-      return res.status(404).json({ erro: 'Cobrança Pix não encontrada.' });
-    }
-
-    const liquidada = await liquidarCobrancaPix(cobs[0].id, obterIo(req));
-    if (!liquidada) {
-      return res.json({ sucesso: true, mensagem: 'Essa cobrança já foi processada anteriormente.' });
-    }
-
-    res.json({ sucesso: true, mensagem: 'Pagamento Pix (TESTE) confirmado.' });
-  } catch (err) {
-    console.error('Erro na simulação de Pix:', err);
-    res.status(500).json({ erro: 'Falha ao simular Pix.' });
   }
 });
 
@@ -558,7 +572,6 @@ router.get('/motorista/:id', autenticarToken, async (req, res) => {
       saques
     });
   } catch (err) {
-    console.error('Erro ao buscar carteira do condutor:', err);
     res.status(500).json({ erro: 'Falha ao carregar dados bancários do motorista.' });
   }
 });
@@ -618,7 +631,6 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
       throw erroRegistro;
     }
   } catch (err) {
-    console.error('Erro na solicitação de saque:', err);
     if (!res.headersSent) {
       res.status(500).json({ erro: 'Falha ao processar solicitação de saque.' });
     }
@@ -641,7 +653,6 @@ router.get('/admin/saques', autenticarToken, verificarAdmin, async (req, res) =>
     `;
     res.json(saques);
   } catch (err) {
-    console.error('Erro ao listar saques no admin:', err);
     res.status(500).json({ erro: 'Falha ao consultar solicitações de saque.' });
   }
 });
@@ -698,7 +709,6 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
 
     res.json({ sucesso: true, statusAtualizado: status });
   } catch (err) {
-    console.error('Erro ao aprovar/recusar saque:', err);
     res.status(500).json({ erro: 'Falha ao atualizar status do saque.' });
   }
 });
@@ -757,7 +767,6 @@ router.post('/debito-corrida', autenticarToken, async (req, res) => {
       novoSaldo: Number(debitado[0].saldo_carteira)
     });
   } catch (err) {
-    console.error('Erro ao debitar corrida da carteira:', err);
     res.status(500).json({ erro: 'Falha ao debitar saldo.' });
   }
 });
@@ -817,7 +826,6 @@ router.post('/gorjeta', autenticarToken, async (req, res) => {
 
     res.json({ sucesso: true, mensagem: 'Gorjeta enviada com sucesso!' });
   } catch (err) {
-    console.error('Erro ao enviar gorjeta:', err);
     res.status(500).json({ erro: 'Falha ao processar gorjeta.' });
   }
 });

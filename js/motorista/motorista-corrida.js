@@ -394,7 +394,7 @@ export function exibirQrCodePixMotorista(pix) {
   if (modalPix) modalPix.style.display = 'flex';
 
   const txid = pix.txid || pix.transacao_id;
-  const pedidoId = pix.pedido_id || estado.pedidoAtivo?.id;
+  const pedidoId = pix.pedido_id || estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id || '';
   let jaConfirmado = false;
 
   const limparMonitoramento = () => {
@@ -415,7 +415,6 @@ export function exibirQrCodePixMotorista(pix) {
 
     if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
 
-    // Mostra confirmação visual grande dentro do próprio modal por 1.8s antes de fechar
     if (lblValor) {
       lblValor.innerHTML = `<span style="color:#10B981;">✅ PIX CONFIRMADO! (+R$ ${repasseFmt})</span>`;
     }
@@ -428,19 +427,18 @@ export function exibirQrCodePixMotorista(pix) {
     }, 1500);
   };
 
-  // 1. Escuta confirmação em tempo real via Socket.IO
   const socketAtivo = estado.socket || estado.socketRadar;
   if (socketAtivo && pedidoId) {
     socketAtivo.once(`corrida_finalizada_${pedidoId}`, concluirAoConfirmarPix);
     socketAtivo.once(`pix_confirmado_${pedidoId}`, concluirAoConfirmarPix);
   }
 
-  // 2. Polling automático a cada 2.5 segundos consultando o status do Pix e da Corrida
   limparMonitoramento();
   intervalPollingPixMotorista = setInterval(async () => {
     try {
       if (txid) {
-        const res = await fetch(`${API_URL}/api/carteira/pix/status/${txid}?t=${Date.now()}`, {
+        const urlStatus = `${API_URL}/api/carteira/pix/status/${encodeURIComponent(txid)}?pedidoId=${encodeURIComponent(pedidoId)}&t=${Date.now()}`;
+        const res = await fetch(urlStatus, {
           cache: 'no-store',
           headers: obterHeaders()
         });
@@ -453,13 +451,13 @@ export function exibirQrCodePixMotorista(pix) {
         }
       }
       if (pedidoId) {
-        const resPed = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status?t=${Date.now()}`, {
+        const resPed = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(pedidoId)}/status?t=${Date.now()}`, {
           cache: 'no-store',
           headers: obterHeaders()
         });
         if (resPed.ok) {
           const p = await resPed.json();
-          if (p.status === 'concluido') {
+          if (String(p.status).toLowerCase() === 'concluido') {
             await concluirAoConfirmarPix();
           }
         }
