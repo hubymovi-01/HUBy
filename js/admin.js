@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Sincronizado com Faturamento, Gráficos e Saque em Lote)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Com Controle de Validade CNH/CRLV e Saque em Lote)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -36,7 +36,54 @@ function notificarAdmin(mensagem, tipo = 'sucesso') {
     toast.style.transform = 'translateX(20px)';
     toast.style.transition = 'all 0.25s ease';
     setTimeout(() => toast.remove(), 260);
-  }, 3600);
+  }, 4200);
+}
+
+// ============================================================================
+// CÁLCULO DE VENCIMENTO DE CNH / CRLV (ALERTA EM 30 DIAS OU VENCIDO)
+// ============================================================================
+function avaliarValidadeDocumento(dataStr, sigla) {
+  if (!dataStr) {
+    return {
+      status: 'sem_data',
+      html: `<span style="display:inline-block; font-size:10px; color:#94A3B8; background:rgba(255,255,255,0.06); padding:2px 6px; border-radius:6px;">${sigla}: Sem data</span>`
+    };
+  }
+
+  const partes = String(dataStr).slice(0, 10).split('-');
+  if (partes.length !== 3) {
+    return { status: 'sem_data', html: '' };
+  }
+
+  const dtValidade = new Date(Number(partes[0]), Number(partes[1]) - 1, Number(partes[2]), 23, 59, 59);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  const diffMs = dtValidade.getTime() - hoje.getTime();
+  const diasRestantes = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  const dataBR = `${partes[2]}/${partes[1]}/${partes[0]}`;
+
+  if (diasRestantes < 0) {
+    return {
+      status: 'vencido',
+      dias: diasRestantes,
+      html: `<span title="Venceu em ${dataBR}" style="display:inline-block; font-size:10px; font-weight:800; color:#FCA5A5; background:rgba(239,68,68,0.22); border:1px solid rgba(239,68,68,0.45); padding:2px 6px; border-radius:6px;">🚨 ${sigla} VENCIDO (${dataBR})</span>`
+    };
+  }
+
+  if (diasRestantes <= 30) {
+    return {
+      status: 'alerta',
+      dias: diasRestantes,
+      html: `<span title="Vence em ${dataBR}" style="display:inline-block; font-size:10px; font-weight:800; color:#FCD34D; background:rgba(245,158,11,0.2); border:1px solid rgba(245,158,11,0.45); padding:2px 6px; border-radius:6px;">⚠️ ${sigla}: ${diasRestantes}d (${dataBR})</span>`
+    };
+  }
+
+  return {
+    status: 'ok',
+    dias: diasRestantes,
+    html: `<span title="Válido até ${dataBR}" style="display:inline-block; font-size:10px; font-weight:700; color:#6EE7B7; background:rgba(16,185,129,0.12); padding:2px 6px; border-radius:6px;">✅ ${sigla}: ${dataBR}</span>`
+  };
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -90,7 +137,7 @@ async function sincronizarTudo(token) {
   const periodoAtual = document.getElementById('selectFiltroPeriodo')?.value || 'total';
 
   await carregarTarifasConfig(token);
-  await carregarTabelaFrota(token);
+  await carregarTabelaFrota(token, true);
   await carregarTabelaViagens(token);
   await carregarMetricasECards(token, periodoAtual);
   await carregarDadosSocios(token);
@@ -508,9 +555,9 @@ window.excluirItemMarketplace = async (id) => {
 };
 
 // ============================================================================
-// 4. GESTÃO DE FROTA E DOCUMENTOS
+// 4. GESTÃO DE FROTA, DOCUMENTOS E ALERTA DE VALIDADE (CNH / CRLV)
 // ============================================================================
-async function carregarTabelaFrota(token) {
+async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
   const tbody = document.getElementById('tabelaFrotaBody');
   if (!tbody) return;
 
@@ -532,6 +579,9 @@ async function carregarTabelaFrota(token) {
 
     window._ultimoSaldoAcumuladoFrota = motoristas.reduce((acc, m) => acc + Number(m.saldo_carteira || 0), 0);
 
+    let qtdVencidos = 0;
+    let qtdVencendoEmBreve = 0;
+
     tbody.innerHTML = motoristas.map(m => {
       const statusLimpo = m.status_aprovacao || 'pendente';
       const badgeStatus = {
@@ -543,6 +593,12 @@ async function carregarTabelaFrota(token) {
 
       const nomeSeguro = escaparHTML(m.nome);
       const idSeguro = escaparHTML(m.id);
+
+      const valCnh = avaliarValidadeDocumento(m.cnh_validade, 'CNH');
+      const valCrlv = avaliarValidadeDocumento(m.crlv_validade, 'CRLV');
+
+      if (valCnh.status === 'vencido' || valCrlv.status === 'vencido') qtdVencidos++;
+      else if (valCnh.status === 'alerta' || valCrlv.status === 'alerta') qtdVencendoEmBreve++;
 
       return `
         <tr>
@@ -558,10 +614,16 @@ async function carregarTabelaFrota(token) {
           <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
           <td><span class="badge ${badgeStatus}">${escaparHTML(statusLimpo.toUpperCase())}</span></td>
           <td>
-            <div style="display:flex; gap:4px; flex-wrap:wrap;">
-              ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_crlv_url)}', 'CRLV do Veículo - ${nomeSeguro}', '${idSeguro}')">CRLV</button>` : ''}
-              ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_cnh_url)}', 'CNH - ${nomeSeguro}', '${idSeguro}')">CNH</button>` : ''}
-              ${!m.doc_crlv_url && !m.doc_cnh_url ? '<small style="color:var(--muted);">Sem doc</small>' : ''}
+            <div style="display:flex; flex-direction:column; gap:4px;">
+              <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_crlv_url)}', 'CRLV do Veículo - ${nomeSeguro}', '${idSeguro}')">CRLV</button>` : ''}
+                ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_cnh_url)}', 'CNH - ${nomeSeguro}', '${idSeguro}')">CNH</button>` : ''}
+                <button class="btn-tbl alt" title="Editar datas de validade" onclick="editarValidadeDocumentos('${idSeguro}', '${escaparHTML(m.cnh_validade || '')}', '${escaparHTML(m.crlv_validade || '')}')">📅 Validades</button>
+              </div>
+              <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                ${valCnh.html}
+                ${valCrlv.html}
+              </div>
             </div>
           </td>
           <td>
@@ -579,10 +641,60 @@ async function carregarTabelaFrota(token) {
         </tr>
       `;
     }).join('');
+
+    // Atualiza badge na aba de Condutores se houver documentos vencidos ou perto de vencer
+    const tabBtnFrota = document.querySelector('[data-tab="tabFrota"]');
+    if (tabBtnFrota) {
+      const totalCriticos = qtdVencidos + qtdVencendoEmBreve;
+      tabBtnFrota.innerHTML = totalCriticos > 0
+        ? `🚗 Condutores <span style="background:${qtdVencidos > 0 ? '#EF4444' : '#F59E0B'}; color:#000; font-weight:900; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px;">${totalCriticos}</span>`
+        : '🚗 Condutores';
+    }
+
+    if (emitirAlertaVencimento) {
+      if (qtdVencidos > 0) {
+        notificarAdmin(`🚨 Atenção: ${qtdVencidos} condutor(es) com CNH ou CRLV VENCIDO! Verifique a aba Condutores.`, 'erro');
+      } else if (qtdVencendoEmBreve > 0) {
+        notificarAdmin(`⚠️ Aviso: ${qtdVencendoEmBreve} condutor(es) com documento vencendo nos próximos 30 dias.`, 'aviso');
+      }
+    }
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhum parceiro cadastrado.</td></tr>';
   }
 }
+
+window.editarValidadeDocumentos = async (motoristaId, cnhAtual, crlvAtual) => {
+  const token = localStorage.getItem('huby_token');
+  const novaCnh = prompt('Validade da CNH (formato AAAA-MM-DD):', cnhAtual || '2028-12-31');
+  if (novaCnh === null) return;
+
+  const novoCrlv = prompt('Validade do CRLV (formato AAAA-MM-DD):', crlvAtual || '2027-10-31');
+  if (novoCrlv === null) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/motoristas/${motoristaId}/validade-documentos`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        cnh_validade: novaCnh.trim() || null,
+        crlv_validade: novoCrlv.trim() || null
+      })
+    });
+
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.erro || 'Erro ao salvar datas.');
+    }
+
+    notificarAdmin('Datas de validade da CNH e CRLV atualizadas!', 'sucesso');
+    await carregarTabelaFrota(token, false);
+  } catch (err) {
+    notificarAdmin(err.message, 'erro');
+  }
+};
 
 // 5. Zonas de Risco
 async function carregarTabelaZonasRisco(token) {
@@ -779,7 +891,7 @@ function configurarBotaoSaqueLote(token) {
 
       notificarAdmin(data.mensagem || 'Lote de saques liquidado com sucesso!', 'sucesso');
       await carregarTabelaSaques(token);
-      await carregarTabelaFrota(token);
+      await carregarTabelaFrota(token, false);
       await carregarMetricasECards(token);
     } catch (err) {
       notificarAdmin(err.message, 'erro');
@@ -1155,6 +1267,7 @@ function configurarNavegacaoAbas() {
         if (tabAlvoId === 'tabViagens') carregarTabelaViagens(token);
         if (tabAlvoId === 'tabConfig') carregarTarifasConfig(token);
         if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token);
+        if (tabAlvoId === 'tabFrota') carregarTabelaFrota(token, false);
 
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
@@ -1179,7 +1292,7 @@ function conectarSocketAdmin() {
     const token = localStorage.getItem('huby_token');
     const periodo = document.getElementById('selectFiltroPeriodo')?.value || 'total';
     await carregarTabelaViagens(token);
-    await carregarTabelaFrota(token);
+    await carregarTabelaFrota(token, false);
     await carregarMetricasECards(token, periodo);
     await carregarDadosSocios(token);
   });
@@ -1188,13 +1301,13 @@ function conectarSocketAdmin() {
     const token = localStorage.getItem('huby_token');
     notificarAdmin(`💸 Novo saque solicitado por ${dados.motorista_nome || 'Condutor'}: R$ ${Number(dados.valor || 0).toFixed(2).replace('.', ',')}`, 'aviso');
     await carregarTabelaSaques(token);
-    await carregarTabelaFrota(token);
+    await carregarTabelaFrota(token, false);
   });
 
   socket.on('saque_atualizado', async () => {
     const token = localStorage.getItem('huby_token');
     await carregarTabelaSaques(token);
-    await carregarTabelaFrota(token);
+    await carregarTabelaFrota(token, false);
   });
 
   socket.on('tarifas_atualizadas', (novasTarifas) => {
@@ -1264,13 +1377,12 @@ window.alterarStatusCondutor = async (id, acao) => {
     });
     if (res.ok) {
       notificarAdmin(acao === 'aprovar' ? 'Condutor aprovado e liberado!' : 'Condutor recusado/bloqueado.', acao === 'aprovar' ? 'sucesso' : 'aviso');
-      await carregarTabelaFrota(token);
+      await carregarTabelaFrota(token, false);
       await carregarMetricasECards(token);
     }
   } catch (e) {}
 };
 
-// Disparo Pix sem popup bloqueante para "pago"
 window.processarSaqueMaster = async (id, status) => {
   const token = localStorage.getItem('huby_token');
   let motivo = '';
@@ -1295,7 +1407,7 @@ window.processarSaqueMaster = async (id, status) => {
 
     notificarAdmin(data.mensagem || (status === 'pago' ? '⚡ Saque Pix liquidado!' : 'Saque recusado e valor estornado.'), status === 'pago' ? 'sucesso' : 'aviso');
     await carregarTabelaSaques(token);
-    await carregarTabelaFrota(token);
+    await carregarTabelaFrota(token, false);
     await carregarMetricasECards(token);
   } catch (e) {
     notificarAdmin(e.message, 'erro');

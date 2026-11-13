@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas, Frota, DRE dos Sócios, Saque Blindado e Gestão Master HUBy
+// routes/admin.routes.js - Métricas, Frota, Controle de Validade CNH/CRLV, DRE dos Sócios e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -212,6 +212,9 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
 
 async function inicializarTabelasAdmin() {
   try {
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+
     await sql`
       CREATE TABLE IF NOT EXISTS zonas_risco (
         id SERIAL PRIMARY KEY,
@@ -320,12 +323,18 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 3. GESTÃO DE MOTORISTAS & FROTA
+  // 3. GESTÃO DE MOTORISTAS & CONTROLE DE VALIDADE CNH / CRLV
   // =========================================================================
   router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+
       const motoristas = await sql`
-        SELECT id, nome, email, telefone, cnh_numero AS cnh, 
+        SELECT id, nome, email, telefone, cnh_numero AS cnh,
+               to_char(cnh_validade, 'YYYY-MM-DD') AS cnh_validade,
+               to_char(crlv_validade, 'YYYY-MM-DD') AS crlv_validade,
                categoria AS categoria_veiculo, veiculo_modelo, veiculo_placa,
                veiculo_cor, veiculo_ano, doc_cnh_url, doc_crlv_url, foto_perfil_url,
                saldo_carteira, status_aprovacao, status_online,
@@ -337,6 +346,31 @@ export default function adminRoutes(io) {
     } catch (err) {
       console.error('Erro ao consultar motoristas:', err);
       res.status(500).json({ erro: 'Falha ao obter lista de parceiros.' });
+    }
+  });
+
+  // Atualiza datas de validade da CNH e do CRLV pelo Painel Admin
+  router.put('/motoristas/:id/validade-documentos', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const cnhVal = req.body.cnh_validade ? String(req.body.cnh_validade).slice(0, 10) : null;
+      const crlvVal = req.body.crlv_validade ? String(req.body.crlv_validade).slice(0, 10) : null;
+
+      const atualizado = await sql`
+        UPDATE motoristas
+        SET cnh_validade = ${cnhVal},
+            crlv_validade = ${crlvVal}
+        WHERE id::text = ${String(id)}::text
+        RETURNING id, nome, to_char(cnh_validade, 'YYYY-MM-DD') AS cnh_validade, to_char(crlv_validade, 'YYYY-MM-DD') AS crlv_validade;
+      `;
+
+      if (!atualizado.length) {
+        return res.status(404).json({ erro: 'Motorista não encontrado.' });
+      }
+
+      res.json({ sucesso: true, motorista: atualizado[0] });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao atualizar validade dos documentos.' });
     }
   });
 

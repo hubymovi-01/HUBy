@@ -1,4 +1,4 @@
-// routes/auth.routes.js - Cadastro com Verificação OTP, Aceite LGPD, Login e Perfil HUBy
+// routes/auth.routes.js - Cadastro com Verificação OTP, Aceite LGPD, Validade CNH/CRLV, Login e Perfil HUBy
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -20,6 +20,8 @@ async function garantirEstruturaAuthSeguranca() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS termos_aceitos_em TIMESTAMP WITH TIME ZONE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS versao_termos VARCHAR(20) DEFAULT '1.0';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS telefone_verificado BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS codigos_verificacao (
@@ -33,7 +35,7 @@ async function garantirEstruturaAuthSeguranca() {
       );
     `;
   } catch (err) {
-    console.warn('Aviso ao sincronizar colunas LGPD/OTP:', err.message);
+    console.warn('Aviso ao sincronizar colunas LGPD/OTP/Validade:', err.message);
   }
 }
 garantirEstruturaAuthSeguranca();
@@ -141,7 +143,6 @@ router.post('/enviar-codigo', async (req, res) => {
       return res.status(400).json({ erro: 'Informe um número de WhatsApp/Telefone válido com DDD.' });
     }
 
-    // Limite anti-spam: máximo 3 códigos nos últimos 10 minutos para o mesmo número
     const recentes = await sql`
       SELECT COUNT(*)::int AS qtd FROM codigos_verificacao
       WHERE telefone = ${telLimpo}
@@ -164,7 +165,6 @@ router.post('/enviar-codigo', async (req, res) => {
     return res.json({
       sucesso: true,
       enviadoViaWhatsApp: envio.enviadoReal,
-      // Quando a API externa de WhatsApp ainda não estiver configurada no .env, retorna o código para validação imediata
       codigoTeste: envio.enviadoReal ? undefined : codigo,
       mensagem: envio.enviadoReal
         ? 'Código de 6 dígitos enviado para o seu WhatsApp!'
@@ -221,7 +221,7 @@ router.post('/verificar-codigo', async (req, res) => {
 });
 
 // ============================================================================
-// CADASTRO (COM ACEITE LGPD E VERIFICAÇÃO DE TELEFONE)
+// CADASTRO (COM ACEITE LGPD, VERIFICAÇÃO OTP E VALIDADE CNH/CRLV)
 // ============================================================================
 router.post('/cadastro', async (req, res) => {
   try {
@@ -231,7 +231,8 @@ router.post('/cadastro', async (req, res) => {
       nome, email, telefone, cpf, senha, role,
       aceitouTermos, versaoTermos,
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
-      cnh, categoria, categoria_veiculo,
+      cnh, cnh_validade, crlv_validade,
+      categoria, categoria_veiculo,
       veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
       doc_cnh_url, doc_crlv_url
     } = req.body;
@@ -257,7 +258,6 @@ router.post('/cadastro', async (req, res) => {
       return res.status(400).json({ erro: 'Número de CPF inválido.' });
     }
 
-    // Confirma se o telefone foi validado via OTP
     let telVerificado = false;
     if (telLimpo) {
       const checkOtp = await sql`
@@ -280,6 +280,9 @@ router.post('/cadastro', async (req, res) => {
       if (!validarNumeroCNH(cnhLimpa)) {
         return res.status(400).json({ erro: 'Informe um número de CNH válido com 11 dígitos.' });
       }
+
+      const cnhValSql = cnh_validade ? String(cnh_validade).slice(0, 10) : null;
+      const crlvValSql = crlv_validade ? String(crlv_validade).slice(0, 10) : null;
 
       const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const modeloLimpo = String(veiculo_modelo).trim().slice(0, 100);
@@ -305,13 +308,15 @@ router.post('/cadastro', async (req, res) => {
         const resultado = await sql`
           INSERT INTO motoristas (
             id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
-            cnh_numero, categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+            cnh_numero, cnh_validade, crlv_validade,
+            categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
             saldo_carteira, status_aprovacao, avaliacao_media, total_corridas,
             doc_cnh_url, doc_crlv_url, termos_aceitos_em, versao_termos, telefone_verificado
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
             ${dataNascSql}, ${senhaHash},
-            ${cnhLimpa}, ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
+            ${cnhLimpa}, ${cnhValSql}, ${crlvValSql},
+            ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
             0.00, ${statusInicial}, 5.00, 0,
             ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
           )

@@ -157,9 +157,15 @@
           <h4 style="margin-bottom: 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do
             Veículo e CNH</h4>
 
-          <div class="input-group">
-            <label>Nº da CNH (11 dígitos)</label>
-            <input type="tel" id="cadCNH" placeholder="Digite os 11 dígitos da CNH" maxlength="11">
+          <div style="display: flex; gap: 8px;">
+            <div class="input-group" style="flex: 1.4;">
+              <label>Nº da CNH (11 dígitos)</label>
+              <input type="tel" id="cadCNH" placeholder="00000000000" maxlength="11">
+            </div>
+            <div class="input-group" style="flex: 1;">
+              <label>Validade CNH</label>
+              <input type="date" id="cadCnhValidade">
+            </div>
           </div>
 
           <div class="input-group">
@@ -191,6 +197,11 @@
               <label>Ano</label>
               <input type="number" id="cadAno" placeholder="2022" min="1990" max="2027">
             </div>
+          </div>
+
+          <div class="input-group">
+            <label>Validade do Licenciamento (CRLV)</label>
+            <input type="date" id="cadCrlvValidade">
           </div>
 
           <div class="upload-group">
@@ -267,7 +278,6 @@
     btnCliente.addEventListener('click', () => alternarPerfil('cliente'));
     btnMotorista.addEventListener('click', () => alternarPerfil('motorista'));
 
-    // MÁSCARA CPF
     const inputCpf = document.getElementById('cadCPF');
     inputCpf.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
@@ -303,7 +313,6 @@
       }
     });
 
-    // ENVIO DE CÓDIGO OTP
     btnEnviarOTP.addEventListener('click', async () => {
       esconderAlerta();
       const telLimpo = inputTel.value.replace(/\D/g, '');
@@ -338,7 +347,6 @@
       }
     });
 
-    // VALIDAÇÃO DE CÓDIGO OTP
     btnConfirmarOTP.addEventListener('click', async () => {
       esconderAlerta();
       const telLimpo = inputTel.value.replace(/\D/g, '');
@@ -457,6 +465,8 @@
       if (roleAtual === 'motorista') {
         payload.cnh = document.getElementById('cadCNH').value.replace(/\D/g, '');
         payload.cnh_numero = payload.cnh;
+        payload.cnh_validade = document.getElementById('cadCnhValidade').value || null;
+        payload.crlv_validade = document.getElementById('cadCrlvValidade').value || null;
         payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
         payload.categoria = payload.categoria_veiculo;
         payload.veiculo_modelo = document.getElementById('cadModelo').value.trim();
@@ -468,6 +478,10 @@
 
         if (!payload.cnh || !payload.veiculo_modelo || !payload.veiculo_placa) {
           exibirAlerta('Preencha os dados da CNH, Modelo e Placa do veículo.', 'error');
+          return;
+        }
+        if (!payload.cnh_validade || !payload.crlv_validade) {
+          exibirAlerta('Informe a data de validade da CNH e do CRLV do veículo.', 'error');
           return;
         }
       }
