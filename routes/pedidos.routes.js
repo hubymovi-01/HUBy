@@ -345,6 +345,40 @@ export default function pedidosRouter(io) {
       return res.status(500).json({ erro: 'Erro interno ao consultar dados da viagem.' });
     }
   });
+  // =========================================================================
+  // 5.1 RECIBO COMPLETO DA CORRIDA PARA O PASSAGEIRO (COMPARTILHÁVEL)
+  // =========================================================================
+  router.get('/recibo/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const pedidos = await sql`
+        SELECT 
+          p.id, p.status, p.tipo, p.sub_tipo_label,
+          p.origem_endereco, p.destino_endereco,
+          p.distancia_km, p.duracao_min,
+          p.valor_total, p.forma_pagamento, p.metodo_pgto,
+          p.criado_em, p.embarque_em, p.concluido_em,
+          COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
+          COALESCE(m.veiculo_modelo, p.motorista_veiculo) AS motorista_veiculo,
+          COALESCE(m.veiculo_placa, p.motorista_placa) AS motorista_placa,
+          m.veiculo_cor,
+          m.foto_perfil_url AS motorista_foto
+        FROM pedidos p
+        LEFT JOIN motoristas m ON p.motorista_id::text = m.id::text
+        WHERE p.id::text = ${String(id)}::text
+        LIMIT 1;
+      `;
+
+      if (pedidos.length === 0) {
+        return res.status(404).json({ erro: 'Recibo de viagem não encontrado.' });
+      }
+
+      return res.json(pedidos[0]);
+    } catch (err) {
+      return res.status(500).json({ erro: 'Falha ao gerar recibo da viagem.' });
+    }
+  });
 
   // =========================================================================
   // 6. STATUS DA VIAGEM (CONSULTA, CHEGADA NO LOCAL, EMBARQUE E CHAT)
