@@ -1,5 +1,5 @@
-// routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques HUBy
-// VERSÃO BLINDADA: Consulta direta na API do Mercado Pago com fallback por pedidoId
+// routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques Automáticos HUBy
+// VERSÃO BLINDADA: Consulta direta na API do Mercado Pago + Cash-Out Pix Automático e em Lote
 import express from 'express';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
@@ -66,7 +66,7 @@ async function buscarMotoristaAutorizado(req, res, idParam, { somenteDono = fals
 }
 
 // ============================================================================
-// 0. MIGRAÇÃO COMPLETA DE TODAS AS COLUNAS DE CARTEIRA E PIX
+// 0. MIGRAÇÃO COMPLETA DE TODAS AS COLUNAS DE CARTEIRA, PIX E SAQUES
 // ============================================================================
 export async function garantirEstruturaCobrancasPix() {
   try {
@@ -106,7 +106,23 @@ export async function garantirEstruturaCobrancasPix() {
       );
     `;
 
-    // Garante que tabelas antigas recebam todas as colunas novas sem quebrar INSERT
+    await sql`
+      CREATE TABLE IF NOT EXISTS saques_motoristas (
+        id SERIAL PRIMARY KEY,
+        motorista_id TEXT NOT NULL,
+        motorista_nome TEXT,
+        chave_pix TEXT NOT NULL,
+        tipo_chave TEXT DEFAULT 'cpf',
+        valor NUMERIC(10,2) NOT NULL,
+        status TEXT DEFAULT 'pendente',
+        comprovante_url TEXT,
+        motivo_recusa TEXT,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        solicitado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        pago_em TIMESTAMP WITH TIME ZONE
+      );
+    `;
+
     await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS transacao_id VARCHAR(64);`;
     await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS txid VARCHAR(64);`;
     await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS pedido_id TEXT;`;
@@ -118,8 +134,13 @@ export async function garantirEstruturaCobrancasPix() {
     await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS pix_copia_cola TEXT;`;
     await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS expira_em TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '15 minutes');`;
     await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`;
+
+    await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS comprovante_url TEXT;`;
+    await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS motivo_recusa TEXT;`;
+    await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS solicitado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`;
+    await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS pago_em TIMESTAMP WITH TIME ZONE;`;
   } catch (err) {
-    console.warn('Aviso na migração cobrancas_pix:', err.message);
+    console.warn('Aviso na migração cobrancas_pix / saques:', err.message);
   }
 }
 garantirEstruturaCobrancasPix();
@@ -149,13 +170,89 @@ export async function obterClienteMercadoPago() {
 }
 
 // ============================================================================
+// MOTOR DE TRANSFERÊNCIA PIX AUTOMÁTICA (CASH-OUT API MERCADO PAGO)
+// ============================================================================
+function normalizarTipoChaveMP(tipo, chave) {
+  const t = String(tipo || '').toLowerCase().trim();
+  const c = String(chave || '').trim();
+
+  if (t === 'email' || c.includes('@')) return { type: 'EMAIL', value: c };
+  if (t === 'aleatoria' || t === 'evp' || (c.includes('-') && c.length >= 32)) return { type: 'EVP', value: c };
+
+  const apenasNumeros = c.replace(/\D/g, '');
+  if (t === 'telefone' || t === 'celular') {
+    const fone = apenasNumeros.startsWith('55') ? `+${apenasNumeros}` : `+55${apenasNumeros}`;
+    return { type: 'PHONE', value: fone };
+  }
+  if (apenasNumeros.length === 14) {
+    return { type: 'CNPJ', value: apenasNumeros };
+  }
+  return { type: 'CPF', value: apenasNumeros };
+}
+
+export async function executarTransferenciaPixMercadoPago({ saqueId, valor, chavePix, tipoChave, motoristaNome }) {
+  const mp = await obterClienteMercadoPago();
+  if (!mp || !mp.accessToken) {
+    return { enviado: false, motivo: 'Access Token do Mercado Pago não configurado.' };
+  }
+
+  const destino = normalizarTipoChaveMP(tipoChave, chavePix);
+  const idempotencyKey = `huby_saque_${saqueId}_${Date.now()}`;
+
+  try {
+    const resp = await fetch('https://api.mercadopago.com/v1/transaction-intents/process', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mp.accessToken}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': idempotencyKey
+      },
+      body: JSON.stringify({
+        external_reference: `saque_${saqueId}`,
+        point_of_interaction: {
+          type: 'PIX_TRANSFER'
+        },
+        transaction: {
+          from: { accounts: [{ amount: Number(valor) }] },
+          to: {
+            accounts: [{
+              amount: Number(valor),
+              chave_pix: destino.value,
+              pix_key_type: destino.type,
+              owner: { name: motoristaNome || 'Motorista Parceiro' }
+            }]
+          },
+          total_amount: Number(valor)
+        }
+      })
+    });
+
+    const dados = await resp.json().catch(() => ({}));
+
+    if (resp.ok && (dados.id || dados.status === 'approved' || dados.status === 'processing' || dados.status === 'created')) {
+      return {
+        enviado: true,
+        comprovanteId: String(dados.id || idempotencyKey),
+        statusMP: dados.status || 'approved'
+      };
+    }
+
+    return {
+      enviado: false,
+      motivo: dados.message || dados.error || `API MP status ${resp.status} (Payouts Pix requer liberação na conta MP).`
+    };
+  } catch (err) {
+    return { enviado: false, motivo: err.message };
+  }
+}
+
+// ============================================================================
 // FUNÇÃO CENTRAL E IDEMPOTENTE QUE LIQUIDA O PEDIDO E CREDITA OS 85% DO MOTORISTA
 // ============================================================================
 export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid, io) {
   if (!pedidoId) return null;
   const idLimpo = String(pedidoId).trim();
 
-  // Trava atômica: só atualiza e credita se o pedido AINDA NÃO estiver 'concluido'
   const pedidosAtualizados = await sql`
     UPDATE pedidos
     SET status = 'concluido',
@@ -177,7 +274,6 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
     } catch (e) {}
   }
 
-  // Se já estava concluído antes, apenas busca os dados atuais para avisar o frontend sem duplicar saldo
   if (!pedidosAtualizados.length) {
     const jaConcluido = await sql`SELECT id, motorista_id, valor_total, status FROM pedidos WHERE id::text = ${idLimpo} LIMIT 1;`;
     if (jaConcluido.length && String(jaConcluido[0].status).toLowerCase() === 'concluido') {
@@ -432,7 +528,7 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// WEBHOOK DO MERCADO PAGO (Extrai o pedidoId mesmo se não achar em cobrancas_pix!)
+// WEBHOOK DO MERCADO PAGO
 // ============================================================================
 router.post('/webhook/mercadopago', async (req, res) => {
   try {
@@ -445,7 +541,6 @@ router.post('/webhook/mercadopago', async (req, res) => {
     const info = await mp.payment.get({ id: paymentId });
     if (info.status === 'approved') {
       const io = obterIo(req);
-      // Tenta extrair o pedidoId do external_reference ou da descrição "HUBy - Corrida #ped_..."
       let pedidoIdExtraido = info.external_reference || null;
       if (!pedidoIdExtraido && info.description) {
         const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+)/i);
@@ -474,8 +569,7 @@ router.post('/webhook/mercadopago', async (req, res) => {
 });
 
 // ============================================================================
-// CONSULTA DE STATUS DO PIX EM TEMPO REAL (Consulta DIRETO no Mercado Pago!)
-// Não falha com 404 mesmo que a linha não tenha sido gravada em cobrancas_pix!
+// CONSULTA DE STATUS DO PIX EM TEMPO REAL
 // ============================================================================
 router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -484,7 +578,6 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
     const pedidoIdQuery = req.query.pedidoId ? String(req.query.pedidoId).trim() : null;
     const io = obterIo(req);
 
-    // 1. Procura na tabela cobrancas_pix (se existir)
     let cobranca = null;
     try {
       const cobrancas = await sql`
@@ -502,7 +595,6 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
       return res.json({ txid, status: 'pago', valor: cobranca.valor });
     }
 
-    // 2. Consulta DIRETO na API do Mercado Pago pelo txid (funciona 100% das vezes!)
     const mp = await obterClienteMercadoPago();
     if (mp && mp.payment && txid && txid !== 'undefined' && txid !== 'null') {
       try {
@@ -550,7 +642,7 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 3. CARTEIRA E SAQUES DO MOTORISTA
+// 3. CARTEIRA E SAQUES DO MOTORISTA (COM TRANSFERÊNCIA PIX AUTOMÁTICA!)
 // ============================================================================
 router.get('/motorista/:id', autenticarToken, async (req, res) => {
   try {
@@ -558,7 +650,7 @@ router.get('/motorista/:id', autenticarToken, async (req, res) => {
     if (!mot) return;
 
     const saques = await sql`
-      SELECT id, valor, chave_pix, tipo_chave, status, criado_em, pago_em, motivo_recusa
+      SELECT id, valor, chave_pix, tipo_chave, status, criado_em, pago_em, motivo_recusa, comprovante_url
       FROM saques_motoristas
       WHERE motorista_id::text = ${String(mot.id)}::text
       ORDER BY criado_em DESC
@@ -579,7 +671,7 @@ router.get('/motorista/:id', autenticarToken, async (req, res) => {
 router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
   const valorNum = lerValor(req.body.valor);
   const chavePix = String(req.body.chave_pix || '').trim();
-  const tipoChave = String(req.body.tipo_chave || 'pix').trim().slice(0, 20);
+  const tipoChave = String(req.body.tipo_chave || 'cpf').trim().slice(0, 20);
 
   if (!valorNum || valorNum <= 0) {
     return res.status(400).json({ erro: 'Informe um valor de saque válido.' });
@@ -615,16 +707,61 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
         RETURNING id;
       `;
 
+      const saqueId = saque[0].id;
+
       await sql`
         INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
-        VALUES (${mot.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${String(saque[0].id)});
+        VALUES (${mot.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${String(saqueId)});
       `;
+
+      // Tenta executar o Cash-Out Pix automático na hora pela API do Mercado Pago
+      const resultadoAuto = await executarTransferenciaPixMercadoPago({
+        saqueId,
+        valor: valorNum,
+        chavePix,
+        tipoChave,
+        motoristaNome: mot.nome
+      });
+
+      const io = obterIo(req);
+
+      if (resultadoAuto.enviado) {
+        await sql`
+          UPDATE saques_motoristas
+          SET status = 'pago',
+              comprovante_url = ${resultadoAuto.comprovanteId},
+              pago_em = CURRENT_TIMESTAMP
+          WHERE id = ${saqueId};
+        `;
+
+        if (io) {
+          io.emit('saque_atualizado', { saqueId, status: 'pago', valor: valorNum, motorista: mot.nome });
+        }
+
+        return res.json({
+          sucesso: true,
+          pagoAutomatico: true,
+          mensagem: `⚡ Pix de R$ ${paraReais(valorNum)} enviado automaticamente para sua chave ${chavePix}!`,
+          novoSaldo,
+          saqueId
+        });
+      }
+
+      if (io) {
+        io.emit('novo_saque_solicitado', {
+          saqueId,
+          motorista_nome: mot.nome,
+          valor: valorNum,
+          chave_pix: chavePix
+        });
+      }
 
       return res.json({
         sucesso: true,
-        mensagem: `Solicitação de saque de R$ ${paraReais(valorNum)} enviada para a administração!`,
+        pagoAutomatico: false,
+        mensagem: `Solicitação de saque de R$ ${paraReais(valorNum)} registrada e enviada para a fila de disparo!`,
         novoSaldo,
-        saqueId: saque[0].id
+        saqueId
       });
     } catch (erroRegistro) {
       await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira + ${valorNum} WHERE id = ${mot.id};`;
@@ -638,18 +775,19 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 4. PAINEL DO ADMINISTRADOR: APROVAÇÃO E GESTÃO FINANCEIRA
+// 4. PAINEL DO ADMINISTRADOR: LIQUIDAÇÃO INDIVIDUAL E EM LOTE (50+ MOTORISTAS)
 // ============================================================================
 router.get('/admin/saques', autenticarToken, verificarAdmin, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   try {
     const saques = await sql`
       SELECT id, motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status,
-             COALESCE(criado_em, solicitado_em) AS criado_em, pago_em, motivo_recusa
+             COALESCE(criado_em, solicitado_em) AS criado_em, pago_em, motivo_recusa, comprovante_url
       FROM saques_motoristas
       ORDER BY
         CASE WHEN status = 'pendente' THEN 1 ELSE 2 END,
         COALESCE(criado_em, solicitado_em) DESC
-      LIMIT 50;
+      LIMIT 100;
     `;
     res.json(saques);
   } catch (err) {
@@ -657,6 +795,76 @@ router.get('/admin/saques', autenticarToken, verificarAdmin, async (req, res) =>
   }
 });
 
+// ROTA DE PAGAMENTO EM LOTE: Dispara e liquida TODOS os saques pendentes com 1 único clique
+router.post('/admin/saques/pagar-lote', autenticarToken, verificarAdmin, async (req, res) => {
+  try {
+    const pendentes = await sql`
+      SELECT * FROM saques_motoristas
+      WHERE status = 'pendente'
+      ORDER BY id ASC
+      LIMIT 100;
+    `;
+
+    if (!pendentes.length) {
+      return res.json({
+        sucesso: true,
+        processados: 0,
+        enviadosViaApiMP: 0,
+        mensagem: 'Não há saques pendentes na fila no momento.'
+      });
+    }
+
+    let enviadosApi = 0;
+    let marcadosPagos = 0;
+    let ultimoAvisoApi = '';
+
+    for (const s of pendentes) {
+      const disp = await executarTransferenciaPixMercadoPago({
+        saqueId: s.id,
+        valor: s.valor,
+        chavePix: s.chave_pix,
+        tipoChave: s.tipo_chave,
+        motoristaNome: s.motorista_nome
+      });
+
+      if (disp.enviado) {
+        enviadosApi++;
+      } else {
+        ultimoAvisoApi = disp.motivo;
+      }
+
+      const upd = await sql`
+        UPDATE saques_motoristas
+        SET status = 'pago',
+            comprovante_url = ${disp.comprovanteId || 'lote_admin'},
+            pago_em = CURRENT_TIMESTAMP
+        WHERE id = ${s.id} AND status = 'pendente'
+        RETURNING id;
+      `;
+      if (upd.length) marcadosPagos++;
+    }
+
+    const io = obterIo(req);
+    if (io) {
+      io.emit('saque_atualizado', { lote: true, total: marcadosPagos });
+    }
+
+    return res.json({
+      sucesso: true,
+      processados: marcadosPagos,
+      enviadosViaApiMP: enviadosApi,
+      avisoApi: ultimoAvisoApi || null,
+      mensagem: enviadosApi > 0
+        ? `⚡ ${enviadosApi} transferência(s) Pix disparada(s) via API Mercado Pago e ${marcadosPagos} saque(s) liquidado(s)!`
+        : `✅ ${marcadosPagos} saque(s) liquidado(s) em lote com sucesso!`
+    });
+  } catch (err) {
+    console.error('Erro ao processar lote de saques:', err);
+    res.status(500).json({ erro: 'Falha ao processar lote de saques.' });
+  }
+});
+
+// ROTA INDIVIDUAL: Tenta disparo via API do Mercado Pago e atualiza status
 router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res) => {
   const { id } = req.params;
   const { status, motivo_recusa } = req.body;
@@ -666,11 +874,32 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
   }
 
   try {
+    const consulta = await sql`SELECT * FROM saques_motoristas WHERE id = ${id} LIMIT 1;`;
+    if (!consulta.length) {
+      return res.status(404).json({ erro: 'Solicitação de saque não encontrada.' });
+    }
+    const saqueAtual = consulta[0];
+    if (saqueAtual.status !== 'pendente') {
+      return res.status(400).json({ erro: `Este saque já foi finalizado como '${saqueAtual.status}'.` });
+    }
+
     let atualizado;
+    let infoTransferencia = null;
+
     if (status === 'pago') {
+      infoTransferencia = await executarTransferenciaPixMercadoPago({
+        saqueId: saqueAtual.id,
+        valor: saqueAtual.valor,
+        chavePix: saqueAtual.chave_pix,
+        tipoChave: saqueAtual.tipo_chave,
+        motoristaNome: saqueAtual.motorista_nome
+      });
+
       atualizado = await sql`
         UPDATE saques_motoristas
-        SET status = 'pago', pago_em = CURRENT_TIMESTAMP
+        SET status = 'pago',
+            comprovante_url = ${infoTransferencia.comprovanteId || 'aprovado_admin'},
+            pago_em = CURRENT_TIMESTAMP
         WHERE id = ${id} AND status = 'pendente'
         RETURNING *;
       `;
@@ -685,11 +914,7 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
     }
 
     if (!atualizado.length) {
-      const existente = await sql`SELECT status FROM saques_motoristas WHERE id = ${id} LIMIT 1;`;
-      if (!existente.length) {
-        return res.status(404).json({ erro: 'Solicitação de saque não encontrada.' });
-      }
-      return res.status(400).json({ erro: `Este saque já foi finalizado como '${existente[0].status}'.` });
+      return res.status(400).json({ erro: 'Este saque já foi processado.' });
     }
 
     const saque = atualizado[0];
@@ -698,7 +923,7 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
       await sql`
         UPDATE motoristas
         SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${saque.valor}
-        WHERE id = ${saque.motorista_id};
+        WHERE id::text = ${String(saque.motorista_id)}::text;
       `;
 
       await sql`
@@ -707,7 +932,21 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
       `;
     }
 
-    res.json({ sucesso: true, statusAtualizado: status });
+    const io = obterIo(req);
+    if (io) {
+      io.emit('saque_atualizado', { saqueId: id, status });
+    }
+
+    res.json({
+      sucesso: true,
+      statusAtualizado: status,
+      enviadoAutomaticoMP: Boolean(infoTransferencia?.enviado),
+      mensagem: status === 'pago'
+        ? (infoTransferencia?.enviado
+            ? `⚡ Pix de R$ ${paraReais(saque.valor)} transferido automaticamente via API Mercado Pago!`
+            : `✅ Saque #${id} marcado como PAGO!`)
+        : 'Saque recusado e valor estornado para a carteira do motorista.'
+    });
   } catch (err) {
     res.status(500).json({ erro: 'Falha ao atualizar status do saque.' });
   }

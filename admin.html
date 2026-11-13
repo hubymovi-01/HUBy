@@ -360,14 +360,18 @@
     </div>
   </section>
 
-  <!-- ABA 8: GESTÃO E EXTRATO DE SAQUES (AUTOMÁTICO) -->
+  <!-- ABA 8: GESTÃO E EXTRATO DE SAQUES (AUTOMÁTICO + DISPARO EM LOTE) -->
   <section id="tabSaques" class="tab-pane">
-    <div class="callout-pix-automatico">
-      <span class="callout-icon">⚡</span>
-      <div class="callout-text">
-        <strong>Repasses Automáticos via Pix:</strong> As solicitações dos condutores são liquidadas de forma imediata
-        via API bancária. O painel abaixo é exclusivo para auditoria contábil.
+    <div class="callout-pix-automatico" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+      <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:260px;">
+        <span class="callout-icon">⚡</span>
+        <div class="callout-text">
+          <strong>Central de Repasses Pix (Cash-Out API):</strong> Os saques são processados automaticamente no pedido ou podem ser disparados em lote com 1 clique para toda a frota.
+        </div>
       </div>
+      <button type="button" id="btnPagarSaquesLote" class="btn-action" style="background:#10B981; color:#02261C; font-weight:900; border:none;">
+        ⚡ Liquidar Todos os Pendentes em Lote
+      </button>
     </div>
     <div class="table-responsive">
       <table>
@@ -378,7 +382,7 @@
             <th>Chave Pix</th>
             <th>Valor</th>
             <th>Status</th>
-            <th>Data/Hora</th>
+            <th>Ações / Auditoria</th>
           </tr>
         </thead>
         <tbody id="tabelaSaquesBody">
@@ -633,7 +637,7 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <!-- MÓDULO PRINCIPAL DO ADMIN -->
-  <script type="module" src="./js/admin.js?v=6.3.0"></script>
+  <script type="module" src="./js/admin.js?v=6.4.0"></script>
 </body>
 
 </html>

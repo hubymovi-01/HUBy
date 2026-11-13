@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Sincronizado com Faturamento, Saldo Líquido e Gráficos)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Sincronizado com Faturamento, Gráficos e Saque em Lote)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
   configurarFormMercadoPago(token);
   configurarModalDocumentos(token);
   configurarFormMarketplace(token);
+  configurarBotaoSaqueLote(token);
 
   document.getElementById('btnSincronizar')?.addEventListener('click', async () => {
     await sincronizarTudo(token);
@@ -134,7 +135,6 @@ async function carregarMetricasECards(token, periodo = 'total') {
     const pctTaxa = Number(dados.taxaPlataforma || TAXA_PLATAFORMA_ATUAL || 15) / 100;
     const pctMotorista = 1 - pctTaxa;
 
-    // Fallback inteligente pela lista de corridas carregadas no navegador
     if (faturamentoBruto === 0 && Array.isArray(window._ultimasCorridasAdmin) && window._ultimasCorridasAdmin.length > 0) {
       let listaValida = window._ultimasCorridasAdmin.filter(c =>
         ['concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado'].includes(String(c.status || '').toLowerCase().trim())
@@ -747,9 +747,52 @@ async function carregarTabelaSeguranca(token) {
   }
 }
 
-// 8. Moderação e Extrato de Saques dos Motoristas
+// ============================================================================
+// 8. MODERAÇÃO, DISPARO EM LOTE E EXTRATO DE SAQUES DOS MOTORISTAS
+// ============================================================================
+function configurarBotaoSaqueLote(token) {
+  const btnLote = document.getElementById('btnPagarSaquesLote');
+  if (!btnLote) return;
+
+  btnLote.addEventListener('click', async () => {
+    const qtdPendentes = Number(window._qtdSaquesPendentes || 0);
+    if (qtdPendentes === 0) {
+      notificarAdmin('Não há saques pendentes na fila no momento.', 'aviso');
+      return;
+    }
+
+    btnLote.disabled = true;
+    const txtOriginal = btnLote.textContent;
+    btnLote.textContent = '⚡ Disparando Pix em Lote...';
+
+    try {
+      const res = await fetch(`${API_URL}/api/carteira/admin/saques/pagar-lote`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.erro || 'Falha ao processar saques em lote.');
+
+      notificarAdmin(data.mensagem || 'Lote de saques liquidado com sucesso!', 'sucesso');
+      await carregarTabelaSaques(token);
+      await carregarTabelaFrota(token);
+      await carregarMetricasECards(token);
+    } catch (err) {
+      notificarAdmin(err.message, 'erro');
+    } finally {
+      btnLote.disabled = false;
+      btnLote.textContent = txtOriginal;
+    }
+  });
+}
+
 async function carregarTabelaSaques(token) {
   const tbody = document.getElementById('tabelaSaquesBody');
+  const btnLote = document.getElementById('btnPagarSaquesLote');
   if (!tbody) return;
 
   try {
@@ -764,8 +807,19 @@ async function carregarTabelaSaques(token) {
     const saques = await res.json();
 
     if (!Array.isArray(saques) || !saques.length) {
+      window._qtdSaquesPendentes = 0;
+      if (btnLote) btnLote.textContent = '⚡ Liquidar Todos os Pendentes em Lote (0)';
       tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum pedido de saque registrado até o momento.</td></tr>';
       return;
+    }
+
+    const pendentes = saques.filter(s => s.status === 'pendente');
+    window._qtdSaquesPendentes = pendentes.length;
+    if (btnLote) {
+      const somaPendentes = pendentes.reduce((acc, s) => acc + Number(s.valor || 0), 0);
+      btnLote.textContent = pendentes.length > 0
+        ? `⚡ Liquidar ${pendentes.length} Pendente(s) em Lote (R$ ${somaPendentes.toFixed(2).replace('.', ',')})`
+        : '✅ Todos os Saques Liquidados (0 Pendentes)';
     }
 
     tbody.innerHTML = saques.map(s => {
@@ -796,10 +850,10 @@ async function carregarTabelaSaques(token) {
           <td>
             ${s.status === 'pendente' ? `
               <div style="display:flex; gap:6px;">
-                <button class="btn-tbl app" onclick="processarSaqueMaster(${Number(s.id)}, 'pago')">Pagar Pix</button>
+                <button class="btn-tbl app" onclick="processarSaqueMaster(${Number(s.id)}, 'pago')">⚡ Disparar Pix</button>
                 <button class="btn-tbl rej" onclick="processarSaqueMaster(${Number(s.id)}, 'recusado')">Recusar</button>
               </div>
-            ` : `<small style="color:var(--muted);">${s.status === 'pago' ? 'Liquidado' : 'Estornado'}</small>`}
+            ` : `<small style="color:var(--muted);">${s.status === 'pago' ? '✅ Liquidado' : 'Estornado'}</small>`}
           </td>
         </tr>
       `;
@@ -1130,6 +1184,19 @@ function conectarSocketAdmin() {
     await carregarDadosSocios(token);
   });
 
+  socket.on('novo_saque_solicitado', async (dados) => {
+    const token = localStorage.getItem('huby_token');
+    notificarAdmin(`💸 Novo saque solicitado por ${dados.motorista_nome || 'Condutor'}: R$ ${Number(dados.valor || 0).toFixed(2).replace('.', ',')}`, 'aviso');
+    await carregarTabelaSaques(token);
+    await carregarTabelaFrota(token);
+  });
+
+  socket.on('saque_atualizado', async () => {
+    const token = localStorage.getItem('huby_token');
+    await carregarTabelaSaques(token);
+    await carregarTabelaFrota(token);
+  });
+
   socket.on('tarifas_atualizadas', (novasTarifas) => {
     aplicarObjetoTarifas(novasTarifas);
   });
@@ -1203,6 +1270,7 @@ window.alterarStatusCondutor = async (id, acao) => {
   } catch (e) {}
 };
 
+// Disparo Pix sem popup bloqueante para "pago"
 window.processarSaqueMaster = async (id, status) => {
   const token = localStorage.getItem('huby_token');
   let motivo = '';
@@ -1210,8 +1278,6 @@ window.processarSaqueMaster = async (id, status) => {
   if (status === 'recusado') {
     motivo = prompt('Informe o motivo da recusa (o valor será estornado para a carteira do parceiro):');
     if (motivo === null) return;
-  } else {
-    if (!confirm('Confirma que realizou a transferência Pix para a chave indicada?')) return;
   }
 
   try {
@@ -1227,8 +1293,9 @@ window.processarSaqueMaster = async (id, status) => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
 
-    notificarAdmin(status === 'pago' ? 'Saque marcado como PAGO!' : 'Saque recusado e valor estornado.', status === 'pago' ? 'sucesso' : 'aviso');
+    notificarAdmin(data.mensagem || (status === 'pago' ? '⚡ Saque Pix liquidado!' : 'Saque recusado e valor estornado.'), status === 'pago' ? 'sucesso' : 'aviso');
     await carregarTabelaSaques(token);
+    await carregarTabelaFrota(token);
     await carregarMetricasECards(token);
   } catch (e) {
     notificarAdmin(e.message, 'erro');

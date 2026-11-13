@@ -1,5 +1,5 @@
 // js/motorista/motorista-carteira.js
-import { API_URL, TAXA_PLATAFORMA_ATUAL } from '../config.js';
+import { API_URL, TAXA_PLATAFORMA_ATUAL, sonsHUBy } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { carregarPerfil } from './motorista-perfil.js';
 import { notificar } from '../util/alertas-huby.js';
@@ -88,8 +88,8 @@ export function configurarEventosSaque() {
 
   btnConfirmar?.addEventListener('click', async () => {
     const chave = inputChave?.value?.trim();
-    const valor = parseFloat(inputValor?.value);
-    const tipo = selectTipo?.value || 'pix';
+    const valor = parseFloat(String(inputValor?.value ?? '').replace(',', '.'));
+    const tipo = selectTipo?.value || 'cpf';
 
     if (!chave) {
       notificar('Por favor, informe a chave Pix para recebimento.', 'alerta');
@@ -107,10 +107,10 @@ export function configurarEventosSaque() {
     }
 
     btnConfirmar.disabled = true;
-    btnConfirmar.textContent = 'Enviando...';
+    btnConfirmar.textContent = 'Transferindo Pix...';
 
     try {
-      const motId = estado.motoristaId || localStorage.getItem('huby_motorista_id') || 'carol_01';
+      const motId = estado.motoristaId || localStorage.getItem('huby_motorista_id') || localStorage.getItem('huby_user_id') || 'carol_01';
       const res = await fetch(`${API_URL}/api/carteira/motorista/${motId}/saque`, {
         method: 'POST',
         headers: obterHeaders(),
@@ -120,7 +120,9 @@ export function configurarEventosSaque() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
 
-      notificar(data.mensagem || 'Solicitação de saque enviada com sucesso!', 'sucesso');
+      if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
+      notificar(data.mensagem || 'Saque Pix processado com sucesso!', 'sucesso', 5000);
+
       localStorage.setItem('huby_motorista_pix', chave);
       fecharModal();
       if (inputValor) inputValor.value = '';
@@ -137,7 +139,7 @@ export function configurarEventosSaque() {
       if (elSaldo) elSaldo.textContent = saldoTxt;
       if (elDrawerSaldo) elDrawerSaldo.textContent = saldoTxt;
 
-      carregarPerfil();
+      await carregarPerfil();
     } catch (err) {
       notificar(err.message, 'erro');
     } finally {

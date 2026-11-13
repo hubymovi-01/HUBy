@@ -2,6 +2,7 @@
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+import { executarTransferenciaPixMercadoPago } from './carteira.routes.js';
 
 function verificarAdmin(req, res, next) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase().trim();
@@ -77,14 +78,12 @@ export async function lerTarifasDoBanco() {
   }
 }
 
-// Função central que calcula o faturamento real garantido a partir de todas as fontes do banco
 export async function calcularResumoFinanceiroReal(periodo = 'total') {
   const tarifasAtuais = await lerTarifasDoBanco();
   const taxaPct = Number(tarifasAtuais.taxa_plataforma ?? 15);
   const pctTaxa = taxaPct / 100;
   const pctMotorista = 1 - pctTaxa;
 
-  // 1. Auto-sincroniza cobranças Pix pagas cujo pedido ainda não mudou para 'concluido'
   try {
     await sql`
       UPDATE pedidos p
@@ -109,7 +108,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
     filtroPeriodo = sql`AND COALESCE(concluido_em, criado_em) >= DATE_TRUNC('month', NOW())`;
   }
 
-  // 2. Soma corridas concluídas no período
   const statsConcluidas = await sql`
     SELECT 
       COUNT(id)::int AS total_concluidas,
@@ -122,7 +120,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
   let totalViagens = Number(statsConcluidas[0]?.total_concluidas || 0);
   let faturamentoBruto = Number(statsConcluidas[0]?.faturamento_corridas || 0);
 
-  // 3. Se o filtro for 'hoje' mas as corridas concluídas forem de dias anteriores, busca o total geral
   if (faturamentoBruto === 0) {
     const statsGeralConcluidas = await sql`
       SELECT 
@@ -137,7 +134,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
     }
   }
 
-  // 4. Fallback pelas transações da carteira (ex: créditos Pix ou descontos de comissão em espécie)
   if (faturamentoBruto === 0) {
     try {
       const trans = await sql`
@@ -154,7 +150,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
     } catch (e) {}
   }
 
-  // 5. Fallback por cobrancas_pix pagas
   if (faturamentoBruto === 0) {
     try {
       const cobsPagas = await sql`
@@ -169,7 +164,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
     } catch (e) {}
   }
 
-  // 6. Fallback pelos pedidos registrados na tabela pedidos (mesmo que não cancelados) se ainda estiver 0
   if (faturamentoBruto === 0) {
     const statsPedidosAtivos = await sql`
       SELECT COUNT(id)::int AS qtd, COALESCE(SUM(valor_total), 0) AS soma
@@ -375,7 +369,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 4. SAQUE AUTOMÁTICO BLINDADO CONTRA DUPLO CLIQUE (ATOMIC UPDATE)
+  // 4. SAQUE AUTOMÁTICO BLINDADO CONTRA DUPLO CLIQUE + DISPARO PIX API
   // =========================================================================
   router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
     const motoristaId = String(req.usuario?.id || '');
@@ -410,10 +404,32 @@ export default function adminRoutes(io) {
         RETURNING id;
       `;
 
+      const saqueId = reg[0].id;
+
+      const disp = await executarTransferenciaPixMercadoPago({
+        saqueId,
+        valor: valorSaque,
+        chavePix: String(chavePix).trim(),
+        tipoChave: String(tipoChave || 'cpf').slice(0, 20),
+        motoristaNome: mot.nome
+      });
+
+      if (disp.enviado) {
+        await sql`
+          UPDATE saques_motoristas
+          SET status = 'pago', comprovante_url = ${disp.comprovanteId}, pago_em = CURRENT_TIMESTAMP
+          WHERE id = ${saqueId};
+        `;
+      }
+
       res.json({
         sucesso: true,
-        mensagem: 'Solicitação de saque registrada com segurança!',
-        saqueId: reg[0].id,
+        pagoAutomatico: disp.enviado,
+        mensagem: disp.enviado
+          ? '⚡ Saque Pix transferido automaticamente para sua conta!'
+          : 'Solicitação de saque registrada com segurança!',
+        saqueId,
+        novoSaldo: Number(mot.saldo_carteira),
         valorTransferido: valorSaque
       });
     } catch (err) {
@@ -426,12 +442,12 @@ export default function adminRoutes(io) {
     try {
       const saques = await sql`
         SELECT id, motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status, 
-               COALESCE(criado_em, solicitado_em) AS criado_em, pago_em, motivo_recusa
+               COALESCE(criado_em, solicitado_em) AS criado_em, pago_em, motivo_recusa, comprovante_url
         FROM saques_motoristas
         ORDER BY 
           CASE WHEN status = 'processando' THEN 1 WHEN status = 'pendente' THEN 2 ELSE 3 END,
           COALESCE(criado_em, solicitado_em) DESC
-        LIMIT 50;
+        LIMIT 100;
       `;
       res.json(saques);
     } catch (err) {
