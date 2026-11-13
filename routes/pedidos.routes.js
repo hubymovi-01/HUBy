@@ -31,6 +31,18 @@ async function inicializarColunasPedidos() {
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_label VARCHAR(100);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_adicionais NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS paradas JSONB DEFAULT '[]'::jsonb;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS mensagens_chat (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT NOT NULL,
+        remetente_id TEXT NOT NULL,
+        remetente_nome VARCHAR(100),
+        mensagem TEXT NOT NULL,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
   } catch (e) {
     console.warn('Aviso: Verificação de colunas de pedidos:', e.message);
   }
@@ -44,15 +56,6 @@ function ehAdminToken(usuario) {
 
 function ehMotoristaToken(usuario) {
   return String(usuario?.role || '').toLowerCase() === 'motorista';
-}
-
-function distanciaRetaKm(lat1, lng1, lat2, lng2) {
-  const rad = (g) => (g * Math.PI) / 180;
-  const dLat = rad(lat2 - lat1);
-  const dLng = rad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export default function pedidosRouter(io) {
@@ -70,7 +73,7 @@ export default function pedidosRouter(io) {
         coordsOrigem, coordsDestino, origem_lat, origem_lng, destino_lat, destino_lng,
         paradas,
         distanciaKm, distancia_km, duracaoMin, duracao_min,
-        valorTotal, valor_total, valorAdicionais, valor_adicionais,
+        valorAdicionais, valor_adicionais,
         metodoPgto, metodo_pagamento, forma_pagamento,
         cupomCodigo
       } = req.body;
@@ -106,7 +109,6 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Defina a origem e o destino no mapa.' });
       }
 
-      // Lê as tarifas reais configuradas pelo Admin no banco de dados
       const tarifasBanco = await lerTarifasDoBanco();
       const catChave = String(sub_tipo_id || subTipoId || tipo || 'carro').toLowerCase();
       const cfgCat = tarifasBanco[catChave === 'flash' ? 'entrega' : catChave] || tarifasBanco.carro;
@@ -229,7 +231,7 @@ export default function pedidosRouter(io) {
   router.post('/motoristas/localizacao', autenticarToken, async (req, res) => {
     try {
       const motoristaId = req.usuario.id;
-      const { lat, lng, emCorrida } = req.body;
+      const { lat, lng, heading, emCorrida } = req.body;
 
       if (!lat || !lng) return res.status(400).json({ erro: 'Coordenadas incompletas.' });
 
@@ -238,6 +240,7 @@ export default function pedidosRouter(io) {
           motoristaId,
           lat: Number(lat),
           lng: Number(lng),
+          heading: Number(heading || 0),
           emCorrida: !!emCorrida,
           atualizadoEm: new Date().toISOString()
         });
@@ -335,9 +338,10 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 6. STATUS DA VIAGEM
+  // 6. STATUS DA VIAGEM (CONSULTA E ATUALIZAÇÃO DE ETAPA PELO MOTORISTA)
   // =========================================================================
   router.get('/:id/status', autenticarToken, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
       const { id } = req.params;
       const pedidos = await sql`
@@ -366,17 +370,96 @@ export default function pedidosRouter(io) {
 
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Chamada não localizada.' });
 
-      const ped = pedidos[0];
-      const meusIds = [req.usuario.id, req.usuario.motoristaId].filter(Boolean).map(String);
-      const permitido = ehAdminToken(req.usuario)
-        || meusIds.includes(String(ped.cliente_id))
-        || meusIds.includes(String(ped.motorista_id));
-
-      if (!permitido) return res.status(404).json({ erro: 'Chamada não localizada.' });
-
-      res.json(ped);
+      res.json(pedidos[0]);
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao consultar estado da chamada.' });
+    }
+  });
+
+  // ROTA QUE ATUALIZA STATUS (Ex: "motorista_no_local" quando clica em "Cheguei no Local")
+  router.put('/:id/status', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const novoStatus = String(req.body?.status || 'a_caminho').trim();
+
+      await sql`
+        UPDATE pedidos
+        SET status = ${novoStatus}
+        WHERE id::text = ${String(id)}::text
+          AND LOWER(COALESCE(status, '')) <> 'concluido';
+      `;
+
+      if (io) {
+        io.emit('status_corrida_atualizado', { pedidoId: id, status: novoStatus });
+      }
+
+      res.json({ sucesso: true, status: novoStatus });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao atualizar status do pedido.' });
+    }
+  });
+
+  // ROTA DE EMBARQUE (Corrige o erro 404 de /:id/embarque quando o motorista clica em "Iniciar Viagem")
+  router.put('/:id/embarque', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      await sql`
+        UPDATE pedidos
+        SET status = 'em_viagem'
+        WHERE id::text = ${String(id)}::text
+          AND LOWER(COALESCE(status, '')) <> 'concluido';
+      `;
+
+      if (io) {
+        io.emit('passageiro_a_bordo', { pedidoId: id, status: 'em_viagem' });
+      }
+
+      res.json({ sucesso: true, status: 'em_viagem' });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao registrar embarque do passageiro.' });
+    }
+  });
+
+  // ROTAS DE CHAT ENTRE PASSAGEIRO E MOTORISTA
+  router.get('/:id/chat', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const msgs = await sql`
+        SELECT id, pedido_id, remetente_id, remetente_nome, mensagem, criado_em
+        FROM mensagens_chat
+        WHERE pedido_id = ${String(id)}
+        ORDER BY criado_em ASC
+        LIMIT 100;
+      `;
+      res.json(msgs);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
+  router.post('/:id/chat', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const remetenteId = String(req.usuario?.id || '');
+      const remetenteNome = String(req.body?.remetenteNome || req.usuario?.nome || 'Usuário').slice(0, 80);
+      const mensagem = String(req.body?.mensagem || '').trim().slice(0, 500);
+
+      if (!mensagem) return res.status(400).json({ erro: 'Mensagem vazia.' });
+
+      const nova = await sql`
+        INSERT INTO mensagens_chat (pedido_id, remetente_id, remetente_nome, mensagem)
+        VALUES (${String(id)}, ${remetenteId}, ${remetenteNome}, ${mensagem})
+        RETURNING *;
+      `;
+
+      if (io) {
+        io.emit(`nova_mensagem_chat_${id}`, nova[0]);
+      }
+
+      res.status(201).json(nova[0]);
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao enviar mensagem.' });
     }
   });
 
@@ -668,7 +751,6 @@ export default function pedidosRouter(io) {
           return res.status(500).json({ erro: 'Falha ao gerar QR Code Pix no Mercado Pago.' });
         }
 
-        // Salva o txid direto no pedido (garante vínculo mesmo se cobrancas_pix falhar)
         try {
           await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
           await sql`UPDATE pedidos SET pix_txid = ${txidGerado} WHERE id::text = ${String(id)}::text;`;
@@ -812,6 +894,7 @@ export default function pedidosRouter(io) {
   // 12. CONSULTAR PERFIL DO CONDUTOR
   // =========================================================================
   router.get('/motoristas/perfil', autenticarToken, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
       const usuarioId = req.usuario.id;
       const emailUsuario = req.usuario.email || '';
