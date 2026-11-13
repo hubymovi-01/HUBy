@@ -1,8 +1,11 @@
 // routes/push.routes.js - Motor Oficial de Notificações Push em Segundo Plano (Web Push VAPID)
 import express from 'express';
-import webpush from 'web-push';
+import { createRequire } from 'module';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+
+const require = createRequire(import.meta.url);
+const webpush = require('web-push');
 
 const router = express.Router();
 let vapidConfigurado = false;
@@ -113,7 +116,6 @@ export async function dispararPushParaMotoristas({ titulo, corpo, categoria, url
           payload
         );
       } catch (errEnvio) {
-        // Remove inscrições expiradas ou revogadas pelo navegador (404 / 410)
         if (errEnvio.statusCode === 404 || errEnvio.statusCode === 410) {
           await sql`DELETE FROM push_subscriptions WHERE id = ${s.id};`.catch(() => {});
         }
