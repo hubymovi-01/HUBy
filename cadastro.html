@@ -37,6 +37,59 @@
     .file-input {
       display: none;
     }
+
+    .otp-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-otp-action {
+      background: rgba(56, 189, 248, 0.16);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38BDF8;
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-weight: 800;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-otp-action.verified {
+      background: rgba(16, 185, 129, 0.2);
+      border-color: #10B981;
+      color: #10B981;
+    }
+
+    .lgpd-box {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-top: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #CBD5E1;
+      line-height: 1.45;
+    }
+
+    .lgpd-box input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: #10B981;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .lgpd-box a {
+      color: #38BDF8;
+      font-weight: 700;
+      text-decoration: underline;
+    }
   </style>
 </head>
 
@@ -45,7 +98,7 @@
   <div class="auth-ambient-glow"></div>
 
   <main class="auth-container">
-    <div class="auth-card" style="max-height: 90vh; overflow-y: auto;">
+    <div class="auth-card" style="max-height: 92vh; overflow-y: auto;">
       <header class="auth-header">
         <h1 class="auth-brand">HUB<span>y</span></h1>
         <p id="txtSubtituloCadastro" class="auth-desc">Crie a sua conta de Passageiro</p>
@@ -70,8 +123,22 @@
         </div>
 
         <div class="input-group">
-          <label>Telemóvel / WhatsApp</label>
-          <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required>
+          <label>Telemóvel / WhatsApp (Verificação Obrigatória)</label>
+          <div class="otp-row">
+            <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required style="flex: 1;">
+            <button type="button" id="btnEnviarOTP" class="btn-otp-action">📲 Enviar Código</button>
+          </div>
+        </div>
+
+        <!-- CAMPO DE VERIFICAÇÃO DO CÓDIGO OTP -->
+        <div class="input-group" id="boxCodigoOTP" style="display: none;">
+          <label style="color: #38BDF8;">Código de 6 Dígitos Enviado</label>
+          <div class="otp-row">
+            <input type="tel" id="cadCodigoOTP" placeholder="000000" maxlength="6"
+              style="flex: 1; text-align: center; letter-spacing: 4px; font-weight: 900; font-size: 16px;">
+            <button type="button" id="btnConfirmarOTP" class="btn-otp-action"
+              style="background: #10B981; color: #02261C; border: none;">✓ Confirmar</button>
+          </div>
         </div>
 
         <div class="input-group">
@@ -143,7 +210,15 @@
           </div>
         </div>
 
-        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action" style="margin-top: 20px;">
+        <!-- ACEITE LGPD E TERMOS DE USO -->
+        <label class="lgpd-box">
+          <input type="checkbox" id="chkAceiteLGPD" required>
+          <span>
+            Li e aceito os <a href="./termos.html" target="_blank">Termos de Uso e Política de Privacidade (LGPD)</a> do HUBy, autorizando o tratamento dos meus dados para segurança e operação das viagens.
+          </span>
+        </label>
+
+        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action" style="margin-top: 18px;">
           <span>Criar Conta</span>
         </button>
       </form>
@@ -161,6 +236,7 @@
     let roleAtual = 'cliente';
     let cnhBase64 = null;
     let crlvBase64 = null;
+    let telefoneVerificado = false;
 
     const urlParams = new URLSearchParams(window.location.search);
     const perfilParam = urlParams.get('perfil');
@@ -208,12 +284,95 @@
     });
 
     const inputTel = document.getElementById('cadTelefone');
+    const btnEnviarOTP = document.getElementById('btnEnviarOTP');
+    const boxCodigoOTP = document.getElementById('boxCodigoOTP');
+    const inputCodigoOTP = document.getElementById('cadCodigoOTP');
+    const btnConfirmarOTP = document.getElementById('btnConfirmarOTP');
+
     inputTel.addEventListener('input', (e) => {
       let v = e.target.value.replace(/\D/g, '');
       if (v.length > 11) v = v.slice(0, 11);
       v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
       v = v.replace(/(\d{5})(\d{4})$/, '$1-$2');
       e.target.value = v;
+
+      if (telefoneVerificado) {
+        telefoneVerificado = false;
+        btnEnviarOTP.classList.remove('verified');
+        btnEnviarOTP.textContent = '📲 Enviar Código';
+      }
+    });
+
+    // ENVIO DE CÓDIGO OTP
+    btnEnviarOTP.addEventListener('click', async () => {
+      esconderAlerta();
+      const telLimpo = inputTel.value.replace(/\D/g, '');
+      if (telLimpo.length < 10) {
+        exibirAlerta('Digite o número de WhatsApp/Telefone com DDD antes de pedir o código.', 'error');
+        return;
+      }
+
+      btnEnviarOTP.disabled = true;
+      btnEnviarOTP.textContent = 'Enviando...';
+
+      try {
+        const resp = await fetch(`${API_URL}/api/auth/enviar-codigo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: telLimpo })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.erro || 'Falha ao enviar código.');
+
+        boxCodigoOTP.style.display = 'block';
+        exibirAlerta(data.mensagem || 'Código enviado!', 'success');
+
+        if (data.codigoTeste) {
+          inputCodigoOTP.value = data.codigoTeste;
+        }
+      } catch (err) {
+        exibirAlerta(err.message, 'error');
+      } finally {
+        btnEnviarOTP.disabled = false;
+        if (!telefoneVerificado) btnEnviarOTP.textContent = '🔄 Reenviar';
+      }
+    });
+
+    // VALIDAÇÃO DE CÓDIGO OTP
+    btnConfirmarOTP.addEventListener('click', async () => {
+      esconderAlerta();
+      const telLimpo = inputTel.value.replace(/\D/g, '');
+      const codigo = inputCodigoOTP.value.replace(/\D/g, '');
+
+      if (codigo.length !== 6) {
+        exibirAlerta('Informe o código de 6 dígitos.', 'error');
+        return;
+      }
+
+      btnConfirmarOTP.disabled = true;
+      btnConfirmarOTP.textContent = '...';
+
+      try {
+        const resp = await fetch(`${API_URL}/api/auth/verificar-codigo`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telefone: telLimpo, codigo })
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.erro || 'Código inválido.');
+
+        telefoneVerificado = true;
+        boxCodigoOTP.style.display = 'none';
+        btnEnviarOTP.classList.add('verified');
+        btnEnviarOTP.textContent = '✅ Verificado';
+        inputTel.readOnly = true;
+        exibirAlerta('Telefone confirmado com sucesso!', 'success');
+      } catch (err) {
+        exibirAlerta(err.message, 'error');
+      } finally {
+        btnConfirmarOTP.disabled = false;
+        btnConfirmarOTP.textContent = '✓ Confirmar';
+      }
     });
 
     function processarUpload(inputId, boxId, callback) {
@@ -268,13 +427,26 @@
       e.preventDefault();
       esconderAlerta();
 
+      const aceitouTermos = document.getElementById('chkAceiteLGPD')?.checked;
+      if (!aceitouTermos) {
+        exibirAlerta('Marque a caixa aceitando os Termos de Uso e a Política de Privacidade (LGPD).', 'error');
+        return;
+      }
+
+      if (!telefoneVerificado) {
+        exibirAlerta('Por favor, valide seu número de telefone enviando e confirmando o código de 6 dígitos.', 'error');
+        return;
+      }
+
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
         email: document.getElementById('cadEmail').value.trim(),
         telefone: inputTel.value.replace(/\D/g, ''),
         cpf: inputCpf.value.replace(/\D/g, ''),
         senha: document.getElementById('cadSenha').value,
-        role: roleAtual
+        role: roleAtual,
+        aceitouTermos: true,
+        versaoTermos: '1.0'
       };
 
       if (!payload.nome || !payload.email || !payload.telefone || !payload.cpf || !payload.senha) {
@@ -325,10 +497,14 @@
           localStorage.setItem('huby_user_name', data.usuario?.nome || payload.nome);
         }
 
-        exibirAlerta('Conta criada com sucesso!', 'success');
+        exibirAlerta(data.mensagem || 'Conta criada com sucesso!', 'success');
         setTimeout(() => {
-          window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
-        }, 800);
+          if (data.pendente) {
+            window.location.replace('./login.html?perfil=motorista');
+          } else {
+            window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
+          }
+        }, 900);
 
       } catch (err) {
         console.error("Erro no cadastro:", err);

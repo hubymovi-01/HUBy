@@ -9,12 +9,14 @@ import { sql, JWT_SECRET } from './db.js';
 import authRoutes from './routes/auth.routes.js';
 import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter from './routes/pedidos.routes.js';
-import adminRoutes, { lerTarifasDoBanco } from './routes/admin.routes.js'; import carteiraRoutes from './routes/carteira.routes.js';
+import adminRoutes, { lerTarifasDoBanco } from './routes/admin.routes.js';
+import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
-import iaRoutes from './routes/ia.routes.js'; // 🤖 IA: Rota do assistente e pesquisa inteligente
+import iaRoutes from './routes/ia.routes.js';
+import pushRoutes from './routes/push.routes.js';
 
 dotenv.config();
 
@@ -28,7 +30,7 @@ const server = createServer(app);
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
 app.disable('x-powered-by');
-app.set('trust proxy', 1); // Proxy reverso ativo em ambiente de alojamento (Render)
+app.set('trust proxy', 1);
 
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -85,7 +87,6 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
 
-  // 🚗 Repasse em tempo real do GPS do motorista para o mapa do passageiro
   socket.on('posicao_motorista', (dados) => {
     socket.broadcast.emit('posicao_motorista_atualizada', dados);
   });
@@ -95,7 +96,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Injeta Socket.IO nas requisições HTTP
 app.use((req, res, next) => {
   req.io = io;
   next();
@@ -335,7 +335,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // Atualizações incrementais com garantia de integridade da base de dados existente
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -366,7 +365,7 @@ inicializarBanco();
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.0.4',
+    versao: '2.1.0',
     banco: 'Neon PostgreSQL'
   });
 });
@@ -402,6 +401,7 @@ app.use('/api/motoristas-regras', motoristaRoutes);
 app.use('/api/socios', sociosRoutes);
 app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/ia', iaRoutes);
+app.use('/api/push', pushRoutes);
 
 // ============================================================================
 // 6. TRATAMENTO GLOBAL DE ERROS

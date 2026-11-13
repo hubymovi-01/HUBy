@@ -1,4 +1,4 @@
-// routes/auth.routes.js - Cadastro, Login e Perfil HUBy (Padronizado)
+// routes/auth.routes.js - Cadastro com Verificação OTP, Aceite LGPD, Login e Perfil HUBy
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -10,6 +10,33 @@ const router = express.Router();
 
 const APROVACAO_AUTOMATICA = process.env.APROVACAO_AUTOMATICA_MOTORISTA === 'true';
 const MSG_CREDENCIAIS = 'Credenciais inválidas.';
+
+async function garantirEstruturaAuthSeguranca() {
+  try {
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS termos_aceitos_em TIMESTAMP WITH TIME ZONE;`;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS versao_termos VARCHAR(20) DEFAULT '1.0';`;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone_verificado BOOLEAN DEFAULT FALSE;`;
+
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS termos_aceitos_em TIMESTAMP WITH TIME ZONE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS versao_termos VARCHAR(20) DEFAULT '1.0';`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS telefone_verificado BOOLEAN DEFAULT FALSE;`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS codigos_verificacao (
+        id SERIAL PRIMARY KEY,
+        telefone VARCHAR(25) NOT NULL,
+        codigo VARCHAR(10) NOT NULL,
+        verificado BOOLEAN DEFAULT FALSE,
+        tentativas INT DEFAULT 0,
+        expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+  } catch (err) {
+    console.warn('Aviso ao sincronizar colunas LGPD/OTP:', err.message);
+  }
+}
+garantirEstruturaAuthSeguranca();
 
 function validarNumeroCPF(cpf) {
   cpf = String(cpf).replace(/\D/g, '');
@@ -30,30 +57,12 @@ function validarNumeroCNH(cnh) {
   return String(cnh).replace(/\D/g, '').length === 11;
 }
 
-function validarPlaca(placa) {
-  return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa);
-}
-
-function validarEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && email.length <= 150;
-}
-
 function validarFoto(url, maxCaracteres) {
   if (typeof url !== 'string') return false;
   const m = url.match(/^data:image\/(jpeg|png|webp);base64,/);
   if (!m) return false;
   const corpo = url.slice(m[0].length);
   return corpo.length >= 500 && corpo.length <= maxCaracteres && /^[A-Za-z0-9+/=]+$/.test(corpo);
-}
-
-function calcularIdade(dataNascStr) {
-  if (!dataNascStr) return 0;
-  const hoje = new Date();
-  const nasc = new Date(dataNascStr);
-  let idade = hoje.getFullYear() - nasc.getFullYear();
-  const m = hoje.getMonth() - nasc.getMonth();
-  if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--;
-  return idade;
 }
 
 function novoId(prefixo) {
@@ -90,16 +99,146 @@ function emitirTokenMotorista(mot) {
   );
 }
 
-// CADASTRO
+// ============================================================================
+// VERIFICAÇÃO DE TELEFONE POR CÓDIGO OTP (WHATSAPP / SMS)
+// ============================================================================
+async function despacharMensagemWhatsApp(telefoneNumeros, codigo) {
+  const apiUrl = process.env.WHATSAPP_API_URL || '';
+  const apiToken = process.env.WHATSAPP_API_TOKEN || '';
+  const numeroComDDI = telefoneNumeros.startsWith('55') ? telefoneNumeros : `55${telefoneNumeros}`;
+
+  if (!apiUrl || !apiToken) {
+    return { enviadoReal: false };
+  }
+
+  try {
+    const resp = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiToken}`,
+        'apikey': apiToken
+      },
+      body: JSON.stringify({
+        number: numeroComDDI,
+        phone: numeroComDDI,
+        text: `🔐 *HUBy Mobilidade*\n\nSeu código de verificação é: *${codigo}*\n\nVálido por 5 minutos. Não compartilhe este código com ninguém.`
+      })
+    });
+    return { enviadoReal: resp.ok };
+  } catch (err) {
+    console.warn('Falha ao enviar OTP via WhatsApp API:', err.message);
+    return { enviadoReal: false };
+  }
+}
+
+router.post('/enviar-codigo', async (req, res) => {
+  try {
+    await garantirEstruturaAuthSeguranca();
+    const telLimpo = String(req.body?.telefone || '').replace(/\D/g, '');
+
+    if (telLimpo.length < 10 || telLimpo.length > 13) {
+      return res.status(400).json({ erro: 'Informe um número de WhatsApp/Telefone válido com DDD.' });
+    }
+
+    // Limite anti-spam: máximo 3 códigos nos últimos 10 minutos para o mesmo número
+    const recentes = await sql`
+      SELECT COUNT(*)::int AS qtd FROM codigos_verificacao
+      WHERE telefone = ${telLimpo}
+        AND criado_em >= NOW() - INTERVAL '10 minutes';
+    `;
+    if (Number(recentes[0]?.qtd || 0) >= 4) {
+      return res.status(429).json({ erro: 'Muitos códigos solicitados. Aguarde alguns minutos.' });
+    }
+
+    const codigo = String(crypto.randomInt(100000, 999999));
+    const expiraEm = new Date(Date.now() + 5 * 60 * 1000);
+
+    await sql`
+      INSERT INTO codigos_verificacao (telefone, codigo, verificado, expira_em)
+      VALUES (${telLimpo}, ${codigo}, FALSE, ${expiraEm});
+    `;
+
+    const envio = await despacharMensagemWhatsApp(telLimpo, codigo);
+
+    return res.json({
+      sucesso: true,
+      enviadoViaWhatsApp: envio.enviadoReal,
+      // Quando a API externa de WhatsApp ainda não estiver configurada no .env, retorna o código para validação imediata
+      codigoTeste: envio.enviadoReal ? undefined : codigo,
+      mensagem: envio.enviadoReal
+        ? 'Código de 6 dígitos enviado para o seu WhatsApp!'
+        : `Código de verificação gerado: ${codigo} (Configure WHATSAPP_API_URL no Render para envio automático).`
+    });
+  } catch (err) {
+    console.error('Erro ao gerar OTP:', err);
+    res.status(500).json({ erro: 'Falha ao enviar código de verificação.' });
+  }
+});
+
+router.post('/verificar-codigo', async (req, res) => {
+  try {
+    await garantirEstruturaAuthSeguranca();
+    const telLimpo = String(req.body?.telefone || '').replace(/\D/g, '');
+    const codigoInformado = String(req.body?.codigo || '').replace(/\D/g, '');
+
+    if (!telLimpo || codigoInformado.length !== 6) {
+      return res.status(400).json({ erro: 'Informe o código de 6 dígitos.' });
+    }
+
+    const registros = await sql`
+      SELECT * FROM codigos_verificacao
+      WHERE telefone = ${telLimpo}
+        AND expira_em > NOW()
+      ORDER BY id DESC
+      LIMIT 1;
+    `;
+
+    if (!registros.length) {
+      return res.status(400).json({ erro: 'Código expirado ou não solicitado. Peça um novo código.' });
+    }
+
+    const reg = registros[0];
+    if (Number(reg.tentativas || 0) >= 5) {
+      return res.status(429).json({ erro: 'Limite de tentativas excedido. Solicite um novo código.' });
+    }
+
+    if (reg.codigo !== codigoInformado) {
+      await sql`UPDATE codigos_verificacao SET tentativas = tentativas + 1 WHERE id = ${reg.id};`;
+      return res.status(400).json({ erro: 'Código incorreto. Verifique os 6 dígitos e tente novamente.' });
+    }
+
+    await sql`UPDATE codigos_verificacao SET verificado = TRUE WHERE id = ${reg.id};`;
+
+    return res.json({
+      sucesso: true,
+      verificado: true,
+      mensagem: 'Telefone verificado com sucesso!'
+    });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao validar código de verificação.' });
+  }
+});
+
+// ============================================================================
+// CADASTRO (COM ACEITE LGPD E VERIFICAÇÃO DE TELEFONE)
+// ============================================================================
 router.post('/cadastro', async (req, res) => {
   try {
+    await garantirEstruturaAuthSeguranca();
+
     const {
       nome, email, telefone, cpf, senha, role,
+      aceitouTermos, versaoTermos,
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
       cnh, categoria, categoria_veiculo,
       veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
       doc_cnh_url, doc_crlv_url
     } = req.body;
+
+    if (!aceitouTermos) {
+      return res.status(400).json({ erro: 'Você precisa ler e aceitar os Termos de Uso e a Política de Privacidade (LGPD).' });
+    }
 
     const papelDesejado = role === 'motorista' ? 'motorista' : 'cliente';
 
@@ -112,9 +251,24 @@ router.post('/cadastro', async (req, res) => {
     const emailLimpo = email ? String(email).trim().toLowerCase() : null;
     const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
     const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : '';
+    const versaoFinalTermos = String(versaoTermos || '1.0').slice(0, 20);
 
     if (!cpfLimpo || !validarNumeroCPF(cpfLimpo)) {
       return res.status(400).json({ erro: 'Número de CPF inválido.' });
+    }
+
+    // Confirma se o telefone foi validado via OTP
+    let telVerificado = false;
+    if (telLimpo) {
+      const checkOtp = await sql`
+        SELECT id FROM codigos_verificacao
+        WHERE telefone = ${telLimpo} AND verificado = TRUE
+        ORDER BY id DESC LIMIT 1;
+      `;
+      if (!checkOtp.length) {
+        return res.status(400).json({ erro: 'Confirme seu número de telefone com o código de 6 dígitos antes de criar a conta.' });
+      }
+      telVerificado = true;
     }
 
     const dataNascSql = dataNascimento ? String(dataNascimento).slice(0, 10) : null;
@@ -136,8 +290,14 @@ router.post('/cadastro', async (req, res) => {
       const statusInicial = APROVACAO_AUTOMATICA ? 'aprovado' : 'pendente';
 
       await sql`
-        INSERT INTO usuarios (id, nome, email, telefone, cpf, data_nascimento, senha_hash, role)
-        VALUES (${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash}, 'motorista');
+        INSERT INTO usuarios (
+          id, nome, email, telefone, cpf, data_nascimento, senha_hash, role,
+          termos_aceitos_em, versao_termos, telefone_verificado
+        ) VALUES (
+          ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
+          ${dataNascSql}, ${senhaHash}, 'motorista',
+          CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
+        );
       `;
 
       let motoristaCriado;
@@ -147,13 +307,13 @@ router.post('/cadastro', async (req, res) => {
             id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
             cnh_numero, categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
             saldo_carteira, status_aprovacao, avaliacao_media, total_corridas,
-            doc_cnh_url, doc_crlv_url
+            doc_cnh_url, doc_crlv_url, termos_aceitos_em, versao_termos, telefone_verificado
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
             ${dataNascSql}, ${senhaHash},
             ${cnhLimpa}, ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
             0.00, ${statusInicial}, 5.00, 0,
-            ${doc_cnh_url}, ${doc_crlv_url}
+            ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
           )
           RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria;
         `;
@@ -167,7 +327,7 @@ router.post('/cadastro', async (req, res) => {
         return res.status(201).json({
           sucesso: true,
           pendente: true,
-          mensagem: 'Cadastro enviado para análise!'
+          mensagem: 'Cadastro enviado para análise da administração!'
         });
       }
 
@@ -183,13 +343,13 @@ router.post('/cadastro', async (req, res) => {
       INSERT INTO usuarios (
         id, nome, email, telefone, cpf, data_nascimento,
         contato_emergencia_nome, contato_emergencia_tel,
-        senha_hash, role
+        senha_hash, role, termos_aceitos_em, versao_termos, telefone_verificado
       ) VALUES (
         ${idUsuario}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
         ${dataNascSql},
         ${contatoEmergenciaNome ? String(contatoEmergenciaNome).trim().slice(0, 150) : null},
         ${contatoEmergenciaTelefone ? String(contatoEmergenciaTelefone).trim().slice(0, 25) : null},
-        ${senhaHash}, 'cliente'
+        ${senhaHash}, 'cliente', CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
       )
       RETURNING id, nome, email, telefone, role;
     `;
@@ -259,7 +419,6 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Prioriza contas de administrador quando houver múltiplos registros
     const usuarios = await sql`
       SELECT * FROM usuarios
       WHERE LOWER(TRIM(email)) = ${idLimpo}

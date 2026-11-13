@@ -1,10 +1,11 @@
-// routes/pedidos.routes.js - Gestão Completa de Pedidos HUBy Sincronizada com Tarifas do Banco
+// routes/pedidos.routes.js - Gestão Completa de Pedidos HUBy Sincronizada com Tarifas do Banco e Web Push
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
+import { dispararPushParaMotoristas } from './push.routes.js';
 
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -62,7 +63,7 @@ export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO (COM CÁLCULO OFICIAL PELAS TARIFAS DO BANCO)
+  // 1. CRIAR PEDIDO (COM CÁLCULO OFICIAL PELAS TARIFAS DO BANCO + PUSH REAL)
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
@@ -207,6 +208,14 @@ export default function pedidosRouter(io) {
         });
       }
 
+      // Dispara Web Push real em segundo plano para acordar o celular dos motoristas
+      dispararPushParaMotoristas({
+        titulo: `🚘 Nova Chamada (${subTipoLabelFinal}) • R$ ${vTotal.toFixed(2).replace('.', ',')}`,
+        corpo: `${endOrigem} ➔ ${endDestino}`,
+        categoria: subTipoIdFinal,
+        pedidoId: idPedido
+      });
+
       return res.status(201).json({
         sucesso: true,
         id: idPedido,
@@ -338,7 +347,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 6. STATUS DA VIAGEM (CONSULTA E ATUALIZAÇÃO DE ETAPA PELO MOTORISTA)
+  // 6. STATUS DA VIAGEM (CONSULTA, CHEGADA NO LOCAL, EMBARQUE E CHAT)
   // =========================================================================
   router.get('/:id/status', autenticarToken, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -376,7 +385,6 @@ export default function pedidosRouter(io) {
     }
   });
 
-  // ROTA QUE ATUALIZA STATUS (Ex: "motorista_no_local" quando clica em "Cheguei no Local")
   router.put('/:id/status', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
@@ -399,14 +407,14 @@ export default function pedidosRouter(io) {
     }
   });
 
-  // ROTA DE EMBARQUE (Corrige o erro 404 de /:id/embarque quando o motorista clica em "Iniciar Viagem")
   router.put('/:id/embarque', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
 
       await sql`
         UPDATE pedidos
-        SET status = 'em_viagem'
+        SET status = 'em_viagem',
+            embarque_em = CURRENT_TIMESTAMP
         WHERE id::text = ${String(id)}::text
           AND LOWER(COALESCE(status, '')) <> 'concluido';
       `;
@@ -421,15 +429,14 @@ export default function pedidosRouter(io) {
     }
   });
 
-  // ROTAS DE CHAT ENTRE PASSAGEIRO E MOTORISTA
   router.get('/:id/chat', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const msgs = await sql`
-        SELECT id, pedido_id, remetente_id, remetente_nome, mensagem, criado_em
+        SELECT id, pedido_id, remetente_id, remetente_nome, mensagem, COALESCE(criado_em, enviado_em) AS criado_em
         FROM mensagens_chat
         WHERE pedido_id = ${String(id)}
-        ORDER BY criado_em ASC
+        ORDER BY id ASC
         LIMIT 100;
       `;
       res.json(msgs);
