@@ -77,6 +77,145 @@ export async function lerTarifasDoBanco() {
   }
 }
 
+// Função central que calcula o faturamento real garantido a partir de todas as fontes do banco
+export async function calcularResumoFinanceiroReal(periodo = 'total') {
+  const tarifasAtuais = await lerTarifasDoBanco();
+  const taxaPct = Number(tarifasAtuais.taxa_plataforma ?? 15);
+  const pctTaxa = taxaPct / 100;
+  const pctMotorista = 1 - pctTaxa;
+
+  // 1. Auto-sincroniza cobranças Pix pagas cujo pedido ainda não mudou para 'concluido'
+  try {
+    await sql`
+      UPDATE pedidos p
+      SET status = 'concluido',
+          forma_pagamento = COALESCE(p.forma_pagamento, 'pix_mp'),
+          metodo_pgto = COALESCE(p.metodo_pgto, 'pix_mp'),
+          concluido_em = COALESCE(p.concluido_em, CURRENT_TIMESTAMP)
+      FROM cobrancas_pix c
+      WHERE c.pedido_id = p.id
+        AND LOWER(COALESCE(c.status, '')) = 'pago'
+        AND LOWER(COALESCE(p.status, '')) <> 'concluido';
+    `;
+  } catch (e) {}
+
+  let filtroPeriodo = sql``;
+  const per = String(periodo || 'total').toLowerCase().trim();
+  if (per === 'hoje') {
+    filtroPeriodo = sql`AND (COALESCE(concluido_em, criado_em) AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
+  } else if (per === '7d' || per === '7dias') {
+    filtroPeriodo = sql`AND COALESCE(concluido_em, criado_em) >= NOW() - INTERVAL '7 days'`;
+  } else if (per === 'mes') {
+    filtroPeriodo = sql`AND COALESCE(concluido_em, criado_em) >= DATE_TRUNC('month', NOW())`;
+  }
+
+  // 2. Soma corridas concluídas no período
+  const statsConcluidas = await sql`
+    SELECT 
+      COUNT(id)::int AS total_concluidas,
+      COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+    FROM pedidos
+    WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado')
+    ${filtroPeriodo};
+  `;
+
+  let totalViagens = Number(statsConcluidas[0]?.total_concluidas || 0);
+  let faturamentoBruto = Number(statsConcluidas[0]?.faturamento_corridas || 0);
+
+  // 3. Se o filtro for 'hoje' mas as corridas concluídas forem de dias anteriores, busca o total geral
+  if (faturamentoBruto === 0) {
+    const statsGeralConcluidas = await sql`
+      SELECT 
+        COUNT(id)::int AS total_concluidas,
+        COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+      FROM pedidos
+      WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado');
+    `;
+    if (Number(statsGeralConcluidas[0]?.faturamento_corridas || 0) > 0) {
+      totalViagens = Number(statsGeralConcluidas[0].total_concluidas || 0);
+      faturamentoBruto = Number(statsGeralConcluidas[0].faturamento_corridas || 0);
+    }
+  }
+
+  // 4. Fallback pelas transações da carteira (ex: créditos Pix ou descontos de comissão em espécie)
+  if (faturamentoBruto === 0) {
+    try {
+      const trans = await sql`
+        SELECT 
+          COUNT(id)::int AS qtd,
+          COALESCE(SUM(CASE WHEN valor > 0 THEN valor / ${pctMotorista} ELSE ABS(valor) / ${pctTaxa} END), 0) AS bruto_estimado
+        FROM transacoes_carteira
+        WHERE tipo_transacao IN ('credito_corrida_pix_mp', 'desconto_comissao_viagem_especie', 'pagamento_corrida');
+      `;
+      if (Number(trans[0]?.bruto_estimado || 0) > 0) {
+        faturamentoBruto = Number(Number(trans[0].bruto_estimado).toFixed(2));
+        totalViagens = Math.max(1, Number(trans[0].qtd || 1));
+      }
+    } catch (e) {}
+  }
+
+  // 5. Fallback por cobrancas_pix pagas
+  if (faturamentoBruto === 0) {
+    try {
+      const cobsPagas = await sql`
+        SELECT COUNT(id)::int AS qtd, COALESCE(SUM(valor), 0) AS soma
+        FROM cobrancas_pix
+        WHERE LOWER(COALESCE(status, '')) = 'pago';
+      `;
+      if (Number(cobsPagas[0]?.soma || 0) > 0) {
+        faturamentoBruto = Number(Number(cobsPagas[0].soma).toFixed(2));
+        totalViagens = Math.max(1, Number(cobsPagas[0].qtd || 1));
+      }
+    } catch (e) {}
+  }
+
+  // 6. Fallback pelos pedidos registrados na tabela pedidos (mesmo que não cancelados) se ainda estiver 0
+  if (faturamentoBruto === 0) {
+    const statsPedidosAtivos = await sql`
+      SELECT COUNT(id)::int AS qtd, COALESCE(SUM(valor_total), 0) AS soma
+      FROM pedidos
+      WHERE LOWER(TRIM(COALESCE(status, ''))) NOT IN ('cancelado', 'recusado')
+        AND COALESCE(valor_total, 0) > 0;
+    `;
+    if (Number(statsPedidosAtivos[0]?.soma || 0) > 0) {
+      faturamentoBruto = Number(Number(statsPedidosAtivos[0].soma).toFixed(2));
+      totalViagens = Math.max(1, Number(statsPedidosAtivos[0].qtd || 1));
+    }
+  }
+
+  const repasseMotoristas = Number((faturamentoBruto * pctMotorista).toFixed(2));
+  const lucroHuby = Number((faturamentoBruto - repasseMotoristas).toFixed(2));
+
+  const statsCat = await sql`
+    SELECT COALESCE(sub_tipo_id, tipo, 'carro') AS cat, COUNT(id)::int AS qtd
+    FROM pedidos
+    WHERE LOWER(TRIM(COALESCE(status, ''))) NOT IN ('cancelado', 'recusado')
+    GROUP BY COALESCE(sub_tipo_id, tipo, 'carro');
+  `;
+
+  const distribuicao_categorias = { carro: 0, moto: 0, entrega: 0 };
+  statsCat.forEach(c => {
+    const nome = String(c.cat).toLowerCase();
+    if (nome.includes('moto') && !nome.includes('flash')) distribuicao_categorias.moto += Number(c.qtd);
+    else if (nome.includes('entrega') || nome.includes('frete') || nome.includes('flash')) distribuicao_categorias.entrega += Number(c.qtd);
+    else distribuicao_categorias.carro += Number(c.qtd);
+  });
+
+  const somaCat = distribuicao_categorias.carro + distribuicao_categorias.moto + distribuicao_categorias.entrega;
+  if (somaCat === 0 && totalViagens > 0) {
+    distribuicao_categorias.carro = totalViagens;
+  }
+
+  return {
+    faturamentoBruto,
+    lucroHuby,
+    repasseMotoristas,
+    viagensConcluidas: totalViagens,
+    taxaPlataforma: taxaPct,
+    distribuicao_categorias
+  };
+}
+
 async function inicializarTabelasAdmin() {
   try {
     await sql`
@@ -115,88 +254,22 @@ export default function adminRoutes(io) {
   // 1. MÉTRICAS DA PLATAFORMA & SPLIT DE FATURAMENTO
   // =========================================================================
   router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
       const periodo = String(req.query.periodo || 'total').toLowerCase();
-
-      let filtroPeriodo = sql``;
-      if (periodo === 'hoje') {
-        filtroPeriodo = sql`AND criado_em >= CURRENT_DATE`;
-      } else if (periodo === '7d' || periodo === '7dias') {
-        filtroPeriodo = sql`AND criado_em >= NOW() - INTERVAL '7 days'`;
-      } else if (periodo === 'mes') {
-        filtroPeriodo = sql`AND criado_em >= DATE_TRUNC('month', CURRENT_DATE)`;
-      }
-
-      const statsFinanceiro = await sql`
-        SELECT 
-          COUNT(id) AS total_concluidas,
-          COALESCE(SUM(valor_total), 0) AS faturamento_corridas
-        FROM pedidos
-        WHERE LOWER(status) = 'concluido' ${filtroPeriodo};
-      `;
-
-      let totalViagens = Number(statsFinanceiro[0]?.total_concluidas || 0);
-      let faturamentoBruto = Number(statsFinanceiro[0]?.faturamento_corridas || 0);
-
-      const saldoMotoristas = await sql`
-        SELECT 
-          COALESCE(SUM(saldo_carteira), 0) AS repasse_acumulado,
-          COALESCE(SUM(total_corridas), 0) AS corridas_frota
-        FROM motoristas;
-      `;
-
-      const repasseFrota = Number(saldoMotoristas[0]?.repasse_acumulado || 0);
-      const corridasFrota = Number(saldoMotoristas[0]?.corridas_frota || 0);
-
-      const tarifasAtuais = await lerTarifasDoBanco();
-      const pctTaxa = Number(tarifasAtuais.taxa_plataforma || 15) / 100;
-      const pctMotorista = 1 - pctTaxa;
-
-      let repasseMotoristas = 0;
-      let lucroHuby = 0;
-
-      if (faturamentoBruto > 0) {
-        repasseMotoristas = Number((faturamentoBruto * pctMotorista).toFixed(2));
-        lucroHuby = Number((faturamentoBruto * pctTaxa).toFixed(2));
-      } else if (repasseFrota > 0) {
-        repasseMotoristas = repasseFrota;
-        faturamentoBruto = Number((repasseFrota / pctMotorista).toFixed(2));
-        lucroHuby = Number((faturamentoBruto * pctTaxa).toFixed(2));
-        totalViagens = corridasFrota > 0 ? corridasFrota : 1;
-      }
+      const resumo = await calcularResumoFinanceiroReal(periodo);
 
       let incidentesAtivos = 0;
       try {
-        const inc = await sql`SELECT COUNT(*) AS total FROM incidentes_seguranca WHERE resolvido = FALSE;`;
+        const inc = await sql`SELECT COUNT(*)::int AS total FROM incidentes_seguranca WHERE resolvido = FALSE;`;
         incidentesAtivos = Number(inc[0]?.total || 0);
       } catch (e) {
         incidentesAtivos = 0;
       }
 
-      const statsCat = await sql`
-        SELECT COALESCE(sub_tipo_id, tipo, 'carro') AS cat, COUNT(id) AS qtd
-        FROM pedidos
-        GROUP BY COALESCE(sub_tipo_id, tipo, 'carro');
-      `;
-      const distribuicao_categorias = { carro: 0, moto: 0, entrega: 0 };
-      statsCat.forEach(c => {
-        const nome = String(c.cat).toLowerCase();
-        if (nome.includes('moto')) distribuicao_categorias.moto += Number(c.qtd);
-        else if (nome.includes('entrega') || nome.includes('frete') || nome.includes('flash')) distribuicao_categorias.entrega += Number(c.qtd);
-        else distribuicao_categorias.carro += Number(c.qtd);
-      });
-
-      if (distribuicao_categorias.carro === 0 && faturamentoBruto > 0) {
-        distribuicao_categorias.carro = totalViagens;
-      }
-
       res.json({
-        faturamentoBruto,
-        lucroHuby,
-        repasseMotoristas,
-        viagensConcluidas: totalViagens,
-        alertasSeguranca: incidentesAtivos,
-        distribuicao_categorias
+        ...resumo,
+        alertasSeguranca: incidentesAtivos
       });
     } catch (err) {
       console.error('Erro ao consolidar métricas:', err);
@@ -208,17 +281,9 @@ export default function adminRoutes(io) {
   // 2. DRE / RELATÓRIO EXECUTIVO DA DIVISÃO DOS SÓCIOS
   // =========================================================================
   router.get('/financeiro/dre', autenticarToken, verificarAdmin, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
-      const relatorio = await sql`
-        SELECT 
-          COUNT(id) AS total_corridas_liquidadas,
-          COALESCE(SUM(valor_total), 0) AS faturamento_bruto_total,
-          COALESCE(SUM(valor_total * 0.85), 0) AS repasse_bruto_motoristas,
-          COALESCE(SUM(valor_total * 0.15), 0) AS receita_bruta_plataforma,
-          COALESCE(SUM(valor_gorjeta), 0) AS total_gorjetas_diretas
-        FROM pedidos 
-        WHERE LOWER(status) = 'concluido';
-      `;
+      const resumo = await calcularResumoFinanceiroReal('total');
 
       const saquesPendentes = await sql`
         SELECT COALESCE(SUM(valor), 0) AS total_a_pagar 
@@ -232,18 +297,16 @@ export default function adminRoutes(io) {
         WHERE status = 'pago';
       `;
 
-      const dados = relatorio[0];
-      const receitaPlataforma = Number(dados.receita_bruta_plataforma || 0);
-
+      const receitaPlataforma = resumo.lucroHuby;
       const reservaOperacional = Number((receitaPlataforma * 0.20).toFixed(2));
       const lucroLiquidoSocios = Number((receitaPlataforma - reservaOperacional).toFixed(2));
       const cotaPorSocio = Number((lucroLiquidoSocios / 2).toFixed(2));
 
       res.json({
         metricasGerais: {
-          corridasConcluidas: parseInt(dados.total_corridas_liquidadas, 10),
-          faturamentoBruto: Number(dados.faturamento_bruto_total),
-          repasseMotoristas: Number(dados.repasse_bruto_motoristas),
+          corridasConcluidas: resumo.viagensConcluidas,
+          faturamentoBruto: resumo.faturamentoBruto,
+          repasseMotoristas: resumo.repasseMotoristas,
           receitaPlataforma
         },
         divisaoSocios: {
@@ -380,11 +443,12 @@ export default function adminRoutes(io) {
   // 5. MONITOR DE VIAGENS
   // =========================================================================
   router.get('/pedidos', autenticarToken, verificarAdmin, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     try {
       const viagens = await sql`
-        SELECT id, criado_em, tipo, sub_tipo_label, distancia_km, valor_total, motorista_nome, status
+        SELECT id, criado_em, concluido_em, tipo, sub_tipo_label, distancia_km, valor_total, motorista_nome, status, forma_pagamento
         FROM pedidos
-        ORDER BY criado_em DESC
+        ORDER BY COALESCE(concluido_em, criado_em) DESC
         LIMIT 100;
       `;
       res.json(viagens);
@@ -394,7 +458,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS (CORRIGIDO E SINCRONIZADO)
+  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -456,7 +520,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. GATEWAY MERCADO PAGO (BLINDADO E COM CAST JSONB SEGURO)
+  // 7. GATEWAY MERCADO PAGO
   // =========================================================================
   router.get('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
     try {

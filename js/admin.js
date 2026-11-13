@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Blindado contra XSS e Sincronizado em Tempo Real)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Sincronizado com Faturamento, Saldo Líquido e Gráficos)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -8,7 +8,6 @@ let motoristaFocadoModalId = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
-// Sanitizador Anti-XSS para proteger o Painel Admin contra injeção de scripts maliciosos
 function escaparHTML(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
@@ -18,9 +17,6 @@ function escaparHTML(str) {
     .replace(/'/g, '&#39;');
 }
 
-// ============================================================================
-// SISTEMA DE NOTIFICAÇÃO TOAST EXECUTIVO
-// ============================================================================
 function notificarAdmin(mensagem, tipo = 'sucesso') {
   let container = document.getElementById('adminToastContainer');
   if (!container) {
@@ -94,6 +90,7 @@ async function sincronizarTudo(token) {
 
   await carregarTarifasConfig(token);
   await carregarTabelaFrota(token);
+  await carregarTabelaViagens(token);
   await carregarMetricasECards(token, periodoAtual);
   await carregarDadosSocios(token);
 
@@ -102,7 +99,6 @@ async function sincronizarTudo(token) {
     carregarTabelaCupons(token),
     carregarTabelaSeguranca(token),
     carregarTabelaSaques(token),
-    carregarTabelaViagens(token),
     carregarTabelaMarketplace(token),
     carregarGatewayConfig(token)
   ]);
@@ -119,7 +115,7 @@ function configurarFiltroPeriodo(token) {
 
 async function carregarMetricasECards(token, periodo = 'total') {
   try {
-    const res = await fetch(`${API_URL}/api/admin/metricas?periodo=${periodo}&t=${Date.now()}`, {
+    const res = await fetch(`${API_URL}/api/admin/metricas?periodo=${encodeURIComponent(periodo)}&t=${Date.now()}`, {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
@@ -135,36 +131,54 @@ async function carregarMetricasECards(token, periodo = 'total') {
     let viagensConcluidas = Number(dados.viagensConcluidas || 0);
     let incidentesAtivos = Number(dados.alertasSeguranca || 0);
 
-    const pctTaxa = Number(TAXA_PLATAFORMA_ATUAL || 15) / 100;
+    const pctTaxa = Number(dados.taxaPlataforma || TAXA_PLATAFORMA_ATUAL || 15) / 100;
     const pctMotorista = 1 - pctTaxa;
 
-    if (faturamentoBruto === 0 && window._ultimoSaldoAcumuladoFrota > 0) {
-      repasseMotoristas = Number(window._ultimoSaldoAcumuladoFrota.toFixed(2));
-      faturamentoBruto = Number((repasseMotoristas / pctMotorista).toFixed(2));
-      lucroLiquido = Number((faturamentoBruto * pctTaxa).toFixed(2));
-      if (viagensConcluidas === 0) viagensConcluidas = 1;
+    // Fallback inteligente pela lista de corridas carregadas no navegador
+    if (faturamentoBruto === 0 && Array.isArray(window._ultimasCorridasAdmin) && window._ultimasCorridasAdmin.length > 0) {
+      let listaValida = window._ultimasCorridasAdmin.filter(c =>
+        ['concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado'].includes(String(c.status || '').toLowerCase().trim())
+      );
+      if (listaValida.length === 0) {
+        listaValida = window._ultimasCorridasAdmin.filter(c =>
+          !['cancelado', 'recusado'].includes(String(c.status || '').toLowerCase().trim()) && Number(c.valor_total || 0) > 0
+        );
+      }
+      if (listaValida.length > 0) {
+        faturamentoBruto = Number(listaValida.reduce((acc, c) => acc + Number(c.valor_total || 0), 0).toFixed(2));
+        repasseMotoristas = Number((faturamentoBruto * pctMotorista).toFixed(2));
+        lucroLiquido = Number((faturamentoBruto - repasseMotoristas).toFixed(2));
+        viagensConcluidas = listaValida.length;
+      }
     }
+
+    const fmtMoeda = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
     const setTexto = (id, valor) => {
       const el = document.getElementById(id);
       if (el) el.textContent = valor;
     };
 
-    setTexto('metricBruto', `R$ ${faturamentoBruto.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-    setTexto('metricLiquido', `R$ ${lucroLiquido.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-    setTexto('metricRepasse', `R$ ${repasseMotoristas.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-    setTexto('metricConcluidas', viagensConcluidas);
-    setTexto('metricAlertas', incidentesAtivos);
+    setTexto('metricBruto', fmtMoeda(faturamentoBruto));
+    setTexto('metricLiquido', fmtMoeda(lucroLiquido));
+    setTexto('metricRepasse', fmtMoeda(repasseMotoristas));
+    setTexto('metricConcluidas', String(viagensConcluidas));
+    setTexto('metricAlertas', String(incidentesAtivos));
 
-    setTimeout(() => {
-      renderizarGraficos(
-        faturamentoBruto,
-        lucroLiquido,
-        repasseMotoristas,
-        dados.distribuicao_categorias || { carro: viagensConcluidas || 1, moto: 0, entrega: 0 }
-      );
-    }, 150);
+    const distCategorias = dados.distribuicao_categorias || {
+      carro: viagensConcluidas,
+      moto: 0,
+      entrega: 0
+    };
 
+    window._ultimosDadosGraficos = {
+      faturamentoBruto,
+      lucroLiquido,
+      repasseMotoristas,
+      distCategorias
+    };
+
+    renderizarGraficos(faturamentoBruto, lucroLiquido, repasseMotoristas, distCategorias);
   } catch (err) {
     console.warn('Erro ao ler KPIs:', err);
   }
@@ -184,13 +198,17 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
       chartFinanceiroInstance = null;
     }
 
-    const valRepasse = repasse > 0 ? repasse : motPct;
-    const valLucro = lucro > 0 ? lucro : taxaPct;
+    const temFaturamento = (Number(repasse) > 0 || Number(lucro) > 0);
+    const valRepasse = temFaturamento ? Number(repasse.toFixed(2)) : motPct;
+    const valLucro = temFaturamento ? Number(lucro.toFixed(2)) : taxaPct;
 
     chartFinanceiroInstance = new Chart(ctxFin, {
       type: 'doughnut',
       data: {
-        labels: [`Repasse Condutores (${motPct}%)`, `Taxa HUBy (${taxaPct}%)`],
+        labels: [
+          `Repasse Condutores (${motPct}%): R$ ${Number(repasse || 0).toFixed(2).replace('.', ',')}`,
+          `Saldo Líquido HUBy (${taxaPct}%): R$ ${Number(lucro || 0).toFixed(2).replace('.', ',')}`
+        ],
         datasets: [{
           data: [valRepasse, valLucro],
           backgroundColor: ['#F59E0B', '#38BDF8'],
@@ -203,7 +221,7 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
         plugins: {
           legend: {
             position: 'bottom',
-            labels: { color: '#94A3B8', boxWidth: 12, font: { size: 12 } }
+            labels: { color: '#E2E8F0', boxWidth: 12, font: { size: 12, weight: 'bold' } }
           }
         }
       }
@@ -218,16 +236,16 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
       chartCategoriasInstance = null;
     }
 
-    const totalCarro = Number(categorias.carro || (bruto > 0 ? 1 : 0));
-    const totalMoto = Number(categorias.moto || 0);
-    const totalEntrega = Number(categorias.entrega || 0);
+    const totalCarro = Number(categorias?.carro || (bruto > 0 ? 1 : 0));
+    const totalMoto = Number(categorias?.moto || 0);
+    const totalEntrega = Number(categorias?.entrega || 0);
 
     chartCategoriasInstance = new Chart(ctxCat, {
       type: 'bar',
       data: {
         labels: ['HUBy Carro', 'HUBy Moto', 'HUBy Entrega'],
         datasets: [{
-          label: 'Viagens',
+          label: 'Viagens Concluídas',
           data: [totalCarro, totalMoto, totalEntrega],
           backgroundColor: ['#10B981', '#F59E0B', '#A855F7'],
           borderRadius: 6
@@ -240,9 +258,10 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
         scales: {
           x: { ticks: { color: '#94A3B8' }, grid: { display: false } },
           y: {
-            ticks: { color: '#94A3B8', precision: 0 },
+            beginAtZero: true,
+            ticks: { color: '#94A3B8', precision: 0, stepSize: 1 },
             grid: { color: 'rgba(255,255,255,0.05)' },
-            suggestedMax: 5
+            suggestedMax: Math.max(5, totalCarro + totalMoto + totalEntrega + 1)
           }
         }
       }
@@ -814,6 +833,8 @@ async function carregarTabelaViagens(token) {
       return;
     }
     const corridas = await res.json();
+    window._ultimasCorridasAdmin = Array.isArray(corridas) ? corridas : [];
+
     if (!Array.isArray(corridas) || !corridas.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="table-empty-row">Nenhuma viagem registrada no histórico.</td></tr>';
       return;
@@ -934,7 +955,7 @@ function configurarFormTarifas(token) {
   });
 }
 
-// 11. Gateway de Pagamento (Mercado Pago - Exibe Token Mascarado por Segurança)
+// 11. Gateway de Pagamento
 async function carregarGatewayConfig(token) {
   try {
     const res = await fetch(`${API_URL}/api/admin/gateway/mercadopago`, {
@@ -1068,10 +1089,10 @@ function configurarNavegacaoAbas() {
         const token = localStorage.getItem('huby_token');
 
         if (tabAlvoId === 'tabMetricas') {
-          setTimeout(() => {
-            if (chartFinanceiroInstance) chartFinanceiroInstance.resize();
-            if (chartCategoriasInstance) chartCategoriasInstance.resize();
-          }, 150);
+          const g = window._ultimosDadosGraficos;
+          if (g) {
+            setTimeout(() => renderizarGraficos(g.faturamentoBruto, g.lucroLiquido, g.repasseMotoristas, g.distCategorias), 100);
+          }
         }
 
         if (tabAlvoId === 'tabSocios') carregarDadosSocios(token);
@@ -1100,13 +1121,13 @@ function conectarSocketAdmin() {
     atualizarPosicaoCondutorNoMapa(dados);
   });
 
-  socket.on('corrida_finalizada', () => {
+  socket.on('corrida_finalizada', async () => {
     const token = localStorage.getItem('huby_token');
     const periodo = document.getElementById('selectFiltroPeriodo')?.value || 'total';
-    carregarTabelaFrota(token);
-    carregarMetricasECards(token, periodo);
-    carregarDadosSocios(token);
-    carregarTabelaViagens(token);
+    await carregarTabelaViagens(token);
+    await carregarTabelaFrota(token);
+    await carregarMetricasECards(token, periodo);
+    await carregarDadosSocios(token);
   });
 
   socket.on('tarifas_atualizadas', (novasTarifas) => {

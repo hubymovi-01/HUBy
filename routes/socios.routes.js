@@ -2,7 +2,7 @@
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
-import { lerTarifasDoBanco } from './admin.routes.js';
+import { calcularResumoFinanceiroReal } from './admin.routes.js';
 
 function verificarAdmin(req, res, next) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase();
@@ -55,20 +55,11 @@ inicializarTabelasSocios();
 
 const router = express.Router();
 
-// Handler unificado para /saldo-divisao e /resumo
 async function obterDivisaoSocios(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
   try {
-    const tarifas = await lerTarifasDoBanco();
-    const pctTaxa = Number(tarifas.taxa_plataforma || 15) / 100;
-
-    const faturamento = await sql`
-      SELECT COALESCE(SUM(valor_total), 0) AS bruto_concluido
-      FROM pedidos
-      WHERE LOWER(status) = 'concluido';
-    `;
-
-    const brutoTotal = Number(faturamento[0]?.bruto_concluido || 0);
-    const lucroTotalPlataforma = Number((brutoTotal * pctTaxa).toFixed(2));
+    const resumo = await calcularResumoFinanceiroReal('total');
+    const lucroTotalPlataforma = Number(resumo.lucroHuby || 0);
     const cotaBrutaSocio = Number((lucroTotalPlataforma / 2).toFixed(2));
 
     const socios = await sql`SELECT * FROM socios_huby ORDER BY id ASC LIMIT 2;`;
@@ -107,7 +98,6 @@ async function obterDivisaoSocios(req, res) {
 router.get('/saldo-divisao', autenticarToken, verificarAdmin, obterDivisaoSocios);
 router.get('/resumo', autenticarToken, verificarAdmin, obterDivisaoSocios);
 
-// Atualizar dados do sócio (compatível com /atualizar/:id e /:id)
 async function atualizarSocioHandler(req, res) {
   const { id } = req.params;
   const { nome, chave_pix } = req.body;
@@ -139,7 +129,6 @@ async function atualizarSocioHandler(req, res) {
 router.put('/atualizar/:id', autenticarToken, verificarAdmin, atualizarSocioHandler);
 router.put('/:id', autenticarToken, verificarAdmin, atualizarSocioHandler);
 
-// Registrar retirada / saque do sócio (compatível com /retirar/:id e /retirada)
 async function retirarSocioHandler(req, res) {
   const socioId = req.params.id || req.body.socio_id;
   const valorNum = parseFloat(String(req.body.valor ?? '').replace(',', '.'));
