@@ -64,14 +64,12 @@ export async function obterOuGerarCodigoUsuario(usuarioId, role = 'cliente') {
   }
 }
 
-// Registra o vínculo quando um novo usuário se cadastra com código de convite
 export async function registrarIndicacaoNoCadastro({ novoUsuarioId, novoUsuarioNome, codigoConvite }) {
   if (!codigoConvite) return;
   try {
     await garantirEstruturaIndicacoes();
     const codLimpo = String(codigoConvite).trim().toUpperCase();
 
-    // Procura indicador entre motoristas primeiro, depois entre passageiros
     let indicadorId = null;
     let indicadorRole = 'cliente';
     let indicadorNome = '';
@@ -109,7 +107,6 @@ export async function registrarIndicacaoNoCadastro({ novoUsuarioId, novoUsuarioN
   }
 }
 
-// Libera o bônus automaticamente quando o indicado conclui sua 1ª corrida
 export async function liquidarBonusIndicacaoPrimeiraCorrida(clienteId) {
   if (!clienteId) return;
   try {
@@ -150,7 +147,6 @@ export async function liquidarBonusIndicacaoPrimeiraCorrida(clienteId) {
   }
 }
 
-// Consulta o código e o extrato de indicações do usuário logado
 router.get('/meu-codigo', autenticarToken, async (req, res) => {
   try {
     const usuarioId = String(req.usuario.id);
