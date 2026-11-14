@@ -8,7 +8,7 @@ import { sql, JWT_SECRET } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
 import usuariosRouter from './routes/usuarios.routes.js';
-import pedidosRouter from './routes/pedidos.routes.js';
+import pedidosRouter, { iniciarDespachanteAgendamentos } from './routes/pedidos.routes.js';
 import adminRoutes, { lerTarifasDoBanco } from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
@@ -17,6 +17,7 @@ import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
 import iaRoutes from './routes/ia.routes.js';
 import pushRoutes from './routes/push.routes.js';
+import indicacoesRoutes from './routes/indicacoes.routes.js';
 
 dotenv.config();
 
@@ -365,7 +366,7 @@ inicializarBanco();
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.1.0',
+    versao: '2.2.0',
     banco: 'Neon PostgreSQL'
   });
 });
@@ -402,6 +403,10 @@ app.use('/api/socios', sociosRoutes);
 app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/ia', iaRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/indicacoes', indicacoesRoutes);
+
+// Inicia o despachante automático de corridas agendadas
+iniciarDespachanteAgendamentos(io);
 
 // ============================================================================
 // 6. TRATAMENTO GLOBAL DE ERROS

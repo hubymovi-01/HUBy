@@ -1,10 +1,11 @@
-// routes/auth.routes.js - Cadastro com Verificação OTP, Aceite LGPD, Validade CNH/CRLV, Login e Perfil HUBy
+// routes/auth.routes.js - Cadastro com Verificação OTP, Aceite LGPD, Validade CNH/CRLV, Indicação e Perfil HUBy
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { sql, JWT_SECRET } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+import { registrarIndicacaoNoCadastro } from './indicacoes.routes.js';
 
 const router = express.Router();
 
@@ -16,12 +17,14 @@ async function garantirEstruturaAuthSeguranca() {
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS termos_aceitos_em TIMESTAMP WITH TIME ZONE;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS versao_termos VARCHAR(20) DEFAULT '1.0';`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefone_verificado BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS indicado_por_codigo VARCHAR(20);`;
 
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS termos_aceitos_em TIMESTAMP WITH TIME ZONE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS versao_termos VARCHAR(20) DEFAULT '1.0';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS telefone_verificado BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS indicado_por_codigo VARCHAR(20);`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS codigos_verificacao (
@@ -221,7 +224,7 @@ router.post('/verificar-codigo', async (req, res) => {
 });
 
 // ============================================================================
-// CADASTRO (COM ACEITE LGPD, VERIFICAÇÃO OTP E VALIDADE CNH/CRLV)
+// CADASTRO (COM ACEITE LGPD, VERIFICAÇÃO OTP, VALIDADE CNH/CRLV E INDICAÇÃO)
 // ============================================================================
 router.post('/cadastro', async (req, res) => {
   try {
@@ -229,7 +232,7 @@ router.post('/cadastro', async (req, res) => {
 
     const {
       nome, email, telefone, cpf, senha, role,
-      aceitouTermos, versaoTermos,
+      aceitouTermos, versaoTermos, codigoIndicacao,
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
       cnh, cnh_validade, crlv_validade,
       categoria, categoria_veiculo,
@@ -253,6 +256,7 @@ router.post('/cadastro', async (req, res) => {
     const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
     const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : '';
     const versaoFinalTermos = String(versaoTermos || '1.0').slice(0, 20);
+    const codigoConviteLimpo = codigoIndicacao ? String(codigoIndicacao).trim().toUpperCase().slice(0, 20) : null;
 
     if (!cpfLimpo || !validarNumeroCPF(cpfLimpo)) {
       return res.status(400).json({ erro: 'Número de CPF inválido.' });
@@ -295,11 +299,11 @@ router.post('/cadastro', async (req, res) => {
       await sql`
         INSERT INTO usuarios (
           id, nome, email, telefone, cpf, data_nascimento, senha_hash, role,
-          termos_aceitos_em, versao_termos, telefone_verificado
+          termos_aceitos_em, versao_termos, telefone_verificado, indicado_por_codigo
         ) VALUES (
           ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
           ${dataNascSql}, ${senhaHash}, 'motorista',
-          CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
+          CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
         );
       `;
 
@@ -311,14 +315,14 @@ router.post('/cadastro', async (req, res) => {
             cnh_numero, cnh_validade, crlv_validade,
             categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
             saldo_carteira, status_aprovacao, avaliacao_media, total_corridas,
-            doc_cnh_url, doc_crlv_url, termos_aceitos_em, versao_termos, telefone_verificado
+            doc_cnh_url, doc_crlv_url, termos_aceitos_em, versao_termos, telefone_verificado, indicado_por_codigo
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
             ${dataNascSql}, ${senhaHash},
             ${cnhLimpa}, ${cnhValSql}, ${crlvValSql},
             ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
             0.00, ${statusInicial}, 5.00, 0,
-            ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
+            ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
           )
           RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria;
         `;
@@ -326,6 +330,14 @@ router.post('/cadastro', async (req, res) => {
       } catch (erroMotorista) {
         await sql`DELETE FROM usuarios WHERE id = ${idMotorista};`;
         throw erroMotorista;
+      }
+
+      if (codigoConviteLimpo) {
+        await registrarIndicacaoNoCadastro({
+          novoUsuarioId: idMotorista,
+          novoUsuarioNome: nomeLimpo,
+          codigoConvite: codigoConviteLimpo
+        });
       }
 
       if (!APROVACAO_AUTOMATICA) {
@@ -348,16 +360,24 @@ router.post('/cadastro', async (req, res) => {
       INSERT INTO usuarios (
         id, nome, email, telefone, cpf, data_nascimento,
         contato_emergencia_nome, contato_emergencia_tel,
-        senha_hash, role, termos_aceitos_em, versao_termos, telefone_verificado
+        senha_hash, role, termos_aceitos_em, versao_termos, telefone_verificado, indicado_por_codigo
       ) VALUES (
         ${idUsuario}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
         ${dataNascSql},
         ${contatoEmergenciaNome ? String(contatoEmergenciaNome).trim().slice(0, 150) : null},
         ${contatoEmergenciaTelefone ? String(contatoEmergenciaTelefone).trim().slice(0, 25) : null},
-        ${senhaHash}, 'cliente', CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}
+        ${senhaHash}, 'cliente', CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
       )
       RETURNING id, nome, email, telefone, role;
     `;
+
+    if (codigoConviteLimpo) {
+      await registrarIndicacaoNoCadastro({
+        novoUsuarioId: idUsuario,
+        novoUsuarioNome: nomeLimpo,
+        codigoConvite: codigoConviteLimpo
+      });
+    }
 
     const criado = resultado[0];
     const token = jwt.sign(

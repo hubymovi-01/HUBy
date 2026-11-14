@@ -151,6 +151,12 @@
           <input type="password" id="cadSenha" placeholder="••••••••" required>
         </div>
 
+        <div class="input-group">
+          <label>🎁 Código de Convite / Indicação (Opcional)</label>
+          <input type="text" id="cadCodigoIndicacao" placeholder="Ex: HUBY-A1B2 (Ganha R$ 5 de desconto)"
+            style="text-transform: uppercase;" maxlength="15">
+        </div>
+
         <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
         <div id="blocoMotorista"
           style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
@@ -251,6 +257,12 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     const perfilParam = urlParams.get('perfil');
+    const conviteParam = urlParams.get('convite');
+
+    if (conviteParam) {
+      const inpConv = document.getElementById('cadCodigoIndicacao');
+      if (inpConv) inpConv.value = conviteParam.toUpperCase();
+    }
 
     const btnCliente = document.getElementById('btnRoleCliente');
     const btnMotorista = document.getElementById('btnRoleMotorista');
@@ -452,6 +464,7 @@
         telefone: inputTel.value.replace(/\D/g, ''),
         cpf: inputCpf.value.replace(/\D/g, ''),
         senha: document.getElementById('cadSenha').value,
+        codigoIndicacao: document.getElementById('cadCodigoIndicacao')?.value.trim().toUpperCase() || null,
         role: roleAtual,
         aceitouTermos: true,
         versaoTermos: '1.0'
