@@ -1,8 +1,15 @@
-// js/motorista/motorista-chat.js
+// js/motorista/motorista-chat.js - Chat em Tempo Real do Motorista HUBy
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 
 let chatInterval = null;
+
+function escaparHTML(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
 
 export function configurarChatMotorista() {
   const btnAbrirChat = document.getElementById('btnAbrirChat');
@@ -14,14 +21,17 @@ export function configurarChatMotorista() {
   btnAbrirChat?.addEventListener('click', () => {
     if (modalChat) modalChat.style.display = 'flex';
     carregarMensagensChat();
-    if (!chatInterval) chatInterval = setInterval(carregarMensagensChat, 3000);
+    if (!chatInterval) chatInterval = setInterval(carregarMensagensChat, 2500);
   });
 
   btnFecharChat?.addEventListener('click', fecharChat);
 
   btnEnviarMsg?.addEventListener('click', enviarMensagemChat);
   inputMsg?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') enviarMensagemChat();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      enviarMensagemChat();
+    }
   });
 }
 
@@ -37,9 +47,10 @@ export function fecharChat() {
 async function enviarMensagemChat() {
   const inputMsg = document.getElementById('inputChatMsg');
   const txt = inputMsg ? inputMsg.value.trim() : '';
-  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
+  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
+  const pedidoId = pedido?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
 
-  if (!txt || !pedido?.id) return;
+  if (!txt || !pedidoId) return;
 
   const quantidadeNumeros = (txt.match(/\d/g) || []).length;
   if (quantidadeNumeros >= 4) {
@@ -49,26 +60,45 @@ async function enviarMensagemChat() {
 
   if (inputMsg) inputMsg.value = '';
 
+  // Renderização imediata (otimista) para o motorista ver na hora
+  const areaMensagens = document.getElementById('chatAreaMensagens');
+  if (areaMensagens) {
+    const meuNome = localStorage.getItem('huby_user_name') || 'Motorista';
+    areaMensagens.insertAdjacentHTML('beforeend', `
+      <div style="display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 6px;">
+        <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${escaparHTML(meuNome)}</small>
+        <div style="background: #10B981; color: #02261C; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 80%;">
+          ${escaparHTML(txt)}
+        </div>
+      </div>
+    `);
+    areaMensagens.scrollTop = areaMensagens.scrollHeight;
+  }
+
   try {
-    await fetch(`${API_URL}/api/pedidos/${pedido.id}/chat`, {
+    await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
       method: 'POST',
       headers: obterHeaders(),
-      body: JSON.stringify({ mensagem: txt })
+      body: JSON.stringify({
+        mensagem: txt,
+        remetenteNome: localStorage.getItem('huby_user_name') || 'Motorista'
+      })
     });
-    carregarMensagensChat();
+    await carregarMensagensChat();
   } catch (err) {
     console.warn('Erro ao enviar msg:', err);
   }
 }
 
 async function carregarMensagensChat() {
-  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
-  if (!pedido?.id) return;
+  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
+  const pedidoId = pedido?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
+  if (!pedidoId) return;
 
   const token = estado.token || localStorage.getItem('huby_token');
-  let meuId = estado.motoristaId;
+  let meuId = estado.motoristaId || localStorage.getItem('huby_user_id');
 
-  if (!meuId && token) {
+  if (!meuId && token && token.includes('.')) {
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       meuId = payload.id;
@@ -79,7 +109,7 @@ async function carregarMensagensChat() {
   if (!areaMensagens) return;
 
   try {
-    const resp = await fetch(`${API_URL}/api/pedidos/${pedido.id}/chat`, {
+    const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat?t=${Date.now()}`, {
       headers: obterHeaders()
     });
     if (!resp.ok) return;
@@ -91,9 +121,9 @@ async function carregarMensagensChat() {
       const souEu = String(m.remetente_id) === String(meuId);
       html += `
         <div style="display: flex; flex-direction: column; align-items: ${souEu ? 'flex-end' : 'flex-start'}; margin-bottom: 6px;">
-          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${m.remetente_nome || 'Mensagem'}</small>
+          <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${escaparHTML(m.remetente_nome || 'Mensagem')}</small>
           <div style="background: ${souEu ? '#10B981' : '#1F2937'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px; max-width: 80%;">
-            ${m.mensagem}
+            ${escaparHTML(m.mensagem)}
           </div>
         </div>
       `;
