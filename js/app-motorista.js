@@ -1,6 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Sincronizada em Tempo Real com Tarifas e Taxas do Painel Admin Master
+ * Versão Sincronizada em Tempo Real + Controle Exclusivo de Cancelamento pelo Motorista
  */
 
 import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
@@ -24,7 +24,7 @@ import {
   falarTexto,
   restaurarPreferenciaCopiloto
 } from './ia/motorista-ia.js';
-import { notificar } from './util/alertas-huby.js';
+import { notificar, confirmarAcao } from './util/alertas-huby.js';
 
 function validarAutenticacaoMotorista() {
   const token = localStorage.getItem('huby_token');
@@ -189,6 +189,113 @@ function escutarAtualizacaoTarifasTempoReal() {
   } catch (e) {}
 }
 
+// ============================================================================
+// BOTÃO EXCLUSIVO DE CANCELAMENTO NA TELA DO MOTORISTA
+// ============================================================================
+export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
+  const pedidoId = pedidoIdAlvo || estado.corridaAtiva?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
+  if (!pedidoId) {
+    notificar('Nenhuma corrida ativa encontrada para cancelar.', 'alerta');
+    return;
+  }
+
+  const executarCancelamento = async () => {
+    const token = localStorage.getItem('huby_token') || '';
+    try {
+      const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ motivo: 'Cancelado pelo motorista parceiro' })
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.erro || 'Não foi possível cancelar a corrida.');
+
+      estado.corridaAtiva = null;
+      localStorage.removeItem('huby_corrida_ativa_mot_id');
+
+      const btnChat = document.getElementById('btnAbrirChat');
+      if (btnChat) btnChat.style.display = 'none';
+
+      notificar(data.mensagem || 'Corrida cancelada com sucesso.', 'aviso');
+      iniciarRadarChamadas();
+    } catch (err) {
+      notificar(err.message, 'erro');
+    }
+  };
+
+  if (typeof confirmarAcao === 'function') {
+    confirmarAcao({
+      titulo: 'Cancelar Corrida?',
+      mensagem: 'Tem certeza que deseja cancelar esta viagem? O passageiro será notificado imediatamente.',
+      textoConfirmar: 'Sim, Cancelar Corrida',
+      onConfirmar: executarCancelamento
+    });
+  } else if (window.confirm('Tem certeza que deseja cancelar esta corrida?')) {
+    await executarCancelamento();
+  }
+}
+
+window.cancelarCorridaPeloMotorista = cancelarCorridaPeloMotorista;
+
+function configurarBotaoCancelarNaTelaMotorista() {
+  const feed = document.getElementById('listaChamadasPendentes');
+  if (!feed) return;
+
+  const garantirBotaoCancelar = () => {
+    const corridaId = estado.corridaAtiva?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
+    const temCorridaEmAndamento = Boolean(corridaId) || Boolean(
+      feed.querySelector('#btnChegueiNoLocal, #btnIniciarViagemMotorista, #btnFinalizarViagemMotorista, [data-acao="cheguei"], [data-acao="iniciar"], [data-acao="finalizar"]')
+    );
+
+    const btnExistente = document.getElementById('btnCancelarCorridaMotoristaDock');
+    if (!temCorridaEmAndamento) {
+      if (btnExistente) btnExistente.remove();
+      return;
+    }
+
+    if (btnExistente) return;
+
+    const btnCancelar = document.createElement('button');
+    btnCancelar.type = 'button';
+    btnCancelar.id = 'btnCancelarCorridaMotoristaDock';
+    btnCancelar.innerHTML = '❌ Cancelar Corrida';
+    btnCancelar.style.cssText = [
+      'width: 100%',
+      'margin-top: 10px',
+      'padding: 12px',
+      'border-radius: 12px',
+      'background: rgba(239, 68, 68, 0.14)',
+      'border: 1.5px solid rgba(239, 68, 68, 0.45)',
+      'color: #F87171',
+      'font-size: 13px',
+      'font-weight: 800',
+      'cursor: pointer',
+      'display: flex',
+      'align-items: center',
+      'justify-content: center',
+      'gap: 6px'
+    ].join(';');
+
+    btnCancelar.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelarCorridaPeloMotorista(corridaId);
+    });
+
+    feed.appendChild(btnCancelar);
+  };
+
+  const observer = new MutationObserver(() => {
+    garantirBotaoCancelar();
+  });
+  observer.observe(feed, { childList: true, subtree: true });
+  setInterval(garantirBotaoCancelar, 1500);
+}
+
 function registrarEventosUI() {
   const btnOnline = document.getElementById('btnToggleStatusOnline');
   if (btnOnline) {
@@ -224,12 +331,12 @@ function registrarEventosUI() {
   
   configurarMetaDiaria();
   configurarCodigoVozDireto();
+  configurarBotaoCancelarNaTelaMotorista();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (!validarAutenticacaoMotorista()) return;
 
-  // 1. Sincroniza tarifas e taxa da plataforma direto do banco antes de iniciar o radar
   await sincronizarTarifasServidor();
   atualizarTextosPercentualRepasse();
 

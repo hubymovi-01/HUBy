@@ -1,19 +1,18 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Tarifas 100% Sincronizadas com o Admin)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Sem Cancelamento pelo Cliente)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
-import { notificar, confirmarAcao } from './util/alertas-huby.js';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido } from './cliente/cliente-pedidos.js?v=2.9.0';
+import { notificar } from './util/alertas-huby.js';
 import { abrirPromptParada } from './cliente-ui.js';
 import {
   configurarSeletorPagamentoRapido,
   configurarNotaMotorista,
   configurarCupomDesconto,
   criarOuAtualizarVeiculoMapa,
-  atualizarResumoComDesconto,
   estadoRecursos
 } from './cliente/cliente-recursos.js';
 
@@ -42,7 +41,6 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// Extrai a distância real em KM de qualquer objeto de rota retornado pelo OSRM / Leaflet
 function extrairDistanciaKmDaRota(rota) {
   if (!rota) return 0;
   const bruta = Number(
@@ -66,7 +64,6 @@ function extrairDistanciaKmDaRota(rota) {
   return 0;
 }
 
-// Recalcula o objeto rotaAtual e todos os cards da interface usando as tarifas oficiais do banco
 function sincronizarPrecosDaRotaAtual() {
   if (!estadoCliente.rotaAtual && !estadoCliente.coordsDestino) {
     atualizarValoresCardsPro(0);
@@ -104,7 +101,8 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     document.getElementById('containerParadasIntermediarias'),
     document.getElementById('btnAddParada'),
     document.querySelector('.modern-search'),
-    document.querySelector('.quick-features-bar')
+    document.querySelector('.quick-features-bar'),
+    document.querySelector('.dock-quick-actions-row')
   ];
 
   elementosParaEsconder.forEach(el => {
@@ -124,7 +122,6 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
   }
 }
 
-// Calcula cada categoria (Carro, Moto e Flash) diretamente com as tarifas salvas no banco (config.js)
 function atualizarValoresCardsPro(precoBase, distanciaForcadaKm = null) {
   const lblCarro = document.getElementById('priceEstCarro');
   const lblMoto = document.getElementById('priceEstMoto');
@@ -518,12 +515,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 400);
   }
 
-  // 1. Garante tarifas atualizadas do banco logo ao abrir
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
   atualizarValoresCardsPro(0);
 
-  // 2. Inicializa o Mapa
   try {
     if (!estadoCliente.hubyMapa) {
       estadoCliente.hubyMapa = new HubyMapa('mapaCliente');
@@ -573,7 +568,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.warn('Aviso no mapa:', err);
   }
 
-  // 3. Pesquisa de locais
   if (estadoCliente.hubyMapa) {
     configurarPesquisaLocal(estadoCliente.hubyMapa, async (rota, coords, nomeCurto) => {
       await sincronizarTarifasServidor();
@@ -601,7 +595,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 4. Ativação dos controles
   configurarParadasIntermediariasSemPrompt();
   configurarBarraPesquisaAnimada();
   configurarAlternanciaSatélite();
@@ -611,7 +604,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarCupomDesconto();
 
-  // 5. Escuta IA (Voz/Gemini)
   const processarDestinoIA = async (e) => {
     const dados = e.detail || {};
     const nome = dados.nome || 'Destino Selecionado';
@@ -704,7 +696,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.removeEventListener('huby_local_selecionado_ia', processarDestinoIA);
   window.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
 
-  // 6. Centralização GPS
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
@@ -726,7 +717,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // 7. Drawer e Menus
   configurarDrawerMenu();
   verificarAcessoAdminMenu();
 
@@ -740,7 +730,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (modal) modal.style.display = 'none';
   });
 
-  // 8. Seletor de Categorias
   const cardsPro = document.querySelectorAll('.category-card-pro');
   cardsPro.forEach(card => {
     card.addEventListener('click', () => {
@@ -763,27 +752,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 9. Botão Chamar (Garante envio do valor sincronizado)
+  // Botão Chamar: apenas inicia uma nova chamada (cliente não cancela chamadas ativas)
   document.getElementById('btnPedirHuby')?.addEventListener('click', async () => {
     if (estadoCliente.pedidoAtivoId) {
-      cancelarBusca();
-    } else {
-      if (!estadoCliente.coordsDestino) {
-        notificar('Selecione primeiro o destino final no mapa.', 'alerta');
-        return;
-      }
-      sincronizarPrecosDaRotaAtual();
-      submeterPedido();
+      notificar('Sua chamada já está em andamento. Aguarde o motorista parceiro.', 'info');
+      return;
+    }
+    if (!estadoCliente.coordsDestino) {
+      notificar('Selecione primeiro o destino final no mapa.', 'alerta');
+      return;
+    }
+    sincronizarPrecosDaRotaAtual();
+    await submeterPedido();
+    const btnPedir = document.getElementById('btnPedirHuby');
+    if (btnPedir && estadoCliente.pedidoAtivoId) {
+      btnPedir.style.display = 'none';
     }
   });
 
-  // 10. Modais e Chat
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
   configurarFluxoPagamentoMercadoPago();
   configurarChatPassageiro();
 
-  // 11. Conexão Socket e Polling
   conectarSocketEPollingCliente();
 
   if ('serviceWorker' in navigator) {
@@ -1008,7 +999,6 @@ function conectarSocketEPollingCliente() {
   }) : null;
 
   if (socket) {
-    // Escuta em tempo real qualquer mudança de tarifa feita no Painel Admin Master
     socket.on('tarifas_atualizadas', (novasTarifas) => {
       aplicarObjetoTarifas(novasTarifas);
       sincronizarPrecosDaRotaAtual();
@@ -1031,6 +1021,21 @@ function conectarSocketEPollingCliente() {
       if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
         alternarModoVisualViagemAtiva(true);
         atualizarParaViagemEmAndamento();
+      }
+    });
+
+    socket.on('corrida_cancelada', (data) => {
+      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+      if (!pedidoAtivo || String(data?.pedidoId) === String(pedidoAtivo)) {
+        if (estadoCliente.intervalPolling) {
+          clearInterval(estadoCliente.intervalPolling);
+          estadoCliente.intervalPolling = null;
+        }
+        localStorage.removeItem('huby_pedido_ativo_id');
+        estadoCliente.pedidoAtivoId = null;
+        alternarModoVisualViagemAtiva(false);
+        atualizarBotaoChamar();
+        notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
       }
     });
 
@@ -1139,6 +1144,8 @@ function conectarSocketEPollingCliente() {
         localStorage.removeItem('huby_pedido_ativo_id');
         estadoCliente.pedidoAtivoId = null;
         alternarModoVisualViagemAtiva(false);
+        atualizarBotaoChamar();
+        notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
       }
     } catch (e) { }
   }, 3500);

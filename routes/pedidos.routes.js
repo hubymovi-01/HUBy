@@ -960,13 +960,17 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CANCELAR VIAGEM (COM TAXA DE CANCELAMENTO APÓS TEMPO DE ESPERA)
+  // 9. CANCELAR VIAGEM (EXCLUSIVO MOTORISTA / ADMIN + TAXA DE ESPERA)
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const { motivo } = req.body;
-      const usuarioId = String(req.usuario.id);
+
+      // Bloqueia cancelamento pelo cliente: apenas motorista parceiro ou admin pode cancelar
+      if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
+        return res.status(403).json({ erro: 'Apenas o motorista parceiro pode cancelar a corrida.' });
+      }
 
       const pedidos = await sql`
         SELECT id, status, cliente_id, motorista_id, chegou_origem_em
@@ -981,9 +985,7 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Esta corrida já foi encerrada.' });
       }
 
-      const canceladoPor = String(pedido.cliente_id) === usuarioId
-        ? 'cliente'
-        : (String(pedido.motorista_id) === usuarioId ? 'motorista' : 'admin');
+      const canceladoPor = ehMotoristaToken(req.usuario) ? 'motorista' : 'admin';
 
       let taxaCancelamentoAplicada = 0;
       let repasseEsperaMotorista = 0;
@@ -993,7 +995,7 @@ export default function pedidosRouter(io) {
         const segundosEsperados = (Date.now() - new Date(pedido.chegou_origem_em).getTime()) / 1000;
         const toleranciaExcedida = segundosEsperados >= TEMPO_TOLERANCIA_ESPERA_SEG;
 
-        if (toleranciaExcedida && (canceladoPor === 'cliente' || canceladoPor === 'motorista')) {
+        if (toleranciaExcedida && canceladoPor === 'motorista') {
           taxaCancelamentoAplicada = VALOR_TAXA_CANCELAMENTO;
           repasseEsperaMotorista = Number((VALOR_TAXA_CANCELAMENTO * 0.85).toFixed(2));
 
@@ -1013,8 +1015,8 @@ export default function pedidosRouter(io) {
       }
 
       const motivoFinal = taxaCancelamentoAplicada > 0
-        ? `${motivo || 'Cancelado'} (Taxa de espera aplicada: R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')})`
-        : (motivo || 'Cancelado');
+        ? `${motivo || 'Cancelado pelo motorista'} (Taxa de espera aplicada: R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')})`
+        : (motivo || 'Cancelado pelo motorista');
 
       const atualizado = await sql`
         UPDATE pedidos
@@ -1039,8 +1041,8 @@ export default function pedidosRouter(io) {
         taxaCancelamento: taxaCancelamentoAplicada,
         repasseMotorista: repasseEsperaMotorista,
         mensagem: taxaCancelamentoAplicada > 0
-          ? `Corrida cancelada. Como o motorista aguardou mais de 3 min, foi aplicada taxa de R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')} (R$ ${repasseEsperaMotorista.toFixed(2).replace('.', ',')} repassados ao condutor).`
-          : 'Chamada cancelada sem taxa.',
+          ? `Corrida cancelada. Como você aguardou mais de 3 min, R$ ${repasseEsperaMotorista.toFixed(2).replace('.', ',')} foram creditados na sua carteira.`
+          : 'Corrida cancelada com sucesso.',
         pedido: atualizado[0]
       });
     } catch (err) {
