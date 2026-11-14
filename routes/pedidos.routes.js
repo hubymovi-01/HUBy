@@ -1,4 +1,4 @@
-// routes/pedidos.routes.js - Gestão Completa de Pedidos HUBy Sincronizada com Tarifas do Banco e Web Push
+// routes/pedidos.routes.js - Pedidos, Agendamento, Taxa de Espera, Web Push e Bônus de Indicação HUBy
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
@@ -6,6 +6,10 @@ import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
 import { dispararPushParaMotoristas } from './push.routes.js';
+import { liquidarBonusIndicacaoPrimeiraCorrida } from './indicacoes.routes.js';
+
+const TEMPO_TOLERANCIA_ESPERA_SEG = 180; // 3 minutos de tolerância após motorista chegar
+const VALOR_TAXA_CANCELAMENTO = 5.00;
 
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -33,6 +37,9 @@ async function inicializarColunasPedidos() {
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_adicionais NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS paradas JSONB DEFAULT '[]'::jsonb;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS agendado_para TIMESTAMP WITH TIME ZONE;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS chegou_origem_em TIMESTAMP WITH TIME ZONE;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS taxa_cancelamento NUMERIC(10,2) DEFAULT 0.00;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS mensagens_chat (
@@ -59,11 +66,54 @@ function ehMotoristaToken(usuario) {
   return String(usuario?.role || '').toLowerCase() === 'motorista';
 }
 
+// Worker automático que ativa corridas agendadas faltando 15 minutos para o horário
+export function iniciarDespachanteAgendamentos(io) {
+  setInterval(async () => {
+    try {
+      const prontas = await sql`
+        UPDATE pedidos
+        SET status = 'pendente'
+        WHERE status = 'agendado'
+          AND agendado_para IS NOT NULL
+          AND agendado_para <= NOW() + INTERVAL '15 minutes'
+        RETURNING *;
+      `;
+
+      for (const p of prontas) {
+        const valorNum = Number(p.valor_total || 0);
+        if (io) {
+          io.emit('nova_chamada', {
+            id: p.id,
+            clienteId: p.cliente_id,
+            tipo: p.tipo || 'carro',
+            subTipoLabel: `${p.sub_tipo_label || 'HUBy'} (Agendada)`,
+            origem: p.origem_endereco,
+            destino: p.destino_endereco,
+            distanciaKm: Number(p.distancia_km || 0),
+            duracaoMin: Number(p.duracao_min || 0),
+            valorTotal: valorNum,
+            agendadoPara: p.agendado_para
+          });
+        }
+
+        dispararPushParaMotoristas({
+          titulo: `⏰ Corrida Agendada Liberada • R$ ${valorNum.toFixed(2).replace('.', ',')}`,
+          corpo: `${p.origem_endereco} ➔ ${p.destino_endereco}`,
+          categoria: p.sub_tipo_id || p.tipo,
+          pedidoId: p.id
+        });
+      }
+    } catch (err) {
+      // Silencioso em caso de oscilação de rede
+    }
+  }, 30000).unref();
+}
+
 export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO (COM CÁLCULO OFICIAL PELAS TARIFAS DO BANCO + PUSH REAL)
+  // 1. CRIAR PEDIDO (IMEDIATO OU AGENDADO + DESCONTO INDICAÇÃO + PUSH REAL)
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
@@ -76,7 +126,7 @@ export default function pedidosRouter(io) {
         distanciaKm, distancia_km, duracaoMin, duracao_min,
         valorAdicionais, valor_adicionais,
         metodoPgto, metodo_pagamento, forma_pagamento,
-        cupomCodigo
+        cupomCodigo, agendadoPara
       } = req.body;
 
       const clienteId = String(req.usuario.id);
@@ -86,6 +136,25 @@ export default function pedidosRouter(io) {
 
       if (!endOrigem || !endDestino) {
         return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
+      }
+
+      let dataAgendamento = null;
+      let statusInicialPedido = 'pendente';
+
+      if (agendadoPara) {
+        const dt = new Date(agendadoPara);
+        if (Number.isNaN(dt.getTime())) {
+          return res.status(400).json({ erro: 'Data e hora de agendamento inválidas.' });
+        }
+        const diffMinutos = (dt.getTime() - Date.now()) / 60000;
+        if (diffMinutos < 25) {
+          return res.status(400).json({ erro: 'O agendamento deve ser feito com pelo menos 30 minutos de antecedência.' });
+        }
+        if (diffMinutos > 7 * 24 * 60) {
+          return res.status(400).json({ erro: 'O agendamento máximo permitido é de 7 dias.' });
+        }
+        dataAgendamento = dt.toISOString();
+        statusInicialPedido = 'agendado';
       }
 
       const idPedido = (typeof id === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(id))
@@ -123,8 +192,22 @@ export default function pedidosRouter(io) {
       ).toFixed(2));
 
       let vTotal = Math.max(0.50, valorCalculadoServidor);
-
       let descontoAplicado = 0;
+
+      // Verifica se o cliente tem desconto de 1ª viagem por indicação
+      try {
+        const ind = await sql`
+          SELECT id, valor_desconto_indicado FROM indicacoes_huby
+          WHERE indicado_id = ${clienteId} AND status = 'pendente'
+          LIMIT 1;
+        `;
+        if (ind.length > 0) {
+          const descInd = Number(ind[0].valor_desconto_indicado || 5);
+          descontoAplicado += descInd;
+          vTotal = Math.max(1.00, Number((vTotal - descInd).toFixed(2)));
+        }
+      } catch (eInd) {}
+
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
         const cupons = await sql`
@@ -154,7 +237,7 @@ export default function pedidosRouter(io) {
 
             if (reservado.length > 0) {
               cupomReservadoId = cupom.id;
-              descontoAplicado = desconto;
+              descontoAplicado += desconto;
               vTotal = Math.max(0.50, Number((vTotal - desconto).toFixed(2)));
             }
           }
@@ -174,13 +257,13 @@ export default function pedidosRouter(io) {
           origem_endereco, destino_endereco,
           origem_lat, origem_lng, destino_lat, destino_lng,
           distancia_km, duracao_min, valor_total, valor_adicionais,
-          forma_pagamento, metodo_pgto, status
+          forma_pagamento, metodo_pgto, status, agendado_para
         ) VALUES (
           ${idPedido}, ${idClienteFinal}, ${tipo || 'carro'}, ${subTipoIdFinal}, ${subTipoLabelFinal},
           ${String(endOrigem).slice(0, 300)}, ${String(endDestino).slice(0, 300)},
           ${origLat}, ${origLng}, ${destLat}, ${destLng},
           ${dKm}, ${dMin}, ${vTotal}, ${vAdic},
-          ${formaPagamentoFinal}, ${formaPagamentoFinal}, 'pendente'
+          ${formaPagamentoFinal}, ${formaPagamentoFinal}, ${statusInicialPedido}, ${dataAgendamento}
         )
         ON CONFLICT (id) DO NOTHING
         RETURNING id;
@@ -193,32 +276,35 @@ export default function pedidosRouter(io) {
         return res.status(409).json({ erro: 'Já existe uma corrida com este código.' });
       }
 
-      if (io) {
-        io.emit('nova_chamada', {
-          id: idPedido,
-          clienteId: idClienteFinal,
-          tipo: tipo || 'carro',
-          subTipoLabel: subTipoLabelFinal,
-          origem: endOrigem,
-          destino: endDestino,
-          distanciaKm: dKm,
-          duracaoMin: dMin,
-          valorTotal: vTotal,
-          paradas: paradas || []
+      if (statusInicialPedido === 'pendente') {
+        if (io) {
+          io.emit('nova_chamada', {
+            id: idPedido,
+            clienteId: idClienteFinal,
+            tipo: tipo || 'carro',
+            subTipoLabel: subTipoLabelFinal,
+            origem: endOrigem,
+            destino: endDestino,
+            distanciaKm: dKm,
+            duracaoMin: dMin,
+            valorTotal: vTotal,
+            paradas: paradas || []
+          });
+        }
+
+        dispararPushParaMotoristas({
+          titulo: `🚘 Nova Chamada (${subTipoLabelFinal}) • R$ ${vTotal.toFixed(2).replace('.', ',')}`,
+          corpo: `${endOrigem} ➔ ${endDestino}`,
+          categoria: subTipoIdFinal,
+          pedidoId: idPedido
         });
       }
-
-      // Dispara Web Push real em segundo plano para acordar o celular dos motoristas
-      dispararPushParaMotoristas({
-        titulo: `🚘 Nova Chamada (${subTipoLabelFinal}) • R$ ${vTotal.toFixed(2).replace('.', ',')}`,
-        corpo: `${endOrigem} ➔ ${endDestino}`,
-        categoria: subTipoIdFinal,
-        pedidoId: idPedido
-      });
 
       return res.status(201).json({
         sucesso: true,
         id: idPedido,
+        agendada: statusInicialPedido === 'agendado',
+        agendadoPara: dataAgendamento,
         valorFinal: vTotal,
         desconto: descontoAplicado
       });
@@ -231,6 +317,24 @@ export default function pedidosRouter(io) {
         } catch (e) { }
       }
       return res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados: ' + error.message });
+    }
+  });
+
+  // Listar corridas agendadas do usuário
+  router.get('/agendadas', autenticarToken, async (req, res) => {
+    try {
+      const usuarioId = String(req.usuario.id);
+      const lista = await sql`
+        SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco,
+               distancia_km, valor_total, status, agendado_para, criado_em
+        FROM pedidos
+        WHERE cliente_id::text = ${usuarioId}::text
+          AND status = 'agendado'
+        ORDER BY agendado_para ASC;
+      `;
+      res.json(lista);
+    } catch (err) {
+      res.json([]);
     }
   });
 
@@ -314,7 +418,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 5. ROTA PÚBLICA PARA RASTREIO DE VIAGEM EM TEMPO REAL
+  // 5. ROTA PÚBLICA PARA RASTREIO E RECIBO DE VIAGEM
   // =========================================================================
   router.get('/publico/:id', async (req, res) => {
     try {
@@ -345,9 +449,7 @@ export default function pedidosRouter(io) {
       return res.status(500).json({ erro: 'Erro interno ao consultar dados da viagem.' });
     }
   });
-  // =========================================================================
-  // 5.1 RECIBO COMPLETO DA CORRIDA PARA O PASSAGEIRO (COMPARTILHÁVEL)
-  // =========================================================================
+
   router.get('/recibo/:id', async (req, res) => {
     try {
       const { id } = req.params;
@@ -392,6 +494,7 @@ export default function pedidosRouter(io) {
           p.id, p.status, p.cliente_id, p.valor_total, p.distancia_km, p.duracao_min,
           p.origem_endereco, p.destino_endereco,
           p.origem_lat, p.origem_lng, p.destino_lat, p.destino_lng,
+          p.chegou_origem_em, p.agendado_para,
           p.motorista_id, 
           COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
           COALESCE(m.telefone, p.motorista_telefone) AS motorista_telefone,
@@ -424,15 +527,31 @@ export default function pedidosRouter(io) {
       const { id } = req.params;
       const novoStatus = String(req.body?.status || 'a_caminho').trim();
 
-      await sql`
-        UPDATE pedidos
-        SET status = ${novoStatus}
-        WHERE id::text = ${String(id)}::text
-          AND LOWER(COALESCE(status, '')) <> 'concluido';
-      `;
+      const ehChegadaNoLocal = ['chegou_local', 'aguardando_passageiro', 'no_local'].includes(novoStatus);
+
+      if (ehChegadaNoLocal) {
+        await sql`
+          UPDATE pedidos
+          SET status = ${novoStatus},
+              chegou_origem_em = COALESCE(chegou_origem_em, CURRENT_TIMESTAMP)
+          WHERE id::text = ${String(id)}::text
+            AND LOWER(COALESCE(status, '')) <> 'concluido';
+        `;
+      } else {
+        await sql`
+          UPDATE pedidos
+          SET status = ${novoStatus}
+          WHERE id::text = ${String(id)}::text
+            AND LOWER(COALESCE(status, '')) <> 'concluido';
+        `;
+      }
 
       if (io) {
-        io.emit('status_corrida_atualizado', { pedidoId: id, status: novoStatus });
+        io.emit('status_corrida_atualizado', {
+          pedidoId: id,
+          status: novoStatus,
+          chegouOrigemEm: ehChegadaNoLocal ? new Date().toISOString() : undefined
+        });
       }
 
       res.json({ sucesso: true, status: novoStatus });
@@ -615,7 +734,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM (COM TAXA DINÂMICA DO BANCO)
+  // 8. CONCLUIR VIAGEM (COM TAXA DINÂMICA + LIBERAÇÃO DE BÔNUS INDICAÇÃO)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -631,7 +750,7 @@ export default function pedidosRouter(io) {
       const motoristaIdReal = mot[0]?.id || usuarioId;
 
       const pedidos = await sql`
-        SELECT id, valor_total, status, motorista_id 
+        SELECT id, cliente_id, valor_total, status, motorista_id 
         FROM pedidos 
         WHERE id::text = ${id}::text 
         LIMIT 1;
@@ -662,6 +781,10 @@ export default function pedidosRouter(io) {
            OR id::text = ${pedido.motorista_id}::text
         RETURNING saldo_carteira, total_corridas;
       `;
+
+      if (pedido.cliente_id) {
+        await liquidarBonusIndicacaoPrimeiraCorrida(pedido.cliente_id);
+      }
 
       if (io) {
         io.emit('corrida_finalizada', {
@@ -734,6 +857,10 @@ export default function pedidosRouter(io) {
               VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
             `;
           } catch (eTrans) { }
+        }
+
+        if (pedido.cliente_id) {
+          await liquidarBonusIndicacaoPrimeiraCorrida(pedido.cliente_id);
         }
 
         if (io) {
@@ -833,25 +960,89 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CANCELAR VIAGEM
+  // 9. CANCELAR VIAGEM (COM TAXA DE CANCELAMENTO APÓS TEMPO DE ESPERA)
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
       const { motivo } = req.body;
-      const usuarioId = req.usuario.id;
-      const pedidos = await sql`SELECT id, status, cliente_id, motorista_id FROM pedidos WHERE id::text = ${id}::text LIMIT 1;`;
+      const usuarioId = String(req.usuario.id);
+
+      const pedidos = await sql`
+        SELECT id, status, cliente_id, motorista_id, chegou_origem_em
+        FROM pedidos
+        WHERE id::text = ${id}::text
+        LIMIT 1;
+      `;
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Pedido não localizado.' });
 
       const pedido = pedidos[0];
-      const canceladoPor = pedido.cliente_id === usuarioId ? 'cliente' : (pedido.motorista_id === usuarioId ? 'motorista' : 'admin');
-      const atualizado = await sql`UPDATE pedidos SET status = 'cancelado', motivo_cancelamento = ${motivo || 'Cancelado'}, cancelado_por = ${canceladoPor} WHERE id::text = ${id}::text RETURNING *;`;
-
-      if (io) {
-        io.emit('corrida_cancelada', { pedidoId: id });
+      if (['concluido', 'cancelado'].includes(String(pedido.status || '').toLowerCase())) {
+        return res.status(400).json({ erro: 'Esta corrida já foi encerrada.' });
       }
 
-      res.json({ sucesso: true, mensagem: 'Chamada cancelada.', pedido: atualizado[0] });
+      const canceladoPor = String(pedido.cliente_id) === usuarioId
+        ? 'cliente'
+        : (String(pedido.motorista_id) === usuarioId ? 'motorista' : 'admin');
+
+      let taxaCancelamentoAplicada = 0;
+      let repasseEsperaMotorista = 0;
+
+      // Calcula se o motorista já chegou ao local de embarque e aguardou mais de 3 minutos
+      if (pedido.motorista_id && pedido.chegou_origem_em) {
+        const segundosEsperados = (Date.now() - new Date(pedido.chegou_origem_em).getTime()) / 1000;
+        const toleranciaExcedida = segundosEsperados >= TEMPO_TOLERANCIA_ESPERA_SEG;
+
+        if (toleranciaExcedida && (canceladoPor === 'cliente' || canceladoPor === 'motorista')) {
+          taxaCancelamentoAplicada = VALOR_TAXA_CANCELAMENTO;
+          repasseEsperaMotorista = Number((VALOR_TAXA_CANCELAMENTO * 0.85).toFixed(2));
+
+          await sql`
+            UPDATE motoristas
+            SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseEsperaMotorista}
+            WHERE id::text = ${String(pedido.motorista_id)}::text;
+          `;
+
+          try {
+            await sql`
+              INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+              VALUES (${String(pedido.motorista_id)}, 'motorista', 'taxa_espera_cancelamento', ${repasseEsperaMotorista}, ${String(id)});
+            `;
+          } catch (eTx) {}
+        }
+      }
+
+      const motivoFinal = taxaCancelamentoAplicada > 0
+        ? `${motivo || 'Cancelado'} (Taxa de espera aplicada: R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')})`
+        : (motivo || 'Cancelado');
+
+      const atualizado = await sql`
+        UPDATE pedidos
+        SET status = 'cancelado',
+            motivo_cancelamento = ${motivoFinal},
+            cancelado_por = ${canceladoPor},
+            taxa_cancelamento = ${taxaCancelamentoAplicada}
+        WHERE id::text = ${id}::text
+        RETURNING *;
+      `;
+
+      if (io) {
+        io.emit('corrida_cancelada', {
+          pedidoId: id,
+          taxaCancelamento: taxaCancelamentoAplicada,
+          repasseMotorista: repasseEsperaMotorista
+        });
+      }
+
+      res.json({
+        sucesso: true,
+        taxaCancelamento: taxaCancelamentoAplicada,
+        repasseMotorista: repasseEsperaMotorista,
+        mensagem: taxaCancelamentoAplicada > 0
+          ? `Corrida cancelada. Como o motorista aguardou mais de 3 min, foi aplicada taxa de R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')} (R$ ${repasseEsperaMotorista.toFixed(2).replace('.', ',')} repassados ao condutor).`
+          : 'Chamada cancelada sem taxa.',
+        pedido: atualizado[0]
+      });
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao processar cancelamento.' });
     }
