@@ -275,6 +275,89 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
+  // 1.1 PAINEL RÁPIDO: NÚMEROS DO DIA (CORRIDAS, FATURAMENTO, CANCELAMENTOS E ONLINE)
+  // =========================================================================
+  router.get('/resumo-dia', autenticarToken, verificarAdmin, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    try {
+      const tarifasAtuais = await lerTarifasDoBanco();
+      const pctTaxa = Number(tarifasAtuais.taxa_plataforma ?? 15) / 100;
+
+      const corridasHoje = await sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'pago', 'finalizado'))::int AS concluidas,
+          COUNT(*) FILTER (WHERE LOWER(TRIM(COALESCE(status, ''))) = 'cancelado')::int AS canceladas,
+          COUNT(*) FILTER (WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('pendente', 'a_caminho', 'em_viagem', 'em_andamento', 'chegou_local'))::int AS em_andamento,
+          COALESCE(SUM(valor_total) FILTER (WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'pago', 'finalizado')), 0) AS faturamento_hoje
+        FROM pedidos
+        WHERE (COALESCE(concluido_em, criado_em) AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date;
+      `;
+
+      const frotaStatus = await sql`
+        SELECT 
+          COUNT(*) FILTER (WHERE status_online = TRUE AND status_aprovacao = 'aprovado')::int AS online_agora,
+          COUNT(*) FILTER (WHERE status_aprovacao = 'aprovado')::int AS total_aprovados
+        FROM motoristas;
+      `;
+
+      const c = corridasHoje[0] || {};
+      const f = frotaStatus[0] || {};
+      const fatHoje = Number(c.faturamento_hoje || 0);
+      const lucroHoje = Number((fatHoje * pctTaxa).toFixed(2));
+
+      res.json({
+        sucesso: true,
+        corridasConcluidasHoje: Number(c.concluidas || 0),
+        corridasEmAndamento: Number(c.em_andamento || 0),
+        cancelamentosHoje: Number(c.canceladas || 0),
+        faturamentoHoje: fatHoje,
+        lucroHubyHoje: lucroHoje,
+        motoristasOnline: Number(f.online_agora || 0),
+        motoristasAprovados: Number(f.total_aprovados || 0)
+      });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao consultar resumo do dia.' });
+    }
+  });
+
+  // =========================================================================
+  // 1.2 TELEMETRIA DE ERROS (FRONTEND + BACKEND)
+  // =========================================================================
+  router.post('/logs-erro', async (req, res) => {
+    try {
+      const { origem, rota, mensagem, stack } = req.body || {};
+      if (!mensagem) return res.status(400).json({ erro: 'Mensagem ausente.' });
+
+      await sql`
+        INSERT INTO logs_erros_sistema (origem, rota, mensagem, stack)
+        VALUES (
+          ${String(origem || 'frontend').slice(0, 40)},
+          ${String(rota || '').slice(0, 140)},
+          ${String(mensagem).slice(0, 500)},
+          ${String(stack || '').slice(0, 2000)}
+        );
+      `;
+      res.json({ sucesso: true });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao registrar log.' });
+    }
+  });
+
+  router.get('/logs-erro', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const logs = await sql`
+        SELECT id, origem, rota, mensagem, stack, criado_em
+        FROM logs_erros_sistema
+        ORDER BY criado_em DESC
+        LIMIT 30;
+      `;
+      res.json(logs);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
+  // =========================================================================
   // 2. DRE / RELATÓRIO EXECUTIVO DA DIVISÃO DOS SÓCIOS
   // =========================================================================
   router.get('/financeiro/dre', autenticarToken, verificarAdmin, async (req, res) => {

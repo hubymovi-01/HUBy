@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
+import * as Sentry from '@sentry/node';
 import { sql, JWT_SECRET } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
@@ -20,6 +21,18 @@ import pushRoutes from './routes/push.routes.js';
 import indicacoesRoutes from './routes/indicacoes.routes.js';
 
 dotenv.config();
+
+// ============================================================================
+// 0. MONITOR DE ERROS SENTRY (ATIVADO AUTOMATICAMENTE SE SENTRY_DSN EXISTIR)
+// ============================================================================
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'production',
+    tracesSampleRate: 0.2
+  });
+  console.log('🛡️ Monitor de erros Sentry conectado e ativo.');
+}
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -336,6 +349,17 @@ async function inicializarBanco() {
       );
     `;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS logs_erros_sistema (
+        id SERIAL PRIMARY KEY,
+        origem VARCHAR(40) DEFAULT 'backend',
+        rota VARCHAR(150),
+        mensagem TEXT NOT NULL,
+        stack TEXT,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -366,7 +390,8 @@ inicializarBanco();
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.2.0',
+    versao: '2.3.0',
+    sentryAtivo: Boolean(process.env.SENTRY_DSN),
     banco: 'Neon PostgreSQL'
   });
 });
@@ -405,19 +430,42 @@ app.use('/api/ia', iaRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/indicacoes', indicacoesRoutes);
 
-// Inicia o despachante automático de corridas agendadas
 iniciarDespachanteAgendamentos(io);
 
 // ============================================================================
-// 6. TRATAMENTO GLOBAL DE ERROS
+// 6. CAPTURA GLOBAL DE ERROS (SENTRY + LOG NO BANCO NEON)
 // ============================================================================
-app.use((err, req, res, next) => {
+if (process.env.SENTRY_DSN) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
+app.use(async (err, req, res, next) => {
   console.error('Erro interno do servidor:', err);
+  if (process.env.SENTRY_DSN) {
+    Sentry.captureException(err);
+  }
+  try {
+    await sql`
+      INSERT INTO logs_erros_sistema (origem, rota, mensagem, stack)
+      VALUES ('backend', ${String(req.originalUrl || '').slice(0, 140)}, ${String(err.message || 'Erro desconhecido').slice(0, 500)}, ${String(err.stack || '').slice(0, 2000)});
+    `;
+  } catch (eLog) {}
+
   const status = err.status || 500;
   res.status(status).json({
     erro: true,
     mensagem: status >= 500 ? 'Erro interno no servidor' : err.message
   });
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Rejection:', reason);
+  if (process.env.SENTRY_DSN) Sentry.captureException(reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  if (process.env.SENTRY_DSN) Sentry.captureException(err);
 });
 
 // ============================================================================
