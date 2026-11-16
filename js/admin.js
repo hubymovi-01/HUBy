@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Com Controle de Validade CNH/CRLV e Saque em Lote)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -98,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   configurarNavegacaoAbas();
   configurarFiltroPeriodo(token);
+  configurarFormGrowthEDinamica(token);
   configurarFormZonasRisco(token);
   configurarFormCupons(token);
   configurarFormBroadcast(token);
@@ -143,6 +144,7 @@ async function sincronizarTudo(token) {
   await carregarDadosSocios(token);
 
   Promise.allSettled([
+    carregarConfigGrowthEDinamica(token),
     carregarTabelaZonasRisco(token),
     carregarTabelaCupons(token),
     carregarTabelaSeguranca(token),
@@ -158,6 +160,82 @@ function configurarFiltroPeriodo(token) {
 
   select.addEventListener('change', () => {
     carregarMetricasECards(token, select.value);
+  });
+}
+
+// ============================================================================
+// GROWTH & TARIFA DINÂMICA (CONTROLE TOTAL DO ADMIN)
+// ============================================================================
+async function carregarConfigGrowthEDinamica(token) {
+  try {
+    const [resInd, resDin] = await Promise.all([
+      fetch(`${API_URL}/api/admin/config/indicacao`, { headers: { Authorization: `Bearer ${token}` } }),
+      fetch(`${API_URL}/api/admin/config/dinamica`, { headers: { Authorization: `Bearer ${token}` } })
+    ]);
+
+    if (resInd.ok) {
+      const ind = await resInd.json();
+      if (document.getElementById('indAtivo')) document.getElementById('indAtivo').value = String(ind.ativo !== false);
+      if (document.getElementById('indDescontoIndicado')) document.getElementById('indDescontoIndicado').value = Number(ind.desconto_indicado ?? 5).toFixed(2);
+      if (document.getElementById('indBonusIndicador')) document.getElementById('indBonusIndicador').value = Number(ind.bonus_indicador ?? 5).toFixed(2);
+      if (document.getElementById('indBonusMotorista')) document.getElementById('indBonusMotorista').value = Number(ind.bonus_motorista ?? 25).toFixed(2);
+      if (document.getElementById('indMetaCorridasMotorista')) document.getElementById('indMetaCorridasMotorista').value = Number(ind.meta_corridas_motorista ?? 15);
+    }
+
+    if (resDin.ok) {
+      const din = await resDin.json();
+      if (document.getElementById('dinAtiva')) document.getElementById('dinAtiva').value = String(din.ativa !== false);
+      if (document.getElementById('dinGatilhoChamadas')) document.getElementById('dinGatilhoChamadas').value = Number(din.gatilho_chamadas ?? 3);
+      if (document.getElementById('dinMultiplicadorMax')) document.getElementById('dinMultiplicadorMax').value = Number(din.multiplicador_maximo ?? 1.8).toFixed(1);
+      if (document.getElementById('dinMultiplicadorManual')) document.getElementById('dinMultiplicadorManual').value = Number(din.multiplicador_manual ?? 1.0).toFixed(1);
+    }
+  } catch (e) {}
+}
+
+function configurarFormGrowthEDinamica(token) {
+  document.getElementById('formConfigIndicacao')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      ativo: document.getElementById('indAtivo').value === 'true',
+      desconto_indicado: parseFloat(document.getElementById('indDescontoIndicado').value) || 0,
+      bonus_indicador: parseFloat(document.getElementById('indBonusIndicador').value) || 0,
+      bonus_motorista: parseFloat(document.getElementById('indBonusMotorista').value) || 0,
+      meta_corridas_motorista: parseInt(document.getElementById('indMetaCorridasMotorista').value, 10) || 15
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/config/indicacao`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Falha ao salvar regras de indicação.');
+      notificarAdmin('✅ Regras do Programa Indique e Ganhe atualizadas!', 'sucesso');
+    } catch (err) {
+      notificarAdmin(err.message, 'erro');
+    }
+  });
+
+  document.getElementById('formConfigDinamica')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      ativa: document.getElementById('dinAtiva').value === 'true',
+      gatilho_chamadas: parseInt(document.getElementById('dinGatilhoChamadas').value, 10) || 3,
+      multiplicador_maximo: parseFloat(document.getElementById('dinMultiplicadorMax').value) || 1.8,
+      multiplicador_manual: parseFloat(document.getElementById('dinMultiplicadorManual').value) || 1.0
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/config/dinamica`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Falha ao salvar tarifa dinâmica.');
+      notificarAdmin('⚡ Regras da Tarifa Dinâmica aplicadas no radar!', 'sucesso');
+    } catch (err) {
+      notificarAdmin(err.message, 'erro');
+    }
   });
 }
 
@@ -500,8 +578,8 @@ function configurarFormMarketplace(token) {
       const res = await fetch(`${API_URL}/api/marketplace/admin/itens`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ 
-          titulo, empresa_nome, categoria, descricao, 
+        body: JSON.stringify({
+          titulo, empresa_nome, categoria, descricao,
           preco_original, preco_parceiro, whatsapp_contato, imagem_url,
           endereco: 'Atendimento Local'
         })
@@ -618,6 +696,7 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
                 ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_crlv_url)}', 'CRLV do Veículo - ${nomeSeguro}', '${idSeguro}')">CRLV</button>` : ''}
                 ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_cnh_url)}', 'CNH - ${nomeSeguro}', '${idSeguro}')">CNH</button>` : ''}
+                ${m.ultima_selfie_url ? `<button class="btn-tbl app" onclick="abrirFotoDocumento('${escaparHTML(m.ultima_selfie_url)}', 'Selfie Turno - ${nomeSeguro}', '${idSeguro}')">🤳 Selfie</button>` : ''}
                 <button class="btn-tbl alt" title="Editar datas de validade" onclick="editarValidadeDocumentos('${idSeguro}', '${escaparHTML(m.cnh_validade || '')}', '${escaparHTML(m.crlv_validade || '')}')">📅 Validades</button>
               </div>
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
@@ -642,7 +721,6 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
       `;
     }).join('');
 
-    // Atualiza badge na aba de Condutores se houver documentos vencidos ou perto de vencer
     const tabBtnFrota = document.querySelector('[data-tab="tabFrota"]');
     if (tabBtnFrota) {
       const totalCriticos = qtdVencidos + qtdVencendoEmBreve;
@@ -1262,6 +1340,7 @@ function configurarNavegacaoAbas() {
         }
 
         if (tabAlvoId === 'tabSocios') carregarDadosSocios(token);
+        if (tabAlvoId === 'tabGrowth') carregarConfigGrowthEDinamica(token);
         if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
         if (tabAlvoId === 'tabCupons') carregarTabelaCupons(token);
         if (tabAlvoId === 'tabViagens') carregarTabelaViagens(token);

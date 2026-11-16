@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas, Frota, Controle de Validade CNH/CRLV, DRE dos Sócios e Gestão Master HUBy
+// routes/admin.routes.js - Métricas, Frota, Controle de Validade CNH/CRLV, Growth, Dinâmica e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -44,6 +44,21 @@ export const TARIFAS_PADRAO_SISTEMA = {
   entrega: { base: 5.0, km: 1.8, min: 0.25 }
 };
 
+export const CONFIG_INDICACAO_PADRAO = {
+  ativo: true,
+  desconto_indicado: 5.00,
+  bonus_indicador: 5.00,
+  bonus_motorista: 25.00,
+  meta_corridas_motorista: 15
+};
+
+export const CONFIG_DINAMICA_PADRAO = {
+  ativa: true,
+  gatilho_chamadas: 3,
+  multiplicador_maximo: 1.8,
+  multiplicador_manual: 1.0
+};
+
 export async function lerTarifasDoBanco() {
   try {
     const config = await sql`
@@ -75,6 +90,49 @@ export async function lerTarifasDoBanco() {
   } catch (err) {
     console.warn('Erro ao ler tarifas do banco:', err.message);
     return TARIFAS_PADRAO_SISTEMA;
+  }
+}
+
+export async function lerConfigIndicacaoDoBanco() {
+  try {
+    const config = await sql`
+      SELECT valor::text AS valor_txt FROM configuracoes_plataforma
+      WHERE chave = 'programa_indicacao' LIMIT 1;
+    `;
+    if (!config.length || !config[0].valor_txt) {
+      return CONFIG_INDICACAO_PADRAO;
+    }
+    const obj = extrairObjetoJSONB(config[0].valor_txt, CONFIG_INDICACAO_PADRAO);
+    return {
+      ativo: obj.ativo !== false,
+      desconto_indicado: Number(obj.desconto_indicado ?? 5.00),
+      bonus_indicador: Number(obj.bonus_indicador ?? 5.00),
+      bonus_motorista: Number(obj.bonus_motorista ?? 25.00),
+      meta_corridas_motorista: Number(obj.meta_corridas_motorista ?? 15)
+    };
+  } catch (err) {
+    return CONFIG_INDICACAO_PADRAO;
+  }
+}
+
+export async function lerConfigDinamicaDoBanco() {
+  try {
+    const config = await sql`
+      SELECT valor::text AS valor_txt FROM configuracoes_plataforma
+      WHERE chave = 'tarifa_dinamica' LIMIT 1;
+    `;
+    if (!config.length || !config[0].valor_txt) {
+      return CONFIG_DINAMICA_PADRAO;
+    }
+    const obj = extrairObjetoJSONB(config[0].valor_txt, CONFIG_DINAMICA_PADRAO);
+    return {
+      ativa: obj.ativa !== false,
+      gatilho_chamadas: Number(obj.gatilho_chamadas ?? 3),
+      multiplicador_maximo: Number(obj.multiplicador_maximo ?? 1.8),
+      multiplicador_manual: Number(obj.multiplicador_manual ?? 1.0)
+    };
+  } catch (err) {
+    return CONFIG_DINAMICA_PADRAO;
   }
 }
 
@@ -275,7 +333,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 1.1 PAINEL RÁPIDO: NÚMEROS DO DIA (CORRIDAS, FATURAMENTO, CANCELAMENTOS E ONLINE)
+  // 1.1 PAINEL RÁPIDO: NÚMEROS DO DIA
   // =========================================================================
   router.get('/resumo-dia', autenticarToken, verificarAdmin, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -321,7 +379,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 1.2 TELEMETRIA DE ERROS (FRONTEND + BACKEND)
+  // 1.2 TELEMETRIA DE ERROS
   // =========================================================================
   router.post('/logs-erro', async (req, res) => {
     try {
@@ -413,6 +471,8 @@ export default function adminRoutes(io) {
     try {
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_url TEXT;`;
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_em TIMESTAMP WITH TIME ZONE;`;
 
       const motoristas = await sql`
         SELECT id, nome, email, telefone, cnh_numero AS cnh,
@@ -420,6 +480,7 @@ export default function adminRoutes(io) {
                to_char(crlv_validade, 'YYYY-MM-DD') AS crlv_validade,
                categoria AS categoria_veiculo, veiculo_modelo, veiculo_placa,
                veiculo_cor, veiculo_ano, doc_cnh_url, doc_crlv_url, foto_perfil_url,
+               ultima_selfie_url, ultima_selfie_em,
                saldo_carteira, status_aprovacao, status_online,
                avaliacao_media, total_corridas, criado_em
         FROM motoristas
@@ -432,7 +493,6 @@ export default function adminRoutes(io) {
     }
   });
 
-  // Atualiza datas de validade da CNH e do CRLV pelo Painel Admin
   router.put('/motoristas/:id/validade-documentos', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -591,7 +651,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS
+  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS, INDICAÇÃO E DINÂMICA
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -649,6 +709,72 @@ export default function adminRoutes(io) {
     } catch (err) {
       console.error('Erro ao atualizar tarifas:', err);
       res.status(500).json({ erro: 'Falha ao atualizar tarifas no banco.' });
+    }
+  });
+
+  // Configuração do Programa Indique e Ganhe
+  router.get('/config/indicacao', autenticarToken, verificarAdmin, async (req, res) => {
+    const cfg = await lerConfigIndicacaoDoBanco();
+    res.json(cfg);
+  });
+
+  router.put('/config/indicacao', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const cfg = {
+        ativo: body.ativo !== false,
+        desconto_indicado: Math.max(0, Number(body.desconto_indicado ?? 5.00)),
+        bonus_indicador: Math.max(0, Number(body.bonus_indicador ?? 5.00)),
+        bonus_motorista: Math.max(0, Number(body.bonus_motorista ?? 25.00)),
+        meta_corridas_motorista: Math.max(1, parseInt(body.meta_corridas_motorista, 10) || 15)
+      };
+      const jsonStr = JSON.stringify(cfg);
+
+      await sql`
+        INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
+        VALUES ('programa_indicacao', (${jsonStr}::text)::jsonb, CURRENT_TIMESTAMP)
+        ON CONFLICT (chave) DO UPDATE
+        SET valor = (${jsonStr}::text)::jsonb, atualizado_em = CURRENT_TIMESTAMP;
+      `;
+
+      res.json({ sucesso: true, config: cfg });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao salvar configuração de indicação.' });
+    }
+  });
+
+  // Configuração da Tarifa Dinâmica (Surge Pricing)
+  router.get('/config/dinamica', autenticarToken, verificarAdmin, async (req, res) => {
+    const cfg = await lerConfigDinamicaDoBanco();
+    res.json(cfg);
+  });
+
+  router.put('/config/dinamica', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const cfg = {
+        ativa: body.ativa !== false,
+        gatilho_chamadas: Math.max(1, parseInt(body.gatilho_chamadas, 10) || 3),
+        multiplicador_maximo: Math.min(4.0, Math.max(1.0, Number(body.multiplicador_maximo ?? 1.8))),
+        multiplicador_manual: Math.min(4.0, Math.max(1.0, Number(body.multiplicador_manual ?? 1.0)))
+      };
+      const jsonStr = JSON.stringify(cfg);
+
+      await sql`
+        INSERT INTO configuracoes_plataforma (chave, valor, atualizado_em)
+        VALUES ('tarifa_dinamica', (${jsonStr}::text)::jsonb, CURRENT_TIMESTAMP)
+        ON CONFLICT (chave) DO UPDATE
+        SET valor = (${jsonStr}::text)::jsonb, atualizado_em = CURRENT_TIMESTAMP;
+      `;
+
+      const socket = req.io || io;
+      if (socket) {
+        socket.emit('dinamica_atualizada', cfg);
+      }
+
+      res.json({ sucesso: true, config: cfg });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao salvar configuração de tarifa dinâmica.' });
     }
   });
 
