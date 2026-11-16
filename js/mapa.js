@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Serviço Central de Mapa e Rotas (js/mapa.js)
- * CÓDIGO BLINDADO - Integrado às Tarifas Dinâmicas do Painel Admin Master
+ * CÓDIGO BLINDADO - Com GPS Pulsante e Movimentação Suave de Câmera
  * ============================================================================
  */
 import { calcularPreco } from './config.js';
@@ -88,29 +88,19 @@ export class HubyMapa {
   definirOrigem(lat, lng, precisaoMetros = null) {
     this.coordsOrigem = [lat, lng];
 
-    const icon = L.divIcon({
-      className: 'huby-pin-origem',
-      html: `
-        <div style="position:relative;width:24px;height:24px;">
-          <div style="position:absolute;inset:0;background:#10B981;border-radius:50%;opacity:0.4;animation:hubyPulse 1.8s infinite ease-out;"></div>
-          <div style="position:absolute;inset:4px;background:#10B981;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 0 12px rgba(16,185,129,0.9);"></div>
-        </div>
-        <style>
-          @keyframes hubyPulse {
-            0% { transform: scale(0.9); opacity: 0.7; }
-            70% { transform: scale(2.4); opacity: 0; }
-            100% { transform: scale(2.4); opacity: 0; }
-          }
-        </style>
-      `,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+    // Ícone atualizado para o Ponto Pulsante Suave (Google Maps Style, Cores HUBy)
+    const iconPulsante = L.divIcon({
+      className: 'gps-pulse-container',
+      html: '<div class="gps-pulse-marker"></div>',
+      iconSize: [48, 48],
+      iconAnchor: [24, 24]
     });
 
     if (this.markerOrigem) {
       this.markerOrigem.setLatLng([lat, lng]);
+      this.markerOrigem.setIcon(iconPulsante);
     } else if (this.map) {
-      this.markerOrigem = L.marker([lat, lng], { icon }).addTo(this.map);
+      this.markerOrigem = L.marker([lat, lng], { icon: iconPulsante }).addTo(this.map);
     }
 
     if (precisaoMetros && precisaoMetros > 0 && this.map) {
@@ -120,10 +110,10 @@ export class HubyMapa {
       } else {
         this.circlePrecisao = L.circle([lat, lng], {
           radius: raio,
-          color: '#10B981',
+          color: '#38BDF8',
           weight: 1,
-          fillColor: '#10B981',
-          fillOpacity: 0.1
+          fillColor: '#38BDF8',
+          fillOpacity: 0.08
         }).addTo(this.map);
       }
     }
@@ -174,12 +164,18 @@ export class HubyMapa {
       this.coordsOrigem = [lat, lng];
       this.definirOrigem(lat, lng, precisao);
 
-      if (!this.gpsFixo) {
-        if (this.map) {
-          this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
-          this.invalidarTamanho();
+      // Movimentação suave (Pan fluido)
+      if (this.map) {
+        if (!this.gpsFixo) {
+          this.map.flyTo([lat, lng], 17, { animate: true, duration: 1.0, easeLinearity: 0.25 });
+          this.gpsFixo = true;
+        } else {
+          // Deslizamento contínuo se o mapa não tiver rotas bloqueando a vista
+          if (!this.rotaLayer) {
+            this.map.panTo([lat, lng], { animate: true, duration: 0.8, easeLinearity: 0.25 });
+          }
         }
-        this.gpsFixo = true;
+        this.invalidarTamanho();
       }
 
       if (this.coordsDestino && this.onClickDestinoCallback) {
@@ -265,7 +261,6 @@ export class HubyMapa {
       const distanciaKm = Math.max(0.2, rota.distance / 1000);
       const duracaoMin = Math.max(2, Math.round(rota.duration / 60));
 
-      // Usa a tarifa oficial sincronizada do banco de dados (config.js)
       const precoEstimado = calcularPreco('carro', distanciaKm, duracaoMin).valorTotal;
 
       if (this.rotaLayer && this.map) {

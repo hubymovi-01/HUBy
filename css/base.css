@@ -312,3 +312,43 @@ input, button, select {
   transform: scale(0.97);
   filter: brightness(0.92);
 }
+/* ==========================================================================
+   EFEITO GPS PULSANTE (Estilo Maps) - Passageiro & Motorista
+   ========================================================================== */
+
+.gps-pulse-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gps-pulse-marker {
+  width: 18px;
+  height: 18px;
+  background-color: var(--accent-blue);
+  border-radius: 50%;
+  border: 3px solid #FFF;
+  box-shadow: 0 0 10px var(--blue-glow);
+  position: relative;
+  z-index: 2;
+}
+
+.gps-pulse-marker::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  background-color: var(--blue-glow);
+  border-radius: 50%;
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  z-index: 1;
+}
+
+@keyframes pulse-ring {
+  0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+}

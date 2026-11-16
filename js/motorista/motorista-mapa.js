@@ -2,7 +2,7 @@
 import { API_URL, sonsHUBy } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-corrida.js';
-import { notificar } from './motorista-alertas.js';
+import { notificar } from '../util/alertas-huby.js';
 
 let watchId = null;
 
@@ -13,7 +13,6 @@ export function inicializarSocket() {
       auth: { token: token || '' }
     });
 
-    // Ouve confirmação de pagamento do Mercado Pago em tempo real
     estado.socket.on('corrida_finalizada', (dados) => {
       const pedidoIdAtual = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
       if (pedidoIdAtual && String(dados.pedidoId) === String(pedidoIdAtual)) {
@@ -48,20 +47,24 @@ export function inicializarMapa() {
       attribution: '&copy; OpenStreetMap'
     }).addTo(estado.mapa);
 
-    const iconeCarro = L.divIcon({
-      className: 'huby-driver-pin',
-      html: '<div id="marcadorCarroIcone" style="width:38px;height:38px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 16px rgba(16,185,129,0.9);font-size:19px;transition:transform 0.4s ease;">🚘</div>',
-      iconSize: [38, 38],
-      iconAnchor: [19, 19]
+    // Usa a mesma classe de pulsar dinâmico do passageiro, com o emoji 🚘 no meio
+    const iconeCarroFluido = L.divIcon({
+      className: 'gps-pulse-container',
+      html: `
+        <div class="gps-pulse-marker" style="background:var(--emerald); border-color:#090D16; box-shadow: 0 0 10px var(--emerald-glow);">
+          <div id="marcadorCarroIcone" style="position:absolute; top:-10px; left:-10px; font-size:18px; transition:transform 0.4s ease; text-shadow:0 0 8px rgba(16,185,129,0.9);">🚘</div>
+        </div>
+      `,
+      iconSize: [48, 48],
+      iconAnchor: [24, 24]
     });
 
-    estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarro }).addTo(estado.mapa);
+    estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarroFluido }).addTo(estado.mapa);
 
     setTimeout(() => {
       if (estado.mapa) estado.mapa.invalidateSize();
     }, 300);
 
-    // Ativa o rastreio contínuo e preciso
     iniciarRastreamentoGPSContinuo();
 
   } catch (err) {
@@ -79,20 +82,19 @@ export function iniciarRastreamentoGPSContinuo() {
     navigator.geolocation.clearWatch(watchId);
   }
 
+  let gpsFixoMotorista = false;
+
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const heading = pos.coords.heading || 0;
 
-      // 1. Atualiza estado central de coordenadas
       estado.coords = [lat, lng];
 
-      // 2. Move o marcador do carro suavemente na tela do motorista
       if (estado.markerVeiculo) {
         estado.markerVeiculo.setLatLng([lat, lng]);
 
-        // Rotaciona o ícone de acordo com a direção do movimento (bússola / heading)
         const elIcone = document.getElementById('marcadorCarroIcone');
         if (elIcone && heading) {
           elIcone.style.transform = `rotate(${heading}deg)`;
@@ -101,12 +103,16 @@ export function iniciarRastreamentoGPSContinuo() {
 
       const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
 
-      // 3. Centraliza a câmera de forma fluida durante a corrida
-      if (estado.mapa && corridaAtiva) {
-        estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
+      // Câmera Fluida estilo Maps
+      if (estado.mapa) {
+        if (!gpsFixoMotorista) {
+          estado.mapa.flyTo([lat, lng], 17, { animate: true, duration: 1.0, easeLinearity: 0.25 });
+          gpsFixoMotorista = true;
+        } else if (corridaAtiva) {
+          estado.mapa.panTo([lat, lng], { animate: true, duration: 0.8, easeLinearity: 0.25 });
+        }
       }
 
-      // 4. Só transmite a posição ao servidor se estiver ONLINE ou em corrida ativa
       if (estado.socket && (estado.isOnline || corridaAtiva)) {
         const idMotorista = estado.motoristaId || localStorage.getItem('huby_user_id') || '';
         const idPedidoAtivo = corridaAtiva?.id || null;
