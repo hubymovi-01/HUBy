@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar de Chamadas Sincronizado com Tarifas do Admin
+// js/motorista/motorista-radar.js - Radar de Chamadas + Selfie de Verificação ao Ficar Online
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -6,6 +6,7 @@ import { notificar } from '../util/alertas-huby.js';
 
 let intervalAlertaChamada = null;
 let wakeLockSentinela = null;
+const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000; // 12 horas por turno
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
@@ -34,6 +35,175 @@ document.addEventListener('visibilitychange', async () => {
     await requisitarWakeLock();
   }
 });
+
+// ============================================================================
+// SELFIE DE VERIFICAÇÃO DE IDENTIDADE AO FICAR ONLINE
+// ============================================================================
+function selfieTurnoValida() {
+  const ultimoTs = Number(localStorage.getItem('huby_ultima_selfie_ts') || 0);
+  if (!ultimoTs) return false;
+  return (Date.now() - ultimoTs) < VALIDADE_SELFIE_MS;
+}
+
+function solicitarSelfieVerificacaoOnline() {
+  return new Promise((resolve) => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      notificar('Câmera indisponível neste dispositivo. Permita o acesso à câmera.', 'erro');
+      resolve(false);
+      return;
+    }
+
+    document.getElementById('modalSelfieVerificacaoHUBy')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'modalSelfieVerificacaoHUBy';
+    overlay.style.cssText = [
+      'position: fixed',
+      'inset: 0',
+      'z-index: 100080',
+      'background: rgba(6, 10, 18, 0.94)',
+      'backdrop-filter: blur(12px)',
+      'display: flex',
+      'align-items: center',
+      'justify-content: center',
+      'padding: 16px'
+    ].join(';');
+
+    overlay.innerHTML = `
+      <div style="background: #0E1422; border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 22px; width: 100%; max-width: 370px; padding: 20px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.85); color: #FFF;">
+        <div style="display: inline-block; background: rgba(16,185,129,0.15); color: #10B981; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+          🛡️ Segurança do Turno
+        </div>
+        <h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 900;">Selfie de Verificação</h3>
+        <p style="margin: 0 0 14px; font-size: 12px; color: #94A3B8; line-height: 1.4;">
+          Enquadre o seu rosto no centro em local iluminado para confirmar sua identidade antes de ficar online.
+        </p>
+
+        <div style="position: relative; width: 220px; height: 260px; margin: 0 auto 14px; border-radius: 50%; overflow: hidden; border: 3px solid #10B981; background: #05080F; box-shadow: 0 0 24px rgba(16,185,129,0.25);">
+          <video id="videoSelfieMotorista" autoplay playsinline muted
+            style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
+          <img id="previewSelfieCapturada" alt="Prévia Selfie"
+            style="display: none; width: 100%; height: 100%; object-fit: cover;">
+        </div>
+
+        <div id="statusSelfieTexto" style="font-size: 11.5px; color: #38BDF8; font-weight: 700; margin-bottom: 12px;">
+          Iniciando câmera frontal...
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btnCancelarSelfieOnline"
+            style="flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer;">
+            Cancelar
+          </button>
+          <button type="button" id="btnCapturarSelfieOnline" disabled
+            style="flex: 1.6; background: #10B981; border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer; opacity: 0.6;">
+            📸 Tirar Selfie
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const video = overlay.querySelector('#videoSelfieMotorista');
+    const previewImg = overlay.querySelector('#previewSelfieCapturada');
+    const statusTxt = overlay.querySelector('#statusSelfieTexto');
+    const btnCapturar = overlay.querySelector('#btnCapturarSelfieOnline');
+    const btnCancelar = overlay.querySelector('#btnCancelarSelfieOnline');
+    let streamAtivo = null;
+
+    const encerrarCameraEModal = (sucesso) => {
+      if (streamAtivo) {
+        try {
+          streamAtivo.getTracks().forEach((t) => t.stop());
+        } catch (e) {}
+        streamAtivo = null;
+      }
+      overlay.remove();
+      resolve(sucesso);
+    };
+
+    btnCancelar.onclick = () => encerrarCameraEModal(false);
+
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 640 } },
+      audio: false
+    }).then((stream) => {
+      streamAtivo = stream;
+      video.srcObject = stream;
+      video.onloadedmetadata = () => {
+        video.play().catch(() => {});
+        if (statusTxt) {
+          statusTxt.textContent = 'Posicione o rosto dentro da moldura';
+          statusTxt.style.color = '#10B981';
+        }
+        btnCapturar.disabled = false;
+        btnCapturar.style.opacity = '1';
+      };
+    }).catch(() => {
+      notificar('Não foi possível acessar a câmera frontal. Verifique a permissão do navegador.', 'erro');
+      encerrarCameraEModal(false);
+    });
+
+    btnCapturar.onclick = async () => {
+      if (!video || !video.videoWidth) return;
+
+      btnCapturar.disabled = true;
+      btnCapturar.textContent = 'Validando...';
+      if (statusTxt) {
+        statusTxt.textContent = 'Enviando verificação de identidade...';
+        statusTxt.style.color = '#38BDF8';
+      }
+
+      const canvas = document.createElement('canvas');
+      const largura = 360;
+      const altura = Math.round((video.videoHeight / video.videoWidth) * largura) || 480;
+      canvas.width = largura;
+      canvas.height = altura;
+
+      const ctx = canvas.getContext('2d');
+      // Desespelha para salvar a foto real corretamente
+      ctx.translate(largura, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, largura, altura);
+
+      const selfieBase64 = canvas.toDataURL('image/jpeg', 0.72);
+      if (previewImg) {
+        previewImg.src = selfieBase64;
+        previewImg.style.display = 'block';
+        video.style.display = 'none';
+      }
+
+      try {
+        const token = localStorage.getItem('huby_token') || '';
+        const resp = await fetch(`${API_URL}/api/motoristas/verificar-selfie`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ selfie_base64: selfieBase64 })
+        });
+
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+          throw new Error(data.erro || 'Falha ao validar selfie.');
+        }
+
+        localStorage.setItem('huby_ultima_selfie_ts', String(Date.now()));
+        if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+        notificar('Identidade verificada com sucesso!', 'sucesso');
+        encerrarCameraEModal(true);
+      } catch (err) {
+        notificar(err.message || 'Erro ao enviar selfie.', 'erro');
+        if (previewImg) previewImg.style.display = 'none';
+        video.style.display = 'block';
+        btnCapturar.disabled = false;
+        btnCapturar.textContent = '📸 Tentar Novamente';
+      }
+    };
+  });
+}
 
 export function extrairDadosDoBotao(btn) {
   const km = btn.getAttribute('data-dist') || btn.getAttribute('data-km') || '1.0';
@@ -86,7 +256,7 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
-// Alterna o status Online com 1 único clique e NÃO liga a IA automaticamente
+// Alterna o status Online exigindo selfie de verificação do turno
 export async function alternarStatusOnline(forcarEstado = null) {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnToggleStatusOnline');
@@ -94,6 +264,14 @@ export async function alternarStatusOnline(forcarEstado = null) {
   const textoBotao = btn ? btn.textContent || '' : '';
   const visualmenteOnline = textoBotao.includes('Online') && !textoBotao.includes('Ficar Online');
   const novoStatus = typeof forcarEstado === 'boolean' ? forcarEstado : !visualmenteOnline;
+
+  // Exige selfie de verificação antes de ativar o modo Online
+  if (novoStatus && !selfieTurnoValida()) {
+    const selfieAprovada = await solicitarSelfieVerificacaoOnline();
+    if (!selfieAprovada) {
+      return false;
+    }
+  }
 
   estado.isOnline = novoStatus;
   estado.statusOnline = novoStatus;
@@ -104,10 +282,10 @@ export async function alternarStatusOnline(forcarEstado = null) {
       btn.style.borderColor = 'var(--emerald)';
       btn.style.color = 'var(--emerald)';
       btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
-      
+
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
       await requisitarWakeLock();
-      
+
       iniciarRadarChamadas();
       notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
     } else {
@@ -115,7 +293,7 @@ export async function alternarStatusOnline(forcarEstado = null) {
       btn.style.borderColor = 'rgba(255,255,255,0.12)';
       btn.style.color = '#94A3B8';
       btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
-      
+
       libertarWakeLock();
       pararRadarChamadas();
       renderizarRadarOffline();
@@ -207,7 +385,7 @@ function renderizarRadarOffline() {
       <div class="dock-empty" style="text-align: center; color: #94A3B8; font-size: 13px; padding: 22px 10px; background: rgba(15,23,42,0.6); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px;">
         <span style="font-size: 24px; display: block; margin-bottom: 6px;">⚪</span>
         <strong>Você está offline</strong><br>
-        <span style="font-size: 11.5px; color: #64748B;">Toque no botão "Ficar Online" para receber chamadas de passageiros.</span>
+        <span style="font-size: 11.5px; color: #64748B;">Toque no botão "Ficar Online" para validar sua selfie e receber chamadas.</span>
       </div>
     `;
   }

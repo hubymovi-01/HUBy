@@ -3,7 +3,6 @@ import { API_URL } from './config.js';
 import { inicializarRadarMaster } from './admin-radar.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // 1. Verificação de Acesso Admin
   const token = localStorage.getItem('huby_token');
   const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase();
 
@@ -13,7 +12,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // 2. Navegação por Abas
   const tabs = document.querySelectorAll('.tab-btn');
   const contents = document.querySelectorAll('.tab-pane');
 
@@ -26,13 +24,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const target = tab.getAttribute('data-tab');
       const pane = document.getElementById(target);
       if (pane) pane.classList.add('active');
-      
-      // Inicializa o mapa apenas quando a aba Radar for aberta
+
       if (target === 'tabRadar') {
         inicializarRadarMaster(token);
       }
-      
-      // Força a atualização do tamanho e redesenho dos gráficos de métricas no mobile
+
       if (target === 'tabMetricas') {
         setTimeout(() => {
           if (window.chartFinInstance) window.chartFinInstance.update();
@@ -42,7 +38,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // 3. Ouvintes de Ações do Cabeçalho e Formulários
   document.getElementById('btnSincronizar')?.addEventListener('click', sincronizarTudo);
   document.getElementById('selectFiltroPeriodo')?.addEventListener('change', carregarMetricasKPI);
   document.getElementById('btnBaixarCSV')?.addEventListener('click', exportarCsvCorridas);
@@ -53,7 +48,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const formMP = document.getElementById('formMercadoPagoConfig');
   if (formMP) formMP.addEventListener('submit', salvarConfigMercadoPago);
 
-  // 4. Carregar Dados Iniciais
   await sincronizarTudo();
 });
 
@@ -82,7 +76,6 @@ async function carregarMetricasKPI() {
     if (!res.ok) return;
     const data = await res.json();
 
-    // Atualiza os Cards Superiores (KPIs)
     const faturamentoBruto = Number(data.faturamentoBruto || 0);
     const lucroHuby = Number(data.lucroHuby || 0);
     const repasseMotoristas = Number(data.repasseMotoristas || 0);
@@ -93,14 +86,11 @@ async function carregarMetricasKPI() {
     if (document.getElementById('metricConcluidas')) document.getElementById('metricConcluidas').textContent = data.viagensConcluidas || 0;
     if (document.getElementById('metricAlertas')) document.getElementById('metricAlertas').textContent = data.alertasSeguranca || 0;
 
-    // Atualiza os painéis dos sócios
-    const saldoCadaSocio = (lucroHuby * 0.40); // 80% do lucro dividido por 2
+    const saldoCadaSocio = (lucroHuby * 0.40);
     if (document.getElementById('socio1Saldo')) document.getElementById('socio1Saldo').textContent = `R$ ${saldoCadaSocio.toFixed(2).replace('.', ',')}`;
     if (document.getElementById('socio2Saldo')) document.getElementById('socio2Saldo').textContent = `R$ ${saldoCadaSocio.toFixed(2).replace('.', ',')}`;
 
-    // Renderiza os Gráficos Visuais
     atualizarGraficos(data);
-
   } catch (e) {
     console.warn('Falha ao sincronizar KPIs:', e);
   }
@@ -110,17 +100,13 @@ function atualizarGraficos(data) {
   const ctxFin = document.getElementById('chartFinanceiro');
   const ctxCat = document.getElementById('chartCategorias');
 
-  // Verifica se os elementos canvas existem e se a biblioteca Chart.js foi carregada
   if (!ctxFin || !ctxCat || typeof Chart === 'undefined') {
-      console.warn("Elementos do gráfico ou biblioteca Chart.js não encontrados.");
-      return;
+    return;
   }
 
-  // Destrói gráficos antigos se o usuário mudar o filtro de período
   if (window.chartFinInstance) window.chartFinInstance.destroy();
   if (window.chartCatInstance) window.chartCatInstance.destroy();
 
-  // 1. Gráfico de Divisão de Receitas (Rosca)
   window.chartFinInstance = new Chart(ctxFin, {
     type: 'doughnut',
     data: {
@@ -142,7 +128,6 @@ function atualizarGraficos(data) {
     }
   });
 
-  // 2. Gráfico de Fluxo Operacional por Categoria (Barras)
   const cat = data.distribuicao_categorias || { carro: 0, moto: 0, entrega: 0 };
   window.chartCatInstance = new Chart(ctxCat, {
     type: 'bar',
@@ -161,14 +146,14 @@ function atualizarGraficos(data) {
       maintainAspectRatio: false,
       plugins: { legend: { display: false } },
       scales: {
-        y: { 
-          beginAtZero: true, 
-          grid: { color: 'rgba(255,255,255,0.05)' }, 
+        y: {
+          beginAtZero: true,
+          grid: { color: 'rgba(255,255,255,0.05)' },
           ticks: { color: '#94A3B8', stepSize: 1, font: { size: 11 } }
         },
-        x: { 
-          grid: { display: false }, 
-          ticks: { color: '#94A3B8', font: { size: 12, weight: 'bold' } } 
+        x: {
+          grid: { display: false },
+          ticks: { color: '#94A3B8', font: { size: 12, weight: 'bold' } }
         }
       }
     }
@@ -241,19 +226,16 @@ async function salvarTarifasServidor(e) {
       },
       body: JSON.stringify(tarifasPayload)
     });
-    
-    // Tratamento de erro melhorado
+
     if (!res.ok) {
-        let errorMessage = 'Falha ao gravar tarifas no Neon.';
-        try {
-            const data = await res.json();
-            errorMessage = data.erro || errorMessage;
-        } catch (jsonErr) {
-             console.error("Erro ao analisar resposta de erro JSON", jsonErr);
-        }
-        throw new Error(errorMessage);
+      let errorMessage = 'Falha ao gravar tarifas no Neon.';
+      try {
+        const data = await res.json();
+        errorMessage = data.erro || errorMessage;
+      } catch (jsonErr) {}
+      throw new Error(errorMessage);
     }
-    
+
     alert('✅ Tarifas calibradas com sucesso!');
   } catch (err) {
     alert(`Erro ao salvar tarifas: ${err.message}`);
@@ -287,18 +269,16 @@ async function salvarConfigMercadoPago(e) {
       },
       body: JSON.stringify(body)
     });
-    
-     if (!res.ok) {
-        let errorMessage = 'Falha ao atualizar chaves.';
-        try {
-            const data = await res.json();
-            errorMessage = data.erro || errorMessage;
-        } catch (jsonErr) {
-             console.error("Erro ao analisar resposta de erro JSON", jsonErr);
-        }
-        throw new Error(errorMessage);
+
+    if (!res.ok) {
+      let errorMessage = 'Falha ao atualizar chaves.';
+      try {
+        const data = await res.json();
+        errorMessage = data.erro || errorMessage;
+      } catch (jsonErr) {}
+      throw new Error(errorMessage);
     }
-    
+
     alert('✅ Credenciais do Mercado Pago salvas com sucesso no banco!');
   } catch (err) {
     alert(`Erro ao salvar Mercado Pago: ${err.message}`);
@@ -342,7 +322,7 @@ async function carregarTabelaCorridas() {
 }
 
 // ============================================================================
-// 5. TABELA DE MOTORISTAS
+// 5. TABELA DE MOTORISTAS (COM AUDITORIA DE DOCUMENTOS E SELFIE DO TURNO)
 // ============================================================================
 async function carregarTabelaMotoristas() {
   const token = localStorage.getItem('huby_token');
@@ -361,28 +341,61 @@ async function carregarTabelaMotoristas() {
       return;
     }
 
-    tbody.innerHTML = motoristas.map(m => `
-      <tr>
-        <td><strong>${m.nome}</strong><br><small style="color: var(--muted);">${m.telefone || m.email || ''}</small></td>
-        <td>${m.veiculo_modelo || m.veiculo || '--'}<br><span style="font-family:monospace; font-weight:800;" class="text-blue">${m.veiculo_placa || m.placa || ''}</span></td>
-        <td>${(m.categoria_veiculo || 'Carro').toUpperCase()}</td>
-        <td class="text-primary" style="font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
-        <td><span class="badge badge-${m.status_aprovacao === 'aprovado' ? 'aprovado' : 'pendente'}">${m.status_aprovacao || 'Pendente'}</span></td>
-        <td>
-          <button type="button" class="btn-tbl alt" onclick="verDocumentos('${m.doc_cnh_url || ''}', '${m.doc_crlv_url || ''}')">Ver Docs</button>
-        </td>
-        <td>
-          ${m.status_aprovacao !== 'aprovado'
-            ? `<button type="button" class="btn-tbl app" onclick="alterarStatusMotorista(${m.id}, 'aprovar')">Aprovar</button>`
-            : `<button type="button" class="btn-tbl rej" onclick="alterarStatusMotorista(${m.id}, 'recusar')">Suspender</button>`
-          }
-        </td>
-      </tr>
-    `).join('');
+    window._cacheMotoristasAdmin = {};
+    motoristas.forEach(m => {
+      window._cacheMotoristasAdmin[String(m.id)] = m;
+    });
+
+    tbody.innerHTML = motoristas.map(m => {
+      const temSelfie = Boolean(m.ultima_selfie_url);
+      const dataSelfie = m.ultima_selfie_em
+        ? new Date(m.ultima_selfie_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : 'Pendente';
+
+      return `
+        <tr>
+          <td>
+            <strong>${m.nome}</strong><br>
+            <small style="color: var(--muted);">${m.telefone || m.email || ''}</small><br>
+            <small style="color: ${temSelfie ? '#10B981' : '#F59E0B'}; font-weight: 700;">
+              🤳 Selfie: ${dataSelfie}
+            </small>
+          </td>
+          <td>${m.veiculo_modelo || m.veiculo || '--'}<br><span style="font-family:monospace; font-weight:800;" class="text-blue">${m.veiculo_placa || m.placa || ''}</span></td>
+          <td>${(m.categoria_veiculo || m.categoria || 'Carro').toUpperCase()}</td>
+          <td class="text-primary" style="font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
+          <td><span class="badge badge-${m.status_aprovacao === 'aprovado' ? 'aprovado' : 'pendente'}">${m.status_aprovacao || 'Pendente'}</span></td>
+          <td style="display: flex; flex-direction: column; gap: 4px;">
+            <button type="button" class="btn-tbl alt" onclick="verDocumentos('${m.doc_cnh_url || ''}', '${m.doc_crlv_url || ''}')">Ver Docs</button>
+            ${temSelfie ? `<button type="button" class="btn-tbl app" onclick="verSelfieMotorista('${m.id}')">🤳 Ver Selfie</button>` : ''}
+          </td>
+          <td>
+            ${m.status_aprovacao !== 'aprovado'
+              ? `<button type="button" class="btn-tbl app" onclick="alterarStatusMotorista('${m.id}', 'aprovar')">Aprovar</button>`
+              : `<button type="button" class="btn-tbl rej" onclick="alterarStatusMotorista('${m.id}', 'recusar')">Suspender</button>`
+            }
+          </td>
+        </tr>
+      `;
+    }).join('');
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" class="table-empty-row" style="color:var(--rose);">Erro ao carregar motoristas.</td></tr>`;
   }
 }
+
+window.verSelfieMotorista = function(id) {
+  const m = window._cacheMotoristasAdmin?.[String(id)];
+  if (!m || !m.ultima_selfie_url) {
+    alert('Este motorista ainda não registrou selfie de turno.');
+    return;
+  }
+  const modal = document.getElementById('modalPreviewFoto');
+  const img = document.getElementById('imgPreviewVeiculo');
+  if (modal && img) {
+    img.src = m.ultima_selfie_url;
+    modal.style.display = 'flex';
+  }
+};
 
 // ============================================================================
 // 6. EXTRATO DE SAQUES
@@ -435,13 +448,11 @@ async function carregarDadosSocios() {
       const s1 = data.socios[0];
       const s2 = data.socios[1];
 
-      // Sócio 1
       if (document.getElementById('socio1Nome')) document.getElementById('socio1Nome').textContent = s1.nome;
       if (document.getElementById('socio1Chave')) document.getElementById('socio1Chave').textContent = `Chave Pix: ${s1.chave_pix || 'Não cadastrada'}`;
       if (document.getElementById('socio1Saldo')) document.getElementById('socio1Saldo').textContent = `R$ ${s1.saldo_disponivel.toFixed(2).replace('.', ',')}`;
       if (document.getElementById('socio1TotalSacado')) document.getElementById('socio1TotalSacado').textContent = `Total já retirado: R$ ${s1.total_retirado.toFixed(2).replace('.', ',')}`;
 
-      // Sócio 2
       if (document.getElementById('socio2Nome')) document.getElementById('socio2Nome').textContent = s2.nome;
       if (document.getElementById('socio2Chave')) document.getElementById('socio2Chave').textContent = `Chave Pix: ${s2.chave_pix || 'Não cadastrada'}`;
       if (document.getElementById('socio2Saldo')) document.getElementById('socio2Saldo').textContent = `R$ ${s2.saldo_disponivel.toFixed(2).replace('.', ',')}`;
@@ -510,9 +521,9 @@ window.editarDadosSocio = async function(numSocio) {
     });
 
     if (!res.ok) throw new Error('Falha ao atualizar dados do sócio no banco.');
-    
+
     alert(`✅ Dados do Sócio ${numSocio} gravados com sucesso!`);
-    carregarDadosSocios(); // Recarrega os dados visuais
+    carregarDadosSocios();
   } catch (err) {
     alert(`❌ Erro: ${err.message}`);
   }
@@ -523,7 +534,7 @@ window.solicitarSaqueSocio = async function(numSocio) {
   const nome = document.getElementById(`socio${numSocio}Nome`)?.textContent || `Sócio ${numSocio}`;
   const chavePix = document.getElementById(`socio${numSocio}Chave`)?.textContent.replace('Chave Pix: ', '').trim();
   const saldoTxt = document.getElementById(`socio${numSocio}Saldo`)?.textContent || 'R$ 0,00';
-  
+
   const saldoLimpo = Number(saldoTxt.replace('R$ ', '').replace(',', '.'));
 
   const valorStr = prompt(`Retirada de lucros para ${nome}\nChave Pix: ${chavePix}\nSaldo Disponível: ${saldoTxt}\n\nInforme o valor do repasse (R$):`, saldoLimpo.toFixed(2));
@@ -551,16 +562,17 @@ window.solicitarSaqueSocio = async function(numSocio) {
       },
       body: JSON.stringify({ socio_id: numSocio, valor: valorNum })
     });
-    
+
     const data = await res.json();
     if (!res.ok) throw new Error(data.erro || 'Falha ao processar retirada.');
 
     alert(`✅ ${data.mensagem}`);
-    carregarDadosSocios(); // Recarrega os saldos e o histórico na tela
+    carregarDadosSocios();
   } catch (err) {
     alert(`❌ Erro na retirada: ${err.message}`);
   }
 };
+
 // ============================================================================
 // 8. FUNÇÕES AUXILIARES
 // ============================================================================

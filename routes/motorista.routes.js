@@ -1,4 +1,4 @@
-// routes/motorista.routes.js - Módulos de Suporte ao Motorista HUBy
+// routes/motorista.routes.js - Módulos de Suporte e Verificação Facial do Motorista HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -17,11 +17,80 @@ async function garantirColunasSuporte() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_cor TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS codigo_voz TEXT DEFAULT 'Zank';`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_em TIMESTAMP WITH TIME ZONE;`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS verificacoes_selfie_motorista (
+        id SERIAL PRIMARY KEY,
+        motorista_id TEXT NOT NULL,
+        selfie_url TEXT NOT NULL,
+        ip_origem VARCHAR(60),
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
   } catch (e) {
     console.warn('Aviso ao sincronizar colunas de suporte do motorista:', e.message);
   }
 }
 garantirColunasSuporte();
+
+// =========================================================================
+// 0. VERIFICAÇÃO POR SELFIE AO FICAR ONLINE
+// =========================================================================
+router.post('/verificar-selfie', autenticarToken, async (req, res) => {
+  try {
+    const usuarioId = String(req.usuario.id);
+    const emailUsuario = req.usuario.email || '';
+    const selfieBase64 = String(req.body?.selfie_base64 || '').trim();
+
+    if (!selfieBase64 || !selfieBase64.startsWith('data:image/')) {
+      return res.status(400).json({ erro: 'Imagem de selfie inválida. Capture novamente pela câmera.' });
+    }
+
+    if (selfieBase64.length > 2 * 1024 * 1024) {
+      return res.status(400).json({ erro: 'Imagem muito grande. Tente capturar novamente.' });
+    }
+
+    let mot = await sql`
+      SELECT id, nome FROM motoristas
+      WHERE id::text = ${usuarioId}::text
+         OR usuario_id::text = ${usuarioId}::text
+         OR (email = ${emailUsuario} AND ${emailUsuario} != '')
+      LIMIT 1;
+    `;
+
+    if (mot.length === 0) {
+      mot = await sql`SELECT id, nome FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1;`;
+    }
+
+    if (mot.length === 0) {
+      return res.status(404).json({ erro: 'Cadastro de motorista não localizado.' });
+    }
+
+    const motoristaIdReal = String(mot[0].id);
+
+    await sql`
+      UPDATE motoristas
+      SET ultima_selfie_url = ${selfieBase64},
+          ultima_selfie_em = CURRENT_TIMESTAMP
+      WHERE id::text = ${motoristaIdReal}::text;
+    `;
+
+    await sql`
+      INSERT INTO verificacoes_selfie_motorista (motorista_id, selfie_url, ip_origem)
+      VALUES (${motoristaIdReal}, ${selfieBase64}, ${String(req.ip || '').slice(0, 50)});
+    `;
+
+    return res.status(201).json({
+      sucesso: true,
+      verificadoEm: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Erro ao registrar selfie de verificação:', err);
+    return res.status(500).json({ erro: 'Falha ao validar selfie no servidor.' });
+  }
+});
 
 // =========================================================================
 // 1. MAPA DE CALOR: PONTOS DE DEMANDA RECENTES (ÚLTIMAS 2 HORAS)
@@ -130,7 +199,7 @@ const handlerObterPerfil = async (req, res) => {
         avaliacao_media, total_corridas,
         veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
         chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
-        em_pausa, pausa_ate, destino_casa_ativo
+        em_pausa, pausa_ate, destino_casa_ativo, ultima_selfie_em
       FROM motoristas
       WHERE id::text = ${usuarioId}::text 
          OR usuario_id::text = ${usuarioId}::text 
@@ -146,7 +215,7 @@ const handlerObterPerfil = async (req, res) => {
           avaliacao_media, total_corridas,
           veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
           chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
-          em_pausa, pausa_ate, destino_casa_ativo
+          em_pausa, pausa_ate, destino_casa_ativo, ultima_selfie_em
         FROM motoristas
         ORDER BY saldo_carteira DESC, criado_em ASC
         LIMIT 1;
@@ -183,7 +252,8 @@ const handlerObterPerfil = async (req, res) => {
         codigo_voz: m.codigo_voz || 'Zank',
         em_pausa: !!m.em_pausa,
         pausa_ate: m.pausa_ate,
-        destino_casa_ativo: !!m.destino_casa_ativo
+        destino_casa_ativo: !!m.destino_casa_ativo,
+        ultima_selfie_em: m.ultima_selfie_em
       });
     }
 
