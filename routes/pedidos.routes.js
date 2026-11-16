@@ -996,6 +996,7 @@ export default function pedidosRouter(io) {
       const canceladoPor = ehMotoristaToken(req.usuario)
         ? 'motorista'
         : (ehAdminToken(req.usuario) ? 'admin' : 'cliente');
+        
       let taxaCancelamentoAplicada = 0;
       let repasseEsperaMotorista = 0;
 
