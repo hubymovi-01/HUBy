@@ -156,33 +156,45 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
     `;
   } catch (e) {}
 
-  let filtroPeriodo = sql``;
   const per = String(periodo || 'total').toLowerCase().trim();
-  if (per === 'hoje') {
-    filtroPeriodo = sql`AND (COALESCE(concluido_em, criado_em) AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
-  } else if (per === '7d' || per === '7dias') {
-    filtroPeriodo = sql`AND COALESCE(concluido_em, criado_em) >= NOW() - INTERVAL '7 days'`;
-  } else if (per === 'mes') {
-    filtroPeriodo = sql`AND COALESCE(concluido_em, criado_em) >= DATE_TRUNC('month', NOW())`;
-  }
+  let statsConcluidas;
 
-  const statsConcluidas = await sql`
-    SELECT 
-      COUNT(id)::int AS total_concluidas,
-      COALESCE(SUM(valor_total), 0) AS faturamento_corridas
-    FROM pedidos
-    WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado')
-    ${filtroPeriodo};
-  `;
+  // Substituído o fragmento dinâmico por consultas explícitas para evitar erro 500 no sql template literal
+  if (per === 'hoje') {
+    statsConcluidas = await sql`
+      SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+      FROM pedidos
+      WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado')
+        AND (COALESCE(concluido_em, criado_em) AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date;
+    `;
+  } else if (per === '7d' || per === '7dias') {
+    statsConcluidas = await sql`
+      SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+      FROM pedidos
+      WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado')
+        AND COALESCE(concluido_em, criado_em) >= NOW() - INTERVAL '7 days';
+    `;
+  } else if (per === 'mes') {
+    statsConcluidas = await sql`
+      SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+      FROM pedidos
+      WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado')
+        AND COALESCE(concluido_em, criado_em) >= DATE_TRUNC('month', NOW());
+    `;
+  } else {
+    statsConcluidas = await sql`
+      SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+      FROM pedidos
+      WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado');
+    `;
+  }
 
   let totalViagens = Number(statsConcluidas[0]?.total_concluidas || 0);
   let faturamentoBruto = Number(statsConcluidas[0]?.faturamento_corridas || 0);
 
   if (faturamentoBruto === 0) {
     const statsGeralConcluidas = await sql`
-      SELECT 
-        COUNT(id)::int AS total_concluidas,
-        COALESCE(SUM(valor_total), 0) AS faturamento_corridas
+      SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
       FROM pedidos
       WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado');
     `;
@@ -195,9 +207,8 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
   if (faturamentoBruto === 0) {
     try {
       const trans = await sql`
-        SELECT 
-          COUNT(id)::int AS qtd,
-          COALESCE(SUM(CASE WHEN valor > 0 THEN valor / ${pctMotorista} ELSE ABS(valor) / ${pctTaxa} END), 0) AS bruto_estimado
+        SELECT COUNT(id)::int AS qtd,
+               COALESCE(SUM(CASE WHEN valor > 0 THEN valor / ${pctMotorista} ELSE ABS(valor) / ${pctTaxa} END), 0) AS bruto_estimado
         FROM transacoes_carteira
         WHERE tipo_transacao IN ('credito_corrida_pix_mp', 'desconto_comissao_viagem_especie', 'pagamento_corrida');
       `;
