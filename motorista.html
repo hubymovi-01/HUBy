@@ -129,7 +129,8 @@
 
     <div class="drawer-content">
       <!-- CENTRAL DO COPILOTO POR VOZ IA (DENTRO DO MENU DO MOTORISTA) -->
-      <div class="drawer-section-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
+      <div class="drawer-section-card"
+        style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <div>
             <h4 style="margin: 0; display: flex; align-items: center; gap: 6px;">
@@ -156,16 +157,21 @@
         </div>
 
         <!-- CONFIGURAÇÕES DE VOZ, TOM E VELOCIDADE -->
-        <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+        <div
+          style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
           <div>
-            <label style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Voz do Assistente</label>
+            <label
+              style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Voz
+              do Assistente</label>
             <select id="selVozCopiloto"
               style="width: 100%; padding: 8px; border-radius: 8px; background: #090D16; color: #FFF; border: 1px solid var(--border-dark); font-size: 12px; outline: none;"></select>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center;">
             <div>
-              <label style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Tom da Voz</label>
+              <label
+                style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Tom
+                da Voz</label>
               <select id="selTomCopiloto"
                 style="width: 100%; padding: 8px; border-radius: 8px; background: #090D16; color: #FFF; border: 1px solid var(--border-dark); font-size: 12px; outline: none;">
                 <option value="0.75">Grave</option>
@@ -174,7 +180,8 @@
               </select>
             </div>
             <div>
-              <label style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Velocidade</label>
+              <label
+                style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Velocidade</label>
               <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05"
                 style="width: 100%; accent-color: #38BDF8; cursor: pointer;">
             </div>
@@ -589,13 +596,17 @@
 
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px;">
         <button type="button" class="btn-fast-meta" data-meta="100"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 100</button>
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
+          100</button>
         <button type="button" class="btn-fast-meta" data-meta="150"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 150</button>
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
+          150</button>
         <button type="button" class="btn-fast-meta" data-meta="200"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 200</button>
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
+          200</button>
         <button type="button" class="btn-fast-meta" data-meta="300"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 300</button>
+          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
+          300</button>
       </div>
 
       <div class="form-group-driver">
@@ -608,7 +619,8 @@
         <button type="button" id="btnCancelarModalMeta"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarMetaDiaria"
-          style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Meta</button>
+          style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
+          Meta</button>
       </div>
     </div>
   </div>
@@ -617,7 +629,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=10.6.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=10.7.0"></script>
   <script type="module" src="./js/push-client.js?v=1.0.0"></script>
 </body>
 
