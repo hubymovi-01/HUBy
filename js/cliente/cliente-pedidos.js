@@ -1,20 +1,21 @@
-// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Carteira Pré-Paga e Radar HUBy Sincronizado
+// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Busca e Radar HUBy Sincronizado
 import { API_URL, calcularPreco, sincronizarTarifasServidor, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
-import { configurarChatCliente, fecharChatCliente } from './cliente-chat.js';
+import { configurarChatCliente, encerrarMonitoramentoChatCliente } from './cliente-chat.js';
 import { notificar } from '../util/alertas-huby.js';
 
 export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn) return;
 
-  // Só esconde se já houver motorista aceito (painelMotoristaAceitou visível)
+  // Esconde definitivamente se o motorista já aceitou
   const painelAceito = document.getElementById('painelMotoristaAceitou');
   if (painelAceito && painelAceito.style.display === 'block') {
     btn.style.setProperty('display', 'none', 'important');
     return;
   }
 
+  // Enquanto procura motorista, exibe o botão vermelho "Cancelar Chamada"
   if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
     btn.style.setProperty('display', 'flex', 'important');
     btn.style.background = '#ef4444';
@@ -78,7 +79,7 @@ export function atualizarResumoValores() {
 
 export async function submeterPedido() {
   const token = localStorage.getItem('huby_token');
-  
+
   if (!token || token === 'null' || token === 'undefined') {
     notificar('Sua sessão expirou. Faça login para chamar.', 'alerta');
     window.location.replace('./login.html?perfil=cliente');
@@ -197,7 +198,7 @@ export async function submeterPedido() {
     }
 
     if (dadosResposta.desconto > 0) {
-      notificar(`🎉 Cupom aplicado! Desconto de R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`, 'sucesso');
+      notificar(`Cupom aplicado: -R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`, 'sucesso');
     }
 
     estadoCliente.pedidoAtivoId = novoId;
@@ -235,7 +236,6 @@ export function mostrarAguardandoMotorista() {
   if (tit) tit.textContent = 'Radar Ativo: Procurando motorista...';
   if (desc) desc.textContent = 'O seu pedido foi enviado para os parceiros próximos.';
 
-  // Mantém o botão "Cancelar Chamada" visível APENAS enquanto procura motorista
   if (btn) {
     btn.disabled = false;
     btn.style.setProperty('display', 'flex', 'important');
@@ -282,9 +282,13 @@ function conectarSocketCliente(pedidoId) {
   });
 
   socket.on('corrida_cancelada', (data) => {
-    if (String(data?.pedidoId) === String(pedidoId) || String(data?.pedidoId) === String(estadoCliente.pedidoAtivoId)) {
+    const idAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+    if (!idAtivo) return;
+    if (String(data?.pedidoId) === String(pedidoId) || String(data?.pedidoId) === String(idAtivo)) {
       if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
-      notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+      if (data?.canceladoPor && data.canceladoPor !== 'cliente') {
+        notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+      }
       resetarPainelCliente();
     }
   });
@@ -307,10 +311,11 @@ export function iniciarPollingStatus() {
   const token = localStorage.getItem('huby_token');
 
   estadoCliente.intervalPolling = setInterval(async () => {
-    if (!estadoCliente.pedidoAtivoId) return;
+    const idAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+    if (!idAtivo) return;
 
     try {
-      const resp = await fetch(`${API_URL}/api/pedidos/${estadoCliente.pedidoAtivoId}/status`, {
+      const resp = await fetch(`${API_URL}/api/pedidos/${idAtivo}/status`, {
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
         }
@@ -340,9 +345,9 @@ export function iniciarPollingStatus() {
       } else if (pedido.status === 'concluido') {
         clearInterval(estadoCliente.intervalPolling);
         if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
-        
-        estadoCliente.corridaParaAvaliarId = estadoCliente.pedidoAtivoId;
-        localStorage.setItem('huby_ultima_corrida_id', estadoCliente.pedidoAtivoId);
+
+        estadoCliente.corridaParaAvaliarId = idAtivo;
+        localStorage.setItem('huby_ultima_corrida_id', idAtivo);
         resetarPainelCliente();
 
         const modal = document.getElementById('modalAvaliacao');
@@ -353,7 +358,9 @@ export function iniciarPollingStatus() {
         }
       } else if (pedido.status === 'cancelado') {
         clearInterval(estadoCliente.intervalPolling);
-        notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+        if (pedido.cancelado_por && pedido.cancelado_por !== 'cliente') {
+          notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+        }
         resetarPainelCliente();
       }
     } catch (e) {
@@ -367,7 +374,7 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
   const blocoResumo = document.getElementById('blocoResumo');
   const cardStatusViagem = document.getElementById('cardStatusViagem');
   const btnPedirHuby = document.getElementById('btnPedirHuby');
-  
+
   if (sliderCategorias) sliderCategorias.style.display = 'none';
   if (blocoResumo) blocoResumo.style.display = 'none';
   if (cardStatusViagem) cardStatusViagem.style.display = 'none';
@@ -387,8 +394,8 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
   const placa = (pedido.motorista_placa || 'HUBy').toUpperCase();
   const telefone = pedido.motorista_telefone || '';
 
-  const tituloStatus = (pedido.status === 'em_viagem') 
-    ? '🚀 Em viagem ao destino' 
+  const tituloStatus = (pedido.status === 'em_viagem')
+    ? '🚀 Em viagem ao destino'
     : '🚘 Motorista a caminho';
 
   painelMotorista.innerHTML = `
@@ -438,25 +445,28 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
 
   configurarChatCliente(pedido.id);
 
-  document.getElementById('btnAbrirChatClienteCard')?.addEventListener('click', () => {
-    const btnFlutuante = document.getElementById('btnAbrirChat');
-    if (btnFlutuante) btnFlutuante.click();
-    else {
-      const modalChat = document.getElementById('modalChatCorrida');
-      if (modalChat) modalChat.style.display = 'flex';
-    }
-  });
-
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) btnChatFlutuante.style.setProperty('display', 'flex', 'important');
 }
 
 export async function cancelarBusca() {
   const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+
+  // Limpa localmente primeiro para não disparar aviso falso via socket/polling
+  estadoCliente.pedidoAtivoId = null;
+  localStorage.removeItem('huby_pedido_ativo_id');
+
+  if (estadoCliente.intervalPolling) {
+    clearInterval(estadoCliente.intervalPolling);
+    estadoCliente.intervalPolling = null;
+  }
+
+  resetarPainelCliente();
+
   if (pedidoId) {
     const token = localStorage.getItem('huby_token');
     try {
-      const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
+      await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -464,19 +474,10 @@ export async function cancelarBusca() {
         },
         body: JSON.stringify({ motivo: 'Cancelado pelo passageiro durante a busca' })
       });
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) {
-        notificar(data.erro || 'Não foi possível cancelar agora.', 'alerta');
-        return;
-      }
     } catch (err) {
       console.warn('Erro ao cancelar busca:', err);
     }
   }
-
-  if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
-  notificar('Busca cancelada.', 'info');
-  resetarPainelCliente();
 }
 
 export function resetarPainelCliente() {
@@ -512,7 +513,7 @@ export function resetarPainelCliente() {
   const btn = document.getElementById('btnPedirHuby');
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
-  
+
   if (inputPesquisa) inputPesquisa.value = '';
   if (btnLimpar) btnLimpar.style.display = 'none';
 
@@ -524,13 +525,13 @@ export function resetarPainelCliente() {
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) btnChatFlutuante.style.setProperty('display', 'none', 'important');
-  
+
   const sliderCategorias = document.getElementById('sliderCategorias');
   if (sliderCategorias) sliderCategorias.style.display = 'flex';
 
   if (cardStatus) cardStatus.style.display = 'none';
   if (blocoResumo) blocoResumo.style.display = 'flex';
-  
+
   if (blocoEntrega) {
     blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
   }
@@ -549,6 +550,6 @@ export function resetarPainelCliente() {
     btn.style.background = '';
     atualizarBotaoChamar();
   }
-  
-  fecharChatCliente();
+
+  encerrarMonitoramentoChatCliente();
 }

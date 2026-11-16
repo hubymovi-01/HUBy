@@ -494,7 +494,7 @@ export default function pedidosRouter(io) {
           p.id, p.status, p.cliente_id, p.valor_total, p.distancia_km, p.duracao_min,
           p.origem_endereco, p.destino_endereco,
           p.origem_lat, p.origem_lng, p.destino_lat, p.destino_lng,
-          p.chegou_origem_em, p.agendado_para,
+          p.chegou_origem_em, p.agendado_para, p.cancelado_por,
           p.motorista_id, 
           COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
           COALESCE(m.telefone, p.motorista_telefone) AS motorista_telefone,
@@ -960,7 +960,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CANCELAR VIAGEM (EXCLUSIVO MOTORISTA / ADMIN + TAXA DE ESPERA)
+  // 9. CANCELAR VIAGEM (CLIENTE SÓ DURANTE BUSCA; MOTORISTA/ADMIN APÓS ACEITE)
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
@@ -996,7 +996,7 @@ export default function pedidosRouter(io) {
       const canceladoPor = ehMotoristaToken(req.usuario)
         ? 'motorista'
         : (ehAdminToken(req.usuario) ? 'admin' : 'cliente');
-        
+
       let taxaCancelamentoAplicada = 0;
       let repasseEsperaMotorista = 0;
 
@@ -1026,7 +1026,7 @@ export default function pedidosRouter(io) {
 
       const motivoFinal = taxaCancelamentoAplicada > 0
         ? `${motivo || 'Cancelado pelo motorista'} (Taxa de espera aplicada: R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')})`
-        : (motivo || 'Cancelado pelo motorista');
+        : (motivo || (canceladoPor === 'cliente' ? 'Cancelado pelo passageiro durante a busca' : 'Cancelado pelo motorista'));
 
       const atualizado = await sql`
         UPDATE pedidos
@@ -1041,6 +1041,7 @@ export default function pedidosRouter(io) {
       if (io) {
         io.emit('corrida_cancelada', {
           pedidoId: id,
+          canceladoPor,
           taxaCancelamento: taxaCancelamentoAplicada,
           repasseMotorista: repasseEsperaMotorista
         });
@@ -1048,6 +1049,7 @@ export default function pedidosRouter(io) {
 
       res.json({
         sucesso: true,
+        canceladoPor,
         taxaCancelamento: taxaCancelamentoAplicada,
         repasseMotorista: repasseEsperaMotorista,
         mensagem: taxaCancelamentoAplicada > 0

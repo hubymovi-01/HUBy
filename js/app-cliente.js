@@ -1,11 +1,12 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Sem Cancelamento pelo Cliente)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, resetarPainelCliente } from './cliente/cliente-pedidos.js?v=3.0.0';
+import { configurarChatCliente, encerrarMonitoramentoChatCliente } from './cliente/cliente-chat.js';
 import { notificar } from './util/alertas-huby.js';
 import { abrirPromptParada } from './cliente-ui.js';
 import {
@@ -15,7 +16,7 @@ import {
   criarOuAtualizarVeiculoMapa,
   estadoRecursos
 } from './cliente/cliente-recursos.js';
-let intervalChatCliente = null;
+
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
 
@@ -353,13 +354,13 @@ function configurarAlternanciaSatélite() {
         });
       }
       layerSatelite.addTo(map);
-      notificar('🛰️ Visão Satélite Ativada', 'info');
+      notificar('Visão Satélite ativada', 'info');
     } else {
       btnCamada.classList.remove('modo-satelite');
       if (layerSatelite && map.hasLayer(layerSatelite)) {
         map.removeLayer(layerSatelite);
       }
-      notificar('🗺️ Mapa Noturno Ativado', 'info');
+      notificar('Mapa Noturno ativado', 'info');
     }
   });
 }
@@ -412,8 +413,6 @@ function configurarLocaisFavoritosMenu() {
       return;
     }
 
-    notificar('Localizando endereço no mapa...', 'info');
-
     try {
       const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`);
       const dados = await resp.json();
@@ -442,7 +441,7 @@ function configurarLocaisFavoritosMenu() {
     const labelAlvo = labelEditando;
 
     fecharModalEdicao();
-    notificar(`Toque no mapa para indicar o local de "${labelAlvo}"`, 'info');
+    notificar(`Toque no mapa para indicar "${labelAlvo}"`, 'info');
 
     if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
       const mapaLeaflet = estadoCliente.hubyMapa.map;
@@ -459,7 +458,7 @@ function configurarLocaisFavoritosMenu() {
         const descElem = document.getElementById(tipoAlvo === 'casa' ? 'txtMenuCasaDesc' : 'txtMenuTrabalhoDesc');
         if (descElem) descElem.textContent = nomeFormatado;
 
-        notificar(`Localização de "${labelAlvo}" salva com sucesso!`, 'sucesso');
+        notificar(`Localização de "${labelAlvo}" salva!`, 'sucesso');
       }
 
       mapaLeaflet.once('click', onToqueMapa);
@@ -490,14 +489,13 @@ function configurarLocaisFavoritosMenu() {
     if (searchBox) searchBox.classList.add('active');
 
     if (estadoCliente.hubyMapa) {
-      const origem = estadoCliente.coordsOrigem || 
-                     (estadoCliente.hubyMapa.posicaoAtual ? [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng] : null) || 
-                     [-8.3582, -42.2476];
+      const origem = estadoCliente.coordsOrigem ||
+        (estadoCliente.hubyMapa.posicaoAtual ? [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng] : null) ||
+        [-8.3582, -42.2476];
       const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
       estadoCliente.rotaAtual = rota;
       sincronizarPrecosDaRotaAtual();
     }
-    notificar(`Destino: ${label}`, 'sucesso');
   }
 
   document.getElementById('actionIrCasa')?.addEventListener('click', () => {
@@ -688,8 +686,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             estadoCliente.hubyMapa.map.invalidateSize();
           }
         }, 150);
-
-        notificar(`Rota traçada: ${nome}`, 'sucesso');
       } catch (errRota) {
         console.error('❌ Erro ao traçar rota no mapa:', errRota);
       }
@@ -755,24 +751,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Botão Chamar: apenas inicia uma nova chamada (cliente não cancela chamadas ativas)
   document.getElementById('btnPedirHuby')?.addEventListener('click', async () => {
-  if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
-    await cancelarBusca();
-    return;
-  }
-  if (!estadoCliente.coordsDestino) {
-    notificar('Selecione primeiro o destino final no mapa.', 'alerta');
-    return;
-  }
-  sincronizarPrecosDaRotaAtual();
-  await submeterPedido();
-});
+    if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
+      await cancelarBusca();
+      return;
+    }
+    if (!estadoCliente.coordsDestino) {
+      notificar('Selecione primeiro o destino final no mapa.', 'alerta');
+      return;
+    }
+    sincronizarPrecosDaRotaAtual();
+    await submeterPedido();
+  });
 
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
   configurarFluxoPagamentoMercadoPago();
-  configurarChatPassageiro();
+
+  const pedidoAtivoSalvo = localStorage.getItem('huby_pedido_ativo_id');
+  if (pedidoAtivoSalvo) {
+    configurarChatCliente(pedidoAtivoSalvo);
+  }
 
   conectarSocketEPollingCliente();
 
@@ -782,7 +781,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.addEventListener('beforeunload', () => {
     if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
-    if (intervalChatCliente) clearInterval(intervalChatCliente);
     if (intervalChecagemPix) clearInterval(intervalChecagemPix);
   });
 });
@@ -1011,7 +1009,7 @@ function conectarSocketEPollingCliente() {
         }
         alertaProximidadeEmitido = false;
         alternarModoVisualViagemAtiva(true);
-        renderizarMotoristaChegando(data.motorista);
+        renderizarMotoristaChegando({ id: data.pedidoId || pedidoAtivo, ...data.motorista });
       }
     });
 
@@ -1025,16 +1023,16 @@ function conectarSocketEPollingCliente() {
 
     socket.on('corrida_cancelada', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || String(data?.pedidoId) === String(pedidoAtivo)) {
+      if (!pedidoAtivo) return;
+      if (String(data?.pedidoId) === String(pedidoAtivo)) {
         if (estadoCliente.intervalPolling) {
           clearInterval(estadoCliente.intervalPolling);
           estadoCliente.intervalPolling = null;
         }
-        localStorage.removeItem('huby_pedido_ativo_id');
-        estadoCliente.pedidoAtivoId = null;
-        alternarModoVisualViagemAtiva(false);
-        atualizarBotaoChamar();
-        notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+        resetarPainelCliente();
+        if (data?.canceladoPor && data.canceladoPor !== 'cliente') {
+          notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+        }
       }
     });
 
@@ -1108,9 +1106,7 @@ function conectarSocketEPollingCliente() {
       if (res.status === 401 || res.status === 404) {
         clearInterval(estadoCliente.intervalPolling);
         estadoCliente.intervalPolling = null;
-        localStorage.removeItem('huby_pedido_ativo_id');
-        estadoCliente.pedidoAtivoId = null;
-        alternarModoVisualViagemAtiva(false);
+        resetarPainelCliente();
         return;
       }
 
@@ -1120,6 +1116,7 @@ function conectarSocketEPollingCliente() {
       if (p.status === 'a_caminho' || p.status === 'aceito' || p.status === 'em_andamento') {
         alternarModoVisualViagemAtiva(true);
         renderizarMotoristaChegando({
+          id: p.id || pedidoId,
           nome: p.motorista_nome,
           telefone: p.motorista_telefone,
           veiculo: p.motorista_veiculo,
@@ -1140,11 +1137,10 @@ function conectarSocketEPollingCliente() {
       } else if (p.status === 'cancelado') {
         clearInterval(estadoCliente.intervalPolling);
         estadoCliente.intervalPolling = null;
-        localStorage.removeItem('huby_pedido_ativo_id');
-        estadoCliente.pedidoAtivoId = null;
-        alternarModoVisualViagemAtiva(false);
-        atualizarBotaoChamar();
-        notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+        resetarPainelCliente();
+        if (p.cancelado_por && p.cancelado_por !== 'cliente') {
+          notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
+        }
       }
     } catch (e) { }
   }, 3500);
@@ -1155,8 +1151,9 @@ function renderizarMotoristaChegando(mot = {}) {
   if (!painel) painel = document.getElementById('cardStatusViagemPassageiro');
   if (!painel) return;
 
-  const nome = escaparHTML(mot.nome || 'Carol');
-  const veiculo = escaparHTML(mot.veiculo || 'Chevrolet Onix');
+  const pedidoId = mot.id || estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  const nome = escaparHTML(mot.nome || 'Motorista Parceiro');
+  const veiculo = escaparHTML(mot.veiculo || 'Veículo');
   const placa = escaparHTML((mot.placa || 'ABC1D23').toUpperCase());
   const cor = escaparHTML(mot.cor || 'Prata');
   const foto = mot.foto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80';
@@ -1224,16 +1221,13 @@ function renderizarMotoristaChegando(mot = {}) {
     </div>
   `;
 
-  document.getElementById('btnAbrirChatClienteCard')?.addEventListener('click', () => {
-    abrirModalChat();
-  });
-
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) {
     btnChatFlutuante.classList.add('chat-visivel');
     btnChatFlutuante.style.setProperty('display', 'flex', 'important');
-    btnChatFlutuante.onclick = abrirModalChat;
   }
+
+  configurarChatCliente(pedidoId);
 }
 
 function atualizarParaViagemEmAndamento() {
@@ -1260,6 +1254,8 @@ function finalizarViagemCliente(data) {
     estadoCliente.corridaParaAvaliarId = pedidoFinalizadoId;
     localStorage.setItem('huby_ultima_corrida_id', pedidoFinalizadoId);
   }
+
+  encerrarMonitoramentoChatCliente();
 
   const painel = document.getElementById('painelMotoristaAceitou');
   if (painel) {
@@ -1289,87 +1285,4 @@ function finalizarViagemCliente(data) {
     notificar('Viagem concluída com sucesso! Obrigado por viajar com a HUBy.', 'sucesso');
     setTimeout(() => location.reload(), 1500);
   }
-}
-
-function configurarChatPassageiro() {
-  const btnFechar = document.getElementById('btnFecharChat');
-  const btnEnviar = document.getElementById('btnEnviarMsgChat');
-  const inputMsg = document.getElementById('inputChatMsg');
-
-  btnFechar?.addEventListener('click', () => {
-    const modalChat = document.getElementById('modalChatCorrida');
-    if (modalChat) modalChat.style.display = 'none';
-    if (intervalChatCliente) {
-      clearInterval(intervalChatCliente);
-      intervalChatCliente = null;
-    }
-  });
-
-  btnEnviar?.addEventListener('click', enviarMensagemPassageiro);
-  inputMsg?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') enviarMensagemPassageiro();
-  });
-}
-
-function abrirModalChat() {
-  const modalChat = document.getElementById('modalChatCorrida');
-  if (modalChat) {
-    modalChat.style.display = 'flex';
-    sincronizarChatPassageiro();
-    if (!intervalChatCliente) {
-      intervalChatCliente = setInterval(sincronizarChatPassageiro, 3000);
-    }
-  }
-}
-
-async function sincronizarChatPassageiro() {
-  const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-  const token = localStorage.getItem('huby_token');
-  const area = document.getElementById('chatAreaMensagens');
-  if (!pedidoId || !area) return;
-
-  try {
-    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-    });
-    if (!res.ok) return;
-    const msgs = await res.json();
-
-    const meuId = localStorage.getItem('huby_user_id');
-    area.innerHTML = msgs.map(m => {
-      const souEu = m.remetente_id === meuId;
-      const remetenteLimpo = escaparHTML(m.remetente_nome || 'Mensagem');
-      const mensagemLimpa = escaparHTML(m.mensagem);
-      return `
-        <div style="align-self: ${souEu ? 'flex-end' : 'flex-start'}; max-width: 80%; background: ${souEu ? '#10B981' : '#1E293B'}; color: ${souEu ? '#02261C' : '#FFF'}; font-weight: 600; padding: 8px 12px; border-radius: 12px; font-size: 13px; word-break: break-word;">
-          <small style="display:block; font-size:9px; opacity:0.8; margin-bottom:2px;">${remetenteLimpo}</small>
-          ${mensagemLimpa}
-        </div>
-      `;
-    }).join('');
-    area.scrollTop = area.scrollHeight;
-  } catch (e) { }
-}
-
-async function enviarMensagemPassageiro() {
-  const input = document.getElementById('inputChatMsg');
-  const msg = input?.value?.trim();
-  const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-  const token = localStorage.getItem('huby_token');
-  const meuNome = localStorage.getItem('huby_user_name') || 'Passageiro';
-
-  if (!msg || !pedidoId) return;
-
-  try {
-    input.value = '';
-    await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({ mensagem: msg, remetenteNome: meuNome })
-    });
-    sincronizarChatPassageiro();
-  } catch (e) { }
 }
