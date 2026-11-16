@@ -1,13 +1,11 @@
-// routes/indicacoes.routes.js - Programa Indique e Ganhe HUBy (Bônus Bilateral Passageiro & Motorista)
+// routes/indicacoes.routes.js - Programa Indique e Ganhe HUBy (Controlado pelo Painel Master)
 import express from 'express';
 import crypto from 'crypto';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+import { lerConfigIndicacaoDoBanco } from './admin.routes.js';
 
 const router = express.Router();
-
-const BONUS_INDICADOR = 5.00;
-const DESCONTO_INDICADO = 5.00;
 
 export async function garantirEstruturaIndicacoes() {
   try {
@@ -25,15 +23,19 @@ export async function garantirEstruturaIndicacoes() {
         indicador_role VARCHAR(20) NOT NULL,
         indicador_nome VARCHAR(120),
         indicado_id TEXT NOT NULL UNIQUE,
+        indicado_role VARCHAR(20) DEFAULT 'cliente',
         indicado_nome VARCHAR(120),
         codigo_usado VARCHAR(20) NOT NULL,
         valor_bonus_indicador NUMERIC(10,2) DEFAULT 5.00,
         valor_desconto_indicado NUMERIC(10,2) DEFAULT 5.00,
+        meta_corridas INT DEFAULT 1,
         status VARCHAR(20) DEFAULT 'pendente',
         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         pago_em TIMESTAMP WITH TIME ZONE
       );
     `;
+    await sql`ALTER TABLE indicacoes_huby ADD COLUMN IF NOT EXISTS indicado_role VARCHAR(20) DEFAULT 'cliente';`;
+    await sql`ALTER TABLE indicacoes_huby ADD COLUMN IF NOT EXISTS meta_corridas INT DEFAULT 1;`;
   } catch (err) {
     console.warn('Aviso ao sincronizar tabelas de indicações:', err.message);
   }
@@ -64,9 +66,12 @@ export async function obterOuGerarCodigoUsuario(usuarioId, role = 'cliente') {
   }
 }
 
-export async function registrarIndicacaoNoCadastro({ novoUsuarioId, novoUsuarioNome, codigoConvite }) {
+export async function registrarIndicacaoNoCadastro({ novoUsuarioId, novoUsuarioNome, novoUsuarioRole = 'cliente', codigoConvite }) {
   if (!codigoConvite) return;
   try {
+    const cfg = await lerConfigIndicacaoDoBanco();
+    if (!cfg.ativo) return;
+
     await garantirEstruturaIndicacoes();
     const codLimpo = String(codigoConvite).trim().toUpperCase();
 
@@ -90,15 +95,20 @@ export async function registrarIndicacaoNoCadastro({ novoUsuarioId, novoUsuarioN
 
     if (!indicadorId || indicadorId === String(novoUsuarioId)) return;
 
+    const ehNovoMotorista = String(novoUsuarioRole).toLowerCase() === 'motorista';
+    const valorBonus = ehNovoMotorista ? Number(cfg.bonus_motorista) : Number(cfg.bonus_indicador);
+    const valorDesconto = ehNovoMotorista ? 0 : Number(cfg.desconto_indicado);
+    const metaCorridas = ehNovoMotorista ? Number(cfg.meta_corridas_motorista || 15) : 1;
+
     await sql`
       INSERT INTO indicacoes_huby (
         indicador_id, indicador_role, indicador_nome,
-        indicado_id, indicado_nome, codigo_usado,
-        valor_bonus_indicador, valor_desconto_indicado, status
+        indicado_id, indicado_role, indicado_nome, codigo_usado,
+        valor_bonus_indicador, valor_desconto_indicado, meta_corridas, status
       ) VALUES (
         ${indicadorId}, ${indicadorRole}, ${indicadorNome},
-        ${String(novoUsuarioId)}, ${novoUsuarioNome}, ${codLimpo},
-        ${BONUS_INDICADOR}, ${DESCONTO_INDICADO}, 'pendente'
+        ${String(novoUsuarioId)}, ${ehNovoMotorista ? 'motorista' : 'cliente'}, ${novoUsuarioNome}, ${codLimpo},
+        ${valorBonus}, ${valorDesconto}, ${metaCorridas}, 'pendente'
       )
       ON CONFLICT (indicado_id) DO NOTHING;
     `;
@@ -119,7 +129,7 @@ export async function liquidarBonusIndicacaoPrimeiraCorrida(clienteId) {
     if (!pend.length) return;
 
     const ind = pend[0];
-    const bonus = Number(ind.valor_bonus_indicador || BONUS_INDICADOR);
+    const bonus = Number(ind.valor_bonus_indicador || 0);
 
     const marcada = await sql`
       UPDATE indicacoes_huby
@@ -128,6 +138,8 @@ export async function liquidarBonusIndicacaoPrimeiraCorrida(clienteId) {
       RETURNING id;
     `;
     if (!marcada.length) return;
+
+    if (bonus <= 0) return;
 
     if (ind.indicador_role === 'motorista') {
       await sql`
@@ -149,12 +161,13 @@ export async function liquidarBonusIndicacaoPrimeiraCorrida(clienteId) {
 
 router.get('/meu-codigo', autenticarToken, async (req, res) => {
   try {
+    const cfg = await lerConfigIndicacaoDoBanco();
     const usuarioId = String(req.usuario.id);
     const role = String(req.usuario.role || 'cliente');
     const codigo = await obterOuGerarCodigoUsuario(usuarioId, role);
 
     const indicados = await sql`
-      SELECT id, indicado_nome, valor_bonus_indicador, status, criado_em, pago_em
+      SELECT id, indicado_nome, indicado_role, valor_bonus_indicador, meta_corridas, status, criado_em, pago_em
       FROM indicacoes_huby
       WHERE indicador_id = ${usuarioId}
       ORDER BY criado_em DESC
@@ -173,9 +186,12 @@ router.get('/meu-codigo', autenticarToken, async (req, res) => {
 
     res.json({
       sucesso: true,
+      ativo: cfg.ativo,
       codigo,
-      bonusPorIndicacao: BONUS_INDICADOR,
-      descontoAmigo: DESCONTO_INDICADO,
+      bonusPorIndicacao: Number(cfg.bonus_indicador),
+      descontoAmigo: Number(cfg.desconto_indicado),
+      bonusIndicacaoMotorista: Number(cfg.bonus_motorista),
+      metaCorridasMotorista: Number(cfg.meta_corridas_motorista),
       totalGanho,
       saldoBonusCliente,
       indicados
