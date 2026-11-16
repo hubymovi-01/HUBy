@@ -5,7 +5,7 @@
   --card-dark: #121826;
   --card-alt: #1A2234;
   --border-dark: rgba(255, 255, 255, 0.08);
-  --glass-bg: rgba(18, 24, 38, 0.82);
+  --glass-bg: rgba(18, 24, 38, 0.88);
   --glass-border: rgba(255, 255, 255, 0.1);
   --emerald: #10B981;
   --emerald-glow: rgba(16, 185, 129, 0.25);
@@ -49,7 +49,7 @@ body {
 /* TOPO MINIMALISTA */
 .top-driver-nav {
   position: absolute;
-  top: 14px;
+  top: calc(env(safe-area-inset-top, 10px) + 6px);
   left: 14px;
   right: 14px;
   z-index: 10;
@@ -66,7 +66,7 @@ body {
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-radius: 14px;
-  padding: 7px 12px;
+  padding: 6px 12px;
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -92,7 +92,7 @@ body {
 /* BOTÃO CHAT FLUTUANTE */
 .btn-floating-chat {
   position: absolute;
-  bottom: calc(54vh + 10px);
+  bottom: calc(59vh + 10px);
   right: 16px;
   width: 46px;
   height: 46px;
@@ -116,16 +116,17 @@ body {
   left: 0;
   right: 0;
   z-index: 10;
-  background: rgba(18, 24, 38, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(14, 20, 32, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border-top: 1px solid var(--glass-border);
   border-radius: 24px 24px 0 0;
-  padding: 16px;
+  padding: 14px 14px calc(env(safe-area-inset-bottom, 10px) + 10px);
   box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.65);
-  max-height: 52vh;
+  max-height: 58vh;
   display: flex;
   flex-direction: column;
+  gap: 8px;
 }
 
 .wallet-card-row {
@@ -135,8 +136,8 @@ body {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--glass-border);
   border-radius: 14px;
-  padding: 10px 14px;
-  margin-bottom: 12px;
+  padding: 9px 14px;
+  flex-shrink: 0;
 }
 
 .wallet-meta small {
@@ -149,7 +150,7 @@ body {
 }
 
 .wallet-meta .val-saldo {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 900;
   color: var(--emerald);
   letter-spacing: -0.3px;
@@ -159,7 +160,7 @@ body {
   background: rgba(16, 185, 129, 0.15);
   border: 1px solid rgba(16, 185, 129, 0.35);
   color: var(--emerald);
-  padding: 8px 14px;
+  padding: 8px 13px;
   border-radius: 8px;
   font-size: 12px;
   font-weight: 800;
@@ -176,18 +177,19 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  padding-bottom: 4px;
 }
 
 .dock-empty {
   text-align: center;
   color: var(--text-sec);
   font-size: 13px;
-  padding: 24px 10px;
+  padding: 20px 10px;
   font-weight: 600;
 }
 
-/* DRAWER LATERAL (GLASSMORPHISM) */
+/* DRAWER LATERAL */
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -211,7 +213,7 @@ body {
   left: -350px;
   width: 335px;
   height: 100vh;
-  background: rgba(13, 18, 31, 0.88);
+  background: rgba(13, 18, 31, 0.94);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-right: 1px solid var(--glass-border);
@@ -248,11 +250,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
-}
-
-.btn-close-drawer:hover {
-  background: rgba(255, 255, 255, 0.16);
 }
 
 .drawer-profile-info {
@@ -284,10 +281,8 @@ body {
 .drawer-section-card {
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(10px);
   border-radius: 14px;
   padding: 14px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
 }
 
 .drawer-section-card h4 {
@@ -314,7 +309,6 @@ body {
   font-family: monospace;
   font-weight: 900;
   margin-top: 2px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 
 .placa-mercosul-header {

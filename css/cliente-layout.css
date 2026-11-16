@@ -121,13 +121,13 @@
   transform: scale(0.92);
 }
 
-/* 3. BARRA DE PESQUISA SUPERIOR MODERNA (Elegante & Espaçada) */
+/* 3. BARRA DE PESQUISA SUPERIOR MODERNA */
 .search-floating-wrapper {
   position: absolute !important;
-  top: calc(env(safe-area-inset-top, 14px) + 72px) !important;
+  top: calc(env(safe-area-inset-top, 14px) + 68px) !important;
   left: 16px !important;
   right: 16px !important;
-  z-index: 1000 !important;
+  z-index: 490 !important;
   pointer-events: none !important;
   display: flex !important;
   flex-direction: column !important;
@@ -138,16 +138,16 @@
   pointer-events: auto !important;
   position: relative !important;
   width: 100% !important;
-  min-height: 52px !important;
+  min-height: 50px !important;
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
-  background: rgba(15, 23, 42, 0.88) !important;
+  background: rgba(15, 23, 42, 0.9) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
   border: 1px solid rgba(255, 255, 255, 0.12) !important;
   border-radius: 16px !important;
-  padding: 6px 12px 6px 14px !important;
+  padding: 5px 12px 5px 14px !important;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35) !important;
   transition: all 0.25s ease !important;
   cursor: text !important;
@@ -177,7 +177,7 @@
   border: none !important;
   outline: none !important;
   color: #FFF !important;
-  font-size: 15px !important;
+  font-size: 14.5px !important;
   font-weight: 500 !important;
   letter-spacing: -0.2px;
   padding: 8px 4px !important;
@@ -188,7 +188,6 @@
   font-size: 14px !important;
 }
 
-/* Agrupamento e botões de ação da barra */
 .search-icon {
   background: transparent !important;
   border: none !important;
@@ -217,10 +216,6 @@
   border: 1px solid rgba(56, 189, 248, 0.25) !important;
 }
 
-#btnBuscaIA.search-icon:active {
-  background: rgba(56, 189, 248, 0.2) !important;
-}
-
 .clear-btn {
   display: none;
   background: rgba(255, 255, 255, 0.08) !important;
@@ -235,55 +230,43 @@
   cursor: pointer !important;
   font-size: 11px !important;
   margin-left: 2px !important;
-  transition: all 0.15s ease !important;
   touch-action: manipulation !important;
-}
-
-.clear-btn:active {
-  background: rgba(239, 68, 68, 0.3) !important;
-  color: #EF4444 !important;
 }
 
 .search-results-glass {
   pointer-events: auto !important;
   width: 100% !important;
-  background: rgba(15, 23, 42, 0.95) !important;
+  background: rgba(15, 23, 42, 0.96) !important;
   backdrop-filter: blur(12px) !important;
   -webkit-backdrop-filter: blur(12px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 16px !important;
-  padding: 8px 0 !important;
+  padding: 6px 0 !important;
   margin: 0 !important;
   list-style: none !important;
-  max-height: 250px !important;
+  max-height: 230px !important;
   overflow-y: auto !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
-  animation: slideDown 0.3s ease forwards !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45) !important;
 }
 
 .search-result-item {
   display: flex !important;
   align-items: center !important;
-  padding: 12px 16px !important;
+  padding: 10px 14px !important;
   cursor: pointer !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-  transition: background 0.2s ease !important;
 }
 
 .search-result-item:last-child {
   border-bottom: none !important;
 }
 
-.search-result-item:hover {
-  background: rgba(255, 255, 255, 0.05) !important;
-}
-
 .result-icon {
-  font-size: 18px !important;
-  margin-right: 12px !important;
+  font-size: 16px !important;
+  margin-right: 10px !important;
   background: rgba(16, 185, 129, 0.2) !important;
-  width: 32px !important;
-  height: 32px !important;
+  width: 30px !important;
+  height: 30px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -298,21 +281,16 @@
 
 .result-text strong {
   color: #FFF !important;
-  font-size: 15px !important;
+  font-size: 14px !important;
 }
 
 .result-text small {
   color: #94A3B8 !important;
-  font-size: 12px !important;
+  font-size: 11.5px !important;
   margin-top: 2px !important;
 }
 
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* 4. DOCK INFERIOR COMPACTO */
+/* 4. DOCK INFERIOR ORGANIZADO */
 .pro-dock {
   position: absolute;
   bottom: 0;
@@ -325,11 +303,12 @@
   border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 24px 24px 0 0 !important;
   box-shadow: 0 -12px 35px rgba(0, 0, 0, 0.85) !important;
-  padding: 8px 14px calc(env(safe-area-inset-bottom, 16px) + 8px) !important;
+  padding: 8px 14px calc(env(safe-area-inset-bottom, 14px) + 10px) !important;
   display: flex;
   flex-direction: column;
   gap: 8px !important;
-  max-height: 52vh !important;
+  max-height: 62vh !important;
+  overflow-y: auto !important;
 }
 
 .sheet-drag-handle {
@@ -338,6 +317,7 @@
   background: rgba(255, 255, 255, 0.25);
   border-radius: 999px;
   margin: 0 auto 2px auto;
+  flex-shrink: 0;
 }
 
 /* 5. TIMELINE COMPACTA */
@@ -427,14 +407,12 @@
   cursor: pointer;
 }
 
-/* 6. CARROSSEL HORIZONTAL DE CATEGORIAS */
+/* 6. CATEGORIAS */
 .categories-container {
   display: grid !important;
   grid-template-columns: repeat(3, 1fr) !important;
   gap: 6px !important;
   width: 100%;
-  max-height: none !important;
-  overflow: visible !important;
   padding: 0 !important;
 }
 
@@ -454,24 +432,14 @@
   touch-action: manipulation;
 }
 
-.category-card-pro:hover {
-  background: rgba(255, 255, 255, 0.05);
-}
-
 .category-card-pro.active {
   background: rgba(16, 185, 129, 0.08);
   border-color: var(--hub-emerald);
   box-shadow: 0 4px 14px rgba(16, 185, 129, 0.2);
 }
 
-.cat-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
 .cat-emoji {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
   margin-bottom: 2px;
 }
@@ -480,26 +448,10 @@
   display: none !important;
 }
 
-.cat-center {
-  padding: 0 !important;
-  width: 100%;
-}
-
-.cat-name-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-}
-
 .cat-name-row strong {
   font-size: 11.5px;
   font-weight: 800;
   color: #FFFFFF;
-}
-
-.cat-right {
-  text-align: center;
 }
 
 .cat-price-est {
@@ -509,7 +461,7 @@
   display: block;
 }
 
-/* 7. LINHA DE BOTÕES RÁPIDOS */
+/* 7. BOTÕES RÁPIDOS */
 .dock-quick-actions-row {
   display: flex;
   align-items: center;
@@ -530,17 +482,6 @@
   gap: 4px;
   cursor: pointer;
   touch-action: manipulation;
-}
-
-.btn-dock-quick-pill:active {
-  transform: scale(0.95);
-  background: rgba(255, 255, 255, 0.08) !important;
-}
-
-.btn-dock-quick-pill .arrow-down {
-  font-size: 10px;
-  color: #94A3B8;
-  margin-left: 2px;
 }
 
 .badge-cupom-ativo {
@@ -582,10 +523,6 @@
   touch-action: manipulation;
 }
 
-.pro-btn:active {
-  transform: scale(0.98);
-}
-
 .pro-btn .btn-text {
   font-size: 14px;
   font-weight: 900;
@@ -599,10 +536,10 @@
   border-radius: 8px;
 }
 
-/* 9. BOTÕES FLUTUANTES */
+/* 9. BOTÕES FLUTUANTES ALINHADOS SEM SOBREPOSIÇÃO */
 .btn-floating-gps {
   position: absolute !important;
-  bottom: calc(270px + env(safe-area-inset-bottom, 16px)) !important;
+  bottom: calc(295px + env(safe-area-inset-bottom, 14px)) !important;
   right: 14px !important;
   width: 44px !important;
   height: 44px !important;
@@ -621,13 +558,8 @@
   touch-action: manipulation;
 }
 
-.btn-floating-gps:active {
-  transform: scale(0.92);
-  background: rgba(16, 185, 129, 0.2) !important;
-}
-
 .btn-floating-layer {
-  bottom: calc(322px + env(safe-area-inset-bottom, 16px)) !important;
+  bottom: calc(348px + env(safe-area-inset-bottom, 14px)) !important;
   border-color: rgba(56, 189, 248, 0.5) !important;
   color: #38BDF8 !important;
 }
@@ -635,7 +567,12 @@
 .btn-floating-layer.modo-satelite {
   background: rgba(56, 189, 248, 0.2) !important;
   border-color: #38BDF8 !important;
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.4) !important;
+}
+
+#btnAbrirChat.btn-floating-gps {
+  bottom: calc(402px + env(safe-area-inset-bottom, 14px)) !important;
+  border-color: #38BDF8 !important;
+  color: #38BDF8 !important;
 }
 
 /* 10. CARDS DE FAVORITOS NO DRAWER */
@@ -648,12 +585,6 @@
   border-radius: 14px;
   padding: 4px 8px 4px 10px;
   margin-bottom: 6px;
-  transition: all 0.2s ease;
-}
-
-.drawer-fav-card:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .fav-main-action {
@@ -663,7 +594,6 @@
   gap: 12px;
   padding: 8px 0;
   cursor: pointer;
-  touch-action: manipulation;
   min-width: 0;
 }
 
@@ -701,13 +631,6 @@
   font-size: 14px;
   cursor: pointer;
   color: #CBD5E1;
-  transition: background 0.15s ease, transform 0.1s ease;
-  touch-action: manipulation;
-}
-
-.btn-fav-edit:active {
-  background: rgba(16, 185, 129, 0.25);
-  transform: scale(0.92);
 }
 
 /* 11. SELETOR RÁPIDO DE FORMAS DE PAGAMENTO */
@@ -727,7 +650,6 @@
   border-radius: 12px;
   padding: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
 }
 
 .opcao-pagamento-rapido.ativa {
@@ -761,7 +683,6 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   padding: 10px;
-  margin-bottom: 2px;
 }
 
 .delivery-header-title {
