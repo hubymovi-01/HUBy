@@ -10,6 +10,38 @@ const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000; // 12 horas por turno
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
+function aplicarEstadoVisualOnline(online) {
+  const ativo = Boolean(online);
+  estado.isOnline = ativo;
+  estado.statusOnline = ativo;
+
+  const btn = document.getElementById('btnToggleStatusOnline');
+  if (btn) {
+    if (ativo) {
+      btn.style.background = 'rgba(16, 185, 129, 0.2)';
+      btn.style.borderColor = 'var(--emerald)';
+      btn.style.color = 'var(--emerald)';
+      btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
+    } else {
+      btn.style.background = '#1F2937';
+      btn.style.borderColor = 'rgba(255,255,255,0.12)';
+      btn.style.color = '#94A3B8';
+      btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
+    }
+  }
+}
+
+function obterCoordenadasAtuaisMotorista() {
+  const fonte = estado.ultimaPosicao || estado.posicaoAtual || estado.coordsAtual || null;
+  if (fonte && Number.isFinite(Number(fonte.lat)) && Number.isFinite(Number(fonte.lng))) {
+    return { lat: Number(fonte.lat), lng: Number(fonte.lng) };
+  }
+  if (Array.isArray(fonte) && fonte.length === 2) {
+    return { lat: Number(fonte[0]), lng: Number(fonte[1]) };
+  }
+  return { lat: '', lng: '' };
+}
+
 async function requisitarWakeLock() {
   if ('wakeLock' in navigator) {
     try {
@@ -261,43 +293,31 @@ export async function alternarStatusOnline(forcarEstado = null) {
   const btn = document.getElementById('btnToggleStatusOnline');
 
   const textoBotao = btn ? btn.textContent || '' : '';
-  const visualmenteOnline = textoBotao.includes('Online') && !textoBotao.includes('Ficar Online');
+  const visualmenteOnline = Boolean(estado.isOnline) || (textoBotao.includes('Online') && !textoBotao.includes('Ficar Online'));
   const novoStatus = typeof forcarEstado === 'boolean' ? forcarEstado : !visualmenteOnline;
 
-  // Exige selfie de verificação antes de ativar o modo Online
   if (novoStatus && !selfieTurnoValida()) {
     const selfieAprovada = await solicitarSelfieVerificacaoOnline();
     if (!selfieAprovada) {
+      aplicarEstadoVisualOnline(false);
+      renderizarRadarOffline();
       return false;
     }
   }
 
-  estado.isOnline = novoStatus;
-  estado.statusOnline = novoStatus;
+  aplicarEstadoVisualOnline(novoStatus);
 
-  if (btn) {
-    if (estado.isOnline) {
-      btn.style.background = 'rgba(16, 185, 129, 0.2)';
-      btn.style.borderColor = 'var(--emerald)';
-      btn.style.color = 'var(--emerald)';
-      btn.innerHTML = '<span>🟢</span> <strong>Online</strong>';
-
-      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
-      await requisitarWakeLock();
-
-      iniciarRadarChamadas();
-      notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
-    } else {
-      btn.style.background = '#1F2937';
-      btn.style.borderColor = 'rgba(255,255,255,0.12)';
-      btn.style.color = '#94A3B8';
-      btn.innerHTML = '<span>⚪</span> <strong>Ficar Online</strong>';
-
-      libertarWakeLock();
-      pararRadarChamadas();
-      renderizarRadarOffline();
-      notificar('⚪ Você ficou offline para corridas.', 'info');
-    }
+  if (novoStatus) {
+    if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+    await requisitarWakeLock();
+    renderizarRadar([]);
+    iniciarRadarChamadas();
+    notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
+  } else {
+    libertarWakeLock();
+    pararRadarChamadas();
+    renderizarRadarOffline();
+    notificar('⚪ Você ficou offline para corridas.', 'info');
   }
 
   try {
@@ -313,7 +333,7 @@ export async function alternarStatusOnline(forcarEstado = null) {
     console.warn('Aviso de rede ao persistir status online:', err);
   }
 
-  return estado.isOnline;
+  return novoStatus;
 }
 
 export function iniciarRadarChamadas() {
@@ -325,6 +345,7 @@ export function iniciarRadarChamadas() {
     return;
   }
 
+  renderizarRadar([]);
   buscarChamadasPendentes();
 
   if (!estado.socketRadar) {
@@ -380,6 +401,7 @@ export function pararRadarChamadas() {
 function renderizarRadarOffline() {
   const feedEl = document.getElementById('listaChamadasPendentes');
   if (feedEl) {
+    feedEl.style.display = 'block';
     feedEl.innerHTML = `
       <div class="dock-empty" style="text-align: center; color: #94A3B8; font-size: 13px; padding: 22px 10px; background: rgba(15,23,42,0.6); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px;">
         <span style="font-size: 24px; display: block; margin-bottom: 6px;">⚪</span>
@@ -407,36 +429,38 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
   try {
     const cat = estado.categoriaMotorista || 'carro';
-    
-    // Captura a localização real atual do motorista se o mapa já estiver ativo
-    let lat = '';
-    let lng = '';
-    if (estado.ultimaPosicao && estado.ultimaPosicao.lat && estado.ultimaPosicao.lng) {
-      lat = estado.ultimaPosicao.lat;
-      lng = estado.ultimaPosicao.lng;
-    }
+    const { lat, lng } = obterCoordenadasAtuaisMotorista();
 
-    // Passa lat e lng na URL para o backend calcular a Cerca Virtual de 15km
-    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&lat=${lat}&lng=${lng}&t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: {
-        'Authorization': `Bearer ${token}`
+    const resp = await fetch(
+      `${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&lat=${lat}&lng=${lng}&t=${Date.now()}`,
+      {
+        cache: 'no-store',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       }
-    });
+    );
 
     if (resp.status === 403) {
-      estado.isOnline = false;
-      libertarWakeLock();
-      renderizarRadarOffline();
-      pararRadarChamadas();
+      // Mantém o estado online visual ativo e aguarda o próximo ciclo sem derrubar o botão
+      renderizarRadar([]);
       return;
     }
 
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      renderizarRadar([]);
+      return;
+    }
 
     const pedidos = await resp.json();
     const chamadasFiltradas = Array.isArray(pedidos)
-      ? pedidos.filter((p) => !estado.pedidosIgnorados?.has(String(p.id)))
+      ? pedidos.filter((p) => {
+          if (estado.pedidosIgnorados?.has(String(p.id))) return false;
+          if (typeof window.pedidoCompativelComRotaCasa === 'function') {
+            return window.pedidoCompativelComRotaCasa(p);
+          }
+          return true;
+        })
       : [];
 
     const idsAtuais = chamadasFiltradas.map((p) => p.id);
@@ -462,6 +486,7 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     renderizarRadar(chamadasFiltradas);
   } catch (err) {
     console.warn('Erro no radar:', err);
+    renderizarRadar([]);
   }
 }
 
@@ -469,8 +494,15 @@ function renderizarRadar(pedidos) {
   const feedEl = document.getElementById('listaChamadasPendentes');
   if (!feedEl) return;
 
+  feedEl.style.display = 'block';
+
+  if (!estado.isOnline) {
+    renderizarRadarOffline();
+    return;
+  }
+
   if (!pedidos || pedidos.length === 0) {
-    feedEl.innerHTML = '<div class="dock-empty" style="text-align: center; color: var(--text-sec); font-size: 12px; padding: 18px 0;">Aguardando novas chamadas na região...</div>';
+    feedEl.innerHTML = '<div class="dock-empty" style="text-align: center; color: #10B981; font-size: 12px; padding: 18px 0; font-weight: 700;">🟢 Online • Aguardando novas chamadas na região...</div>';
     return;
   }
 

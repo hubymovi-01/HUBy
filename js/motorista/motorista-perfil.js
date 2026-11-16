@@ -20,7 +20,6 @@ export async function carregarPerfil() {
     const motorista = await resp.json();
     if (!motorista) return null;
 
-    // Sincroniza todas as propriedades com motorista-estado.js
     estado.motoristaId = motorista.id;
     estado.motoristaNome = motorista.nome || 'Carol';
     estado.categoriaMotorista = motorista.categoria || 'carro';
@@ -30,6 +29,17 @@ export async function carregarPerfil() {
     estado.aceitaCartao = motorista.aceita_cartao !== false;
     estado.aceitaPix = motorista.aceita_pix !== false;
     estado.dadosMotorista = motorista;
+
+    // Só sincroniza status_online do banco se o botão ainda não tiver sido alterado na sessão atual
+    const btnOnline = document.getElementById('btnToggleStatusOnline');
+    const botaoJaMarcadoOnline = Boolean(
+      estado.isOnline ||
+      (btnOnline && (btnOnline.textContent || '').includes('Online') && !(btnOnline.textContent || '').includes('Ficar Online'))
+    );
+    if (!botaoJaMarcadoOnline && typeof motorista.status_online === 'boolean') {
+      estado.isOnline = motorista.status_online;
+      estado.statusOnline = motorista.status_online;
+    }
 
     const inVoz = document.getElementById('drawerInputCodigoVoz');
     if (inVoz) {
@@ -108,7 +118,6 @@ export async function carregarPerfil() {
     if (editAno) editAno.value = motorista.veiculo_ano || '';
     if (prevFoto && motorista.foto_perfil_url) prevFoto.src = motorista.foto_perfil_url;
 
-    // Atualiza também o card de Ganhos de Hoje e o Extrato Lateral
     carregarGanhosHoje();
     carregarExtratoFinanceiro();
 
