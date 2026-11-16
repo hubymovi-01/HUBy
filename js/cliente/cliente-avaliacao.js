@@ -1,52 +1,75 @@
-// js/cliente/cliente-avaliacao.js - Avaliação, Tags e Gorjetas do Passageiro
+// js/cliente/cliente-avaliacao.js - Avaliação com Estrelas, Etiquetas de Elogio e Gorjetas
 import { API_URL, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
 import { carregarSaldoCarteiraCliente } from './cliente-ui-menu.js';
+import { notificar } from '../util/alertas-huby.js';
+
+const ETIQUETAS_ELOGIO_PADRAO = [
+  { id: 'carro_limpo', label: '✨ Carro limpo' },
+  { id: 'direcao_tranquila', label: '🛣️ Direção tranquila' },
+  { id: 'boa_conversa', label: '💬 Boa conversa' },
+  { id: 'pontual', label: '⏱️ Pontual' },
+  { id: 'educado', label: '🤝 Muito educado' },
+  { id: 'ar_condicionado', label: '❄️ Ar agradável' }
+];
+
+function garantirEtiquetasNoModal() {
+  const modalCard = document.querySelector('#modalAvaliacao .modal-card');
+  const estrelasBox = document.getElementById('estrelasRating');
+  if (!modalCard || !estrelasBox) return;
+
+  if (!document.getElementById('containerTagsAvaliacao')) {
+    const grid = document.createElement('div');
+    grid.id = 'containerTagsAvaliacao';
+    grid.className = 'tags-avaliacao-grid';
+    grid.innerHTML = ETIQUETAS_ELOGIO_PADRAO.map(
+      (tag) => `<button type="button" class="tag-avaliacao-rapida" data-tag="${tag.label}">${tag.label}</button>`
+    ).join('');
+    estrelasBox.insertAdjacentElement('afterend', grid);
+  }
+}
 
 export function configurarModalAvaliacao() {
+  garantirEtiquetasNoModal();
+
   // 1. Controle das Estrelas (1 a 5)
   const estrelas = document.querySelectorAll('#estrelasRating span');
-  estrelas.forEach(star => {
-    star.addEventListener('click', () => {
+  estrelas.forEach((star) => {
+    star.onclick = () => {
       estadoCliente.notaSelecionada = parseInt(star.getAttribute('data-val'), 10) || 5;
       estrelas.forEach((s, idx) => {
         s.style.color = idx < estadoCliente.notaSelecionada ? '#F59E0B' : '#4B5563';
       });
-    });
+    };
   });
 
-  // 2. Tags/Etiquetas de Avaliação Rápida (se existirem no HTML)
-  document.querySelectorAll('.tag-avaliacao-rapida').forEach(tag => {
-    tag.addEventListener('click', () => {
+  // 2. Tags/Etiquetas de Avaliação Rápida
+  document.querySelectorAll('.tag-avaliacao-rapida').forEach((tag) => {
+    tag.onclick = () => {
       tag.classList.toggle('active');
-      if (tag.classList.contains('active')) {
-        tag.style.background = 'rgba(16, 185, 129, 0.2)';
-        tag.style.borderColor = '#10B981';
-        tag.style.color = '#10B981';
-      } else {
-        tag.style.background = 'rgba(255, 255, 255, 0.05)';
-        tag.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-        tag.style.color = '#94A3B8';
-      }
-    });
+    };
   });
 
   // 3. Botões de Ação
-  document.getElementById('btnEnviarAvaliacao')?.addEventListener('click', enviarAvaliacaoCorrida);
-  document.getElementById('btnPularAvaliacao')?.addEventListener('click', fecharModalAvaliacao);
+  const btnEnviar = document.getElementById('btnEnviarAvaliacao');
+  const btnPular = document.getElementById('btnPularAvaliacao');
+  if (btnEnviar) btnEnviar.onclick = enviarAvaliacaoCorrida;
+  if (btnPular) btnPular.onclick = fecharModalAvaliacao;
 
   const modal = document.getElementById('modalAvaliacao');
-  modal?.addEventListener('click', (e) => {
-    if (e.target === modal) fecharModalAvaliacao();
-  });
+  if (modal) {
+    modal.onclick = (e) => {
+      if (e.target === modal) fecharModalAvaliacao();
+    };
+  }
 }
 
 export function configurarBotoesGorjeta() {
   const btnGorjetas = document.querySelectorAll('.btn-gorjeta');
-  btnGorjetas.forEach(btn => {
-    btn.addEventListener('click', () => {
+  btnGorjetas.forEach((btn) => {
+    btn.onclick = () => {
       const jaAtivo = btn.classList.contains('active');
-      btnGorjetas.forEach(b => {
+      btnGorjetas.forEach((b) => {
         b.classList.remove('active');
         b.style.background = 'rgba(255, 255, 255, 0.05)';
         b.style.color = '#FFF';
@@ -60,7 +83,7 @@ export function configurarBotoesGorjeta() {
       } else {
         estadoCliente.gorjetaSelecionada = 0;
       }
-    });
+    };
   });
 }
 
@@ -73,29 +96,33 @@ export function fecharModalAvaliacao() {
 
   estadoCliente.notaSelecionada = 5;
   estadoCliente.gorjetaSelecionada = 0;
-  
-  const estrelas = document.querySelectorAll('#estrelasRating span');
-  estrelas.forEach(s => s.style.color = '#F59E0B');
 
-  document.querySelectorAll('.btn-gorjeta').forEach(b => {
+  const estrelas = document.querySelectorAll('#estrelasRating span');
+  estrelas.forEach((s) => {
+    s.style.color = '#F59E0B';
+  });
+
+  document.querySelectorAll('.btn-gorjeta').forEach((b) => {
     b.classList.remove('active');
     b.style.background = 'rgba(255, 255, 255, 0.05)';
     b.style.color = '#FFF';
   });
 
-  document.querySelectorAll('.tag-avaliacao-rapida').forEach(t => {
+  document.querySelectorAll('.tag-avaliacao-rapida').forEach((t) => {
     t.classList.remove('active');
-    t.style.background = 'rgba(255, 255, 255, 0.05)';
-    t.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-    t.style.color = '#94A3B8';
   });
 
   estadoCliente.corridaParaAvaliarId = null;
   localStorage.removeItem('huby_pedido_ativo_id');
+  localStorage.removeItem('huby_ultima_corrida_id');
 }
 
 export async function enviarAvaliacaoCorrida() {
-  const pedidoId = estadoCliente.corridaParaAvaliarId || localStorage.getItem('huby_pedido_ativo_id');
+  const pedidoId =
+    estadoCliente.corridaParaAvaliarId ||
+    localStorage.getItem('huby_ultima_corrida_id') ||
+    localStorage.getItem('huby_pedido_ativo_id');
+
   if (!pedidoId) {
     fecharModalAvaliacao();
     return;
@@ -106,10 +133,9 @@ export async function enviarAvaliacaoCorrida() {
   const comentario = comentarioEl ? comentarioEl.value.trim() : '';
   const btn = document.getElementById('btnEnviarAvaliacao');
 
-  // Coleta as etiquetas marcadas (se existirem)
   const tagsAtivas = [];
-  document.querySelectorAll('.tag-avaliacao-rapida.active').forEach(t => {
-    tagsAtivas.push(t.textContent.trim());
+  document.querySelectorAll('.tag-avaliacao-rapida.active').forEach((t) => {
+    tagsAtivas.push(t.getAttribute('data-tag') || t.textContent.trim());
   });
 
   try {
@@ -118,7 +144,6 @@ export async function enviarAvaliacaoCorrida() {
       btn.textContent = 'Enviando...';
     }
 
-    // 1. Enviar Avaliação com Nota, Comentário e Tags
     const resAvaliacao = await fetch(`${API_URL}/api/pedidos/${pedidoId}/avaliar`, {
       method: 'POST',
       headers: {
@@ -132,7 +157,11 @@ export async function enviarAvaliacaoCorrida() {
       })
     });
 
-    // 2. Enviar Gorjeta (se selecionada)
+    if (!resAvaliacao.ok) {
+      const errData = await resAvaliacao.json().catch(() => ({}));
+      throw new Error(errData.erro || 'Não foi possível registrar sua avaliação.');
+    }
+
     if (estadoCliente.gorjetaSelecionada > 0) {
       const resGorjeta = await fetch(`${API_URL}/api/carteira/gorjeta`, {
         method: 'POST',
@@ -155,13 +184,13 @@ export async function enviarAvaliacaoCorrida() {
       sonsHUBy.tocarMetaBatida();
     }
 
-    alert('⭐ Obrigado pela sua avaliação! Sua opinião ajuda a manter a comunidade HUBy excelente.');
+    notificar('Avaliação enviada! Obrigado por viajar com a HUBy.', 'sucesso');
   } catch (err) {
-    console.warn('Erro ao processar avaliação:', err.message);
+    notificar(err.message || 'Erro ao enviar avaliação.', 'erro');
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = 'Enviar Avaliação';
+      btn.textContent = 'Enviar';
     }
     fecharModalAvaliacao();
   }

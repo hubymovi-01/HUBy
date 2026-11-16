@@ -1262,6 +1262,59 @@ export default function pedidosRouter(io) {
       return res.status(500).json({ erro: err.message || 'Falha ao salvar dados do perfil.' });
     }
   });
+  // =========================================================================
+  // 14. AVALIAR CORRIDA CONCLUÍDA (ESTRELAS + ETIQUETAS + COMENTÁRIO)
+  // =========================================================================
+  router.post('/:id/avaliar', autenticarToken, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const clienteId = String(req.usuario.id);
+      const notaNum = Math.min(5, Math.max(1, parseInt(req.body?.nota, 10) || 5));
+      const comentario = String(req.body?.comentario || '').trim().slice(0, 400);
+      const etiquetasArr = Array.isArray(req.body?.etiquetas)
+        ? req.body.etiquetas.map((t) => String(t).trim().slice(0, 60)).filter(Boolean).slice(0, 8)
+        : [];
+
+      await sql`ALTER TABLE avaliacoes ADD COLUMN IF NOT EXISTS etiquetas JSONB DEFAULT '[]'::jsonb;`;
+
+      const pedidos = await sql`
+        SELECT id, motorista_id FROM pedidos
+        WHERE id::text = ${String(id)}::text
+        LIMIT 1;
+      `;
+      if (pedidos.length === 0) {
+        return res.status(404).json({ erro: 'Corrida não encontrada.' });
+      }
+
+      const motoristaId = pedidos[0].motorista_id || null;
+
+      await sql`
+        INSERT INTO avaliacoes (pedido_id, cliente_id, motorista_id, nota, comentario, etiquetas)
+        VALUES (${String(id)}, ${clienteId}, ${motoristaId}, ${notaNum}, ${comentario}, ${JSON.stringify(etiquetasArr)}::jsonb);
+      `;
+
+      if (motoristaId) {
+        await sql`
+          UPDATE motoristas
+          SET total_avaliacoes = COALESCE(total_avaliacoes, 0) + 1,
+              avaliacao_media = ROUND(
+                ((COALESCE(avaliacao_media, 5.00) * COALESCE(total_avaliacoes, 0)) + ${notaNum})::numeric /
+                (COALESCE(total_avaliacoes, 0) + 1),
+                2
+              )
+          WHERE id::text = ${String(motoristaId)}::text;
+        `;
+      }
+
+      return res.status(201).json({
+        sucesso: true,
+        nota: notaNum,
+        etiquetas: etiquetasArr
+      });
+    } catch (err) {
+      return res.status(500).json({ erro: 'Falha ao registrar avaliação.' });
+    }
+  });
 
   return router;
 }
