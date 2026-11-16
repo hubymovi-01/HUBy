@@ -10,6 +10,7 @@ import { liquidarBonusIndicacaoPrimeiraCorrida } from './indicacoes.routes.js';
 
 const TEMPO_TOLERANCIA_ESPERA_SEG = 180; // 3 minutos de tolerância após motorista chegar
 const VALOR_TAXA_CANCELAMENTO = 5.00;
+const RAIO_MAXIMO_KM = 15.0; // Distância máxima para um motorista ver uma corrida
 
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -82,6 +83,7 @@ export function iniciarDespachanteAgendamentos(io) {
       for (const p of prontas) {
         const valorNum = Number(p.valor_total || 0);
         if (io) {
+          // Emite apenas para clientes na mesma região (lógica de room no Socket.IO idealmente, mas aqui emitimos global por enquanto)
           io.emit('nova_chamada', {
             id: p.id,
             clienteId: p.cliente_id,
@@ -278,6 +280,7 @@ export default function pedidosRouter(io) {
 
       if (statusInicialPedido === 'pendente') {
         if (io) {
+          // Dispara para todos, mas no frontend o motorista vai ignorar se estiver muito longe
           io.emit('nova_chamada', {
             id: idPedido,
             clienteId: idClienteFinal,
@@ -366,7 +369,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES
+  // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
@@ -386,14 +389,48 @@ export default function pedidosRouter(io) {
         }
       }
 
-      const { categoria } = req.query;
+      const { categoria, lat, lng } = req.query;
+      const motoristaLat = parseFloat(lat);
+      const motoristaLng = parseFloat(lng);
+
+      // Cláusula de Distância baseada na Fórmula de Haversine se lat e lng forem fornecidos
+      let filtroDistancia = sql``;
+      if (!isNaN(motoristaLat) && !isNaN(motoristaLng)) {
+        filtroDistancia = sql`
+          AND (
+            6371 * acos(
+              cos(radians(${motoristaLat})) * cos(radians(origem_lat)) *
+              cos(radians(origem_lng) - radians(${motoristaLng})) +
+              sin(radians(${motoristaLat})) * sin(radians(origem_lat))
+            )
+          ) <= ${RAIO_MAXIMO_KM}
+        `;
+      }
+
       let pedidos;
       if (categoria === 'moto') {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status IN ('pendente', 'aguardando', 'buscando') AND tipo IN ('moto', 'flash_moto') ORDER BY criado_em DESC LIMIT 20;`;
+        pedidos = await sql`
+          SELECT * FROM pedidos 
+          WHERE status IN ('pendente', 'aguardando', 'buscando') 
+            AND tipo IN ('moto', 'flash_moto') 
+            ${filtroDistancia}
+          ORDER BY criado_em DESC LIMIT 20;
+        `;
       } else if (categoria === 'cargo_pickup' || categoria === 'frete' || categoria === 'entrega') {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status IN ('pendente', 'aguardando', 'buscando') AND tipo IN ('cargo_pickup', 'frete', 'entrega') ORDER BY criado_em DESC LIMIT 20;`;
+        pedidos = await sql`
+          SELECT * FROM pedidos 
+          WHERE status IN ('pendente', 'aguardando', 'buscando') 
+            AND tipo IN ('cargo_pickup', 'frete', 'entrega') 
+            ${filtroDistancia}
+          ORDER BY criado_em DESC LIMIT 20;
+        `;
       } else {
-        pedidos = await sql`SELECT * FROM pedidos WHERE status IN ('pendente', 'aguardando', 'buscando') ORDER BY criado_em DESC LIMIT 20;`;
+        pedidos = await sql`
+          SELECT * FROM pedidos 
+          WHERE status IN ('pendente', 'aguardando', 'buscando') 
+            ${filtroDistancia}
+          ORDER BY criado_em DESC LIMIT 20;
+        `;
       }
       res.json(pedidos);
     } catch (error) {

@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar de Chamadas + Selfie de Verificação ao Ficar Online
+// js/motorista/motorista-radar.js - Radar de Chamadas + Cerca Virtual + Selfie de Verificação
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -162,7 +162,6 @@ function solicitarSelfieVerificacaoOnline() {
       canvas.height = altura;
 
       const ctx = canvas.getContext('2d');
-      // Desespelha para salvar a foto real corretamente
       ctx.translate(largura, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0, largura, altura);
@@ -408,7 +407,17 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
   try {
     const cat = estado.categoriaMotorista || 'carro';
-    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&t=${Date.now()}`, {
+    
+    // Captura a localização real atual do motorista se o mapa já estiver ativo
+    let lat = '';
+    let lng = '';
+    if (estado.ultimaPosicao && estado.ultimaPosicao.lat && estado.ultimaPosicao.lng) {
+      lat = estado.ultimaPosicao.lat;
+      lng = estado.ultimaPosicao.lng;
+    }
+
+    // Passa lat e lng na URL para o backend calcular a Cerca Virtual de 15km
+    const resp = await fetch(`${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&lat=${lat}&lng=${lng}&t=${Date.now()}`, {
       cache: 'no-store',
       headers: {
         'Authorization': `Bearer ${token}`
