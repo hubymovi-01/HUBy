@@ -193,7 +193,13 @@ function escutarAtualizacaoTarifasTempoReal() {
 // BOTÃO EXCLUSIVO DE CANCELAMENTO NA TELA DO MOTORISTA
 // ============================================================================
 export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
-  const pedidoId = pedidoIdAlvo || estado.corridaAtiva?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
+  const pedidoId =
+    pedidoIdAlvo ||
+    estado.pedidoAceitoAtual?.id ||
+    estado.pedidoAtivo?.id ||
+    estado.corridaAtiva?.id ||
+    localStorage.getItem('huby_corrida_ativa_mot_id');
+
   if (!pedidoId) {
     notificar('Nenhuma corrida ativa encontrada para cancelar.', 'alerta');
     return;
@@ -214,7 +220,10 @@ export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(data.erro || 'Não foi possível cancelar a corrida.');
 
+      estado.pedidoAceitoAtual = null;
+      estado.pedidoAtivo = null;
       estado.corridaAtiva = null;
+      estado.pedidoEmAnalise = null;
       localStorage.removeItem('huby_corrida_ativa_mot_id');
 
       const btnChat = document.getElementById('btnAbrirChat');
@@ -242,17 +251,16 @@ export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
 window.cancelarCorridaPeloMotorista = cancelarCorridaPeloMotorista;
 
 function configurarBotaoCancelarNaTelaMotorista() {
+  const dock = document.querySelector('.driver-dock');
   const feed = document.getElementById('listaChamadasPendentes');
-  if (!feed) return;
+  if (!dock || !feed) return;
 
   const garantirBotaoCancelar = () => {
-    const corridaId = estado.corridaAtiva?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
-    const temCorridaEmAndamento = Boolean(corridaId) || Boolean(
-      feed.querySelector('#btnChegueiNoLocal, #btnIniciarViagemMotorista, #btnFinalizarViagemMotorista, [data-acao="cheguei"], [data-acao="iniciar"], [data-acao="finalizar"]')
-    );
+    const pedidoAtual = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
+    const corridaId = pedidoAtual?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
 
     const btnExistente = document.getElementById('btnCancelarCorridaMotoristaDock');
-    if (!temCorridaEmAndamento) {
+    if (!corridaId) {
       if (btnExistente) btnExistente.remove();
       return;
     }
@@ -265,14 +273,14 @@ function configurarBotaoCancelarNaTelaMotorista() {
     btnCancelar.innerHTML = '❌ Cancelar Corrida';
     btnCancelar.style.cssText = [
       'width: 100%',
-      'margin-top: 10px',
+      'margin: 8px 0 10px',
       'padding: 12px',
       'border-radius: 12px',
-      'background: rgba(239, 68, 68, 0.14)',
-      'border: 1.5px solid rgba(239, 68, 68, 0.45)',
+      'background: rgba(239, 68, 68, 0.16)',
+      'border: 1.5px solid rgba(239, 68, 68, 0.5)',
       'color: #F87171',
       'font-size: 13px',
-      'font-weight: 800',
+      'font-weight: 900',
       'cursor: pointer',
       'display: flex',
       'align-items: center',
@@ -286,14 +294,14 @@ function configurarBotaoCancelarNaTelaMotorista() {
       cancelarCorridaPeloMotorista(corridaId);
     });
 
-    feed.appendChild(btnCancelar);
+    feed.insertAdjacentElement('afterend', btnCancelar);
   };
 
   const observer = new MutationObserver(() => {
     garantirBotaoCancelar();
   });
-  observer.observe(feed, { childList: true, subtree: true });
-  setInterval(garantirBotaoCancelar, 1500);
+  observer.observe(dock, { childList: true, subtree: true });
+  setInterval(garantirBotaoCancelar, 1000);
 }
 
 function registrarEventosUI() {

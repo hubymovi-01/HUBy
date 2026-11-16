@@ -6,9 +6,14 @@ import { notificar } from '../util/alertas-huby.js';
 
 export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
-  if (!btn || estadoCliente.pedidoAtivoId) return;
+  if (!btn) return;
 
-  btn.style.display = 'flex';
+  if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
+    btn.style.setProperty('display', 'none', 'important');
+    return;
+  }
+
+  btn.style.setProperty('display', 'flex', 'important');
   btn.style.background = '';
 
   const labels = {
@@ -46,7 +51,6 @@ export function atualizarResumoValores() {
   const calc = calcularPreco(categoria, Math.max(0.2, distanciaKm));
   let precoFinal = calc.valorTotal;
 
-  // Adicional por paradas intermediárias (R$ 2,50 cada)
   const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
   precoFinal = Number((precoFinal + (qtdParadas * 2.50)).toFixed(2));
 
@@ -220,9 +224,9 @@ export function mostrarAguardandoMotorista() {
   if (tit) tit.textContent = 'Radar Ativo: Procurando motorista...';
   if (desc) desc.textContent = 'O seu pedido foi enviado para os parceiros próximos.';
 
-  // Oculta o botão principal na tela do passageiro (cancelamento exclusivo do motorista)
+  // Esconde definitivamente com !important para não sobrepor a classe .pro-btn
   if (btn) {
-    btn.style.display = 'none';
+    btn.style.setProperty('display', 'none', 'important');
   }
 }
 
@@ -351,7 +355,7 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
   if (sliderCategorias) sliderCategorias.style.display = 'none';
   if (blocoResumo) blocoResumo.style.display = 'none';
   if (cardStatusViagem) cardStatusViagem.style.display = 'none';
-  if (btnPedirHuby) btnPedirHuby.style.display = 'none';
+  if (btnPedirHuby) btnPedirHuby.style.setProperty('display', 'none', 'important');
 
   const painelMotorista = document.getElementById('painelMotoristaAceitou');
   if (!painelMotorista) return;
@@ -501,7 +505,7 @@ export function resetarPainelCliente() {
 
   if (btn) {
     btn.disabled = false;
-    btn.style.display = 'flex';
+    btn.style.setProperty('display', 'flex', 'important');
     btn.style.background = '';
     atualizarBotaoChamar();
   }
