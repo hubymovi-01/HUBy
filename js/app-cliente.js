@@ -15,8 +15,6 @@ import {
   criarOuAtualizarVeiculoMapa,
   estadoRecursos
 } from './cliente/cliente-recursos.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
-
 let intervalChatCliente = null;
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
