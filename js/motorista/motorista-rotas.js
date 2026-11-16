@@ -12,8 +12,8 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   const dLat = (lat2 - lat1) * rad;
   const dLon = (lon2 - lon1) * rad;
   const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
-            Math.sin(dLon / 2) ** 2;
+    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
+    Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
@@ -90,8 +90,8 @@ export function iniciarMonitoramentoDesvios(destinoCoords) {
     (err) => console.warn('Aviso de GPS:', err.message),
     {
       enableHighAccuracy: true,
-      maximumAge: 3000,
-      timeout: 8000
+      maximumAge: 10000,
+      timeout: 30000
     }
   );
 }
