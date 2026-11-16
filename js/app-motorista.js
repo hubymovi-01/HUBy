@@ -226,6 +226,8 @@ export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
       estado.pedidoEmAnalise = null;
       localStorage.removeItem('huby_corrida_ativa_mot_id');
 
+      document.getElementById('btnCancelarCorridaMotoristaDock')?.remove();
+
       const btnChat = document.getElementById('btnAbrirChat');
       if (btnChat) btnChat.style.display = 'none';
 
@@ -258,9 +260,22 @@ function configurarBotaoCancelarNaTelaMotorista() {
   const garantirBotaoCancelar = () => {
     const pedidoAtual = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
     const corridaId = pedidoAtual?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
-
     const btnExistente = document.getElementById('btnCancelarCorridaMotoristaDock');
+
     if (!corridaId) {
+      if (btnExistente) btnExistente.remove();
+      return;
+    }
+
+    // Evita duplicação caso o cartão ativo dentro do dock já contenha um botão de cancelar
+    const botoesNoDock = Array.from(dock.querySelectorAll('button'));
+    const jaExisteBotaoCancelarNoCard = botoesNoDock.some((btn) => {
+      if (btn.id === 'btnCancelarCorridaMotoristaDock') return false;
+      const texto = (btn.textContent || '').toLowerCase();
+      return texto.includes('cancelar');
+    });
+
+    if (jaExisteBotaoCancelarNoCard) {
       if (btnExistente) btnExistente.remove();
       return;
     }
