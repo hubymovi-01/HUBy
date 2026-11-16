@@ -1,14 +1,60 @@
-// js/motorista/motorista-chat.js - Chat em Tempo Real do Motorista HUBy
-import { API_URL } from '../config.js';
+// js/motorista/motorista-chat.js - Chat em Tempo Real do Motorista com Notificação Visual (Bolinha Vermelha)
+import { API_URL, sonsHUBy } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 
 let chatInterval = null;
+let ultimoIdMensagemVistaMotorista = 0;
+let pedidoMonitoradoMotorista = null;
 
 function escaparHTML(str) {
   return String(str ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+function injetarEstiloBadgeChatMotorista() {
+  if (document.getElementById('estilo-badge-chat-huby')) return;
+  const style = document.createElement('style');
+  style.id = 'estilo-badge-chat-huby';
+  style.textContent = `
+    @keyframes hubyPulseDot {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.85); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .huby-chat-red-dot {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      width: 14px;
+      height: 14px;
+      background: #EF4444;
+      border: 2px solid #090D16;
+      border-radius: 50%;
+      z-index: 25;
+      animation: hubyPulseDot 1.3s infinite;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+export function atualizarNotificacaoChatMotorista(temNovaMensagem) {
+  injetarEstiloBadgeChatMotorista();
+  const btnAbrirChat = document.getElementById('btnAbrirChat');
+  if (!btnAbrirChat) return;
+
+  let dot = btnAbrirChat.querySelector('.huby-chat-red-dot');
+  if (temNovaMensagem) {
+    if (!dot) {
+      dot = document.createElement('span');
+      dot.className = 'huby-chat-red-dot';
+      btnAbrirChat.appendChild(dot);
+    }
+  } else if (dot) {
+    dot.remove();
+  }
 }
 
 export function configurarChatMotorista() {
@@ -18,36 +64,63 @@ export function configurarChatMotorista() {
   const btnEnviarMsg = document.getElementById('btnEnviarMsgChat');
   const inputMsg = document.getElementById('inputChatMsg');
 
-  btnAbrirChat?.addEventListener('click', () => {
-    if (modalChat) modalChat.style.display = 'flex';
-    carregarMensagensChat();
-    if (!chatInterval) chatInterval = setInterval(carregarMensagensChat, 2500);
-  });
+  if (btnAbrirChat) {
+    btnAbrirChat.onclick = () => {
+      if (modalChat) modalChat.style.display = 'flex';
+      atualizarNotificacaoChatMotorista(false);
+      carregarMensagensChat(true);
+    };
+  }
 
-  btnFecharChat?.addEventListener('click', fecharChat);
+  if (btnFecharChat) {
+    btnFecharChat.onclick = fecharChat;
+  }
 
-  btnEnviarMsg?.addEventListener('click', enviarMensagemChat);
-  inputMsg?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
+  if (btnEnviarMsg) {
+    btnEnviarMsg.onclick = (e) => {
       e.preventDefault();
       enviarMensagemChat();
-    }
-  });
+    };
+  }
+
+  if (inputMsg) {
+    inputMsg.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        enviarMensagemChat();
+      }
+    };
+  }
+
+  // Polling contínuo enquanto houver corrida ativa para acender a bolinha vermelha mesmo com o chat fechado
+  if (!chatInterval) {
+    chatInterval = setInterval(() => {
+      const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
+      const pedidoId = pedido?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
+      if (pedidoId) {
+        if (pedidoId !== pedidoMonitoradoMotorista) {
+          pedidoMonitoradoMotorista = pedidoId;
+          ultimoIdMensagemVistaMotorista = 0;
+        }
+        carregarMensagensChat(false);
+      } else {
+        pedidoMonitoradoMotorista = null;
+        ultimoIdMensagemVistaMotorista = 0;
+        atualizarNotificacaoChatMotorista(false);
+      }
+    }, 2500);
+  }
 }
 
 export function fecharChat() {
   const modalChat = document.getElementById('modalChatCorrida');
   if (modalChat) modalChat.style.display = 'none';
-  if (chatInterval) {
-    clearInterval(chatInterval);
-    chatInterval = null;
-  }
 }
 
 async function enviarMensagemChat() {
   const inputMsg = document.getElementById('inputChatMsg');
   const txt = inputMsg ? inputMsg.value.trim() : '';
-  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
+  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
   const pedidoId = pedido?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
 
   if (!txt || !pedidoId) return;
@@ -58,12 +131,11 @@ async function enviarMensagemChat() {
     return;
   }
 
+  const meuNome = estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Motorista';
   if (inputMsg) inputMsg.value = '';
 
-  // Renderização imediata (otimista) para o motorista ver na hora
   const areaMensagens = document.getElementById('chatAreaMensagens');
   if (areaMensagens) {
-    const meuNome = localStorage.getItem('huby_user_name') || 'Motorista';
     areaMensagens.insertAdjacentHTML('beforeend', `
       <div style="display: flex; flex-direction: column; align-items: flex-end; margin-bottom: 6px;">
         <small style="font-size: 9px; color: #94A3B8; margin-bottom: 2px;">${escaparHTML(meuNome)}</small>
@@ -81,17 +153,17 @@ async function enviarMensagemChat() {
       headers: obterHeaders(),
       body: JSON.stringify({
         mensagem: txt,
-        remetenteNome: localStorage.getItem('huby_user_name') || 'Motorista'
+        remetenteNome: meuNome
       })
     });
-    await carregarMensagensChat();
+    await carregarMensagensChat(true);
   } catch (err) {
     console.warn('Erro ao enviar msg:', err);
   }
 }
 
-async function carregarMensagensChat() {
-  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
+async function carregarMensagensChat(marcarComoLida = false) {
+  const pedido = estado.pedidoAceitoAtual || estado.pedidoAtivo;
   const pedidoId = pedido?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
   if (!pedidoId) return;
 
@@ -105,8 +177,9 @@ async function carregarMensagensChat() {
     } catch (e) {}
   }
 
+  const modalChat = document.getElementById('modalChatCorrida');
+  const modalAberto = modalChat && modalChat.style.display === 'flex';
   const areaMensagens = document.getElementById('chatAreaMensagens');
-  if (!areaMensagens) return;
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat?t=${Date.now()}`, {
@@ -114,6 +187,24 @@ async function carregarMensagensChat() {
     });
     if (!resp.ok) return;
     const msgs = await resp.json();
+
+    if (Array.isArray(msgs) && msgs.length > 0) {
+      const ultima = msgs[msgs.length - 1];
+      const ultimoId = Number(ultima.id || msgs.length);
+      const veioDoPassageiro = String(ultima.remetente_id) !== String(meuId);
+
+      if (modalAberto || marcarComoLida) {
+        ultimoIdMensagemVistaMotorista = Math.max(ultimoIdMensagemVistaMotorista, ultimoId);
+        atualizarNotificacaoChatMotorista(false);
+      } else if (ultimoId > ultimoIdMensagemVistaMotorista && veioDoPassageiro) {
+        atualizarNotificacaoChatMotorista(true);
+        if (sonsHUBy?.tocarAlertaChamada) {
+          sonsHUBy.tocarAlertaChamada();
+        }
+      }
+    }
+
+    if (!areaMensagens) return;
 
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat é monitorizado por segurança.</div>';
 

@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Prévia Hands-Free e Confirmação Automática Pix HUBy
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Cancelamento pelo Motorista e Liquidação Pix HUBy
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -6,7 +6,8 @@ import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
 import { carregarGanhosHoje, carregarExtratoFinanceiro } from './motorista-ganhos.js';
 import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motorista-rotas.js';
-import { notificar } from '../util/alertas-huby.js';
+import { fecharChat } from './motorista-chat.js';
+import { notificar, confirmarAcao } from '../util/alertas-huby.js';
 
 let processandoPagamento = false;
 let intervalPollingPixMotorista = null;
@@ -32,6 +33,62 @@ export function obterValoresSincronizadosPedido(dados = {}) {
     valorBrutoFmt: valorBruto.toFixed(2).replace('.', ','),
     repasseFmt: repasseNum.toFixed(2).replace('.', ',')
   };
+}
+
+// ============================================================================
+// CANCELAR CORRIDA EXCLUSIVO PELO MOTORISTA PARCEIRO
+// ============================================================================
+export async function executarCancelamentoCorridaMotorista(dados) {
+  const pedidoId = dados?.id || estado.pedidoAceitoAtual?.id || estado.pedidoAtivo?.id;
+  if (!pedidoId) {
+    notificar('Nenhuma corrida ativa encontrada para cancelar.', 'alerta');
+    return;
+  }
+
+  const confirmar = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify({ motivo: 'Cancelado pelo motorista parceiro' })
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.erro || 'Não foi possível cancelar a corrida.');
+      }
+
+      pararMonitoramentoDesvios();
+      limparRotasMapa();
+      fecharChat();
+
+      const btnChat = document.getElementById('btnAbrirChat');
+      if (btnChat) btnChat.style.display = 'none';
+
+      estado.pedidoAceitoAtual = null;
+      estado.pedidoAtivo = null;
+      estado.pedidoEmAnalise = null;
+      estado.etapaCorridaAtual = 'a_caminho';
+      localStorage.removeItem('huby_corrida_ativa_mot_id');
+
+      notificar(json.mensagem || 'Corrida cancelada com sucesso.', 'alerta');
+      await carregarPerfil();
+      iniciarRadarChamadas();
+    } catch (err) {
+      notificar(err.message || 'Erro ao cancelar corrida.', 'erro');
+    }
+  };
+
+  if (typeof confirmarAcao === 'function') {
+    confirmarAcao({
+      titulo: 'Cancelar Corrida?',
+      mensagem: 'Tem certeza que deseja cancelar esta viagem? O passageiro será notificado na hora.',
+      textoConfirmar: 'Sim, Cancelar Corrida',
+      onConfirmar: confirmar
+    });
+  } else if (window.confirm('Tem certeza que deseja cancelar esta corrida?')) {
+    await confirmar();
+  }
 }
 
 // ============================================================================
@@ -151,6 +208,7 @@ async function iniciarFaseBuscarPassageiro(dados) {
   estado.pedidoAtivo = dados;
   estado.pedidoEmAnalise = null;
   estado.etapaCorridaAtual = 'a_caminho';
+  localStorage.setItem('huby_corrida_ativa_mot_id', dados.id);
   pararRadarChamadas();
 
   const btnChat = document.getElementById('btnAbrirChat');
@@ -213,6 +271,11 @@ async function iniciarFaseBuscarPassageiro(dados) {
           🚀 Iniciar Viagem
         </button>
       </div>
+
+      <button type="button" id="btnCancelarCorridaMotoristaAtiva"
+        style="width: 100%; background: rgba(239, 68, 68, 0.14); border: 1.5px solid rgba(239, 68, 68, 0.45); color: #F87171; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        ❌ Cancelar Corrida
+      </button>
     </div>
   `;
 
@@ -221,13 +284,14 @@ async function iniciarFaseBuscarPassageiro(dados) {
       await fetch(`${API_URL}/api/pedidos/${dados.id}/status`, {
         method: 'PUT',
         headers: obterHeaders(),
-        body: JSON.stringify({ status: 'motorista_no_local' })
+        body: JSON.stringify({ status: 'chegou_local' })
       });
     } catch (e) {}
     notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
   });
 
   document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
+  document.getElementById('btnCancelarCorridaMotoristaAtiva')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
 }
 
 // ============================================================================
@@ -295,10 +359,16 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
         style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
         🏁 Cheguei ao Destino / Finalizar
       </button>
+
+      <button type="button" id="btnCancelarCorridaMotoristaViagem"
+        style="width: 100%; background: rgba(239, 68, 68, 0.14); border: 1.5px solid rgba(239, 68, 68, 0.45); color: #F87171; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        ❌ Cancelar Corrida
+      </button>
     </div>
   `;
 
   document.getElementById('btnConcluirCorrida')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
+  document.getElementById('btnCancelarCorridaMotoristaViagem')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
 }
 
 // ============================================================================
@@ -488,14 +558,15 @@ export function fecharModaisPagamento() {
 export async function concluirLimpezaPosCorrida() {
   pararMonitoramentoDesvios();
   limparRotasMapa();
+  fecharChat();
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'none';
 
   estado.pedidoAceitoAtual = null;
   estado.pedidoAtivo = null;
   estado.etapaCorridaAtual = 'a_caminho';
+  localStorage.removeItem('huby_corrida_ativa_mot_id');
 
-  // Atualiza saldo da carteira, ganhos de hoje e extrato imediatamente
   await carregarPerfil();
   await carregarGanhosHoje();
   await carregarExtratoFinanceiro();

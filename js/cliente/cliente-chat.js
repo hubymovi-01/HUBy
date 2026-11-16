@@ -1,9 +1,10 @@
-// js/cliente/cliente-chat.js - Chat em Tempo Real do Passageiro HUBy (Renderização Instantânea)
-import { API_URL } from '../config.js';
+// js/cliente/cliente-chat.js - Chat em Tempo Real do Passageiro com Notificação Visual (Bolinha Vermelha)
+import { API_URL, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
 
 let chatIntervalCliente = null;
 let pedidoChatAtual = null;
+let ultimoIdMensagemVistaCliente = 0;
 
 function escaparHTML(str) {
   return String(str ?? '')
@@ -22,8 +23,62 @@ function obterPedidoIdChat(pedidoIdParam = null) {
   );
 }
 
+function injetarEstiloBadgeChat() {
+  if (document.getElementById('estilo-badge-chat-huby')) return;
+  const style = document.createElement('style');
+  style.id = 'estilo-badge-chat-huby';
+  style.textContent = `
+    @keyframes hubyPulseDot {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.85); }
+      70% { transform: scale(1.15); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .huby-chat-red-dot {
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      width: 13px;
+      height: 13px;
+      background: #EF4444;
+      border: 2px solid #090D16;
+      border-radius: 50%;
+      z-index: 20;
+      animation: hubyPulseDot 1.3s infinite;
+      pointer-events: none;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+export function atualizarNotificacaoChatCliente(temNovaMensagem) {
+  injetarEstiloBadgeChat();
+  const alvos = [
+    document.getElementById('btnAbrirChat'),
+    document.getElementById('btnAbrirChatClienteCard')
+  ].filter(Boolean);
+
+  alvos.forEach((btn) => {
+    if (getComputedStyle(btn).position === 'static') {
+      btn.style.position = 'relative';
+    }
+    let dot = btn.querySelector('.huby-chat-red-dot');
+    if (temNovaMensagem) {
+      if (!dot) {
+        dot = document.createElement('span');
+        dot.className = 'huby-chat-red-dot';
+        btn.appendChild(dot);
+      }
+    } else if (dot) {
+      dot.remove();
+    }
+  });
+}
+
 export function configurarChatCliente(pedidoId) {
-  if (pedidoId) pedidoChatAtual = pedidoId;
+  if (pedidoId && pedidoId !== pedidoChatAtual) {
+    pedidoChatAtual = pedidoId;
+    ultimoIdMensagemVistaCliente = 0;
+  }
 
   const btnAbrirChatCard = document.getElementById('btnAbrirChatClienteCard');
   const btnAbrirChatFlut = document.getElementById('btnAbrirChat');
@@ -35,23 +90,14 @@ export function configurarChatCliente(pedidoId) {
   const abrirChat = () => {
     const idAtivo = obterPedidoIdChat(pedidoId);
     if (modalChat) modalChat.style.display = 'flex';
-    carregarMensagensChatCliente(idAtivo);
-    if (!chatIntervalCliente) {
-      chatIntervalCliente = setInterval(() => carregarMensagensChatCliente(obterPedidoIdChat(pedidoId)), 2500);
-    }
+    atualizarNotificacaoChatCliente(false);
+    carregarMensagensChatCliente(idAtivo, true);
   };
 
-  if (btnAbrirChatCard) {
-    btnAbrirChatCard.onclick = abrirChat;
-  }
-  if (btnAbrirChatFlut) {
-    btnAbrirChatFlut.onclick = abrirChat;
-  }
-  if (btnFecharChat) {
-    btnFecharChat.onclick = fecharChatCliente;
-  }
+  if (btnAbrirChatCard) btnAbrirChatCard.onclick = abrirChat;
+  if (btnAbrirChatFlut) btnAbrirChatFlut.onclick = abrirChat;
+  if (btnFecharChat) btnFecharChat.onclick = fecharChatCliente;
 
-  // Usa .onclick / .onkeydown para evitar disparos duplicados durante o polling
   if (btnEnviarMsg) {
     btnEnviarMsg.onclick = (e) => {
       e.preventDefault();
@@ -66,15 +112,32 @@ export function configurarChatCliente(pedidoId) {
       }
     };
   }
+
+  // Polling contínuo enquanto a corrida estiver ativa para acender a bolinha vermelha mesmo com o chat fechado
+  if (!chatIntervalCliente) {
+    chatIntervalCliente = setInterval(() => {
+      const idAtivo = obterPedidoIdChat();
+      if (idAtivo) {
+        carregarMensagensChatCliente(idAtivo, false);
+      }
+    }, 2500);
+  }
 }
 
 export function fecharChatCliente() {
   const modalChat = document.getElementById('modalChatCorrida');
   if (modalChat) modalChat.style.display = 'none';
+}
+
+export function encerrarMonitoramentoChatCliente() {
   if (chatIntervalCliente) {
     clearInterval(chatIntervalCliente);
     chatIntervalCliente = null;
   }
+  pedidoChatAtual = null;
+  ultimoIdMensagemVistaCliente = 0;
+  atualizarNotificacaoChatCliente(false);
+  fecharChatCliente();
 }
 
 export async function enviarMensagemChatCliente(pedidoIdParam) {
@@ -93,7 +156,6 @@ export async function enviarMensagemChatCliente(pedidoIdParam) {
   const meuNome = localStorage.getItem('huby_user_name') || 'Passageiro';
   if (inputMsg) inputMsg.value = '';
 
-  // Renderização imediata na tela antes mesmo da resposta do servidor
   const areaMensagens = document.getElementById('chatAreaMensagens');
   if (areaMensagens) {
     areaMensagens.insertAdjacentHTML('beforeend', `
@@ -116,13 +178,13 @@ export async function enviarMensagemChatCliente(pedidoIdParam) {
       },
       body: JSON.stringify({ mensagem: txt, remetenteNome: meuNome })
     });
-    await carregarMensagensChatCliente(pedidoId);
+    await carregarMensagensChatCliente(pedidoId, true);
   } catch (err) {
     console.warn('Erro ao enviar mensagem:', err);
   }
 }
 
-export async function carregarMensagensChatCliente(pedidoIdParam) {
+export async function carregarMensagensChatCliente(pedidoIdParam, marcarComoLida = false) {
   const pedidoId = obterPedidoIdChat(pedidoIdParam);
   if (!pedidoId) return;
   const token = localStorage.getItem('huby_token');
@@ -135,8 +197,9 @@ export async function carregarMensagensChatCliente(pedidoIdParam) {
     } catch (e) {}
   }
 
+  const modalChat = document.getElementById('modalChatCorrida');
+  const modalAberto = modalChat && modalChat.style.display === 'flex';
   const areaMensagens = document.getElementById('chatAreaMensagens');
-  if (!areaMensagens) return;
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/chat?t=${Date.now()}`, {
@@ -144,6 +207,24 @@ export async function carregarMensagensChatCliente(pedidoIdParam) {
     });
     if (!resp.ok) return;
     const msgs = await resp.json();
+
+    if (Array.isArray(msgs) && msgs.length > 0) {
+      const ultima = msgs[msgs.length - 1];
+      const ultimoId = Number(ultima.id || msgs.length);
+      const veioDoMotorista = String(ultima.remetente_id) !== String(meuId);
+
+      if (modalAberto || marcarComoLida) {
+        ultimoIdMensagemVistaCliente = Math.max(ultimoIdMensagemVistaCliente, ultimoId);
+        atualizarNotificacaoChatCliente(false);
+      } else if (ultimoId > ultimoIdMensagemVistaCliente && veioDoMotorista) {
+        atualizarNotificacaoChatCliente(true);
+        if (sonsHUBy?.tocarAlertaChamada) {
+          sonsHUBy.tocarAlertaChamada();
+        }
+      }
+    }
+
+    if (!areaMensagens) return;
 
     let html = '<div style="text-align: center; color: #64748B; font-size: 11px; margin-bottom: 10px;">O chat foi iniciado. Evite partilhar dados pessoais.</div>';
 
