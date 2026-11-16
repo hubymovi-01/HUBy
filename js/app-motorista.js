@@ -17,6 +17,7 @@ import { configurarEventosSaque } from './motorista/motorista-carteira.js';
 import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
+import { inicializarZonasRiscoMapa } from './motorista/motorista-zonas-risco.js';
 import {
   inicializarCopilotoVoz,
   definirCodigoAtivacaoMotorista,
@@ -267,7 +268,6 @@ function configurarBotaoCancelarNaTelaMotorista() {
       return;
     }
 
-    // Evita duplicação caso o cartão ativo dentro do dock já contenha um botão de cancelar
     const botoesNoDock = Array.from(dock.querySelectorAll('button'));
     const jaExisteBotaoCancelarNoCard = botoesNoDock.some((btn) => {
       if (btn.id === 'btnCancelarCorridaMotoristaDock') return false;
@@ -366,6 +366,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   inicializarSocket();
   escutarAtualizacaoTarifasTempoReal();
   inicializarMapa();
+  inicializarZonasRiscoMapa();
   registrarEventosUI();
   await carregarPerfil();
   atualizarBarraMetaDiaria();

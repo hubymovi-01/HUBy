@@ -1,4 +1,4 @@
-// routes/motorista.routes.js - Módulos de Suporte e Verificação Facial do Motorista HUBy
+// routes/motorista.routes.js - Módulos de Suporte, Zonas de Risco e Verificação Facial do Motorista HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -34,6 +34,26 @@ async function garantirColunasSuporte() {
   }
 }
 garantirColunasSuporte();
+
+// =========================================================================
+// LISTAR ZONAS DE RISCO ATIVAS PARA O MAPA DO MOTORISTA
+// =========================================================================
+router.get('/zonas-risco', autenticarToken, async (req, res) => {
+  try {
+    const zonas = await sql`
+      SELECT id, nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim, ativo
+      FROM zonas_risco
+      WHERE COALESCE(ativo, TRUE) = TRUE
+        AND lat IS NOT NULL
+        AND lng IS NOT NULL
+      ORDER BY id DESC;
+    `;
+    return res.json({ sucesso: true, zonas });
+  } catch (err) {
+    console.error('Erro ao buscar zonas de risco para o motorista:', err);
+    return res.status(500).json({ erro: 'Falha ao carregar zonas de risco.' });
+  }
+});
 
 // =========================================================================
 // 0. VERIFICAÇÃO POR SELFIE AO FICAR ONLINE
@@ -185,7 +205,7 @@ router.put('/filtro-destino', autenticarToken, async (req, res) => {
 });
 
 // =========================================================================
-// 4. CONSULTA DE PERFIL
+// 4. CONSULTA DE PERFIL (COM CÓDIGO PESSOAL DE VOZ)
 // =========================================================================
 const handlerObterPerfil = async (req, res) => {
   try {
@@ -195,7 +215,7 @@ const handlerObterPerfil = async (req, res) => {
     let mot = await sql`
       SELECT 
         id, usuario_id, nome, email, telefone, categoria,
-        saldo_carteira, status_aprovacao, foto_perfil_url, cpf, cnh_numero,
+        saldo_carteira, status_aprovacao, foto_perfil_url,
         avaliacao_media, total_corridas,
         veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
         chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
@@ -209,7 +229,13 @@ const handlerObterPerfil = async (req, res) => {
 
     if (mot.length === 0) {
       mot = await sql`
-        SELECT *
+        SELECT 
+          id, usuario_id, nome, email, telefone, categoria,
+          saldo_carteira, status_aprovacao, foto_perfil_url,
+          avaliacao_media, total_corridas,
+          veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+          chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
+          em_pausa, pausa_ate, destino_casa_ativo, ultima_selfie_em
         FROM motoristas
         ORDER BY saldo_carteira DESC, criado_em ASC
         LIMIT 1;
@@ -232,8 +258,6 @@ const handlerObterPerfil = async (req, res) => {
         nome: m.nome || 'Motorista Parceiro',
         email: m.email || '',
         telefone: m.telefone || '',
-        cpf: m.cpf || '',
-        cnh: m.cnh_numero || '',
         categoria: m.categoria || 'carro',
         saldo_carteira: Number(m.saldo_carteira || 0),
         status_aprovacao: m.status_aprovacao || 'aprovado',
@@ -512,85 +536,6 @@ router.post('/saque', autenticarToken, async (req, res) => {
   } catch (err) {
     console.error('Erro ao processar saque:', err);
     res.status(500).json({ erro: 'Falha ao processar saque.' });
-  }
-});
-
-// =========================================================================
-// 10. RELATÓRIO MENSAL EM PDF (COMPROVANTE DE RENDA E IMPOSTO)
-// =========================================================================
-router.get('/relatorio-mensal', autenticarToken, async (req, res) => {
-  try {
-    const usuarioId = String(req.usuario.id);
-    // ex: "2026-11" (se não for fornecido, pega o mês atual)
-    const mesReferencia = req.query.mes || new Date().toISOString().slice(0, 7); 
-
-    let mot = await sql`
-      SELECT id, nome, cpf, cnh_numero, veiculo_modelo, veiculo_placa
-      FROM motoristas
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text
-      LIMIT 1;
-    `;
-    if (mot.length === 0) {
-      mot = await sql`SELECT id, nome, cpf, cnh_numero, veiculo_modelo, veiculo_placa FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1;`;
-    }
-    const motorista = mot[0];
-
-    const tarifas = await lerTarifasDoBanco();
-    const fatorMotorista = Math.max(0.1, (100 - Number(tarifas.taxa_plataforma ?? 15)) / 100);
-
-    // Soma consolidações do mês no banco
-    const corridasRelatorio = await sql`
-      SELECT 
-        COUNT(id)::int AS total_viagens,
-        COALESCE(SUM(distancia_km), 0) AS total_km,
-        COALESCE(SUM(valor_total), 0) AS faturamento_bruto,
-        COALESCE(SUM(valor_total * ${fatorMotorista}), 0) AS ganhos_liquidos,
-        COALESCE(SUM(valor_total - (valor_total * ${fatorMotorista})), 0) AS taxas_huby
-      FROM pedidos
-      WHERE LOWER(status) = 'concluido'
-        AND (motorista_id::text = ${motorista.id}::text OR motorista_id::text = ${usuarioId}::text)
-        AND TO_CHAR(COALESCE(concluido_em, criado_em), 'YYYY-MM') = ${mesReferencia};
-    `;
-
-    const result = corridasRelatorio[0] || {};
-    
-    // Gera dados dos últimos 7 dias com movimentação dentro do mês
-    const viagensDiarias = await sql`
-      SELECT 
-        TO_CHAR(COALESCE(concluido_em, criado_em), 'DD/MM/YYYY') AS data_corrida,
-        COUNT(id)::int AS qtd,
-        ROUND(COALESCE(SUM(valor_total * ${fatorMotorista}), 0), 2) AS liquido
-      FROM pedidos
-      WHERE LOWER(status) = 'concluido'
-        AND (motorista_id::text = ${motorista.id}::text OR motorista_id::text = ${usuarioId}::text)
-        AND TO_CHAR(COALESCE(concluido_em, criado_em), 'YYYY-MM') = ${mesReferencia}
-      GROUP BY data_corrida
-      ORDER BY data_corrida DESC
-      LIMIT 7;
-    `;
-
-    res.json({
-      sucesso: true,
-      mesReferencia,
-      motorista: {
-        nome: motorista.nome,
-        cpf: motorista.cpf || 'Não cadastrado',
-        veiculo: `${motorista.veiculo_modelo || 'Veículo'} (${(motorista.veiculo_placa || 'Sem Placa').toUpperCase()})`
-      },
-      resumo: {
-        totalViagens: result.total_viagens || 0,
-        kmRodado: Number(result.total_km || 0).toFixed(1),
-        faturamentoBruto: Number(result.faturamento_bruto || 0).toFixed(2),
-        ganhoLiquido: Number(result.ganhos_liquidos || 0).toFixed(2),
-        taxaPlataforma: Number(result.taxas_huby || 0).toFixed(2)
-      },
-      viagensDiarias
-    });
-
-  } catch (err) {
-    console.error('Erro ao gerar relatório mensal:', err);
-    res.status(500).json({ erro: 'Falha ao processar relatório mensal.' });
   }
 });
 
