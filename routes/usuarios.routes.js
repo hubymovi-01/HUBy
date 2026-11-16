@@ -1,9 +1,22 @@
-// routes/usuarios.routes.js - Autenticação e Gestão de Contas HUBy
+// routes/usuarios.routes.js - Autenticação e Gestão de Contas HUBy (Com Verificação em 2 Etapas para Admin)
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { sql, JWT_SECRET } from '../db.js';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer'; // Necessário instalar: npm install nodemailer
 
 export const usuariosRouter = express.Router();
+
+// Configuração do disparador de emails da HUBy (Ajuste com suas credenciais reais SMTP depois)
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com', // Ex: smtp.hostinger.com ou smtp.gmail.com
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER || 'hubymobilidade@gmail.com',
+    pass: process.env.EMAIL_PASS || 'sua_senha_de_app_aqui'
+  }
+});
 
 // Middleware local de autenticação
 function autenticar(req, res, next) {
@@ -23,8 +36,26 @@ function autenticar(req, res, next) {
   }
 }
 
+async function garantirTabela2FA() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS admin_2fa_codes (
+        id SERIAL PRIMARY KEY,
+        usuario_id TEXT NOT NULL,
+        codigo VARCHAR(6) NOT NULL,
+        usado BOOLEAN DEFAULT FALSE,
+        expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+  } catch (e) {
+    console.warn('Aviso tabela 2FA:', e.message);
+  }
+}
+garantirTabela2FA();
+
 // ============================================================================
-// 1. LOGIN DE PASSAGEIRO (E-mail ou Telemóvel + Senha)
+// 1. LOGIN DE PASSAGEIRO E ADMIN (COM INTERCEPTAÇÃO 2FA)
 // ============================================================================
 usuariosRouter.post('/login', async (req, res) => {
   try {
@@ -36,7 +67,6 @@ usuariosRouter.post('/login', async (req, res) => {
 
     const idLimpo = String(identificador).trim().toLowerCase();
 
-    // Procura por email ou telefone na tabela de utilizadores
     const users = await sql`
       SELECT id, nome, email, telefone, role, senha
       FROM usuarios
@@ -55,6 +85,54 @@ usuariosRouter.post('/login', async (req, res) => {
       return res.status(401).json({ erro: 'Credenciais inválidas.' });
     }
 
+    const role = String(user.role || 'cliente').toLowerCase();
+
+    // INTERCEPTAÇÃO PARA ADMINISTRAÇÃO (2FA)
+    if (role === 'admin' || role === 'administrador') {
+      const codigo6Digitos = String(crypto.randomInt(100000, 999999));
+      const expira = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+
+      await sql`
+        INSERT INTO admin_2fa_codes (usuario_id, codigo, expira_em)
+        VALUES (${user.id}, ${codigo6Digitos}, ${expira});
+      `;
+
+      // Envia o e-mail de segurança
+      const htmlEmail = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
+          <h2 style="color: #10b981;">HUBy Master - Código de Acesso</h2>
+          <p>Olá, <strong>${user.nome}</strong>,</p>
+          <p>Uma tentativa de login no Painel de Administração Master foi iniciada.</p>
+          <p>Para concluir a verificação em duas etapas, utilize o código abaixo:</p>
+          <div style="background: #f1f5f9; padding: 15px; text-align: center; border-radius: 8px; font-size: 28px; font-weight: 900; letter-spacing: 4px; color: #0f172a; margin: 20px 0;">
+            ${codigo6Digitos}
+          </div>
+          <p style="font-size: 12px; color: #64748b;">Se você não solicitou este acesso, ignore este e-mail. Este código expira em 10 minutos.</p>
+        </div>
+      `;
+
+      try {
+        await transporter.sendMail({
+          from: '"HUBy Segurança" <hubymobilidade@gmail.com>',
+          to: user.email,
+          subject: '🔐 Código de Segurança do Painel Master',
+          html: htmlEmail
+        });
+      } catch (eMail) {
+        console.warn('Erro ao disparar email 2FA (verifique as credenciais):', eMail.message);
+        // Em ambiente de teste sem servidor de e-mail configurado, devolver o código na resposta:
+        // return res.json({ requer_2fa: true, email: user.email, usuario_id: user.id, codigoTeste: codigo6Digitos });
+      }
+
+      return res.json({
+        requer_2fa: true,
+        email: user.email,
+        usuario_id: user.id,
+        mensagem: `Um código de 6 dígitos foi enviado para ${user.email}.`
+      });
+    }
+
+    // Login normal de passageiro (Sem 2FA)
     const token = jwt.sign(
       { id: user.id, nome: user.nome, email: user.email, role: user.role || 'cliente' },
       JWT_SECRET,
@@ -79,6 +157,61 @@ usuariosRouter.post('/login', async (req, res) => {
 });
 
 // ============================================================================
+// 1.5 VALIDAÇÃO DO CÓDIGO 2FA DO ADMIN
+// ============================================================================
+usuariosRouter.post('/validar-2fa', async (req, res) => {
+  try {
+    const { usuario_id, codigo } = req.body;
+
+    if (!usuario_id || !codigo || String(codigo).length !== 6) {
+      return res.status(400).json({ erro: 'Código de 6 dígitos inválido.' });
+    }
+
+    const checks = await sql`
+      SELECT id FROM admin_2fa_codes
+      WHERE usuario_id = ${usuario_id}
+        AND codigo = ${String(codigo)}
+        AND usado = FALSE
+        AND expira_em > NOW()
+      ORDER BY id DESC LIMIT 1;
+    `;
+
+    if (checks.length === 0) {
+      return res.status(401).json({ erro: 'Código incorreto ou expirado. Faça o login novamente.' });
+    }
+
+    // Invalida o código para não ser usado de novo
+    await sql`UPDATE admin_2fa_codes SET usado = TRUE WHERE id = ${checks[0].id};`;
+
+    // Resgata o Admin para emitir o Token Master
+    const users = await sql`SELECT id, nome, email, telefone, role FROM usuarios WHERE id = ${usuario_id} LIMIT 1;`;
+    if (users.length === 0) return res.status(404).json({ erro: 'Usuário administrador não localizado.' });
+
+    const admin = users[0];
+    const token = jwt.sign(
+      { id: admin.id, nome: admin.nome, email: admin.email, role: admin.role },
+      JWT_SECRET,
+      { expiresIn: '30d' } // Pode reduzir para 12h se quiser mais segurança
+    );
+
+    res.json({
+      sucesso: true,
+      token,
+      usuario: {
+        id: admin.id,
+        nome: admin.nome,
+        email: admin.email,
+        role: admin.role
+      }
+    });
+
+  } catch (err) {
+    console.error('Erro validação 2FA:', err);
+    res.status(500).json({ erro: 'Falha ao validar verificação de duas etapas.' });
+  }
+});
+
+// ============================================================================
 // 2. LOGIN DE MOTORISTA PARCEIRO (Sem Senha: E-mail + CNH + Placa)
 // ============================================================================
 usuariosRouter.post('/login-motorista', async (req, res) => {
@@ -93,7 +226,6 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
     const placaLimpa = String(veiculo_placa).trim().toUpperCase();
     const emailLimpo = String(email).trim().toLowerCase();
 
-    // Localiza o motorista com os dados fornecidos
     let condutores = await sql`
       SELECT m.*, u.id AS usuario_conta_id, u.role
       FROM motoristas m
@@ -104,7 +236,6 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
       LIMIT 1;
     `;
 
-    // Fallback: se for a conta da Carol cadastrada na base
     if (condutores.length === 0) {
       condutores = await sql`
         SELECT * FROM motoristas 
@@ -165,7 +296,6 @@ usuariosRouter.post('/registo', async (req, res) => {
     const idUsuario = 'usr_' + Date.now().toString(36);
     const tipoConta = role === 'motorista' ? 'motorista' : 'cliente';
 
-    // Cria conta na tabela usuarios
     await sql`
       INSERT INTO usuarios (id, nome, email, telefone, senha, role)
       VALUES (${idUsuario}, ${nome}, ${email.toLowerCase()}, ${telefone || ''}, ${senha || '123456'}, ${tipoConta})
@@ -174,7 +304,6 @@ usuariosRouter.post('/registo', async (req, res) => {
 
     let idMotorista = null;
 
-    // Se for motorista, cria também na tabela motoristas
     if (tipoConta === 'motorista') {
       idMotorista = 'mot_' + Date.now().toString(36);
       await sql`
