@@ -8,8 +8,19 @@ export function atualizarBotaoChamar(resumo = null) {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn) return;
 
-  if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
+  // Só esconde se já houver motorista aceito (painelMotoristaAceitou visível)
+  const painelAceito = document.getElementById('painelMotoristaAceitou');
+  if (painelAceito && painelAceito.style.display === 'block') {
     btn.style.setProperty('display', 'none', 'important');
+    return;
+  }
+
+  if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
+    btn.style.setProperty('display', 'flex', 'important');
+    btn.style.background = '#ef4444';
+    const spanText = btn.querySelector('.btn-text');
+    if (spanText) spanText.textContent = 'Cancelar Chamada';
+    else btn.textContent = 'Cancelar Chamada';
     return;
   }
 
@@ -224,9 +235,14 @@ export function mostrarAguardandoMotorista() {
   if (tit) tit.textContent = 'Radar Ativo: Procurando motorista...';
   if (desc) desc.textContent = 'O seu pedido foi enviado para os parceiros próximos.';
 
-  // Esconde definitivamente com !important para não sobrepor a classe .pro-btn
+  // Mantém o botão "Cancelar Chamada" visível APENAS enquanto procura motorista
   if (btn) {
-    btn.style.setProperty('display', 'none', 'important');
+    btn.disabled = false;
+    btn.style.setProperty('display', 'flex', 'important');
+    btn.style.background = '#ef4444';
+    const spanText = btn.querySelector('.btn-text');
+    if (spanText) spanText.textContent = 'Cancelar Chamada';
+    else btn.textContent = 'Cancelar Chamada';
   }
 }
 
@@ -436,7 +452,31 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
 }
 
 export async function cancelarBusca() {
-  notificar('Apenas o motorista parceiro pode cancelar a corrida.', 'info');
+  const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  if (pedidoId) {
+    const token = localStorage.getItem('huby_token');
+    try {
+      const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ motivo: 'Cancelado pelo passageiro durante a busca' })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        notificar(data.erro || 'Não foi possível cancelar agora.', 'alerta');
+        return;
+      }
+    } catch (err) {
+      console.warn('Erro ao cancelar busca:', err);
+    }
+  }
+
+  if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
+  notificar('Busca cancelada.', 'info');
+  resetarPainelCliente();
 }
 
 export function resetarPainelCliente() {

@@ -966,11 +966,7 @@ export default function pedidosRouter(io) {
     try {
       const { id } = req.params;
       const { motivo } = req.body;
-
-      // Bloqueia cancelamento pelo cliente: apenas motorista parceiro ou admin pode cancelar
-      if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
-        return res.status(403).json({ erro: 'Apenas o motorista parceiro pode cancelar a corrida.' });
-      }
+      const usuarioId = String(req.usuario.id);
 
       const pedidos = await sql`
         SELECT id, status, cliente_id, motorista_id, chegou_origem_em
@@ -981,12 +977,25 @@ export default function pedidosRouter(io) {
       if (pedidos.length === 0) return res.status(404).json({ erro: 'Pedido não localizado.' });
 
       const pedido = pedidos[0];
-      if (['concluido', 'cancelado'].includes(String(pedido.status || '').toLowerCase())) {
+      const statusAtual = String(pedido.status || '').toLowerCase();
+
+      if (['concluido', 'cancelado'].includes(statusAtual)) {
         return res.status(400).json({ erro: 'Esta corrida já foi encerrada.' });
       }
 
-      const canceladoPor = ehMotoristaToken(req.usuario) ? 'motorista' : 'admin';
+      const ehClienteDono = String(pedido.cliente_id) === usuarioId;
+      const aindaBuscando = ['pendente', 'aguardando', 'buscando', 'criado'].includes(statusAtual) && !pedido.motorista_id;
 
+      // Cliente só pode cancelar enquanto ainda está procurando motorista (antes do aceite)
+      if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
+        if (!ehClienteDono || !aindaBuscando) {
+          return res.status(403).json({ erro: 'Corrida já aceita. Apenas o motorista parceiro pode cancelar agora.' });
+        }
+      }
+
+      const canceladoPor = ehMotoristaToken(req.usuario)
+        ? 'motorista'
+        : (ehAdminToken(req.usuario) ? 'admin' : 'cliente');
       let taxaCancelamentoAplicada = 0;
       let repasseEsperaMotorista = 0;
 

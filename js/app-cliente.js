@@ -15,6 +15,7 @@ import {
   criarOuAtualizarVeiculoMapa,
   estadoRecursos
 } from './cliente/cliente-recursos.js';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
 
 let intervalChatCliente = null;
 let intervalChecagemPix = null;
@@ -97,7 +98,6 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     document.getElementById('blocoResumo'),
     document.getElementById('blocoDetalhesEntrega'),
     document.getElementById('cardStatusViagem'),
-    document.getElementById('btnPedirHuby'),
     document.getElementById('containerParadasIntermediarias'),
     document.getElementById('btnAddParada'),
     document.querySelector('.modern-search'),
@@ -110,6 +110,11 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
       el.style.display = emViagem ? 'none' : '';
     }
   });
+
+  const btnPedir = document.getElementById('btnPedirHuby');
+  if (btnPedir) {
+    btnPedir.style.setProperty('display', emViagem ? 'none' : 'flex', 'important');
+  }
 
   const cardsPro = document.querySelectorAll('.category-card-pro');
   cardsPro.forEach(c => {
@@ -754,21 +759,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Botão Chamar: apenas inicia uma nova chamada (cliente não cancela chamadas ativas)
   document.getElementById('btnPedirHuby')?.addEventListener('click', async () => {
-    if (estadoCliente.pedidoAtivoId) {
-      notificar('Sua chamada já está em andamento. Aguarde o motorista parceiro.', 'info');
-      return;
-    }
-    if (!estadoCliente.coordsDestino) {
-      notificar('Selecione primeiro o destino final no mapa.', 'alerta');
-      return;
-    }
-    sincronizarPrecosDaRotaAtual();
-    await submeterPedido();
-    const btnPedir = document.getElementById('btnPedirHuby');
-    if (btnPedir && estadoCliente.pedidoAtivoId) {
-      btnPedir.style.display = 'none';
-    }
-  });
+  if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
+    await cancelarBusca();
+    return;
+  }
+  if (!estadoCliente.coordsDestino) {
+    notificar('Selecione primeiro o destino final no mapa.', 'alerta');
+    return;
+  }
+  sincronizarPrecosDaRotaAtual();
+  await submeterPedido();
+});
 
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
