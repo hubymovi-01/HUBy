@@ -5,7 +5,7 @@ import { configurarPesquisaLocal } from './pesquisa.js?v=6';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido } from './cliente/cliente-pedidos.js?v=2.9.0';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca } from './cliente/cliente-pedidos.js?v=2.9.0';
 import { notificar } from './util/alertas-huby.js';
 import { abrirPromptParada } from './cliente-ui.js';
 import {
