@@ -6,6 +6,7 @@ import { notificar } from '../util/alertas-huby.js';
 
 let intervalAlertaChamada = null;
 let wakeLockSentinela = null;
+let gpsFallbackEmAndamento = false;
 const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000; // 12 horas por turno
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
@@ -37,9 +38,39 @@ function obterCoordenadasAtuaisMotorista() {
     return { lat: Number(fonte.lat), lng: Number(fonte.lng) };
   }
   if (Array.isArray(fonte) && fonte.length === 2) {
-    return { lat: Number(fonte[0]), lng: Number(fonte[1]) };
+    const latNum = Number(fonte[0]);
+    const lngNum = Number(fonte[1]);
+    if (Number.isFinite(latNum) && Number.isFinite(lngNum)) {
+      return { lat: latNum, lng: lngNum };
+    }
+  }
+  if (Number.isFinite(Number(estado.lat)) && Number.isFinite(Number(estado.lng))) {
+    return { lat: Number(estado.lat), lng: Number(estado.lng) };
   }
   return { lat: '', lng: '' };
+}
+
+function capturarGPSFallbackSilencioso() {
+  if (gpsFallbackEmAndamento || !navigator.geolocation) return;
+  const atual = obterCoordenadasAtuaisMotorista();
+  if (atual.lat !== '' && atual.lng !== '') return;
+
+  gpsFallbackEmAndamento = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      gpsFallbackEmAndamento = false;
+      const lat = Number(pos?.coords?.latitude);
+      const lng = Number(pos?.coords?.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        estado.ultimaPosicao = { lat, lng };
+        estado.posicaoAtual = { lat, lng };
+      }
+    },
+    () => {
+      gpsFallbackEmAndamento = false;
+    },
+    { enableHighAccuracy: false, timeout: 6000, maximumAge: 30000 }
+  );
 }
 
 async function requisitarWakeLock() {
@@ -310,6 +341,7 @@ export async function alternarStatusOnline(forcarEstado = null) {
   if (novoStatus) {
     if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
     await requisitarWakeLock();
+    capturarGPSFallbackSilencioso();
     renderizarRadar([]);
     iniciarRadarChamadas();
     notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
@@ -345,6 +377,7 @@ export function iniciarRadarChamadas() {
     return;
   }
 
+  capturarGPSFallbackSilencioso();
   renderizarRadar([]);
   buscarChamadasPendentes();
 
@@ -441,13 +474,7 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
       }
     );
 
-    if (resp.status === 403) {
-      // Mantém o estado online visual ativo e aguarda o próximo ciclo sem derrubar o botão
-      renderizarRadar([]);
-      return;
-    }
-
-    if (!resp.ok) {
+    if (resp.status === 403 || !resp.ok) {
       renderizarRadar([]);
       return;
     }
