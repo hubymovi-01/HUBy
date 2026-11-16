@@ -208,7 +208,7 @@ export default function pedidosRouter(io) {
           descontoAplicado += descInd;
           vTotal = Math.max(1.00, Number((vTotal - descInd).toFixed(2)));
         }
-      } catch (eInd) {}
+      } catch (eInd) { }
 
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
@@ -369,7 +369,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL)
+  // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL BLINDADA)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
@@ -390,22 +390,30 @@ export default function pedidosRouter(io) {
       }
 
       const { categoria, lat, lng } = req.query;
-      const motoristaLat = parseFloat(lat);
-      const motoristaLng = parseFloat(lng);
+      const motoristaLat = Number(lat);
+      const motoristaLng = Number(lng);
+      const temCoordsValidas =
+        Number.isFinite(motoristaLat) &&
+        Number.isFinite(motoristaLng) &&
+        Math.abs(motoristaLat) <= 90 &&
+        Math.abs(motoristaLng) <= 180 &&
+        !(motoristaLat === 0 && motoristaLng === 0);
 
-      // Cláusula de Distância baseada na Fórmula de Haversine se lat e lng forem fornecidos
-      let filtroDistancia = sql``;
-      if (!isNaN(motoristaLat) && !isNaN(motoristaLng)) {
-        filtroDistancia = sql`
+      const filtroDistancia = temCoordsValidas
+        ? sql`
+          AND origem_lat IS NOT NULL
+          AND origem_lng IS NOT NULL
           AND (
-            6371 * acos(
-              cos(radians(${motoristaLat})) * cos(radians(origem_lat)) *
-              cos(radians(origem_lng) - radians(${motoristaLng})) +
-              sin(radians(${motoristaLat})) * sin(radians(origem_lat))
+            6371.0 * acos(
+              LEAST(1.0, GREATEST(-1.0,
+                cos(radians(${motoristaLat}::double precision)) * cos(radians(origem_lat::double precision)) *
+                cos(radians(origem_lng::double precision) - radians(${motoristaLng}::double precision)) +
+                sin(radians(${motoristaLat}::double precision)) * sin(radians(origem_lat::double precision))
+              ))
             )
           ) <= ${RAIO_MAXIMO_KM}
-        `;
-      }
+        `
+        : sql``;
 
       let pedidos;
       if (categoria === 'moto') {
@@ -432,9 +440,11 @@ export default function pedidosRouter(io) {
           ORDER BY criado_em DESC LIMIT 20;
         `;
       }
-      res.json(pedidos);
+
+      return res.json(pedidos);
     } catch (error) {
-      res.status(500).json({ erro: 'Falha ao consultar chamadas.' });
+      console.error('Erro em GET /api/pedidos/pendentes:', error);
+      return res.status(500).json({ erro: 'Falha ao consultar chamadas.' });
     }
   });
 
@@ -959,7 +969,7 @@ export default function pedidosRouter(io) {
         try {
           await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
           await sql`UPDATE pedidos SET pix_txid = ${txidGerado} WHERE id::text = ${String(id)}::text;`;
-        } catch (ePed) {}
+        } catch (ePed) { }
 
         try {
           await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS txid VARCHAR(64);`;
@@ -1057,7 +1067,7 @@ export default function pedidosRouter(io) {
               INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
               VALUES (${String(pedido.motorista_id)}, 'motorista', 'taxa_espera_cancelamento', ${repasseEsperaMotorista}, ${String(id)});
             `;
-          } catch (eTx) {}
+          } catch (eTx) { }
         }
       }
 
@@ -1235,8 +1245,8 @@ export default function pedidosRouter(io) {
 
       const fNome = (nome && nome.trim()) ? nome.trim() : null;
       const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
-      const fFoto = (foto_perfil_url && foto_perfil_url.trim()) 
-        ? foto_perfil_url.trim() 
+      const fFoto = (foto_perfil_url && foto_perfil_url.trim())
+        ? foto_perfil_url.trim()
         : ((foto_base64 && foto_base64.trim()) ? foto_base64.trim() : null);
 
       const fMod = (veiculo_modelo && veiculo_modelo.trim()) ? veiculo_modelo.trim() : null;
