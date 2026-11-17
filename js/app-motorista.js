@@ -1,6 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Sincronizada em Tempo Real + Controle Exclusivo de Cancelamento + Suporte IA
+ * Versão Sincronizada em Tempo Real + Controle de Cancelamento + Suporte IA Avançado
  */
 
 import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
@@ -156,13 +156,13 @@ function configurarCodigoVozDireto() {
       const valorDigitado = (inputComando.value || '').trim();
 
       if (!valorDigitado) {
-        notificar('Digite uma palavra-chave para ativar seu copiloto (Ex: Zanix, Zank, Falcão).', 'alerta');
+        notificar('Digite uma palavra-chave para ativar o copiloto.', 'alerta');
         inputComando.focus();
         return;
       }
 
       await definirCodigoAtivacaoMotorista(valorDigitado);
-      notificar(`Comando "${valorDigitado}" salvo com sucesso!`, 'sucesso');
+      notificar(`Comando de ativação salvo com sucesso!`, 'sucesso');
     });
   }
 
@@ -171,7 +171,7 @@ function configurarCodigoVozDireto() {
       e.preventDefault();
       e.stopPropagation();
       const comandoAtual = (inputComando.value || '').trim() || obterCodigoAtivacaoMotorista();
-      falarTexto(`Olá parceiro! Essa é a minha voz configurada. Basta me chamar por ${comandoAtual}.`);
+      falarTexto(`Olá. Esta é a configuração da minha voz. Basta me chamar por ${comandoAtual}.`);
     });
   }
 }
@@ -242,11 +242,11 @@ export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
   if (typeof confirmarAcao === 'function') {
     confirmarAcao({
       titulo: 'Cancelar Corrida?',
-      mensagem: 'Tem certeza que deseja cancelar esta viagem? O passageiro será notificado imediatamente.',
-      textoConfirmar: 'Sim, Cancelar Corrida',
+      mensagem: 'Confirma o cancelamento desta viagem? O passageiro será notificado.',
+      textoConfirmar: 'Confirmar Cancelamento',
       onConfirmar: executarCancelamento
     });
-  } else if (window.confirm('Tem certeza que deseja cancelar esta corrida?')) {
+  } else if (window.confirm('Confirma o cancelamento desta corrida?')) {
     await executarCancelamento();
   }
 }
@@ -320,7 +320,7 @@ function configurarBotaoCancelarNaTelaMotorista() {
 }
 
 // ============================================================================
-// CHAT DE SUPORTE INTELIGENTE (IA) COM MENSAGENS TEMPORÁRIAS (24H)
+// CHAT DE SUPORTE CORPORATIVO & IA COM RESPOSTAS DINÂMICAS E FORMAIS
 // ============================================================================
 function inicializarChatSuporteIA() {
   const btnAbrir = document.getElementById('btnAbrirChatSuporte');
@@ -333,7 +333,7 @@ function inicializarChatSuporteIA() {
   if (!btnAbrir || !modal) return;
 
   const CHAT_STORAGE_KEY = 'huby_suporte_chat_history';
-  const TEMPO_EXPIRACAO_MS = 24 * 60 * 60 * 1000; // 24 horas
+  const TEMPO_EXPIRACAO_MS = 24 * 60 * 60 * 1000; // Expira em 24h
 
   function carregarHistorico() {
     try {
@@ -343,12 +343,10 @@ function inicializarChatSuporteIA() {
       const data = JSON.parse(dataString);
       const agora = new Date().getTime();
       
-      // Limpa se passou 24h desde a última mensagem
       if (data.ultimaAtualizacao && (agora - data.ultimaAtualizacao > TEMPO_EXPIRACAO_MS)) {
         localStorage.removeItem(CHAT_STORAGE_KEY);
         return [];
       }
-      
       return data.mensagens || [];
     } catch (e) {
       return [];
@@ -364,10 +362,13 @@ function inicializarChatSuporteIA() {
 
   function renderizarMensagem(msg) {
     const isUser = msg.autor === 'user';
+    const isAdmin = msg.autor === 'admin';
     const alignSelf = isUser ? 'flex-end' : 'flex-start';
-    const bgColor = isUser ? '#38BDF8' : 'rgba(16, 185, 129, 0.15)';
+    
+    // Cores profissionais: Azul para o motorista, Verde elegante para IA, Azul-claro com borda para o Admin
+    const bgColor = isUser ? '#38BDF8' : (isAdmin ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.1)');
     const color = isUser ? '#02131D' : '#FFF';
-    const border = isUser ? 'none' : '1px solid rgba(16, 185, 129, 0.3)';
+    const border = isUser ? 'none' : (isAdmin ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)');
     const borderRadius = isUser ? '12px 12px 0 12px' : '0 12px 12px 12px';
     const textAlign = isUser ? 'right' : 'left';
 
@@ -376,7 +377,13 @@ function inicializarChatSuporteIA() {
 
     const divMsg = document.createElement('div');
     divMsg.style.cssText = `background: ${bgColor}; border: ${border}; color: ${color}; padding: 12px; border-radius: ${borderRadius}; font-size: 13px; line-height: 1.5;`;
-    divMsg.innerHTML = msg.texto; // innerHTML para suportar <br>
+    
+    // Adiciona o selo corporativo se for resposta da administração
+    if (isAdmin) {
+      divMsg.innerHTML = `<strong style="color: #38BDF8; display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;">🛡️ Equipe HUBy</strong> ${msg.texto}`;
+    } else {
+      divMsg.innerHTML = msg.texto; 
+    }
 
     const smallTime = document.createElement('small');
     smallTime.style.cssText = `display: block; color: #64748B; font-size: 10px; margin-top: 4px; text-align: ${textAlign};`;
@@ -396,7 +403,7 @@ function inicializarChatSuporteIA() {
     if (mensagens.length === 0) {
       const msgInicial = {
         autor: 'ia',
-        texto: 'Olá, parceiro! Sou o assistente virtual da HUBy. Como posso ajudar?<br><br><small style="color: #94A3B8;">Dica: Se for um problema sério ou urgente, digite "Falar com humano" ou "Acidente".</small>',
+        texto: 'Olá! Sou o Assistente Virtual da HUBy. Como posso auxiliar na sua jornada hoje?<br><br><small style="color: #94A3B8;">Por favor, descreva detalhadamente a sua solicitação.</small>',
         data: new Date().getTime()
       };
       mensagens.push(msgInicial);
@@ -406,7 +413,7 @@ function inicializarChatSuporteIA() {
     mensagens.forEach(renderizarMensagem);
   }
 
-  async function escalarParaHumano(mensagemTexto) {
+  async function escalarParaCentral(mensagemTexto, assuntoCategoria = 'Suporte HUBy') {
     const token = localStorage.getItem('huby_token');
     try {
       await fetch(`${API_URL}/api/suporte/chamado`, {
@@ -417,12 +424,12 @@ function inicializarChatSuporteIA() {
         },
         body: JSON.stringify({
           pedido_id: null,
-          assunto: 'Escalado via IA - Urgente',
+          assunto: assuntoCategoria,
           mensagem: mensagemTexto
         })
       });
     } catch (e) {
-      console.warn('Erro ao escalar ticket para o backend:', e);
+      console.warn('Falha silenciosa ao registrar ticket:', e);
     }
   }
 
@@ -442,18 +449,27 @@ function inicializarChatSuporteIA() {
     btnEnviar.innerHTML = '⏳';
     btnEnviar.disabled = true;
 
-    // Simular o delay de digitação e a resposta da IA
+    // Respostas Formais Baseadas em Contexto (Sem menção a humanos)
     setTimeout(async () => {
       let respostaTexto = '';
-      const textoLower = texto.toLowerCase();
+      let categoriaTicket = 'Suporte Geral';
+      const txt = texto.toLowerCase();
 
-      // Gatilhos de escalonamento automático para a tabela do painel Master
-      if (textoLower.includes('humano') || textoLower.includes('grave') || textoLower.includes('acidente') || textoLower.includes('roubo') || textoLower.includes('polícia')) {
-        respostaTexto = 'Compreendo a gravidade da situação. Acabei de transferir este relato diretamente para a nossa equipe humana. Eles analisarão o caso e entrarão em contato via e-mail e telefone o mais rápido possível.';
-        await escalarParaHumano(texto);
+      if (txt.includes('pagamento') || txt.includes('saque') || txt.includes('dinheiro') || txt.includes('pix') || txt.includes('receber')) {
+        respostaTexto = 'Compreendido. Para questões financeiras e de repasse, solicitamos que verifique a aba "Ganhos" e confirme a exatidão da sua chave Pix. O seu relato foi encaminhado para o departamento financeiro para análise de pendências.';
+        categoriaCategoria = 'Auditoria Financeira';
+      } else if (txt.includes('passageiro') || txt.includes('cliente') || txt.includes('corrida') || txt.includes('viagem') || txt.includes('bagagem')) {
+        respostaTexto = 'A segurança e a excelência no atendimento são fundamentais na HUBy. O seu relato sobre a viagem foi devidamente registrado e direcionado para a nossa equipe de qualidade.';
+        categoriaTicket = 'Auditoria de Viagem';
+      } else if (txt.includes('aplicativo') || txt.includes('erro') || txt.includes('bug') || txt.includes('mapa') || txt.includes('travar')) {
+        respostaTexto = 'Agradecemos o apontamento. A nossa equipe técnica foi notificada sobre este comportamento no aplicativo e trabalhará para garantir a estabilidade do sistema.';
+        categoriaTicket = 'Suporte Técnico App';
       } else {
-        respostaTexto = 'Entendido! Registei o seu relato. Como sou um assistente em treinamento, salvei esta informação para ajudar no acompanhamento do seu perfil.';
+        respostaTexto = 'Agradecemos o seu contato. A solicitação foi registrada com sucesso no sistema da HUBy. O caso será analisado e, se necessária uma intervenção, retornaremos através deste canal de atendimento.';
       }
+
+      // Envia o ticket para o backend com a categoria apropriada
+      await escalarParaCentral(texto, categoriaTicket);
 
       const respostaIA = { autor: 'ia', texto: respostaTexto, data: new Date().getTime() };
       const mensagensAtuais = carregarHistorico();
@@ -464,10 +480,9 @@ function inicializarChatSuporteIA() {
       btnEnviar.innerHTML = btnTexto;
       btnEnviar.disabled = false;
       inputMsg.focus();
-    }, 1200);
+    }, 1400);
   }
 
-  // Eventos de click e enter
   btnAbrir.addEventListener('click', (e) => {
     e.preventDefault();
     renderizarChatInteiro();
@@ -483,6 +498,30 @@ function inicializarChatSuporteIA() {
   inputMsg.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') enviarMensagem();
   });
+
+  // Integração com WebSocket para receber respostas diretamente da Administração
+  const token = localStorage.getItem('huby_token') || '';
+  const socket = window.io ? window.io(API_URL, { auth: { token } }) : null;
+  if (socket) {
+    socket.on('resposta_suporte_admin', (dados) => {
+      if (dados && dados.resposta) {
+        const respostaAdmin = { 
+          autor: 'admin', 
+          texto: dados.resposta, 
+          data: dados.data || new Date().getTime() 
+        };
+        const mensagensAtuais = carregarHistorico();
+        mensagensAtuais.push(respostaAdmin);
+        salvarHistorico(mensagensAtuais);
+        
+        if (modal.style.display === 'flex') {
+           renderizarMensagem(respostaAdmin);
+        } else {
+           notificar('Recebeu um novo retorno da Administração HUBy no suporte.', 'aviso');
+        }
+      }
+    });
+  }
 }
 
 function registrarEventosUI() {
@@ -542,6 +581,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   inicializarCopilotoVoz();
   restaurarPreferenciaCopiloto();
   
-  // Inicializa o chat da IA após o carregamento da página
+  // Inicialização do Chat de Suporte Virtual
   inicializarChatSuporteIA();
 });
