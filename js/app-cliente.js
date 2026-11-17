@@ -1286,3 +1286,44 @@ function finalizarViagemCliente(data) {
     setTimeout(() => location.reload(), 1500);
   }
 }
+// ============================================================================
+// SISTEMA DE SUPORTE E AJUDA (TICKETS)
+// ============================================================================
+window.abrirSuporteCorrida = async (pedidoId = null) => {
+  const mensagem = prompt('Conte-nos o que aconteceu. A nossa equipa vai analisar o seu caso:');
+
+  if (!mensagem || mensagem.trim() === '') {
+    return; // Utilizador cancelou ou não escreveu nada
+  }
+
+  const token = localStorage.getItem('huby_token');
+  if (!token) {
+    alert('A sua sessão expirou. Faça login novamente.');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/api/suporte/chamado`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        pedido_id: pedidoId,
+        assunto: 'Problema na Viagem',
+        mensagem: mensagem.trim()
+      })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      alert('✅ O seu relato foi enviado para a central HUBy. A nossa equipa vai analisar e entrar em contacto!');
+    } else {
+      alert('❌ Erro: ' + (data.erro || 'Não foi possível enviar o relato.'));
+    }
+  } catch (err) {
+    alert('❌ Erro de ligação ao contactar o suporte.');
+  }
+};

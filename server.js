@@ -19,6 +19,7 @@ import marketplaceRouter from './routes/marketplace.routes.js';
 import iaRoutes from './routes/ia.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import indicacoesRoutes from './routes/indicacoes.routes.js';
+import suporteRouter from './routes/suporte.routes.js';
 
 dotenv.config();
 
@@ -429,6 +430,7 @@ app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/ia', iaRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/indicacoes', indicacoesRoutes);
+app.use('/api/suporte', suporteRouter);
 
 iniciarDespachanteAgendamentos(io);
 
