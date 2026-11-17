@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Cancelamento pelo Motorista e Liquidação Pix HUBy
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Cancelamento pelo Motorista, Rota Suave e Pix
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -92,18 +92,58 @@ export async function executarCancelamentoCorridaMotorista(dados) {
 }
 
 // ============================================================================
-// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR
+// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR (Correção Anti-Bug no Mapa)
 // ============================================================================
 export async function preVisualizarRotaPedido(dados) {
   await sincronizarTarifasServidor();
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
   pararMonitoramentoDesvios();
-  limparRotasMapa();
+  limparRotasMapa(); // Limpa as rotas de busca antes de desenhar a rota oficial
 
   const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
   const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
 
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  const { valorBrutoFmt, repasseFmt } = obterValoresSincronizadosPedido(dados);
+
+  // Injetamos a UI antes para que o Container já tenha o tamanho exato, evitando salto na Leaflet (Glitch)
+  container.innerHTML = `
+    <div id="modalPreviaRotaCorrida" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--amber); background: rgba(245,158,11,0.15); padding: 4px 10px; border-radius: 8px;">
+          🔍 ROTA EM ANÁLISE
+        </span>
+        <div style="text-align: right;">
+          <strong style="color: var(--emerald); font-size: 22px; font-weight: 900; display: block; letter-spacing: -0.5px;">R$ ${repasseFmt}</strong>
+          <small style="color: #94A3B8; font-size: 10px; font-weight: 600;">Ganhos Limpos</small>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
+        <div style="color: #94A3B8; margin-bottom: 4px;"><strong style="color:#10B981;">A</strong> ${dados.origem}</div>
+        <div><strong style="color:#EF4444;">B</strong> ${dados.destino}</div>
+        <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
+          📏 <span id="lblPreviaDistKm">${dados.dist || '1.0'} km</span> • ⏱️ ~<span id="lblPreviaDurMin">${dados.dur || 5} min</span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 4px;">
+        <button type="button" id="btnCancelarPreviaRota"
+          style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #FFF; font-weight: 800; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer;">
+          ✕ Voltar
+        </button>
+        <button type="button" id="btnConfirmarAceiteViagem"
+          style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🚀 Aceitar Corrida
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Só agora traçamos a rota com o container já estável.
   if (estado.mapa) {
     estado.markerOrigem = L.marker(coordsOrigem, {
       icon: L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
@@ -116,44 +156,6 @@ export async function preVisualizarRotaPedido(dados) {
     await tracarRotaRealRuas(coordsOrigem, coordsDestino, '#F59E0B');
   }
 
-  const container = document.getElementById('listaChamadasPendentes');
-  if (!container) return;
-
-  const { valorBrutoFmt, repasseFmt } = obterValoresSincronizadosPedido(dados);
-
-  container.innerHTML = `
-    <div id="modalPreviaRotaCorrida" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 800; color: var(--amber); background: rgba(245,158,11,0.15); padding: 4px 10px; border-radius: 8px;">
-          🔍 ROTA EM ANÁLISE
-        </span>
-        <div style="text-align: right;">
-          <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; display: block;">R$ ${repasseFmt}</strong>
-          <small style="color: #94A3B8; font-size: 10px;">Total passageiro: R$ ${valorBrutoFmt}</small>
-        </div>
-      </div>
-
-      <div style="font-size: 12px; color: #FFF; line-height: 1.4;">
-        <div style="color: #94A3B8;">🟢 <strong>Buscar em:</strong> ${dados.origem}</div>
-        <div style="margin-top: 3px;">📍 <strong>Destino:</strong> ${dados.destino}</div>
-        <div style="font-size: 11px; color: var(--text-sec); margin-top: 4px;">
-          📏 Distância: <strong id="lblPreviaDistKm">${dados.dist || '1.0'} km</strong> • ⏱️ ~<span id="lblPreviaDurMin">${dados.dur || 5}</span> min
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; margin-top: 4px;">
-        <button type="button" id="btnCancelarPreviaRota"
-          style="background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; font-weight: 700; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
-          ✕ Voltar
-        </button>
-        <button type="button" id="btnConfirmarAceiteViagem"
-          style="background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer;">
-          ✅ Aceitar Corrida
-        </button>
-      </div>
-    </div>
-  `;
-
   document.getElementById('btnCancelarPreviaRota')?.addEventListener('click', () => {
     limparRotasMapa();
     pararMonitoramentoDesvios();
@@ -161,7 +163,10 @@ export async function preVisualizarRotaPedido(dados) {
     iniciarRadarChamadas();
   });
 
-  document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', () => {
+  document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', (e) => {
+    const btn = e.target;
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Confirmando...';
     aceitarCorrida(dados);
   });
 }
@@ -217,6 +222,58 @@ async function iniciarFaseBuscarPassageiro(dados) {
   limparRotasMapa();
   const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
 
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
+  const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--blue); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
+          🚗 A CAMINHO DO PASSAGEIRO
+        </span>
+        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; letter-spacing: -0.5px;">R$ ${repasseFmt}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
+        <div style="color: #94A3B8;"><strong style="color:#10B981;">A</strong> ${dados.origem}</div>
+        <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
+          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <a href="${urlWaze}" target="_blank" rel="noopener"
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🧭 Waze
+        </a>
+        <a href="${urlGoogle}" target="_blank" rel="noopener"
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🗺️ Maps
+        </a>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <button type="button" id="btnChegueiLocalEmbarque"
+          style="background: rgba(56,189,248,0.18); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 900; padding: 13px; border-radius: 12px; font-size: 13px; cursor: pointer;">
+          📍 Cheguei Aqui
+        </button>
+        <button type="button" id="btnIniciarCorridaAtiva"
+          style="background: #38BDF8; border: none; color: #000; font-weight: 900; padding: 13px; border-radius: 12px; font-size: 13px; cursor: pointer;">
+          🚀 Iniciar Viagem
+        </button>
+      </div>
+
+      <button type="button" id="btnCancelarCorridaMotoristaAtiva"
+        style="width: 100%; background: transparent; border: none; color: #94A3B8; font-weight: 800; padding: 6px; border-radius: 8px; font-size: 11px; cursor: pointer; text-decoration: underline;">
+        Cancelar Corrida
+      </button>
+    </div>
+  `;
+
   if (estado.mapa) {
     estado.markerOrigem = L.marker(coordsOrigem, {
       icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
@@ -226,58 +283,6 @@ async function iniciarFaseBuscarPassageiro(dados) {
   }
 
   iniciarMonitoramentoDesvios(coordsOrigem);
-
-  const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
-  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
-
-  const container = document.getElementById('listaChamadasPendentes');
-  if (!container) return;
-
-  container.innerHTML = `
-    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--blue); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
-          🚗 A CAMINHO DO PASSAGEIRO
-        </span>
-        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseFmt}</strong>
-      </div>
-
-      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-        🟢 <strong>Embarque:</strong> <span style="color: #94A3B8;">${dados.origem}</span>
-        <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
-          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <a href="${urlWaze}" target="_blank" rel="noopener"
-          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🧭 Waze (Embarque)
-        </a>
-        <a href="${urlGoogle}" target="_blank" rel="noopener"
-          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🗺️ Maps (Embarque)
-        </a>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <button type="button" id="btnChegueiLocalEmbarque"
-          style="background: rgba(56,189,248,0.18); border: 1px solid #38BDF8; color: #38BDF8; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 13px; cursor: pointer;">
-          📍 Cheguei no Local
-        </button>
-        <button type="button" id="btnIniciarCorridaAtiva"
-          style="background: #38BDF8; border: none; color: #000; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 13px; cursor: pointer;">
-          🚀 Iniciar Viagem
-        </button>
-      </div>
-
-      <button type="button" id="btnCancelarCorridaMotoristaAtiva"
-        style="width: 100%; background: rgba(239, 68, 68, 0.14); border: 1.5px solid rgba(239, 68, 68, 0.45); color: #F87171; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-        ❌ Cancelar Corrida
-      </button>
-    </div>
-  `;
 
   document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async () => {
     try {
@@ -311,6 +316,52 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
   limparRotasMapa();
   const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
 
+  const container = document.getElementById('listaChamadasPendentes');
+  if (!container) return;
+
+  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
+  const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
+
+  container.innerHTML = `
+    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
+          🚀 EM VIAGEM
+        </span>
+        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; letter-spacing: -0.5px;">R$ ${repasseFmt}</strong>
+      </div>
+
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
+        <div style="color: #94A3B8;"><strong style="color:#EF4444;">B</strong> ${dados.destino}</div>
+        <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
+          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <a href="${urlWaze}" target="_blank" rel="noopener"
+          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🧭 Waze (Destino)
+        </a>
+        <a href="${urlGoogle}" target="_blank" rel="noopener"
+          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+          🗺️ Maps (Destino)
+        </a>
+      </div>
+
+      <button type="button" id="btnConcluirCorrida"
+        style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 14px; border-radius: 12px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        🏁 Cheguei ao Destino / Cobrar
+      </button>
+
+      <button type="button" id="btnCancelarCorridaMotoristaViagem"
+        style="width: 100%; background: transparent; border: none; color: #94A3B8; font-weight: 800; padding: 6px; border-radius: 8px; font-size: 11px; cursor: pointer; text-decoration: underline;">
+        Cancelar Corrida
+      </button>
+    </div>
+  `;
+
   if (estado.mapa) {
     estado.markerDestino = L.marker(coordsDestino, {
       icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
@@ -320,52 +371,6 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
   }
 
   iniciarMonitoramentoDesvios(coordsDestino);
-
-  const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
-  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
-
-  const container = document.getElementById('listaChamadasPendentes');
-  if (!container) return;
-
-  container.innerHTML = `
-    <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
-          🚀 EM VIAGEM COM PASSAGEIRO
-        </span>
-        <strong style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ ${repasseFmt}</strong>
-      </div>
-
-      <div style="font-size: 13px; color: #FFF; line-height: 1.4;">
-        🏁 <strong>Destino Final:</strong> <span style="color: #94A3B8;">${dados.destino}</span>
-        <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
-          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
-        </div>
-      </div>
-
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <a href="${urlWaze}" target="_blank" rel="noopener"
-          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🧭 Waze (Destino)
-        </a>
-        <a href="${urlGoogle}" target="_blank" rel="noopener"
-          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 11px; border-radius: 10px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 5px;">
-          🗺️ Maps (Destino)
-        </a>
-      </div>
-
-      <button type="button" id="btnConcluirCorrida"
-        style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 13px; border-radius: 10px; font-size: 14px; cursor: pointer;">
-        🏁 Cheguei ao Destino / Finalizar
-      </button>
-
-      <button type="button" id="btnCancelarCorridaMotoristaViagem"
-        style="width: 100%; background: rgba(239, 68, 68, 0.14); border: 1.5px solid rgba(239, 68, 68, 0.45); color: #F87171; font-weight: 900; padding: 11px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-        ❌ Cancelar Corrida
-      </button>
-    </div>
-  `;
 
   document.getElementById('btnConcluirCorrida')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
   document.getElementById('btnCancelarCorridaMotoristaViagem')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));

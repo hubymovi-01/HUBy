@@ -53,43 +53,11 @@
   <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
     aria-label="Abrir Chat">💬</button>
 
-  <!-- DOCK DE CORRIDAS E SALDO -->
-  <section class="driver-dock">
-    <div class="wallet-card-row">
-      <div class="wallet-meta">
-        <small>Saldo Disponível (85%)</small>
-        <div class="val-saldo" id="saldoCarteiraValor">R$ 0,00</div>
-      </div>
-      <button type="button" id="btnAbrirModalSaque" class="btn-action-pix">
-        Solicitar Saque Pix
-      </button>
-    </div>
-
-    <div class="orders-feed" id="listaChamadasPendentes">
-      <div class="dock-empty">Aguardando novas chamadas na região...</div>
-    </div>
-
-    <!-- CARD RESUMO DO DIA E META DIÁRIA -->
-    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <div>
-          <small style="font-size: 10px; font-weight: 800; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px;">Ganhos de Hoje</small>
-          <div style="font-size: 19px; font-weight: 900; color: #FFF;" id="lblGanhosHojeValor">R$ 0,00</div>
-        </div>
-        <div style="text-align: right;">
-          <button type="button" id="btnEditarMetaDiaria" style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">
-            ✏️ Definir Meta
-          </button>
-          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0 viagens</small>
-        </div>
-      </div>
-
-      <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 6px;">
-        <div id="barraProgressoMeta" style="background: #38BDF8; width: 0%; height: 100%; transition: width 0.4s ease;"></div>
-      </div>
-      <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-sec); margin-top: 4px;">
-        <span id="lblMetaDiariaTxt">Meta: R$ 200,00 (0%)</span>
-        <span style="color: #10B981; font-weight: 700;">85% repasse líquido</span>
+  <!-- DOCK DE CORRIDAS (Limpo - Foco 100% no Mapa) -->
+  <section class="driver-dock" style="background: transparent; border: none; box-shadow: none; padding: 10px 14px; pointer-events: none;">
+    <div class="orders-feed" id="listaChamadasPendentes" style="pointer-events: auto;">
+      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <span style="color: #10B981; font-weight: 800; font-size: 13px;">⚪ Fique online para receber chamadas</span>
       </div>
     </div>
   </section>
@@ -219,10 +187,10 @@
         </div>
       </div>
 
-      <!-- EXTRATO & SAQUE PIX -->
+      <!-- CARTÃO 5: EXTRATO, METAS & SAQUE PIX -->
       <div class="drawer-section-card">
         <h4 class="drawer-section-title" style="display: flex; justify-content: space-between;">
-          <span>💰 Ganhos</span>
+          <span>💰 Ganhos Disponíveis</span>
           <span style="color: var(--emerald);" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
         <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px;">
@@ -230,12 +198,22 @@
         </div>
         
         <label style="font-size: 10px; color: var(--text-sec);">Chave Pix para Saques</label>
-        <div style="display: flex; gap: 6px; margin-top: 4px; margin-bottom: 10px;">
+        <div style="display: flex; gap: 6px; margin-top: 4px; margin-bottom: 14px;">
           <input type="text" id="drawerInputChavePix" class="drawer-input" placeholder="Sua Chave Pix">
           <button type="button" id="btnSalvarChavePix" class="btn-drawer-solid" style="width: auto; background: var(--blue); padding: 0 14px;">Salvar</button>
         </div>
         
-        <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline">📄 Exportar Fechamento (CSV)</button>
+        <!-- BOTOES MOVIDOS DA TELA PRINCIPAL -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <button type="button" id="btnAbrirModalSaque" class="btn-drawer-solid" style="background: var(--emerald); color: #02261C;">
+            💸 Sacar Pix
+          </button>
+          <button type="button" id="btnEditarMetaDiaria" class="btn-drawer-outline" style="border-color: #38BDF8; color: #38BDF8;">
+            🎯 Definir Meta
+          </button>
+        </div>
+        
+        <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline" style="margin-top: 8px;">📄 Exportar Fechamento (CSV)</button>
       </div>
 
       <!-- BOTÕES DE SAÍDA E AJUDA (SUPORTE IA/HUMANO) -->
@@ -252,12 +230,12 @@
   </aside>
 
   <!-- =========================================================================
-       NOVO: MODAL DO CHAT DE SUPORTE INTELIGENTE (IA) 
+       MODAIS (Chat, Edição, Loja, Pagtos, Metas, etc.)
        ========================================================================= -->
+
+  <!-- CHAT DE SUPORTE INTELIGENTE (IA) -->
   <div id="modalChatSuporteIA" class="modal-backdrop-custom" style="display: none; z-index: 10020;">
     <div class="modal-box-edit" style="height: 75vh; max-height: 600px; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #0B0F19;">
-      
-      <!-- Cabeçalho do Suporte -->
       <div style="padding: 14px 16px; background: rgba(16, 185, 129, 0.1); border-bottom: 1px solid rgba(16, 185, 129, 0.3); display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 10px;">
           <div style="width: 38px; height: 38px; background: #10B981; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 20px;">🛡️</div>
@@ -268,18 +246,10 @@
         </div>
         <button type="button" id="btnFecharChatSuporte" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
-
-      <!-- Área de Mensagens (Onde a mágica acontece) -->
-      <div id="suporteAreaMensagens" style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(0, 0, 0, 0.3);">
-        <!-- Mensagens serão inseridas aqui dinamicamente -->
-      </div>
-
-      <!-- Aviso de Mensagens Temporárias -->
+      <div id="suporteAreaMensagens" style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(0, 0, 0, 0.3);"></div>
       <div style="text-align: center; padding: 6px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.05);">
         <small style="color: #64748B; font-size: 10px;">🔒 O histórico desta conversa é apagado do seu celular após 24h.</small>
       </div>
-
-      <!-- Input e Envio -->
       <div style="padding: 12px; border-top: 1px solid var(--border-dark); background: #090D16; display: flex; gap: 8px;">
         <input type="text" id="inputMsgSuporte" placeholder="Escreva o seu problema..." style="flex: 1; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: #1F2937; color: #FFF; padding: 12px 14px; font-size: 13px; outline: none;">
         <button type="button" id="btnEnviarMsgSuporte" style="background: #10B981; color: #02261C; border: none; border-radius: 12px; width: 45px; font-weight: 800; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 18px;">
@@ -348,8 +318,7 @@
         <button type="button" id="btnCancelarEdicao"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 10px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnSalvarEdicaoPerfil"
-          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 10px; font-weight: 900; cursor: pointer;">Salvar
-          Alterações</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 10px; font-weight: 900; cursor: pointer;">Salvar Alterações</button>
       </div>
     </div>
   </div>
@@ -458,8 +427,7 @@
       <div style="margin-top: 14px; display: flex; align-items: center; justify-content: center; gap: 8px;">
         <span
           style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); animation: pulse 1.5s infinite;"></span>
-        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando confirmação do
-          banco...</small>
+        <small style="color: var(--text-sec); font-size: 11px; font-weight: 700;">Aguardando confirmação do banco...</small>
       </div>
 
       <button type="button" id="btnFecharPixMotorista"
@@ -521,8 +489,7 @@
         <button type="button" id="btnCancelarSaqueModal"
           style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
         <button type="button" id="btnConfirmarSaquePix"
-          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar
-          Saque</button>
+          style="flex: 1.5; background: var(--emerald); border: none; color: #02261C; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Confirmar Saque</button>
       </div>
     </div>
   </div>
@@ -597,7 +564,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=11.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=12.0.0"></script>
   <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
 </body>
 
