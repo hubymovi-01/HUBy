@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar de Chamadas + Cerca Virtual + Selfie de Verificação
+// js/motorista/motorista-radar.js - Radar de Chamadas + Cerca Virtual + Selfie + Tempo Limite
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -7,7 +7,9 @@ import { notificar } from '../util/alertas-huby.js';
 let intervalAlertaChamada = null;
 let wakeLockSentinela = null;
 let gpsFallbackEmAndamento = false;
+
 const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000; // 12 horas por turno
+const TEMPO_EXPIRACAO_TELA_MS = 30 * 1000; // 30 Segundos para a chamada sumir da tela
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
@@ -416,7 +418,7 @@ export function iniciarRadarChamadas() {
     if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
       buscarChamadasPendentes(false);
     }
-  }, 4000);
+  }, 4000); // Polling de 4 em 4 segundos
 }
 
 export function pararRadarChamadas() {
@@ -465,9 +467,7 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
       `${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&aceitaEntrega=${aceitaEntrega}&lat=${lat}&lng=${lng}&t=${Date.now()}`,
       {
         cache: 'no-store',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        headers: { 'Authorization': `Bearer ${token}` }
       }
     );
 
@@ -477,12 +477,34 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     }
 
     const pedidos = await resp.json();
+    const agora = Date.now();
+
+    // Inicializa rastreador de tempo se não existir
+    if (!estado.temposPedidosTela) estado.temposPedidosTela = {};
+
     const chamadasFiltradas = Array.isArray(pedidos)
       ? pedidos.filter((p) => {
+          // Já ignorou antes?
           if (estado.pedidosIgnorados?.has(String(p.id))) return false;
+          
+          // Compatibilidade de rota para casa
           if (typeof window.pedidoCompativelComRotaCasa === 'function') {
-            return window.pedidoCompativelComRotaCasa(p);
+            if (!window.pedidoCompativelComRotaCasa(p)) return false;
           }
+
+          // Controle de Expiração de Tempo (Timeout da Chamada na Tela)
+          if (!estado.temposPedidosTela[p.id]) {
+            estado.temposPedidosTela[p.id] = agora; // Regista o momento em que viu pela 1ª vez
+          }
+          
+          const tempoQuePassou = agora - estado.temposPedidosTela[p.id];
+          if (tempoQuePassou >= TEMPO_EXPIRACAO_TELA_MS) {
+            // Estourou os 30 segundos! Auto-ignora e tira da tela
+            if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
+            estado.pedidosIgnorados.add(String(p.id));
+            return false;
+          }
+
           return true;
         })
       : [];
@@ -495,9 +517,7 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
       return;
     }
 
-    if (!estado.chamadasAnterioresIds) {
-      estado.chamadasAnterioresIds = new Set();
-    }
+    if (!estado.chamadasAnterioresIds) estado.chamadasAnterioresIds = new Set();
 
     const existeNovaChamada = idsAtuais.some((id) => !estado.chamadasAnterioresIds.has(id));
 
@@ -531,29 +551,48 @@ function renderizarRadar(pedidos) {
   }
 
   const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
+  const agora = Date.now();
 
   feedEl.innerHTML = pedidos.map((p) => {
     const catPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
     const distKm = parseFloat(p.distancia_km || p.distanciaKm || 1.0);
+    
     let valorBruto = Number(p.valor_total || 0);
     if (!valorBruto || valorBruto <= 0) {
       valorBruto = calcularPreco(catPedido, distKm).valorTotal;
     }
+    
     const valorFormatado = valorBruto.toFixed(2).replace('.', ',');
     const repasse = (valorBruto * fatorMotorista).toFixed(2).replace('.', ',');
+    
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
     const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
 
+    // Cálculo da Barra de Progresso Visual
+    const inicio = estado.temposPedidosTela[p.id] || agora;
+    const tempoDecorrido = agora - inicio;
+    const percentualRestante = Math.max(0, 100 - ((tempoDecorrido / TEMPO_EXPIRACAO_TELA_MS) * 100));
+    
+    let corBarra = '#10B981'; // Verde
+    if (percentualRestante <= 50) corBarra = '#F59E0B'; // Amarelo no meio do tempo
+    if (percentualRestante <= 25) corBarra = '#EF4444'; // Vermelho no finalzinho
+
     return `
-      <div class="order-card" style="position: relative; border: 2px solid #10B981; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px;">
+      <div class="order-card" style="position: relative; border: 2px solid #10B981; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px; overflow: hidden;">
+        
+        <!-- BARRA DE TEMPO LIMITE DE ACEITE -->
+        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: rgba(255,255,255,0.05);">
+          <div style="height: 100%; background: ${corBarra}; width: ${percentualRestante}%; transition: width 4s linear, background-color 1s ease;"></div>
+        </div>
+
         <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Dispensar corrida"
-          style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-dark); color: var(--text-sec); width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; cursor: pointer;">
+          style="position: absolute; top: 12px; right: 10px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-dark); color: var(--text-sec); width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; cursor: pointer;">
           ✕
         </button>
 
-        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-right: 30px;">
+        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-top: 6px; padding-right: 30px;">
           <span class="order-badge" style="background: rgba(16,185,129,0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
             ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
           </span>
