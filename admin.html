@@ -82,6 +82,8 @@
     <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Viagens</button>
     <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Tarifas & Gateway</button>
     <button type="button" class="tab-btn" data-tab="tabMarketplace">🛍️ Loja & Clube</button>
+    <!-- NOVO BOTÃO DA ABA DE SUPORTE -->
+    <button type="button" class="tab-btn" data-tab="tabSuporte">🎧 Suporte & Ajuda</button>
   </nav>
 
   <!-- ABA 1: MÉTRICAS E GRÁFICOS -->
@@ -712,6 +714,34 @@
           <tbody id="tabelaMarketplaceBody">
             <tr>
               <td colspan="6" class="table-empty-row">A carregar parcerias da base de dados...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- NOVA ABA 13: SUPORTE & AJUDA -->
+  <section id="tabSuporte" class="tab-pane" style="display: none;">
+    <div class="card glass-panel" style="padding: 20px;">
+      <h3 style="margin-bottom: 5px;">🎧 Chamados de Suporte</h3>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Passageiros e motoristas que relataram problemas</p>
+      
+      <div class="table-responsive">
+        <table class="table-huby">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Utilizador</th>
+              <th>Viagem (ID)</th>
+              <th>Mensagem / Relato</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaSuporteBody">
+            <tr>
+              <td colspan="6" class="table-empty-row">A carregar chamados de suporte...</td>
             </tr>
           </tbody>
         </table>

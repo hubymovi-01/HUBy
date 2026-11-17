@@ -150,7 +150,8 @@ async function sincronizarTudo(token) {
     carregarTabelaSeguranca(token),
     carregarTabelaSaques(token),
     carregarTabelaMarketplace(token),
-    carregarGatewayConfig(token)
+    carregarGatewayConfig(token),
+    carregarTabelaSuporte(token) // Carrega a tabela de suporte
   ]);
 }
 
@@ -1347,6 +1348,7 @@ function configurarNavegacaoAbas() {
         if (tabAlvoId === 'tabConfig') carregarTarifasConfig(token);
         if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token);
         if (tabAlvoId === 'tabFrota') carregarTabelaFrota(token, false);
+        if (tabAlvoId === 'tabSuporte') carregarTabelaSuporte(token); // NOVO
 
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
@@ -1513,7 +1515,73 @@ function exportarRelatorioCSV(token) {
   window.open(`${API_URL}/api/admin/relatorios/corridas.csv?token=${encodeURIComponent(tokenUrl)}`, '_blank');
 }
 
-function exportarFinanceiroCSV(token) {
-  const tokenUrl = token || localStorage.getItem('huby_token') || '';
-  window.open(`${API_URL}/api/admin/relatorios/financeiro.csv?token=${encodeURIComponent(tokenUrl)}`, '_blank');
+// ============================================================================
+// 12. GESTÃO DE SUPORTE E TICKETS
+// ============================================================================
+async function carregarTabelaSuporte(token) {
+  const tbody = document.getElementById('tabelaSuporteBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/suporte/admin/chamados`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error();
+    const chamados = await res.json();
+
+    if (!chamados || !chamados.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum chamado de suporte pendente. Tudo tranquilo!</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = chamados.map(c => {
+      const badgeClass = c.status === 'pendente' ? 'badge-pendente' : 'badge-concluido';
+      const msgCurta = c.mensagem.length > 45 ? c.mensagem.slice(0, 45) + '...' : c.mensagem;
+      const dataBR = new Date(c.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+      return `
+        <tr>
+          <td>${dataBR}</td>
+          <td><strong>${escaparHTML(c.usuario_nome)}</strong><br><small style="color:var(--muted); text-transform:capitalize;">${escaparHTML(c.tipo_usuario)}</small></td>
+          <td>${c.pedido_id ? `<code style="color:var(--blue);">#${String(c.pedido_id).slice(-6)}</code>` : 'Geral'}</td>
+          <td title="${escaparHTML(c.mensagem)}">${escaparHTML(msgCurta)}</td>
+          <td><span class="badge ${badgeClass}">${escaparHTML(String(c.status).toUpperCase())}</span></td>
+          <td>
+            ${c.status === 'pendente'
+              ? `<button class="btn-tbl app" onclick="responderChamadoMaster(${c.id}, '${escaparHTML(c.usuario_nome)}')">Responder</button>`
+              : `<small style="color:var(--primary); font-weight:700;">✅ Respondido</small>`
+            }
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Erro ao carregar chamados de suporte.</td></tr>';
+  }
 }
+
+window.responderChamadoMaster = async (ticketId, nomeAutor) => {
+  const token = localStorage.getItem('huby_token');
+  const resposta = prompt(`Respondendo ao chamado de ${nomeAutor}.\nDigite a sua resposta (resolução do problema):`);
+  
+  if (!resposta || resposta.trim() === '') return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/suporte/admin/chamados/${ticketId}/responder`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ resposta: resposta.trim() })
+    });
+    
+    const data = await res.json();
+    
+    if (res.ok) {
+      notificarAdmin('Resposta registada e chamado encerrado com sucesso!', 'sucesso');
+      carregarTabelaSuporte(token);
+    } else {
+      notificarAdmin(data.erro || 'Erro ao enviar resposta.', 'erro');
+    }
+  } catch (e) {
+    notificarAdmin('Erro de ligação ao responder chamado.', 'erro');
+  }
+};
