@@ -26,7 +26,7 @@
   <!-- ESTILOS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
-  <link rel="stylesheet" href="./css/cliente.css?v=3.2.0">
+  <link rel="stylesheet" href="./css/cliente.css?v=3.5.0">
   <link rel="stylesheet" href="./css/cliente-layout.css?v=4.3.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
   <link rel="stylesheet" href="./css/ia.css?v=1.0.0">
@@ -166,7 +166,7 @@
         <div class="d-info"><strong>Contato de Segurança</strong><small>Compartilhar trajeto e emergência</small></div>
       </a>
       
-      <!-- MENU DE INDICAÇÃO (Centralizado Aqui) -->
+      <!-- MENU DE INDICAÇÃO -->
       <a href="#" id="menuItemIndique" class="drawer-item">
         <span class="d-icon">🎁</span>
         <div class="d-info"><strong>Indique e Ganhe</strong><small>Ganhe R$ 5,00 por amigo indicado</small></div>
@@ -312,38 +312,40 @@
     <!-- LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM, NOTAS E AGENDAMENTO -->
     <div class="dock-quick-actions-row pro-actions">
       <!-- 1. Pagamento -->
-      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" aria-label="Forma de Pagamento">
-        <span id="iconFormaPagamento">💵</span>
-        <span id="txtFormaPagamentoSelecionada">Dinheiro</span>
+      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" title="Forma de Pagamento">
+        <span class="pill-icon" id="iconFormaPagamento">💵</span>
+        <span class="pill-text" id="txtFormaPagamentoSelecionada">Dinheiro</span>
       </button>
 
       <!-- 2. Cupom -->
-      <div style="display: flex; align-items: center; gap: 4px;">
-        <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill">
-          <span>🏷️ Cupom</span>
-        </button>
-        <span id="tagCupomAtivo" class="badge-cupom-ativo" style="display: none;"></span>
-      </div>
+      <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill" title="Adicionar Cupom">
+        <span class="pill-icon">🏷️</span>
+        <span class="pill-text">Cupom</span>
+      </button>
 
       <!-- 3. Observações -->
-      <div style="display: flex; align-items: center; gap: 4px; position: relative;">
-        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" title="Adicionar nota">
-          <span>📝 Observação</span>
+      <div style="position: relative; flex: 1;">
+        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Adicionar nota">
+          <span class="pill-icon">📝</span>
+          <span class="pill-text">Obs</span>
         </button>
-        <button type="button" id="btnLimparNotaMotorista" style="display: none; background: rgba(239, 68, 68, 0.15); border: none; color: #EF4444; width: 22px; height: 22px; border-radius: 50%; font-size: 10px; cursor: pointer; align-items: center; justify-content: center; position: absolute; right: -8px; top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);">
-          ✕
-        </button>
+        <button type="button" id="btnLimparNotaMotorista" class="btn-clear-badge" style="display: none;">✕</button>
       </div>
       
       <!-- 4. Agendamento -->
-      <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" title="Agendar Viagem">
-        <span>⏰ Agendar</span>
-      </button>
+      <div style="position: relative; flex: 1;">
+        <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Agendar Viagem">
+          <span class="pill-icon">⏰</span>
+          <span class="pill-text">Agendar</span>
+        </button>
+        <button type="button" id="btnLimparAgendamento" class="btn-clear-badge" style="display: none;">✕</button>
+      </div>
     </div>
 
-    <!-- NOTA DO MOTORISTA / AGENDAMENTO ANEXADA -->
-    <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none; margin-top: 8px;"></div>
-    <div id="txtAgendamentoBadge" class="badge-nota-motorista" style="display: none; background: rgba(245, 158, 11, 0.15); color: #F59E0B; margin-top: 4px;"></div>
+    <!-- BADGES VISUAIS (Quando a nota ou cupom é aplicado) -->
+    <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none;"></div>
+    <div id="txtAgendamentoBadge" class="badge-nota-motorista" style="display: none; background: rgba(245, 158, 11, 0.15); color: #F59E0B;"></div>
+    <div id="tagCupomAtivo" class="badge-nota-motorista" style="display: none; background: rgba(16, 185, 129, 0.15); color: #10B981;"></div>
 
     <!-- RADAR DE BUSCA -->
     <div id="cardStatusViagem" class="active-ride-card modern-radar" style="display: none;">
@@ -366,7 +368,9 @@
     </button>
   </section>
 
-  <!-- MODAL SELETOR RÁPIDO DE PAGAMENTO -->
+  <!-- ==================== MODAIS ==================== -->
+
+  <!-- MODAL SELETOR DE PAGAMENTO RAPIDO -->
   <div id="modalSeletorPagamentoRapido" class="modal-backdrop" style="display: none; z-index: 10006;">
     <div class="modal-card">
       <div class="modal-header-row">
@@ -389,11 +393,11 @@
             <small>Transfira pela chave oficial</small>
           </div>
         </div>
-        <div class="opcao-pagamento-rapido" data-metodo="cartao_maquininha" data-nome="Cartão (Máquina)" data-icone="💳">
+        <div class="opcao-pagamento-rapido" data-metodo="cartao_maquininha" data-nome="Máquina" data-icone="💳">
           <span class="op-icon">💳</span>
           <div class="op-text">
             <strong>Maquininha</strong>
-            <small>Débito ou Crédito no embarque</small>
+            <small>Débito/Crédito no embarque</small>
           </div>
         </div>
       </div>
@@ -407,51 +411,13 @@
         <h3 id="tituloModalFav">Definir Local</h3>
         <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
       </div>
-      <p style="font-size: 12px; color: #94A3B8; margin-top: -6px; margin-bottom: 14px;">
-        Escolha como prefere definir o seu endereço:
-      </p>
-
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar
-          Endereço</label>
+        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
         <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
           style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
-
-        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">
-          💾 Salvar Endereço Escrito
-        </button>
-
-        <div style="display: flex; align-items: center; gap: 8px; margin: 8px 0;">
-          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-          <span style="font-size: 11px; color: #64748B; font-weight: 700;">OU</span>
-          <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.08);"></div>
-        </div>
-
-        <button type="button" id="btnMarcarFavNoMapa"
-          style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; touch-action: manipulation;">
-          📍 Marcar Direto no Mapa
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL SEGURANÇA -->
-  <div id="modalSeguranca" class="modal-backdrop" style="display: none; z-index: 10000;">
-    <div class="modal-card">
-      <div class="modal-header-row">
-        <h3>Segurança na Viagem</h3><button type="button" id="btnFecharSeguranca" class="btn-icon-close">✕</button>
-      </div>
-      <div style="text-align: left; margin: 12px 0;">
-        <p style="font-size: 13px; color: #94A3B8; margin-bottom: 14px;">Seu contato de confiança recebe sua rota em
-          tempo real.</p>
-        <div
-          style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-bottom: 14px;">
-          <small style="color: #64748B; font-weight: 700; text-transform: uppercase;">Contato Cadastrado</small>
-          <div id="infoContatoSeguranca" style="font-size: 15px; font-weight: 800; color: #FFF; margin-top: 4px;">Nenhum
-            contato cadastrado</div>
-        </div>
-        <button type="button" id="btnCompartilharRotaZap" class="btn-primary-modal" style="width: 100%;">
-          <span>📲 Compartilhar Rota no WhatsApp</span>
+        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">💾 Salvar</button>
+        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+          📍 Marcar no Mapa
         </button>
       </div>
     </div>
@@ -469,77 +435,6 @@
     </div>
   </div>
 
-  <!-- MODAL AVALIAÇÃO -->
-  <div id="modalAvaliacao" class="modal-backdrop" style="display: none; z-index: 10000;">
-    <div class="modal-card">
-      <h3>Como correu a sua viagem?</h3>
-      <p>Classifique o atendimento do condutor parceiro:</p>
-      <div id="estrelasRating" class="star-rating">
-        <span data-val="1">★</span><span data-val="2">★</span><span data-val="3">★</span><span
-          data-val="4">★</span><span data-val="5">★</span>
-      </div>
-      <textarea id="txtComentarioAvaliacao" placeholder="Deixe um elogio ou observação (opcional)..."></textarea>
-      <div class="modal-btn-row">
-        <button type="button" id="btnPularAvaliacao" class="btn-secondary-modal">Pular</button>
-        <button type="button" id="btnEnviarAvaliacao" class="btn-primary-modal">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL DE PAGAMENTO & RECARGA PIX -->
-  <div id="modalPagamento" class="modal-backdrop" style="display: none; z-index: 10000;">
-    <div class="modal-card modal-wide">
-      <div class="modal-header-row">
-        <h3>Formas de Pagamento</h3>
-        <button type="button" id="btnFecharPagamento" class="btn-icon-close">✕</button>
-      </div>
-
-      <div class="payment-methods-list">
-        <div class="payment-method-card active-method" id="metodoPixCard">
-          <div class="method-header">
-            <span class="m-icon">💠</span>
-            <div>
-              <strong>Pix Dinâmico Oficial</strong>
-              <small>Gera QR Code com liquidação automática</small>
-            </div>
-          </div>
-          <span class="badge-active">Recomendado</span>
-        </div>
-        <div class="payment-method-card" id="metodoDinheiroCard">
-          <div class="method-header">
-            <span class="m-icon">💵</span>
-            <div>
-              <strong>Dinheiro ou Maquininha</strong>
-              <small>Pague direto ao motorista parceiro</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="areaPixMercadoPago" style="display: none;">
-        <div class="mp-qr-container"
-          style="background: #FFF; border-radius: 16px; padding: 14px; text-align: center; margin: 12px 0;">
-          <img id="imgPixQrCode" src="" alt="QR Code Pix" style="width: 190px; height: 190px; object-fit: contain;" />
-          <span style="font-size: 11px; color: #64748B; margin-top: 6px; font-weight: 700; display: block;">Aponte o app
-            do seu banco para pagar</span>
-        </div>
-
-        <div class="pix-charge-box" style="margin-top: 10px;">
-          <span class="charge-title">Pix Copia e Cola:</span>
-          <div class="pix-key-row">
-            <input type="text" id="chavePixInput" placeholder="Código copia e cola Pix..." readonly />
-            <button type="button" id="btnCopiarPix">Copiar</button>
-          </div>
-        </div>
-
-        <div id="statusPagamentoPixTexto"
-          style="text-align: center; font-size: 12px; color: #F59E0B; font-weight: 700; margin-top: 10px;">
-          ⏳ Aguardando confirmação do pagamento...
-        </div>
-      </div>
-    </div>
-  </div>
-
   <!-- MODAL INDIQUE E GANHE -->
   <div id="modalIndiqueGanhe" class="modal-backdrop" style="display: none; z-index: 10020;">
     <div class="modal-card">
@@ -548,88 +443,28 @@
         <button type="button" id="btnFecharIndique" class="btn-icon-close">✕</button>
       </div>
       <p style="font-size: 13px; color: #94A3B8; margin: 8px 0 14px;">
-        Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ 5,00 de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ 5,00 de bônus</strong> assim que ele concluir a corrida.
+        Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ 5,00 de desconto</strong> na 1ª viagem.
       </p>
       <div style="background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px;">
-        <small style="color: #94A3B8; font-size: 10px; text-transform: uppercase; font-weight: 800;">Seu Código Exclusivo</small>
-        <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px; margin: 4px 0;">HUBY-...</div>
-        <small id="lblResumoIndicacoes" style="color: #CBD5E1; font-size: 11px;">Carregando seu extrato...</small>
+        <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px;">HUBY-VIP</div>
       </div>
       <div style="display: flex; gap: 8px;">
         <button type="button" id="btnCopiarCodigoInd" class="btn-secondary-modal" style="flex: 1;">📋 Copiar</button>
-        <button type="button" id="btnCompartilharCodigoZap" class="btn-primary-modal" style="flex: 1.5;">📲 Enviar no WhatsApp</button>
+        <button type="button" id="btnCompartilharCodigoZap" class="btn-primary-modal" style="flex: 1.5;">📲 Enviar WhatsApp</button>
       </div>
     </div>
   </div>
 
-  <!-- CHAT INTERNO -->
-  <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
-    <div class="modal-card modal-chat-custom">
-      <div class="modal-header-row"
-        style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); background: #121826;">
-        <h3 style="margin: 0; font-size: 15px; color: #38BDF8; font-weight: 700;">💬 Mensagens da Viagem</h3>
-        <button type="button" id="btnFecharChat" class="btn-icon-close">✕</button>
-      </div>
-      <div id="chatAreaMensagens" class="chat-area-messages">
-        <div style="text-align: center; color: #64748B; font-size: 11px;">O chat foi iniciado. Evite partilhar dados
-          pessoais.</div>
-      </div>
-      <div class="chat-input-row">
-        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." />
-        <button type="button" id="btnEnviarMsgChat">Enviar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- CONTROLES ESSENCIAIS DO MENU LATERAL E SEGURANÇA -->
+  <!-- CONTROLES ESSENCIAIS DO MENU LATERAL -->
   <script type="module">
     import { API_URL } from './js/config.js';
     
-    const modalSeg = document.getElementById('modalSeguranca');
-    const btnMenuSeg = document.getElementById('menuItemSeguranca');
-    const btnFecharSeg = document.getElementById('btnFecharSeguranca');
-    const infoContato = document.getElementById('infoContatoSeguranca');
-    const btnZap = document.getElementById('btnCompartilharRotaZap');
-
-    function abrirModalSeguranca() {
-      const nomeEmergencia = localStorage.getItem('huby_emergencia_nome') || 'Não informado';
-      const telEmergencia = localStorage.getItem('huby_emergencia_tel') || '';
-      if (infoContato) {
-        infoContato.innerHTML = telEmergencia
-          ? `<strong>${nomeEmergencia}</strong><br><span style="font-size: 13px; color: #10B981;">${telEmergencia}</span>`
-          : 'Nenhum contato registrado. Atualize seu cadastro.';
-      }
-      if (modalSeg) modalSeg.style.display = 'flex';
-    }
-
-    btnMenuSeg?.addEventListener('click', (e) => {
-      e.preventDefault();
-      document.getElementById('menuBackdrop')?.click();
-      abrirModalSeguranca();
-    });
-
-    btnFecharSeg?.addEventListener('click', () => { if (modalSeg) modalSeg.style.display = 'none'; });
-
-    btnZap?.addEventListener('click', () => {
-      const tel = (localStorage.getItem('huby_emergencia_tel') || '').replace(/\D/g, '');
-      const corridaAtivaId = localStorage.getItem('huby_pedido_ativo_id') || localStorage.getItem('huby_ultima_corrida_id') || '';
-
-      const linkRastreio = corridaAtivaId
-        ? `https://hubymovi-01.github.io/HUBy/viagem.html?id=${corridaAtivaId}`
-        : 'https://hubymovi-01.github.io/HUBy/';
-
-      const msg = encodeURIComponent(`Olá! Estou em viagem pelo app HUBy. Acompanhe meu trajeto em tempo real: ${linkRastreio}`);
-      const link = tel ? `https://wa.me/55${tel}?text=${msg}` : `https://wa.me/?text=${msg}`;
-      window.open(link, '_blank');
-    });
-
     function checarAdminInstantaneo() {
       const token = localStorage.getItem('huby_token');
       const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
       const btnAdmin = document.getElementById('menuItemAdmin');
 
       let ehAdmin = role === 'admin' || role === 'administrador';
-
       if (!ehAdmin && token && token.includes('.')) {
         try {
           const payload = JSON.parse(atob(token.split('.')[1]));
@@ -640,21 +475,11 @@
           }
         } catch (e) { }
       }
-
-      if (btnAdmin && token && ehAdmin) {
-        btnAdmin.style.display = 'flex';
-      }
+      if (btnAdmin && token && ehAdmin) btnAdmin.style.display = 'flex';
     }
 
-    checarAdminInstantaneo();
-    document.getElementById('btnAbrirMenu')?.addEventListener('click', checarAdminInstantaneo);
-
     document.getElementById('btnAcaoConta')?.addEventListener('click', () => {
-      localStorage.removeItem('huby_token');
-      localStorage.removeItem('huby_user_role');
-      localStorage.removeItem('huby_user_name');
-      localStorage.removeItem('huby_user_id');
-      localStorage.removeItem('huby_pedido_ativo_id');
+      localStorage.clear();
       window.location.replace('./login.html');
     });
 
@@ -663,19 +488,12 @@
       const fotoLocal = localStorage.getItem('huby_user_foto');
       const roleLocal = String(localStorage.getItem('huby_user_role') || '').toLowerCase();
       const drawerBox = document.getElementById('drawerPerfilBox');
-
-      const badgeTexto = (roleLocal === 'admin' || roleLocal === 'administrador')
-        ? 'Administrador Master'
-        : (roleLocal === 'motorista' ? 'Motorista Parceiro' : 'Conta verificada');
+      const badgeTexto = (roleLocal === 'admin' || roleLocal === 'administrador') ? 'Administrador Master' : (roleLocal === 'motorista' ? 'Motorista Parceiro' : 'Conta verificada');
 
       if (drawerBox) {
-        let avatarHTML = '';
-        if (fotoLocal && fotoLocal !== 'null' && fotoLocal !== 'undefined') {
-          avatarHTML = `<img src="${fotoLocal}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981; box-shadow: 0 4px 12px rgba(0,0,0,0.4);" alt="Avatar" />`;
-        } else {
-          avatarHTML = `<div style="width: 52px; height: 52px; border-radius: 50%; background: #121826; border: 2px solid #10B981; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: #10B981; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">${nomeLocal.charAt(0).toUpperCase()}</div>`;
-        }
-
+        let avatarHTML = (fotoLocal && fotoLocal !== 'null' && fotoLocal !== 'undefined')
+          ? `<img src="${fotoLocal}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981;" />`
+          : `<div style="width: 52px; height: 52px; border-radius: 50%; background: #121826; border: 2px solid #10B981; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: #10B981;">${nomeLocal.charAt(0).toUpperCase()}</div>`;
         drawerBox.innerHTML = `
           <div style="display: flex; align-items: center; gap: 14px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); background: linear-gradient(180deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%);">
             ${avatarHTML}
@@ -686,51 +504,25 @@
           </div>
         `;
       }
-
-      const casaSalva = localStorage.getItem('huby_endereco_casa');
-      const trabSalvo = localStorage.getItem('huby_endereco_trabalho');
-      if (casaSalva) {
-        const el = document.getElementById('txtMenuCasaDesc');
-        if (el) el.textContent = casaSalva;
-      }
-      if (trabSalvo) {
-        const el = document.getElementById('txtMenuTrabalhoDesc');
-        if (el) el.textContent = trabSalvo;
-      }
     }
 
-    // Modal Indique e Ganhe
+    // Indique e Ganhe
     document.getElementById('menuItemIndique')?.addEventListener('click', async (e) => {
       e.preventDefault();
       document.getElementById('menuBackdrop')?.click();
       document.getElementById('modalIndiqueGanhe').style.display = 'flex';
-      
       const token = localStorage.getItem('huby_token');
       if (token) {
         try {
           const res = await fetch(`${API_URL}/api/indicacoes/meu-codigo`, { headers: { Authorization: `Bearer ${token}` } });
           const data = await res.json();
           document.getElementById('lblMeuCodigoIndicacao').textContent = data.codigo || 'HUBY-VIP';
-          document.getElementById('lblResumoIndicacoes').textContent = `${(data.indicados || []).length} amigo(s) indicado(s) • Total ganho: R$ ${Number(data.totalGanho || 0).toFixed(2).replace('.', ',')}`;
         } catch (e) {}
       }
     });
 
     document.getElementById('btnFecharIndique')?.addEventListener('click', () => {
       document.getElementById('modalIndiqueGanhe').style.display = 'none';
-    });
-
-    document.getElementById('btnCopiarCodigoInd')?.addEventListener('click', async () => {
-      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || '';
-      await navigator.clipboard.writeText(cod);
-      document.getElementById('btnCopiarCodigoInd').textContent = '✅ Copiado!';
-      setTimeout(() => { document.getElementById('btnCopiarCodigoInd').textContent = '📋 Copiar'; }, 2000);
-    });
-
-    document.getElementById('btnCompartilharCodigoZap')?.addEventListener('click', () => {
-      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || '';
-      const msg = encodeURIComponent(`🚘 Baixe ou acesse o *HUBy* e ganhe *R$ 5,00 de desconto* na sua 1ª corrida usando meu código de convite: *${cod}*\n\nAcesse: https://hubymovi-01.github.io/HUBy/cadastro.html`);
-      window.open(`https://wa.me/?text=${msg}`, '_blank');
     });
 
     document.addEventListener('DOMContentLoaded', () => {
@@ -745,10 +537,10 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.40.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.50.0"></script>
   <!-- INTELIGÊNCIA ARTIFICIAL E COMANDOS DE VOZ DO PASSAGEIRO -->
   <script type="module" src="./js/ia/cliente-ia.js?v=2.0.0"></script>
-  <!-- RECIBO COMPARTILHÁVEL E PUSH -->
+  <!-- RECIBO E PUSH -->
   <script type="module" src="./js/recibo-cliente.js?v=1.0.0"></script>
   <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
 </body>

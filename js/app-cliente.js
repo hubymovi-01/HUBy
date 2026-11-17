@@ -508,31 +508,17 @@ function configurarLocaisFavoritosMenu() {
 }
 
 // ----------------------------------------------------------------------
-// SISTEMA DE AGENDAMENTO (NATIVO APP)
+// SISTEMA DE AGENDAMENTO E OBSERVAÇÃO DECORADA
 // ----------------------------------------------------------------------
 function configurarSistemaAgendamento() {
   const btnAgendar = document.getElementById('btnAgendarViagem');
+  const btnLimparAgendamento = document.getElementById('btnLimparAgendamento');
   const badgeAgendamento = document.getElementById('txtAgendamentoBadge');
   
   if (!btnAgendar) return;
 
   btnAgendar.addEventListener('click', () => {
-    if (estadoRecursos.dataAgendada) {
-      if (window.confirm('Você já tem uma viagem agendada. Deseja cancelar o agendamento e solicitar para agora?')) {
-        estadoRecursos.dataAgendada = null;
-        if (badgeAgendamento) {
-          badgeAgendamento.style.display = 'none';
-          badgeAgendamento.innerHTML = '';
-        }
-        btnAgendar.style.background = '';
-        btnAgendar.style.color = '';
-        notificar('Agendamento cancelado. Viagem mudou para imediata.', 'info');
-      }
-      return;
-    }
-
     const dataInputStr = prompt("Para quando deseja agendar? (Digite no formato AAAA-MM-DD HH:MM)\n\nEx: 2026-12-25 14:30\n(O mínimo é 30 minutos de antecedência)");
-    
     if (!dataInputStr) return; // Cancelou
 
     const datePattern = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
@@ -554,14 +540,29 @@ function configurarSistemaAgendamento() {
     estadoRecursos.dataAgendada = dtAgendada.toISOString();
     btnAgendar.style.background = 'rgba(245, 158, 11, 0.2)';
     btnAgendar.style.color = '#F59E0B';
+    btnAgendar.style.borderColor = '#F59E0B';
 
     if (badgeAgendamento) {
       badgeAgendamento.style.display = 'block';
       badgeAgendamento.innerHTML = `⏰ Agendada para: <strong>${dtAgendada.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short'})}</strong>`;
     }
-
-    notificar('A viagem foi configurada para ser agendada! Confirme no botão principal.', 'sucesso');
+    
+    if (btnLimparAgendamento) btnLimparAgendamento.style.display = 'flex';
+    notificar('Viagem agendada! Confirme no botão principal.', 'sucesso');
   });
+
+  if (btnLimparAgendamento) {
+    btnLimparAgendamento.addEventListener('click', (e) => {
+      e.stopPropagation();
+      estadoRecursos.dataAgendada = null;
+      btnAgendar.style.background = '';
+      btnAgendar.style.color = '';
+      btnAgendar.style.borderColor = '';
+      if (badgeAgendamento) badgeAgendamento.style.display = 'none';
+      btnLimparAgendamento.style.display = 'none';
+      notificar('Agendamento removido.', 'info');
+    });
+  }
 }
 
 // ----------------------------------------------------------------------
@@ -577,13 +578,11 @@ async function iniciarSubmissaoPedidoFinal() {
     return;
   }
 
-  // Coleta as Observações
   const textNota = estadoRecursos?.notaMotorista || '';
   if (textNota && !estadoCliente.paradasIntermediarias) {
     estadoCliente.paradasIntermediarias = [];
   }
   if (textNota) {
-    // Injecta a observação como uma 'parada fake' para o backend guardar no histórico facilmente
     const indexNota = estadoCliente.paradasIntermediarias.findIndex(p => p.nota);
     if (indexNota > -1) {
       estadoCliente.paradasIntermediarias[indexNota].nota = textNota;
@@ -592,28 +591,24 @@ async function iniciarSubmissaoPedidoFinal() {
     }
   }
 
-  // Coleta Agendamento
   const dataAgendada = estadoRecursos?.dataAgendada || null;
   if (dataAgendada) {
     estadoCliente.rotaAtual.agendadoPara = dataAgendada;
   }
 
-  // Coleta Forma de Pagamento
   const metodoLocal = localStorage.getItem('huby_metodo_pgto_padrao') || 'dinheiro';
   estadoCliente.rotaAtual.forma_pagamento = metodoLocal;
   estadoCliente.rotaAtual.metodo_pgto = metodoLocal;
 
-  // Cupom Ativo
   if (estadoRecursos?.cupomAtivo) {
     estadoCliente.rotaAtual.cupomCodigo = estadoRecursos.cupomAtivo.codigo;
   }
 
-  // Ajusta o SubTipo (Carro, Moto ou Entrega)
   estadoCliente.rotaAtual.subTipoId = estadoCliente.categoriaSelecionada || 'carro';
   estadoCliente.rotaAtual.subTipoLabel = `HUBy ${String(estadoCliente.categoriaSelecionada).charAt(0).toUpperCase() + String(estadoCliente.categoriaSelecionada).slice(1)}`;
 
   sincronizarPrecosDaRotaAtual();
-  await submeterPedido(); // Vai disparar para API
+  await submeterPedido(); 
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -864,7 +859,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // ACIONA A FUNÇÃO NOVA QUE PEGA PAGAMENTO, NOTA E AGENDAMENTO
   document.getElementById('btnPedirHuby')?.addEventListener('click', iniciarSubmissaoPedidoFinal);
 
   configurarModalAvaliacao();

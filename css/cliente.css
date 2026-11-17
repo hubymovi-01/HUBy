@@ -586,3 +586,82 @@ body.client-viewport {
   font-size: 12px;
   cursor: pointer;
 }
+/* ==========================================================================
+   HUBY 2.0 - AÇÕES RÁPIDAS DA DOCA (PAGAMENTO, CUPOM, OBS, AGENDAR)
+   ========================================================================== */
+.pro-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 14px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.pro-actions::-webkit-scrollbar {
+  display: none; /* Esconde a barra de scroll no telemóvel */
+}
+
+.modern-pill {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 10px 6px;
+  border-radius: 12px;
+  color: #FFF;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.modern-pill:active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.modern-pill .pill-icon {
+  font-size: 14px;
+}
+
+.btn-clear-badge {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #EF4444;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: -6px;
+  top: -6px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  z-index: 5;
+}
+
+.btn-clear-badge:active {
+  transform: scale(0.9);
+}
+
+.badge-nota-motorista {
+  background: rgba(56, 189, 248, 0.15);
+  border-left: 2.5px solid #38BDF8;
+  padding: 8px 10px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: #E0F2FE;
+  border-radius: 0 8px 8px 0;
+}
