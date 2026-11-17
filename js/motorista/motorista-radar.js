@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar de Chamadas + Cerca Virtual + Selfie + Tempo Limite
+// js/motorista/motorista-radar.js - Radar de Chamadas + Cerca Virtual + Selfie + UI Premium
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -298,7 +298,9 @@ export function extrairDadosDoBotao(btn) {
     dist: km,
     dur,
     coordsOrig,
-    coordsDest
+    coordsDest,
+    forma_pagamento: btn.getAttribute('data-pagamento') || 'dinheiro',
+    observacoes: btn.getAttribute('data-obs') || ''
   };
 }
 
@@ -418,7 +420,7 @@ export function iniciarRadarChamadas() {
     if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
       buscarChamadasPendentes(false);
     }
-  }, 4000); // Polling de 4 em 4 segundos
+  }, 4000);
 }
 
 export function pararRadarChamadas() {
@@ -479,27 +481,22 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     const pedidos = await resp.json();
     const agora = Date.now();
 
-    // Inicializa rastreador de tempo se não existir
     if (!estado.temposPedidosTela) estado.temposPedidosTela = {};
 
     const chamadasFiltradas = Array.isArray(pedidos)
       ? pedidos.filter((p) => {
-          // Já ignorou antes?
           if (estado.pedidosIgnorados?.has(String(p.id))) return false;
           
-          // Compatibilidade de rota para casa
           if (typeof window.pedidoCompativelComRotaCasa === 'function') {
             if (!window.pedidoCompativelComRotaCasa(p)) return false;
           }
 
-          // Controle de Expiração de Tempo (Timeout da Chamada na Tela)
           if (!estado.temposPedidosTela[p.id]) {
-            estado.temposPedidosTela[p.id] = agora; // Regista o momento em que viu pela 1ª vez
+            estado.temposPedidosTela[p.id] = agora;
           }
           
           const tempoQuePassou = agora - estado.temposPedidosTela[p.id];
           if (tempoQuePassou >= TEMPO_EXPIRACAO_TELA_MS) {
-            // Estourou os 30 segundos! Auto-ignora e tira da tela
             if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
             estado.pedidosIgnorados.add(String(p.id));
             return false;
@@ -562,62 +559,91 @@ function renderizarRadar(pedidos) {
       valorBruto = calcularPreco(catPedido, distKm).valorTotal;
     }
     
-    const valorFormatado = valorBruto.toFixed(2).replace('.', ',');
-    const repasse = (valorBruto * fatorMotorista).toFixed(2).replace('.', ',');
+    const repasseBruto = valorBruto * fatorMotorista;
+    const repasseFormat = repasseBruto.toFixed(2).replace('.', ',');
+    const valorDisplay = `R$ ${repasseFormat}`;
     
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
     const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
 
-    // Cálculo da Barra de Progresso Visual
+    // Dados que não apareciam e agora vão aparecer:
+    const pgto = p.forma_pagamento || p.metodo_pgto || 'dinheiro';
+    let pgtoIcon = '💵 Dinheiro';
+    if (pgto.includes('cartao') || pgto.includes('maquininha')) pgtoIcon = '💳 Cartão (Máquina)';
+    if (pgto.includes('pix')) pgtoIcon = '📱 Pix App';
+
+    // Agendamento
+    const agendamento = p.agendado_para 
+      ? `<span style="display: block; color: #F59E0B; font-weight: 700; margin-top: 4px;">⏰ Agendada para: ${new Date(p.agendado_para).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>` 
+      : '';
+
+    // Observações
+    let obsText = '';
+    if (p.paradas && Array.isArray(p.paradas) && p.paradas.length > 0) {
+      let extraTrocoOuObs = p.paradas.find(item => item.nota);
+      if (extraTrocoOuObs) {
+         obsText = `<span style="display: block; background: rgba(245, 158, 11, 0.1); border-left: 2px solid #F59E0B; padding: 6px; margin-top: 6px; font-size: 11px; color: #FCD34D;">📝 Obs: ${extraTrocoOuObs.nota}</span>`;
+      }
+    }
+
+    // Calcula tempo restante da barra
     const inicio = estado.temposPedidosTela[p.id] || agora;
     const tempoDecorrido = agora - inicio;
     const percentualRestante = Math.max(0, 100 - ((tempoDecorrido / TEMPO_EXPIRACAO_TELA_MS) * 100));
     
-    let corBarra = '#10B981'; // Verde
-    if (percentualRestante <= 50) corBarra = '#F59E0B'; // Amarelo no meio do tempo
-    if (percentualRestante <= 25) corBarra = '#EF4444'; // Vermelho no finalzinho
+    let corBarra = '#059669'; // Verde mais fechado (Base)
+    if (percentualRestante <= 50) corBarra = '#D97706'; // Laranja
+    if (percentualRestante <= 20) corBarra = '#DC2626'; // Vermelho
 
     return `
-      <div class="order-card" style="position: relative; border: 2px solid #10B981; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px; overflow: hidden;">
+      <div class="order-card" style="position: relative; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
         
-        <!-- BARRA DE TEMPO LIMITE DE ACEITE -->
-        <div style="position: absolute; top: 0; left: 0; right: 0; height: 4px; background: rgba(255,255,255,0.05);">
-          <div style="height: 100%; background: ${corBarra}; width: ${percentualRestante}%; transition: width 4s linear, background-color 1s ease;"></div>
-        </div>
-
-        <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Dispensar corrida"
-          style="position: absolute; top: 12px; right: 10px; background: rgba(255,255,255,0.08); border: 1px solid var(--border-dark); color: var(--text-sec); width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; cursor: pointer;">
+        <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Recusar"
+          style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.06); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; cursor: pointer; z-index: 10;">
           ✕
         </button>
 
-        <div class="order-card-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-top: 6px; padding-right: 30px;">
-          <span class="order-badge" style="background: rgba(16,185,129,0.2); color: #10B981; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px;">
-            ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
-          </span>
-          <div style="text-align: right;">
-            <span class="order-price" style="font-size: 18px; font-weight: 900; color: #10B981; display: block;">
-              R$ ${valorFormatado}
+        <!-- Cabeçalho (Badge, Km e Valor) -->
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; padding-right: 35px;">
+          <div>
+            <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-bottom: 4px;">
+              ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
             </span>
-            <small style="font-size: 11px; color: #94A3B8; font-weight: 700;">Seu ganho: R$ ${repasse}</small>
+            <div style="font-size: 12px; color: #94A3B8; font-weight: 600;">
+              📏 ${distKm.toFixed(1)} km • ⏱️ ${p.duracao_min || 5} min
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <span style="font-size: 20px; font-weight: 900; color: #10B981; display: block; letter-spacing: -0.5px;">
+              ${valorDisplay}
+            </span>
+            <small style="font-size: 10px; color: #64748B; text-transform: uppercase;">Ganhos (Líquido)</small>
           </div>
         </div>
 
-        <div class="order-route" style="font-size: 13px; line-height: 1.5; color: #E2E8F0;">
-          <span style="display: block;"><strong>Partida:</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
-          <span style="display: block;"><strong>Destino:</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
-          <small style="color: #38BDF8; font-weight: 700; display: block; margin-top: 4px;">
-            📏 ${distKm.toFixed(1)} km • ⏱️ ${p.duracao_min || 5} min
-          </small>
+        <!-- Rota -->
+        <div style="font-size: 13px; line-height: 1.4; color: #E2E8F0; padding-left: 10px; border-left: 2px solid rgba(255,255,255,0.1); margin-bottom: 10px;">
+          <span style="display: block; margin-bottom: 6px;"><strong style="color: #10B981;">A</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
+          <span style="display: block;"><strong style="color: #EF4444;">B</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
         </div>
+
+        <!-- Informações do Pedido -->
+        <div style="background: rgba(255, 255, 255, 0.03); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 11.5px; color: #CBD5E1;">
+          <span style="display: block; margin-bottom: 2px;"><strong>Pagamento:</strong> ${pgtoIcon}</span>
+          ${agendamento}
+          ${obsText}
+        </div>
+
+        <!-- BOTÃO DE ACEITE PREMIUM COM BARRA DE TEMPO INTERNA -->
         <button type="button" 
                 class="btn-accept-order" 
-                style="width: 100%; margin-top: 10px; background: #10B981; color: #022C22; border: none; border-radius: 10px; padding: 12px; font-weight: 900; font-size: 13px; cursor: pointer;"
+                style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"
                 data-id="${p.id}" 
                 data-cat="${catPedido}"
                 data-preco="${valorBruto}"
-                data-repasse="${repasse}"
+                data-repasse="${repasseFormat}"
                 data-origem="${p.origem_endereco || 'Local do passageiro'}"
                 data-destino="${p.destino_endereco}"
                 data-dist="${distKm}"
@@ -625,8 +651,15 @@ function renderizarRadar(pedidos) {
                 data-lat-orig="${latOrig}" 
                 data-lng-orig="${lngOrig}" 
                 data-lat-dest="${latDest}" 
-                data-lng-dest="${lngDest}">
-          Visualizar Rota no Mapa
+                data-lng-dest="${lngDest}"
+                data-pagamento="${pgto}"
+                data-obs="${obsText ? 'Sim' : 'Não'}">
+          
+          <!-- Fundo da barra de progresso -->
+          <div style="position: absolute; top: 0; left: 0; bottom: 0; width: ${percentualRestante}%; background: ${corBarra}; z-index: 1; transition: width 4s linear, background-color 1s ease;"></div>
+          
+          <!-- Texto do Botão -->
+          <span style="position: relative; z-index: 2; text-shadow: 0 1px 2px rgba(255,255,255,0.3);">🚀 Aceitar Corrida</span>
         </button>
       </div>
     `;
