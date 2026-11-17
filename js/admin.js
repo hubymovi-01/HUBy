@@ -113,7 +113,6 @@ document.addEventListener('DOMContentLoaded', () => {
     notificarAdmin('Dados sincronizados com o servidor!', 'sucesso');
   });
   document.getElementById('btnBaixarCSV')?.addEventListener('click', () => exportarRelatorioCSV(token));
-  document.getElementById('btnExportarFinanceiroContabilidade')?.addEventListener('click', () => exportarFinanceiroCSV(token));
 
   try {
     inicializarRadarMaster(token);

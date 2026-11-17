@@ -1028,15 +1028,13 @@ export default function adminRoutes(io) {
     }
   });
   // =========================================================================
-  // 11. RELATÓRIO FINANCEIRO PARA CONTABILIDADE (CSV)
+  // 10. RELATÓRIO FINANCEIRO (CSV) - Botão Exportar CSV
   // =========================================================================
-  router.get('/relatorios/financeiro.csv', autenticarCsv, verificarAdmin, async (req, res) => {
+  router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
-      // Puxa a taxa atual da plataforma para calcular a retenção
       const tarifas = await lerTarifasDoBanco();
       const taxaPct = Number(tarifas.taxa_plataforma ?? 15) / 100;
 
-      // Consolida saques, corridas e dados do motorista numa única super query
       const registros = await sql`
         WITH saques AS (
           SELECT motorista_id, COALESCE(SUM(valor), 0) AS total_saques
@@ -1065,8 +1063,8 @@ export default function adminRoutes(io) {
         ORDER BY m.nome ASC;
       `;
 
-      // Cabeçalho com separador Ponto e Vírgula (Padrão Excel PT-BR)
-      let csv = 'ID_Motorista;Nome;CPF;Chave_PIX;Data_Cadastro;Total_Viagens;Faturamento_Bruto;Entradas_Digitais_Pix;Taxa_Plataforma_Retida;Saques_Pagos;Saldo_Atual_Carteira\n';
+      // O \ufeff é o BOM (Byte Order Mark), essencial para Excel/WPS reconhecer UTF-8 e ;
+      let csv = '\ufeffID_Motorista;Nome;CPF;Chave_PIX;Data_Cadastro;Total_Viagens;Faturamento_Bruto;Entradas_Digitais_Pix;Taxa_Plataforma_Retida;Saques_Pagos;Saldo_Atual_Carteira\n';
       
       const formatarMoedaBR = (num) => Number(num).toFixed(2).replace('.', ',');
       const formatarData = (data) => new Date(data).toLocaleDateString('pt-BR');
@@ -1078,15 +1076,13 @@ export default function adminRoutes(io) {
         csv += `"${r.id}";"${r.nome || ''}";"${r.cpf || ''}";"${r.chave_pix_padrao || ''}";"${formatarData(r.criado_em)}";"${r.total_viagens}";"${formatarMoedaBR(fatBruto)}";"${formatarMoedaBR(r.entradas_app)}";"${formatarMoedaBR(taxaPlataforma)}";"${formatarMoedaBR(r.saques_realizados)}";"${formatarMoedaBR(r.saldo_carteira)}"\n`;
       });
 
-      // Força o download do arquivo no navegador
       res.header('Content-Type', 'text/csv; charset=utf-8');
-      res.attachment(`huby-relatorio-financeiro-${Date.now()}.csv`);
+      res.attachment(`huby-relatorio-contabil-${Date.now()}.csv`);
       res.send(csv);
     } catch (err) {
       console.error('Erro ao gerar CSV financeiro:', err);
-      res.status(500).json({ erro: 'Falha ao gerar relatório financeiro para contabilidade.' });
+      res.status(500).json({ erro: 'Falha ao gerar relatório.' });
     }
   });
-
   return router;
 }
