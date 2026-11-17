@@ -165,6 +165,13 @@
         <span class="d-icon">🛡️</span>
         <div class="d-info"><strong>Contato de Segurança</strong><small>Compartilhar trajeto e emergência</small></div>
       </a>
+      
+      <!-- MENU DE INDICAÇÃO (Centralizado Aqui) -->
+      <a href="#" id="menuItemIndique" class="drawer-item">
+        <span class="d-icon">🎁</span>
+        <div class="d-info"><strong>Indique e Ganhe</strong><small>Ganhe R$ 5,00 por amigo indicado</small></div>
+      </a>
+
       <a href="./motorista.html" class="drawer-item highlight-driver">
         <span class="d-icon">🚘</span>
         <div class="d-info"><strong>Painel do Motorista</strong><small>Aceder ao modo parceiro</small></div>
@@ -533,6 +540,28 @@
     </div>
   </div>
 
+  <!-- MODAL INDIQUE E GANHE -->
+  <div id="modalIndiqueGanhe" class="modal-backdrop" style="display: none; z-index: 10020;">
+    <div class="modal-card">
+      <div class="modal-header-row">
+        <h3>🎁 Indique e Ganhe</h3>
+        <button type="button" id="btnFecharIndique" class="btn-icon-close">✕</button>
+      </div>
+      <p style="font-size: 13px; color: #94A3B8; margin: 8px 0 14px;">
+        Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ 5,00 de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ 5,00 de bônus</strong> assim que ele concluir a corrida.
+      </p>
+      <div style="background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px;">
+        <small style="color: #94A3B8; font-size: 10px; text-transform: uppercase; font-weight: 800;">Seu Código Exclusivo</small>
+        <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px; margin: 4px 0;">HUBY-...</div>
+        <small id="lblResumoIndicacoes" style="color: #CBD5E1; font-size: 11px;">Carregando seu extrato...</small>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" id="btnCopiarCodigoInd" class="btn-secondary-modal" style="flex: 1;">📋 Copiar</button>
+        <button type="button" id="btnCompartilharCodigoZap" class="btn-primary-modal" style="flex: 1.5;">📲 Enviar no WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CHAT INTERNO -->
   <div id="modalChatCorrida" class="modal-backdrop" style="display: none; z-index: 10005;">
     <div class="modal-card modal-chat-custom">
@@ -554,6 +583,8 @@
 
   <!-- CONTROLES ESSENCIAIS DO MENU LATERAL E SEGURANÇA -->
   <script type="module">
+    import { API_URL } from './js/config.js';
+    
     const modalSeg = document.getElementById('modalSeguranca');
     const btnMenuSeg = document.getElementById('menuItemSeguranca');
     const btnFecharSeg = document.getElementById('btnFecharSeguranca');
@@ -668,10 +699,45 @@
       }
     }
 
+    // Modal Indique e Ganhe
+    document.getElementById('menuItemIndique')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      document.getElementById('menuBackdrop')?.click();
+      document.getElementById('modalIndiqueGanhe').style.display = 'flex';
+      
+      const token = localStorage.getItem('huby_token');
+      if (token) {
+        try {
+          const res = await fetch(`${API_URL}/api/indicacoes/meu-codigo`, { headers: { Authorization: `Bearer ${token}` } });
+          const data = await res.json();
+          document.getElementById('lblMeuCodigoIndicacao').textContent = data.codigo || 'HUBY-VIP';
+          document.getElementById('lblResumoIndicacoes').textContent = `${(data.indicados || []).length} amigo(s) indicado(s) • Total ganho: R$ ${Number(data.totalGanho || 0).toFixed(2).replace('.', ',')}`;
+        } catch (e) {}
+      }
+    });
+
+    document.getElementById('btnFecharIndique')?.addEventListener('click', () => {
+      document.getElementById('modalIndiqueGanhe').style.display = 'none';
+    });
+
+    document.getElementById('btnCopiarCodigoInd')?.addEventListener('click', async () => {
+      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || '';
+      await navigator.clipboard.writeText(cod);
+      document.getElementById('btnCopiarCodigoInd').textContent = '✅ Copiado!';
+      setTimeout(() => { document.getElementById('btnCopiarCodigoInd').textContent = '📋 Copiar'; }, 2000);
+    });
+
+    document.getElementById('btnCompartilharCodigoZap')?.addEventListener('click', () => {
+      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || '';
+      const msg = encodeURIComponent(`🚘 Baixe ou acesse o *HUBy* e ganhe *R$ 5,00 de desconto* na sua 1ª corrida usando meu código de convite: *${cod}*\n\nAcesse: https://hubymovi-01.github.io/HUBy/cadastro.html`);
+      window.open(`https://wa.me/?text=${msg}`, '_blank');
+    });
+
     document.addEventListener('DOMContentLoaded', () => {
       checarAdminInstantaneo();
       atualizarMenuLateral();
     });
+    
     document.getElementById('btnAbrirMenu')?.addEventListener('click', () => {
       checarAdminInstantaneo();
       atualizarMenuLateral();
@@ -679,12 +745,11 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.30.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.40.0"></script>
   <!-- INTELIGÊNCIA ARTIFICIAL E COMANDOS DE VOZ DO PASSAGEIRO -->
   <script type="module" src="./js/ia/cliente-ia.js?v=2.0.0"></script>
-  <!-- RECIBO COMPARTILHÁVEL, INDIQUE E GANHE, AGENDAMENTO E PUSH -->
+  <!-- RECIBO COMPARTILHÁVEL E PUSH -->
   <script type="module" src="./js/recibo-cliente.js?v=1.0.0"></script>
-  <script type="module" src="./js/extras-clientes.js?v=1.0.0"></script>
   <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
 </body>
 
