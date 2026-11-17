@@ -369,7 +369,7 @@ export default function pedidosRouter(io) {
   });
 
  // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL SEM FRAGMENTO SQL)
+  // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL E FILTRO DE CATEGORIA)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
@@ -389,9 +389,11 @@ export default function pedidosRouter(io) {
         }
       }
 
+      // O frontend agora envia a categoria do motorista na requisição
       const { categoria, lat, lng } = req.query;
       const motoristaLat = Number(lat);
       const motoristaLng = Number(lng);
+      
       const temCoordsValidas =
         Number.isFinite(motoristaLat) &&
         Number.isFinite(motoristaLng) &&
@@ -399,84 +401,77 @@ export default function pedidosRouter(io) {
         Math.abs(motoristaLng) <= 180 &&
         !(motoristaLat === 0 && motoristaLng === 0);
 
+      // Limpa e normaliza a categoria do motorista (carro, moto, entrega)
+      let catMotorista = String(categoria || 'carro').toLowerCase().trim();
+      if (catMotorista.includes('flash') || catMotorista.includes('frete')) catMotorista = 'entrega';
+      
       let pedidos = [];
 
-      if (categoria === 'moto') {
+      // A cláusula SQL de proximidade
+      const filtroDistancia = sql`
+        AND origem_lat IS NOT NULL
+        AND origem_lng IS NOT NULL
+        AND (
+          6371.0 * acos(
+            LEAST(1.0, GREATEST(-1.0,
+              cos(radians(${motoristaLat}::double precision)) * cos(radians(origem_lat::double precision)) *
+              cos(radians(origem_lng::double precision) - radians(${motoristaLng}::double precision)) +
+              sin(radians(${motoristaLat}::double precision)) * sin(radians(origem_lat::double precision))
+            ))
+          )
+        ) <= ${RAIO_MAXIMO_KM}
+      `;
+
+      // Aplica o filtro RÍGIDO de categoria
+      if (catMotorista === 'moto') {
         pedidos = temCoordsValidas
           ? await sql`
               SELECT * FROM pedidos
               WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND tipo IN ('moto', 'flash_moto')
-                AND origem_lat IS NOT NULL
-                AND origem_lng IS NOT NULL
-                AND (
-                  6371.0 * acos(
-                    LEAST(1.0, GREATEST(-1.0,
-                      cos(radians(${motoristaLat}::double precision)) * cos(radians(origem_lat::double precision)) *
-                      cos(radians(origem_lng::double precision) - radians(${motoristaLng}::double precision)) +
-                      sin(radians(${motoristaLat}::double precision)) * sin(radians(origem_lat::double precision))
-                    ))
-                  )
-                ) <= ${RAIO_MAXIMO_KM}
+                AND LOWER(tipo) IN ('moto', 'hubymoto', 'huby moto')
+                ${filtroDistancia}
               ORDER BY criado_em DESC
               LIMIT 20;
             `
           : await sql`
               SELECT * FROM pedidos
               WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND tipo IN ('moto', 'flash_moto')
+                AND LOWER(tipo) IN ('moto', 'hubymoto', 'huby moto')
               ORDER BY criado_em DESC
               LIMIT 20;
             `;
-      } else if (categoria === 'cargo_pickup' || categoria === 'frete' || categoria === 'entrega') {
+      } else if (catMotorista === 'entrega') {
         pedidos = temCoordsValidas
           ? await sql`
               SELECT * FROM pedidos
               WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND tipo IN ('cargo_pickup', 'frete', 'entrega')
-                AND origem_lat IS NOT NULL
-                AND origem_lng IS NOT NULL
-                AND (
-                  6371.0 * acos(
-                    LEAST(1.0, GREATEST(-1.0,
-                      cos(radians(${motoristaLat}::double precision)) * cos(radians(origem_lat::double precision)) *
-                      cos(radians(origem_lng::double precision) - radians(${motoristaLng}::double precision)) +
-                      sin(radians(${motoristaLat}::double precision)) * sin(radians(origem_lat::double precision))
-                    ))
-                  )
-                ) <= ${RAIO_MAXIMO_KM}
+                AND LOWER(tipo) IN ('cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
+                ${filtroDistancia}
               ORDER BY criado_em DESC
               LIMIT 20;
             `
           : await sql`
               SELECT * FROM pedidos
               WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND tipo IN ('cargo_pickup', 'frete', 'entrega')
+                AND LOWER(tipo) IN ('cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
               ORDER BY criado_em DESC
               LIMIT 20;
             `;
       } else {
+        // Se a categoria for Carro, ele só pega corridas de carro (ignorando moto e entrega)
         pedidos = temCoordsValidas
           ? await sql`
               SELECT * FROM pedidos
               WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND origem_lat IS NOT NULL
-                AND origem_lng IS NOT NULL
-                AND (
-                  6371.0 * acos(
-                    LEAST(1.0, GREATEST(-1.0,
-                      cos(radians(${motoristaLat}::double precision)) * cos(radians(origem_lat::double precision)) *
-                      cos(radians(origem_lng::double precision) - radians(${motoristaLng}::double precision)) +
-                      sin(radians(${motoristaLat}::double precision)) * sin(radians(origem_lat::double precision))
-                    ))
-                  )
-                ) <= ${RAIO_MAXIMO_KM}
+                AND LOWER(tipo) NOT IN ('moto', 'hubymoto', 'huby moto', 'cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
+                ${filtroDistancia}
               ORDER BY criado_em DESC
               LIMIT 20;
             `
           : await sql`
               SELECT * FROM pedidos
               WHERE status IN ('pendente', 'aguardando', 'buscando')
+                AND LOWER(tipo) NOT IN ('moto', 'hubymoto', 'huby moto', 'cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
               ORDER BY criado_em DESC
               LIMIT 20;
             `;
@@ -488,7 +483,6 @@ export default function pedidosRouter(io) {
       return res.status(500).json({ erro: 'Falha ao consultar chamadas.' });
     }
   });
-
   // =========================================================================
   // 4. HISTÓRICO
   // =========================================================================
