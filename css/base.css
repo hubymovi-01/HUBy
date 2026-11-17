@@ -352,3 +352,26 @@ input, button, select {
   20% { opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
 }
+/* Botão de Suporte na Viagem (Para o Passo 2) */
+.btn-suporte-huby {
+  width: 100%;
+  margin-top: 15px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #F87171;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.btn-suporte-huby:active {
+  transform: scale(0.98);
+  background: rgba(239, 68, 68, 0.2);
+}

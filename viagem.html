@@ -173,6 +173,11 @@
       <div>🟢 <strong>Origem:</strong> <span id="txtOrigem">Local de partida</span></div>
       <div style="margin-top: 4px;">🏁 <strong>Destino:</strong> <span id="txtDestino">Destino da rota</span></div>
     </div>
+    
+    <!-- NOVO BOTÃO DE SUPORTE NO APP DO PASSAGEIRO -->
+    <button type="button" class="btn-suporte-huby" onclick="abrirSuporteCorrida()">
+      🎧 Tive um problema nesta viagem
+    </button>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -333,6 +338,46 @@
     }
 
     document.addEventListener('DOMContentLoaded', iniciar);
+    
+    // NOVA FUNÇÃO DO SISTEMA DE SUPORTE
+    window.abrirSuporteCorrida = async () => {
+      const mensagem = prompt('Conte-nos o que aconteceu. A nossa equipa vai analisar o seu caso:');
+
+      if (!mensagem || mensagem.trim() === '') {
+        return; 
+      }
+
+      const token = localStorage.getItem('huby_token');
+      if (!token) {
+        alert('A sua sessão expirou. Faça login novamente através da tela principal.');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/api/suporte/chamado`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            pedido_id: pedidoId, 
+            assunto: 'Problema na Viagem (Durante Rastreio)',
+            mensagem: mensagem.trim()
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          alert('✅ O seu relato foi enviado para a central HUBy. A nossa equipa vai analisar e entrar em contacto!');
+        } else {
+          alert('❌ Erro: ' + (data.erro || 'Não foi possível enviar o relato.'));
+        }
+      } catch (err) {
+        alert('❌ Erro de ligação ao contactar o suporte.');
+      }
+    };
   </script>
 </body>
 </html>
