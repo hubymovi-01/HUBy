@@ -3,23 +3,18 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>HUBy Motorista • Modo Parceiro</title>
 
-  <!-- PWA Manifest & Cores -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#090D16">
   <link rel="icon" href="data:,">
 
-  <!-- Estilos Leaflet e Base -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="./css/base.css?v=6.0.0">
-
-  <!-- Estilos Modulares do Motorista -->
   <link rel="stylesheet" href="./css/motorista-layout.css?v=1.0.0">
   <link rel="stylesheet" href="./css/motorista-modais.css?v=1.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
@@ -29,74 +24,51 @@
 
 <body>
 
-  <!-- NAVEGAÇÃO SUPERIOR MINIMALISTA -->
   <header class="top-driver-nav">
     <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil">
-      <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
-        alt="Motorista" class="avatar-mini" id="topAvatarImg">
+      <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Motorista" class="avatar-mini" id="topAvatarImg">
       <div style="display: flex; flex-direction: column;">
         <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
         <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
       </div>
     </div>
-
-    <!-- BOTÃO ONLINE / OFFLINE -->
-    <button type="button" id="btnToggleStatusOnline"
-      style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 24px; padding: 10px 18px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); backdrop-filter: blur(14px);">
+    <button type="button" id="btnToggleStatusOnline" style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 24px; padding: 10px 18px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); backdrop-filter: blur(14px);">
       <span>⚪</span> <strong>Ficar Online</strong>
     </button>
   </header>
 
-  <!-- MAPA PRINCIPAL -->
   <div id="mapaMotorista"></div>
+  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;" aria-label="Abrir Chat">💬</button>
 
-  <!-- BOTÃO CHAT FLUTUANTE -->
-  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
-    aria-label="Abrir Chat">💬</button>
-
-  <!-- DOCK DE CORRIDAS E SALDO -->
   <section class="driver-dock">
     <div class="wallet-card-row">
       <div class="wallet-meta">
         <small>Saldo Disponível (85%)</small>
         <div class="val-saldo" id="saldoCarteiraValor">R$ 0,00</div>
       </div>
-      <button type="button" id="btnAbrirModalSaque" class="btn-action-pix">
-        Solicitar Saque Pix
-      </button>
+      <button type="button" id="btnAbrirModalSaque" class="btn-action-pix">Solicitar Saque Pix</button>
     </div>
 
     <div class="orders-feed" id="listaChamadasPendentes">
       <div class="dock-empty">Aguardando novas chamadas na região...</div>
     </div>
 
-    <!-- CARD RESUMO DO DIA E META DIÁRIA -->
-    <div
-      style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;">
+    <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-dark); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
         <div>
-          <small
-            style="font-size: 10px; font-weight: 800; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px;">Ganhos
-            de Hoje</small>
+          <small style="font-size: 10px; font-weight: 800; color: var(--text-sec); text-transform: uppercase; letter-spacing: 0.5px;">Ganhos de Hoje</small>
           <div style="font-size: 19px; font-weight: 900; color: #FFF;" id="lblGanhosHojeValor">R$ 0,00</div>
         </div>
         <div style="text-align: right;">
-          <button type="button" id="btnEditarMetaDiaria"
-            style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">
-            ✏️ Definir Meta
-          </button>
-          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0
-            viagens</small>
+          <button type="button" id="btnEditarMetaDiaria" style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">✏️ Definir Meta</button>
+          <small style="display: block; font-size: 11px; color: var(--text-sec);" id="lblCorridasHojeQtd">0 viagens</small>
         </div>
       </div>
 
-      <div
-        style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 6px;">
-        <div id="barraProgressoMeta" style="background: #38BDF8; width: 0%; height: 100%; transition: width 0.4s ease;">
-        </div>
+      <div style="background: rgba(255, 255, 255, 0.08); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 6px;">
+        <div id="barraProgressoMeta" style="background: #38BDF8; width: 0%; height: 100%; transition: width 0.4s ease;"></div>
       </div>
-      <div
-        style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-sec); margin-top: 4px;">
+      <div style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-sec); margin-top: 4px;">
         <span id="lblMetaDiariaTxt">Meta: R$ 200,00 (0%)</span>
         <span style="color: #10B981; font-weight: 700;">85% repasse líquido</span>
       </div>
@@ -110,8 +82,7 @@
     <div class="drawer-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
       <button type="button" class="btn-close-drawer" id="btnFecharDrawerPerfil">✕</button>
       <div class="drawer-profile-info">
-        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
-          alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
+        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 17px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
           <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;" id="drawerCategoriaBadge">HUBY CARRO</span>
@@ -121,145 +92,84 @@
           </div>
         </div>
       </div>
-      <button type="button" id="btnAbrirModalEdicaoPerfil"
-        style="margin-top: 14px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 9px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; transition: background 0.2s;">
-        ✏️ Editar Dados e Foto
-      </button>
+      <button type="button" id="btnAbrirModalEdicaoPerfil" style="margin-top: 14px; width: 100%; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); color: var(--blue); padding: 9px; border-radius: 10px; font-size: 12px; font-weight: 800; cursor: pointer; transition: background 0.2s;">✏️ Editar Dados e Foto</button>
     </div>
 
     <div class="drawer-content" style="padding: 16px 16px 40px 16px; overflow-y: auto;">
       
-      <!-- CARTÃO 1: FERRAMENTAS INTELIGENTES -->
       <div class="drawer-section-card">
         <h4 class="drawer-section-title">⚡ Modos e Ferramentas</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
           <button type="button" id="btnAbrirMarketplaceDrawer" class="btn-drawer-tool" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #C084FC;">
-            <span style="font-size: 18px;">🛍️</span>
-            <div><strong>HUBy Loja</strong><small>Clube & Descontos</small></div>
+            <span style="font-size: 18px;">🛍️</span><div><strong>HUBy Loja</strong><small>Clube & Descontos</small></div>
           </button>
           <button type="button" id="btnToggleHeatmap" class="btn-drawer-tool" style="background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); color: var(--amber);">
-            <span style="font-size: 18px;">🔥</span>
-            <div><strong>Mapa Calor</strong><small>Alta Demanda</small></div>
+            <span style="font-size: 18px;">🔥</span><div><strong>Mapa Calor</strong><small>Alta Demanda</small></div>
           </button>
           <button type="button" id="btnModoPausa" class="btn-drawer-tool" style="background: rgba(255, 255, 255, 0.05); border-color: var(--border-dark); color: #FFF;">
-            <span style="font-size: 18px;">☕</span>
-            <div><strong>Modo Pausa</strong><small>Pausa Rápida</small></div>
+            <span style="font-size: 18px;">☕</span><div><strong>Modo Pausa</strong><small>Pausa Rápida</small></div>
           </button>
           <button type="button" id="btnModoDestino" class="btn-drawer-tool" style="background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.3); color: var(--blue);">
-            <span style="font-size: 18px;">🏠</span>
-            <div><strong>Ir p/ Casa</strong><small>Corridas na Rota</small></div>
+            <span style="font-size: 18px;">🏠</span><div><strong>Ir p/ Casa</strong><small>Corridas na Rota</small></div>
           </button>
         </div>
       </div>
 
-      <!-- CARTÃO 2: FORMAS DE RECEBIMENTO -->
       <div class="drawer-section-card">
         <h4 class="drawer-section-title">💳 Aceitação de Pagamento</h4>
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
-            <span>💵 Dinheiro (Espécie)</span>
-            <input type="checkbox" id="chkAceitaDinheiro" checked style="accent-color: var(--emerald); width: 18px; height: 18px;">
+            <span>💵 Dinheiro (Espécie)</span><input type="checkbox" id="chkAceitaDinheiro" checked style="accent-color: var(--emerald); width: 18px; height: 18px;">
           </label>
           <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
-            <span>💳 Maquininha Própria</span>
-            <input type="checkbox" id="chkAceitaCartao" checked style="accent-color: var(--blue); width: 18px; height: 18px;">
+            <span>💳 Maquininha Própria</span><input type="checkbox" id="chkAceitaCartao" checked style="accent-color: var(--blue); width: 18px; height: 18px;">
           </label>
           <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
-            <span>📱 Pix Oficial (App)</span>
-            <input type="checkbox" id="chkAceitaPix" checked style="accent-color: var(--purple); width: 18px; height: 18px;">
+            <span>📱 Pix Oficial (App)</span><input type="checkbox" id="chkAceitaPix" checked style="accent-color: var(--purple); width: 18px; height: 18px;">
           </label>
         </div>
         <button type="button" id="btnSalvarPreferenciasPagto" class="btn-drawer-solid" style="margin-top: 14px;">Salvar Preferências</button>
       </div>
 
-      <!-- CARTÃO 3: COPILOTO (ACORDEÃO OCULTO) -->
       <details class="drawer-section-card collapsible-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
-        <summary class="drawer-section-title" style="cursor: pointer; margin: 0; outline: none; color: #10B981;">
-          🎙️ Configurar Copiloto de Voz
-        </summary>
+        <summary class="drawer-section-title" style="cursor: pointer; margin: 0; outline: none; color: #10B981;">🎙️ Configurar Copiloto de Voz</summary>
         <div style="padding-top: 16px; display: flex; flex-direction: column; gap: 12px;">
-          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
-            Ativar Inteligência Artificial
-            <input type="checkbox" id="chkCopilotoAtivo" style="width: 20px; height: 20px; accent-color: #10B981;">
-          </label>
-          
-          <div>
-            <label style="font-size: 10px; color: var(--text-sec);">Nome de Chamada (Ex: Jarvis)</label>
-            <div style="display: flex; gap: 6px; margin-top: 4px;">
-              <input type="text" id="drawerInputCodigoVoz" class="drawer-input" placeholder="Zanix, Falcão...">
-              <button type="button" id="btnSalvarCodigoVoz" class="btn-drawer-solid" style="width: auto; padding: 0 14px;">Salvar</button>
-            </div>
-          </div>
-
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">Ativar Inteligência Artificial<input type="checkbox" id="chkCopilotoAtivo" style="width: 20px; height: 20px; accent-color: #10B981;"></label>
+          <div><label style="font-size: 10px; color: var(--text-sec);">Nome de Chamada (Ex: Jarvis)</label><div style="display: flex; gap: 6px; margin-top: 4px;"><input type="text" id="drawerInputCodigoVoz" class="drawer-input" placeholder="Zanix, Falcão..."><button type="button" id="btnSalvarCodigoVoz" class="btn-drawer-solid" style="width: auto; padding: 0 14px;">Salvar</button></div></div>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <div>
-              <label style="font-size: 10px; color: var(--text-sec);">Tom da Voz</label>
-              <select id="selTomCopiloto" class="drawer-input">
-                <option value="0.75">Grave</option>
-                <option value="1">Normal</option>
-                <option value="1.3">Aguda</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size: 10px; color: var(--text-sec);">Velocidade</label>
-              <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05" style="width: 100%; accent-color: #38BDF8;">
-            </div>
+            <div><label style="font-size: 10px; color: var(--text-sec);">Tom da Voz</label><select id="selTomCopiloto" class="drawer-input"><option value="0.75">Grave</option><option value="1">Normal</option><option value="1.3">Aguda</option></select></div>
+            <div><label style="font-size: 10px; color: var(--text-sec);">Velocidade</label><input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05" style="width: 100%; accent-color: #38BDF8;"></div>
           </div>
-          <div>
-            <label style="font-size: 10px; color: var(--text-sec);">Voz Base</label>
-            <select id="selVozCopiloto" class="drawer-input"></select>
-          </div>
-
+          <div><label style="font-size: 10px; color: var(--text-sec);">Voz Base</label><select id="selVozCopiloto" class="drawer-input"></select></div>
           <button type="button" id="btnTestarCodigoVoz" class="btn-drawer-outline">🔊 Testar Voz</button>
         </div>
       </details>
 
-      <!-- CARTÃO 4: VEÍCULO -->
       <div class="drawer-section-card">
         <h4 class="drawer-section-title">🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <strong style="font-size: 14px; color: #FFF;" id="drawerCarroModelo">Onix</strong>
-            <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div>
-          </div>
-          <div class="mercosul-plate-passenger">
-            <div class="mercosul-plate-header"><span>BRASIL</span> <span>🇧🇷</span></div>
-            <div class="mercosul-plate-body" id="drawerCarroPlaca">ABC1D23</div>
-          </div>
+          <div><strong style="font-size: 14px; color: #FFF;" id="drawerCarroModelo">Onix</strong><div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div></div>
+          <div class="mercosul-plate-passenger"><div class="mercosul-plate-header"><span>BRASIL</span> <span>🇧🇷</span></div><div class="mercosul-plate-body" id="drawerCarroPlaca">ABC1D23</div></div>
         </div>
       </div>
 
-      <!-- EXTRATO & SAQUE PIX -->
       <div class="drawer-section-card">
-        <h4 class="drawer-section-title" style="display: flex; justify-content: space-between;">
-          <span>💰 Ganhos</span>
-          <span style="color: var(--emerald);" id="drawerSaldoValor">R$ 0,00</span>
-        </h4>
-        <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px;">
-          <div style="text-align: center; color: var(--text-sec); padding: 10px 0;">Consultando histórico...</div>
-        </div>
-        
+        <h4 class="drawer-section-title" style="display: flex; justify-content: space-between;"><span>💰 Ganhos</span><span style="color: var(--emerald);" id="drawerSaldoValor">R$ 0,00</span></h4>
+        <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px;"><div style="text-align: center; color: var(--text-sec); padding: 10px 0;">Consultando histórico...</div></div>
         <label style="font-size: 10px; color: var(--text-sec);">Chave Pix para Saques</label>
-        <div style="display: flex; gap: 6px; margin-top: 4px; margin-bottom: 10px;">
-          <input type="text" id="drawerInputChavePix" class="drawer-input" placeholder="Sua Chave Pix">
-          <button type="button" id="btnSalvarChavePix" class="btn-drawer-solid" style="width: auto; background: var(--blue); padding: 0 14px;">Salvar</button>
-        </div>
-        
+        <div style="display: flex; gap: 6px; margin-top: 4px; margin-bottom: 10px;"><input type="text" id="drawerInputChavePix" class="drawer-input" placeholder="Sua Chave Pix"><button type="button" id="btnSalvarChavePix" class="btn-drawer-solid" style="width: auto; background: var(--blue); padding: 0 14px;">Salvar</button></div>
         <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline">📄 Exportar Fechamento (CSV)</button>
       </div>
 
-      <!-- BOTÕES DE SAÍDA E AJUDA -->
       <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
-        <button type="button" onclick="abrirSuporteCorrida()" class="btn-drawer-danger-outline">
-          🛡️ Reportar Problema ou Objeto Esquecido
-        </button>
-        <a href="./index.html" id="btnLogoutMotorista" class="btn-drawer-danger-solid" style="text-decoration: none; text-align: center; display: block; box-sizing: border-box;">
-          🚪 Encerrar Sessão / Sair
-        </a>
+        <button type="button" id="btnAbrirChatSuporte" class="btn-drawer-danger-outline">🛡️ Central de Ajuda & Suporte</button>
+        <a href="./index.html" id="btnLogoutMotorista" class="btn-drawer-danger-solid" style="text-decoration: none; text-align: center; display: block; box-sizing: border-box;">🚪 Encerrar Sessão / Sair</a>
       </div>
 
     </div>
   </aside>
+
+  <!-- MODAIS EXISTENTES (EDIÇÃO, MARKETPLACE, PAGAMENTO, ETC) FICAM AQUI... -->
   <!-- MODAL DE EDIÇÃO DE PERFIL E FOTO -->
   <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
     <div class="modal-box-edit">
@@ -498,24 +408,67 @@
     </div>
   </div>
 
-  <!-- MODAL CHAT -->
+  <!-- MODAL DE CHAT DA CORRIDA (COM O PASSAGEIRO) -->
   <div id="modalChatCorrida" class="modal-backdrop-custom" style="z-index: 10007;">
     <div class="modal-box-edit"
       style="height: 65vh; max-height: 500px; display: flex; flex-direction: column; padding: 0; overflow: hidden;">
-      <div
-        style="padding: 14px; border-bottom: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center;">
+      <div style="padding: 14px; border-bottom: 1px solid var(--border-dark); display: flex; justify-content: space-between; align-items: center;">
         <h3 style="margin: 0; font-size: 15px; color: #38BDF8;">💬 Mensagens com o Passageiro</h3>
-        <button type="button" id="btnFecharChat"
-          style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+        <button type="button" id="btnFecharChat" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
-      <div id="chatAreaMensagens"
-        style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
+      <div id="chatAreaMensagens" style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: rgba(0,0,0,0.2);">
       </div>
       <div style="padding: 12px; border-top: 1px solid var(--border-dark); display: flex; gap: 8px;">
-        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..."
-          style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
-        <button type="button" id="btnEnviarMsgChat"
-          style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer;">Enviar</button>
+        <input type="text" id="inputChatMsg" placeholder="Escreva uma mensagem..." style="flex: 1; border-radius: 8px; border: 1px solid var(--border-dark); background: #090D16; color: #FFF; padding: 10px 14px; font-size: 14px; outline: none;">
+        <button type="button" id="btnEnviarMsgChat" style="background: #38BDF8; color: #000; border: none; border-radius: 8px; padding: 0 16px; font-weight: 800; cursor: pointer;">Enviar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       NOVO: MODAL DO CHAT DE SUPORTE INTELIGENTE (IA) 
+       ========================================================================= -->
+  <div id="modalChatSuporteIA" class="modal-backdrop-custom" style="display: none; z-index: 10020;">
+    <div class="modal-box-edit" style="height: 75vh; max-height: 600px; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #0B0F19;">
+      
+      <!-- Cabeçalho do Suporte -->
+      <div style="padding: 14px 16px; background: rgba(16, 185, 129, 0.1); border-bottom: 1px solid rgba(16, 185, 129, 0.3); display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 38px; height: 38px; background: #10B981; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 20px;">🛡️</div>
+          <div>
+            <h3 style="margin: 0; font-size: 15px; color: #FFF;">Central de Ajuda HUBy</h3>
+            <small style="color: #10B981; font-weight: 700; font-size: 11px;">Assistente Virtual Online</small>
+          </div>
+        </div>
+        <button type="button" id="btnFecharChatSuporte" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
+      </div>
+
+      <!-- Área de Mensagens (Onde a mágica acontece) -->
+      <div id="suporteAreaMensagens" style="flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; background: rgba(0, 0, 0, 0.3);">
+        
+        <!-- Mensagem de Boas-Vindas da IA -->
+        <div style="align-self: flex-start; max-width: 85%;">
+          <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #FFF; padding: 12px; border-radius: 0 12px 12px 12px; font-size: 13px; line-height: 1.5;">
+            Olá, parceiro! Sou o assistente virtual da HUBy. Como posso te ajudar hoje?
+            <br><br>
+            <small style="color: #94A3B8;">Dica: Se for um problema grave (ex: acidente, objeto esquecido), digite "Falar com humano".</small>
+          </div>
+          <small style="display: block; color: #64748B; font-size: 10px; margin-top: 4px; text-align: left;">Agora</small>
+        </div>
+        
+      </div>
+
+      <!-- Aviso de Mensagens Temporárias -->
+      <div style="text-align: center; padding: 6px; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.05);">
+        <small style="color: #64748B; font-size: 10px;">🔒 O histórico desta conversa é apagado do seu celular após 24h.</small>
+      </div>
+
+      <!-- Input e Envio -->
+      <div style="padding: 12px; border-top: 1px solid var(--border-dark); background: #090D16; display: flex; gap: 8px;">
+        <input type="text" id="inputMsgSuporte" placeholder="Escreva o seu problema..." style="flex: 1; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: #1F2937; color: #FFF; padding: 12px 14px; font-size: 13px; outline: none;">
+        <button type="button" id="btnEnviarMsgSuporte" style="background: #10B981; color: #02261C; border: none; border-radius: 12px; width: 45px; font-weight: 800; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 18px;">
+          ➤
+        </button>
       </div>
     </div>
   </div>
@@ -534,32 +487,20 @@
       </p>
 
       <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px;">
-        <button type="button" class="btn-fast-meta" data-meta="100"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
-          100</button>
-        <button type="button" class="btn-fast-meta" data-meta="150"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
-          150</button>
-        <button type="button" class="btn-fast-meta" data-meta="200"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
-          200</button>
-        <button type="button" class="btn-fast-meta" data-meta="300"
-          style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$
-          300</button>
+        <button type="button" class="btn-fast-meta" data-meta="100" style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 100</button>
+        <button type="button" class="btn-fast-meta" data-meta="150" style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 150</button>
+        <button type="button" class="btn-fast-meta" data-meta="200" style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 200</button>
+        <button type="button" class="btn-fast-meta" data-meta="300" style="background: rgba(56,189,248,0.12); border: 1px solid rgba(56,189,248,0.3); color: #38BDF8; padding: 8px 4px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">R$ 300</button>
       </div>
 
       <div class="form-group-driver">
         <label>Valor da Meta (R$)</label>
-        <input type="number" step="5" min="10" id="inputValorMetaDiaria" placeholder="200.00"
-          style="color: #38BDF8; font-weight: 900; font-size: 18px;">
+        <input type="number" step="5" min="10" id="inputValorMetaDiaria" placeholder="200.00" style="color: #38BDF8; font-weight: 900; font-size: 18px;">
       </div>
 
       <div style="display: flex; gap: 8px; margin-top: 16px;">
-        <button type="button" id="btnCancelarModalMeta"
-          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
-        <button type="button" id="btnSalvarMetaDiaria"
-          style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar
-          Meta</button>
+        <button type="button" id="btnCancelarModalMeta" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid var(--border-dark); color: #FFF; padding: 11px; border-radius: 8px; font-weight: 700; cursor: pointer;">Cancelar</button>
+        <button type="button" id="btnSalvarMetaDiaria" style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; padding: 11px; border-radius: 8px; font-weight: 900; cursor: pointer;">Salvar Meta</button>
       </div>
     </div>
   </div>
@@ -568,8 +509,8 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=10.7.0"></script>
-<script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=11.0.0"></script>
+  <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
 </body>
 
 </html>
