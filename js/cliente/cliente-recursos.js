@@ -56,30 +56,43 @@ export function configurarSeletorPagamentoRapido() {
 }
 
 // 3. CONFIGURAR NOTA / OBSERVAÇÃO PARA O MOTORISTA
+// Localize e substitua apenas a função configurarNotaMotorista()
 export function configurarNotaMotorista() {
   const btnNota = document.getElementById('btnAdicionarNotaMotorista');
-  const txtNotaBadge = document.getElementById('txtNotaMotoristaBadge');
+  const btnLimparNota = document.getElementById('btnLimparNotaMotorista');
+  const badgeText = document.getElementById('txtNotaMotoristaBadge');
 
-  btnNota?.addEventListener('click', () => {
-    abrirPromptParada({
-      titulo: 'Nota para o Motorista',
-      placeholder: 'Ex: Levar troco para 50, portão verde...',
-      onConfirmar: (textoDigitado) => {
-        estadoRecursos.notaMotorista = textoDigitado.trim();
-        if (txtNotaBadge) {
-          if (estadoRecursos.notaMotorista) {
-            txtNotaBadge.textContent = `📝 "${estadoRecursos.notaMotorista}"`;
-            txtNotaBadge.style.display = 'inline-block';
-            btnNota.classList.add('com-nota');
-          } else {
-            txtNotaBadge.style.display = 'none';
-            btnNota.classList.remove('com-nota');
-          }
-        }
-        notificarCliente('Nota anexada ao pedido.', 'sucesso');
+  if (!btnNota) return;
+
+  btnNota.addEventListener('click', () => {
+    const msg = prompt('Informe a sua observação para o motorista (Ex: Levar troco para 50, Estou no portão azul...):', estadoRecursos.notaMotorista || '');
+    
+    if (msg !== null && msg.trim() !== '') {
+      estadoRecursos.notaMotorista = msg.trim();
+      btnNota.style.background = 'rgba(56, 189, 248, 0.2)';
+      btnNota.style.color = '#38BDF8';
+      
+      if (badgeText) {
+        badgeText.style.display = 'block';
+        badgeText.innerHTML = `📝 Observação: <strong>${estadoRecursos.notaMotorista}</strong>`;
       }
-    });
+      if (btnLimparNota) btnLimparNota.style.display = 'flex';
+      
+      notificar('Observação adicionada ao pedido!', 'sucesso');
+    }
   });
+
+  if (btnLimparNota) {
+    btnLimparNota.addEventListener('click', (e) => {
+      e.stopPropagation(); // Evita clicar no botão principal de nota
+      estadoRecursos.notaMotorista = '';
+      btnNota.style.background = '';
+      btnNota.style.color = '';
+      if (badgeText) badgeText.style.display = 'none';
+      btnLimparNota.style.display = 'none';
+      notificar('Observação removida.', 'info');
+    });
+  }
 }
 
 // 4. CONFIGURAR CUPOM DE DESCONTO

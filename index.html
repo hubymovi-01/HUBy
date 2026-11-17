@@ -304,13 +304,13 @@
 
     <!-- LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM, NOTAS E AGENDAMENTO -->
     <div class="dock-quick-actions-row pro-actions">
-      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill"
-        aria-label="Forma de Pagamento">
+      <!-- 1. Pagamento -->
+      <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" aria-label="Forma de Pagamento">
         <span id="iconFormaPagamento">💵</span>
         <span id="txtFormaPagamentoSelecionada">Dinheiro</span>
-        <span class="arrow-down">▾</span>
       </button>
 
+      <!-- 2. Cupom -->
       <div style="display: flex; align-items: center; gap: 4px;">
         <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill">
           <span>🏷️ Cupom</span>
@@ -318,14 +318,25 @@
         <span id="tagCupomAtivo" class="badge-cupom-ativo" style="display: none;"></span>
       </div>
 
-      <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill"
-        title="Adicionar nota">
-        <span>📝 Observação</span>
+      <!-- 3. Observações -->
+      <div style="display: flex; align-items: center; gap: 4px; position: relative;">
+        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" title="Adicionar nota">
+          <span>📝 Observação</span>
+        </button>
+        <button type="button" id="btnLimparNotaMotorista" style="display: none; background: rgba(239, 68, 68, 0.15); border: none; color: #EF4444; width: 22px; height: 22px; border-radius: 50%; font-size: 10px; cursor: pointer; align-items: center; justify-content: center; position: absolute; right: -8px; top: -8px; box-shadow: 0 2px 5px rgba(0,0,0,0.5);">
+          ✕
+        </button>
+      </div>
+      
+      <!-- 4. Agendamento -->
+      <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" title="Agendar Viagem">
+        <span>⏰ Agendar</span>
       </button>
     </div>
 
-    <!-- NOTA DO MOTORISTA ANEXADA -->
-    <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none;"></div>
+    <!-- NOTA DO MOTORISTA / AGENDAMENTO ANEXADA -->
+    <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none; margin-top: 8px;"></div>
+    <div id="txtAgendamentoBadge" class="badge-nota-motorista" style="display: none; background: rgba(245, 158, 11, 0.15); color: #F59E0B; margin-top: 4px;"></div>
 
     <!-- RADAR DE BUSCA -->
     <div id="cardStatusViagem" class="active-ride-card modern-radar" style="display: none;">
@@ -364,14 +375,14 @@
             <small>Pagar direto ao motorista</small>
           </div>
         </div>
-        <div class="opcao-pagamento-rapido" data-metodo="pix" data-nome="Pix" data-icone="💠">
+        <div class="opcao-pagamento-rapido" data-metodo="pix" data-nome="Pix App" data-icone="💠">
           <span class="op-icon">💠</span>
           <div class="op-text">
-            <strong>Pix Dinâmico</strong>
-            <small>QR Code com liquidação automática</small>
+            <strong>Pix App</strong>
+            <small>Transfira pela chave oficial</small>
           </div>
         </div>
-        <div class="opcao-pagamento-rapido" data-metodo="cartao" data-nome="Cartão" data-icone="💳">
+        <div class="opcao-pagamento-rapido" data-metodo="cartao_maquininha" data-nome="Cartão (Máquina)" data-icone="💳">
           <span class="op-icon">💳</span>
           <div class="op-text">
             <strong>Maquininha</strong>
@@ -668,7 +679,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.20.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=9.30.0"></script>
   <!-- INTELIGÊNCIA ARTIFICIAL E COMANDOS DE VOZ DO PASSAGEIRO -->
   <script type="module" src="./js/ia/cliente-ia.js?v=2.0.0"></script>
   <!-- RECIBO COMPARTILHÁVEL, INDIQUE E GANHE, AGENDAMENTO E PUSH -->

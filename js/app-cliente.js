@@ -1,4 +1,4 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Formas de Pagamento e Obs Ativadas)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
@@ -507,6 +507,58 @@ function configurarLocaisFavoritosMenu() {
   });
 }
 
+// ----------------------------------------------------------------------
+// PREPARAR E ENVIAR PEDIDO AO SERVIDOR COM PAGAMENTO, CUPOM E NOTAS
+// ----------------------------------------------------------------------
+async function iniciarSubmissaoPedidoFinal() {
+  if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
+    await cancelarBusca();
+    return;
+  }
+  if (!estadoCliente.coordsDestino || !estadoCliente.rotaAtual) {
+    notificar('Selecione um destino no mapa antes de confirmar.', 'alerta');
+    return;
+  }
+
+  // Coleta as Observações
+  const textNota = estadoRecursos?.notaMotorista || '';
+  if (textNota && !estadoCliente.paradasIntermediarias) {
+    estadoCliente.paradasIntermediarias = [];
+  }
+  if (textNota) {
+    // Injecta a observação como uma 'parada fake' com uma chave de 'nota'
+    const indexNota = estadoCliente.paradasIntermediarias.findIndex(p => p.nota);
+    if (indexNota > -1) {
+      estadoCliente.paradasIntermediarias[indexNota].nota = textNota;
+    } else {
+      estadoCliente.paradasIntermediarias.push({ nota: textNota });
+    }
+  }
+
+  // Coleta Agendamento
+  const dataAgendada = estadoRecursos?.dataAgendada || null;
+  if (dataAgendada) {
+    estadoCliente.rotaAtual.agendadoPara = dataAgendada;
+  }
+
+  // Coleta Forma de Pagamento
+  const metodoLocal = localStorage.getItem('huby_metodo_pgto_padrao') || 'dinheiro';
+  estadoCliente.rotaAtual.forma_pagamento = metodoLocal;
+  estadoCliente.rotaAtual.metodo_pgto = metodoLocal;
+
+  // Cupom Ativo
+  if (estadoRecursos?.cupomAtivo) {
+    estadoCliente.rotaAtual.cupomCodigo = estadoRecursos.cupomAtivo.codigo;
+  }
+
+  // Ajusta o SubTipo (Carro, Moto ou Entrega)
+  estadoCliente.rotaAtual.subTipoId = estadoCliente.categoriaSelecionada || 'carro';
+  estadoCliente.rotaAtual.subTipoLabel = `HUBy ${String(estadoCliente.categoriaSelecionada).charAt(0).toUpperCase() + String(estadoCliente.categoriaSelecionada).slice(1)}`;
+
+  sincronizarPrecosDaRotaAtual();
+  await submeterPedido(); // Vai disparar para API
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   const splash = document.getElementById('hubySplash');
   if (splash) {
@@ -601,9 +653,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarAlternanciaSatélite();
   configurarLocaisFavoritosMenu();
 
+  // ----------------------------------------------------
+  // CONFIGURAÇÃO DOS RECURSOS (PAGAMENTO, OBS, CUPOM)
+  // ----------------------------------------------------
   configurarSeletorPagamentoRapido();
-  configurarNotaMotorista();
   configurarCupomDesconto();
+  configurarNotaMotorista();
+  configurarSistemaAgendamento(); // Função nova no final do arquivo
 
   const processarDestinoIA = async (e) => {
     const dados = e.detail || {};
@@ -751,18 +807,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  document.getElementById('btnPedirHuby')?.addEventListener('click', async () => {
-    if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
-      await cancelarBusca();
-      return;
-    }
-    if (!estadoCliente.coordsDestino) {
-      notificar('Selecione primeiro o destino final no mapa.', 'alerta');
-      return;
-    }
-    sincronizarPrecosDaRotaAtual();
-    await submeterPedido();
-  });
+  // MUDAMOS AQUI: Agora ele aciona a função que junta os dados em vez de ir direto pro submeterPedido()
+  document.getElementById('btnPedirHuby')?.addEventListener('click', iniciarSubmissaoPedidoFinal);
 
   configurarModalAvaliacao();
   configurarBotoesGorjeta();
@@ -784,6 +830,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (intervalChecagemPix) clearInterval(intervalChecagemPix);
   });
 });
+
+// ============================================================================
+// SISTEMA DE AGENDAMENTO (NOVO)
+// ============================================================================
+function configurarSistemaAgendamento() {
+  const btnAgendar = document.getElementById('btnAgendarViagem');
+  const badgeAgendamento = document.getElementById('txtAgendamentoBadge');
+  
+  if (!btnAgendar) return;
+
+  btnAgendar.addEventListener('click', () => {
+    // Remove o botão de limpar anterior se existir
+    const existeCancelamento = document.getElementById('btnCancelarAgendamento');
+    if (existeCancelamento) existeCancelamento.remove();
+
+    if (estadoRecursos.dataAgendada) {
+      if (window.confirm('Você já tem uma viagem agendada. Deseja cancelar o agendamento e solicitar para agora?')) {
+        estadoRecursos.dataAgendada = null;
+        if (badgeAgendamento) {
+          badgeAgendamento.style.display = 'none';
+          badgeAgendamento.innerHTML = '';
+        }
+        btnAgendar.style.background = '';
+        btnAgendar.style.color = '';
+        notificar('Agendamento cancelado. Viagem mudou para imediata.', 'info');
+      }
+      return;
+    }
+
+    const dataInputStr = prompt("Para quando deseja agendar? (Digite no formato AAAA-MM-DD HH:MM)\n\nEx: 2026-12-25 14:30\n(O mínimo é 30 minutos de antecedência)");
+    
+    if (!dataInputStr) return; // Cancelou
+
+    // Transforma para ISO
+    const datePattern = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
+    const m = dataInputStr.match(datePattern);
+    
+    if (!m) {
+      notificar('Formato de data inválido. Use AAAA-MM-DD HH:MM', 'erro');
+      return;
+    }
+
+    const dtAgendada = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00`);
+    const diffMs = dtAgendada.getTime() - Date.now();
+
+    if (isNaN(dtAgendada.getTime()) || diffMs < (25 * 60 * 1000)) {
+      notificar('A hora de agendamento deve ser pelo menos 30 minutos a partir de agora.', 'erro');
+      return;
+    }
+
+    estadoRecursos.dataAgendada = dtAgendada.toISOString();
+    btnAgendar.style.background = 'rgba(245, 158, 11, 0.2)';
+    btnAgendar.style.color = '#F59E0B';
+
+    if (badgeAgendamento) {
+      badgeAgendamento.style.display = 'block';
+      badgeAgendamento.innerHTML = `⏰ Agendada para: <strong>${dtAgendada.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short'})}</strong>`;
+    }
+
+    notificar('A viagem foi configurada para ser agendada! Confirme no botão principal.', 'sucesso');
+  });
+}
 
 // FLUXO DE PAGAMENTO PIX DINÂMICO
 function configurarFluxoPagamentoMercadoPago() {
@@ -1286,9 +1394,6 @@ function finalizarViagemCliente(data) {
     setTimeout(() => location.reload(), 1500);
   }
 }
-// ============================================================================
-// SISTEMA DE SUPORTE E AJUDA (TICKETS)
-// ============================================================================
 window.abrirSuporteCorrida = async (pedidoId = null) => {
   const mensagem = prompt('Conte-nos o que aconteceu. A nossa equipa vai analisar o seu caso:');
 
