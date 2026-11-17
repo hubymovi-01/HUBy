@@ -295,8 +295,12 @@
       localStorage.setItem('huby_user_name', data.usuario?.nome || 'Utilizador');
       localStorage.setItem('huby_user_id', data.usuario?.id);
 
+      // NOVO: SALVA A CATEGORIA DO MOTORISTA NO NAVEGADOR
       if (papelNormalizado === 'motorista') {
         localStorage.setItem('huby_motorista_id', data.usuario?.motoristaId || data.usuario?.id);
+        
+        const cat = data.usuario?.categoria || 'carro';
+        localStorage.setItem('huby_motorista_categoria', cat);
       }
 
       exibirAlerta('Sessão iniciada com sucesso! Conectando...', 'success');

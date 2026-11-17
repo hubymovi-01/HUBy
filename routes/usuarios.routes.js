@@ -250,6 +250,8 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
 
     const mot = condutores[0];
     const usuarioId = mot.usuario_conta_id || mot.usuario_id || mot.id;
+    // Puxa a categoria do banco. Se estiver nulo, vira "carro" por padrão.
+    const catFinal = String(mot.categoria || mot.categoria_veiculo || 'carro').toLowerCase().trim();
 
     const token = jwt.sign(
       {
@@ -257,7 +259,8 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
         motoristaId: mot.id,
         nome: mot.nome,
         email: mot.email,
-        role: 'motorista'
+        role: 'motorista',
+        categoria: catFinal
       },
       JWT_SECRET,
       { expiresIn: '30d' }
@@ -272,6 +275,7 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
         nome: mot.nome,
         email: mot.email,
         role: 'motorista',
+        categoria: catFinal,
         veiculo_modelo: mot.veiculo_modelo || 'Onix',
         veiculo_placa: mot.veiculo_placa || 'ABC1D23'
       }
