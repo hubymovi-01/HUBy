@@ -433,34 +433,56 @@
     </div>
   </section>
 
-  <!-- ABA 7: BROADCAST PUSH -->
+ <!-- ABA 7: BROADCAST PUSH (Elegante e Regionalizado) -->
   <section id="tabBroadcast" class="tab-pane">
-    <div class="card-panel max-w-600">
-      <h3 class="panel-clean-title">Disparo de Alerta Global</h3>
-      <p class="panel-subtitle">
-        Esta mensagem surge instantaneamente na tela dos utilizadores e parceiros conectados.
-      </p>
+    <div class="card-panel max-w-600" style="margin: 0 auto;">
+      
+      <!-- Cabeçalho Elegante -->
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+        <div style="width: 48px; height: 48px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px;">📢</div>
+        <div>
+          <h3 class="panel-blue-title" style="margin: 0; font-size: 18px;">Disparo de Alerta Push</h3>
+          <p class="panel-subtitle" style="margin: 4px 0 0 0; font-size: 12px;">Envie notificações direcionadas por região e público.</p>
+        </div>
+      </div>
+
       <form id="formBroadcast">
-        <div class="form-group">
-          <label>Público Alvo</label>
-          <select id="broadPublico">
-            <option value="todos">Todos (Passageiros e Motoristas)</option>
-            <option value="motoristas">Apenas Condutores Parceiros</option>
-            <option value="passageiros">Apenas Passageiros</option>
-          </select>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
+          <div class="form-group">
+            <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Público Alvo</label>
+            <select id="broadPublico" class="drawer-input" style="margin-top: 4px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(0,0,0,0.4);">
+              <option value="todos">🌍 Todos (Frota e Clientes)</option>
+              <option value="motoristas">🚕 Apenas Motoristas</option>
+              <option value="passageiros">👤 Apenas Passageiros</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Região / Cidade</label>
+            <select id="broadRegiao" class="drawer-input" style="margin-top: 4px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(0,0,0,0.4);">
+              <option value="todas">🌐 Todas as Regiões (Global)</option>
+              <option value="sao_joao_pi">📍 São João do Piauí - PI</option>
+              <option value="sao_paulo_sp">📍 São Paulo - SP</option>
+              <option value="teresina_pi">📍 Teresina - PI</option>
+            </select>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Título do Alerta</label>
-          <input type="text" id="broadTitulo" placeholder="Ex: Chuva Intensa ou Alta Demanda" required>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Título do Alerta</label>
+          <input type="text" id="broadTitulo" class="drawer-input" style="margin-top: 4px;" placeholder="Ex: ⚡ Bônus de Alta Demanda Ativo!" required>
         </div>
-        <div class="form-group">
-          <label>Mensagem</label>
-          <textarea id="broadMensagem" rows="4" placeholder="Mensagem detalhada para a frota..." required></textarea>
+        
+        <div class="form-group" style="margin-bottom: 20px;">
+          <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Mensagem da Notificação</label>
+          <textarea id="broadMensagem" class="drawer-input" rows="4" style="margin-top: 4px; resize: none;" placeholder="Escreva a mensagem detalhada aqui..." required></textarea>
         </div>
-        <button type="submit" class="btn-action btn-full-center">Enviar Broadcast Agora</button>
+        
+        <button type="submit" class="btn-action btn-blue-full" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px; font-size: 14px; border-radius: 12px; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);">
+          🚀 Disparar Notificação Push
+        </button>
       </form>
     </div>
-  </section>
+  </section>>
 
   <!-- ABA 8: GESTÃO E EXTRATO DE SAQUES -->
   <section id="tabSaques" class="tab-pane">

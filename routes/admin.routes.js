@@ -978,33 +978,38 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 10. NOTIFICAÇÕES BROADCAST & RELATÓRIO CSV
-  // =========================================================================
-  router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
-    try {
-      const { publico, titulo, mensagem } = req.body;
-      if (!titulo || !mensagem) {
-        return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
-      }
-      const pubLimpo = ['todos', 'motoristas', 'passageiros'].includes(publico) ? publico : 'todos';
-      const titLimpo = String(titulo).trim().slice(0, 110);
-      const msgLimpa = String(mensagem).trim().slice(0, 500);
+// ROTA DE DISPARO DE PUSH (BROADCAST)
+// =========================================================================
+router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
+  try {
+    const { publico, regiao, titulo, mensagem } = req.body;
 
-      await sql`
-        INSERT INTO notificacoes_globais (titulo, mensagem, publico)
-        VALUES (${titLimpo}, ${msgLimpa}, ${pubLimpo});
-      `;
-
-      const socket = req.io || io;
-      if (socket) {
-        socket.emit('broadcast_alerta', { publico: pubLimpo, titulo: titLimpo, mensagem: msgLimpa });
-      }
-
-      res.json({ sucesso: true });
-    } catch (err) {
-      res.status(500).json({ erro: 'Falha ao disparar broadcast.' });
+    if (!titulo || !mensagem) {
+      return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
     }
-  });
+
+    // Acessa o Socket.IO configurado no servidor
+    const io = req.app.get('io');
+    if (io) {
+      // O evento é disparado contendo os filtros. 
+      // No app (passageiro ou motorista), o script vai checar se a cidade dele bate com a 'regiao' enviada (ou se for 'todas', ele exibe).
+      io.emit('nova_notificacao_push', { 
+        publico, 
+        regiao, 
+        titulo, 
+        mensagem,
+        data: new Date().toISOString()
+      });
+    }
+
+    // Se no futuro integrar Firebase Cloud Messaging (FCM) ou OneSignal, o código de disparo irá entrar exatamente aqui.
+
+    res.json({ sucesso: true, mensagem: 'Broadcast processado e enviado aos sockets conectados.' });
+  } catch (err) {
+    console.error('Erro no broadcast:', err);
+    res.status(500).json({ erro: 'Falha ao disparar broadcast' });
+  }
+});
 
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {

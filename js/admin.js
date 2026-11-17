@@ -1247,7 +1247,14 @@ function configurarFormMercadoPago(token) {
 function configurarFormBroadcast(token) {
   document.getElementById('formBroadcast')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    
+    const btnSubmit = e.target.querySelector('button[type="submit"]');
+    const txtOriginal = btnSubmit.innerHTML;
+    btnSubmit.innerHTML = '⏳ Enviando Notificação...';
+    btnSubmit.disabled = true;
+
     const publico = document.getElementById('broadPublico').value;
+    const regiao = document.getElementById('broadRegiao').value;
     const titulo = document.getElementById('broadTitulo').value.trim();
     const mensagem = document.getElementById('broadMensagem').value.trim();
 
@@ -1255,16 +1262,22 @@ function configurarFormBroadcast(token) {
       const res = await fetch(`${API_URL}/api/admin/notificacoes/broadcast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ publico, titulo, mensagem })
+        body: JSON.stringify({ publico, regiao, titulo, mensagem })
       });
+      
+      const data = await res.json();
+      
       if (res.ok) {
-        notificarAdmin('Notificação Push transmitida para a frota!', 'sucesso');
+        notificarAdmin(`🚀 Push transmitido com sucesso para: ${regiao.toUpperCase()}`, 'sucesso');
         e.target.reset();
       } else {
-        notificarAdmin('Erro ao enviar broadcast.', 'erro');
+        notificarAdmin(data.erro || 'Erro ao enviar broadcast.', 'erro');
       }
     } catch (err) {
       notificarAdmin('Falha de conexão ao disparar alerta.', 'erro');
+    } finally {
+      btnSubmit.innerHTML = txtOriginal;
+      btnSubmit.disabled = false;
     }
   });
 }
