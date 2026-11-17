@@ -1,4 +1,4 @@
-// js/motorista/motorista-perfil.js - Perfil do Motorista, Foto Base64 e Sincronização de Estado
+// js/motorista/motorista-perfil.js - Perfil do Motorista, Foto Base64, Modo Entrega Extra e Sincronização de Estado
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { notificar } from '../util/alertas-huby.js';
@@ -8,6 +8,28 @@ import {
   definirCodigoAtivacaoMotorista, 
   falarTexto 
 } from '../ia/motorista-ia.js';
+
+function garantirToggleEntregaNoDrawer(aceitaEntregaAtual) {
+  const chkDinheiro = document.getElementById('chkAceitaDinheiro');
+  const containerLista = chkDinheiro?.closest('div');
+  if (!containerLista) return;
+
+  let chkEntrega = document.getElementById('chkAceitaEntregaExtra');
+  if (!chkEntrega) {
+    const labelEntrega = document.createElement('label');
+    labelEntrega.style.cssText = 'display: flex; align-items: center; justify-content: space-between; font-size: 13px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08);';
+    labelEntrega.innerHTML = `
+      <span>📦 Fazer Entrega também</span>
+      <input type="checkbox" id="chkAceitaEntregaExtra" style="accent-color: #F59E0B; width: 18px; height: 18px;">
+    `;
+    containerLista.appendChild(labelEntrega);
+    chkEntrega = document.getElementById('chkAceitaEntregaExtra');
+  }
+
+  if (chkEntrega) {
+    chkEntrega.checked = Boolean(aceitaEntregaAtual);
+  }
+}
 
 export async function carregarPerfil() {
   try {
@@ -22,7 +44,8 @@ export async function carregarPerfil() {
 
     estado.motoristaId = motorista.id;
     estado.motoristaNome = motorista.nome || 'Carol';
-    estado.categoriaMotorista = motorista.categoria || 'carro';
+    estado.categoriaMotorista = String(motorista.categoria || 'carro').toLowerCase();
+    estado.aceitaEntrega = Boolean(motorista.aceita_entrega);
     estado.statusAprovacaoAtual = motorista.status_aprovacao || 'aprovado';
     estado.saldoCarteira = Number(motorista.saldo_carteira || 0);
     estado.aceitaDinheiro = motorista.aceita_dinheiro !== false;
@@ -30,7 +53,6 @@ export async function carregarPerfil() {
     estado.aceitaPix = motorista.aceita_pix !== false;
     estado.dadosMotorista = motorista;
 
-    // Só sincroniza status_online do banco se o botão ainda não tiver sido alterado na sessão atual
     const btnOnline = document.getElementById('btnToggleStatusOnline');
     const botaoJaMarcadoOnline = Boolean(
       estado.isOnline ||
@@ -68,8 +90,12 @@ export async function carregarPerfil() {
     const drawerViagens = document.getElementById('drawerTotalViagensTxt');
     const drawerFoto = document.getElementById('drawerFotoImg');
 
+    const catExibicao = estado.aceitaEntrega && estado.categoriaMotorista !== 'entrega'
+      ? `HUBY ${estado.categoriaMotorista.toUpperCase()} + ENTREGA`
+      : `HUBY ${estado.categoriaMotorista.toUpperCase()}`;
+
     if (drawerNome) drawerNome.textContent = motorista.nome || 'Carol';
-    if (drawerCat) drawerCat.textContent = `HUBY ${(motorista.categoria || 'carro').toUpperCase()}`;
+    if (drawerCat) drawerCat.textContent = catExibicao;
     if (drawerNota) drawerNota.textContent = `⭐ ${avaliacaoVal}`;
     if (drawerViagens) drawerViagens.textContent = `${totalCorridasVal} viagens`;
     if (drawerFoto && motorista.foto_perfil_url) drawerFoto.src = motorista.foto_perfil_url;
@@ -95,6 +121,8 @@ export async function carregarPerfil() {
     if (checkDinheiro) checkDinheiro.checked = estado.aceitaDinheiro;
     if (checkCartao) checkCartao.checked = estado.aceitaCartao;
     if (checkPix) checkPix.checked = estado.aceitaPix;
+
+    garantirToggleEntregaNoDrawer(estado.aceitaEntrega);
 
     const inputPixDrawer = document.getElementById('drawerInputChavePix');
     if (inputPixDrawer && motorista.chave_pix_padrao) {
@@ -177,6 +205,7 @@ export function configurarSalvarPreferenciasPagto() {
     const aceita_dinheiro = document.getElementById('chkAceitaDinheiro')?.checked ?? true;
     const aceita_cartao = document.getElementById('chkAceitaCartao')?.checked ?? true;
     const aceita_pix = document.getElementById('chkAceitaPix')?.checked ?? true;
+    const aceita_entrega = document.getElementById('chkAceitaEntregaExtra')?.checked ?? false;
 
     if (!aceita_dinheiro && !aceita_cartao && !aceita_pix) {
       notificar('Selecione ao menos uma forma de recebimento.', 'alerta');
@@ -186,16 +215,28 @@ export function configurarSalvarPreferenciasPagto() {
     estado.aceitaDinheiro = aceita_dinheiro;
     estado.aceitaCartao = aceita_cartao;
     estado.aceitaPix = aceita_pix;
+    estado.aceitaEntrega = aceita_entrega;
 
     try {
       const resp = await fetch(`${API_URL}/api/pedidos/motoristas/preferencias-pagamento`, {
         method: 'PUT',
         headers: obterHeaders(),
-        body: JSON.stringify({ aceita_dinheiro, aceita_cartao, aceita_pix })
+        body: JSON.stringify({ aceita_dinheiro, aceita_cartao, aceita_pix, aceita_entrega })
       });
 
       if (resp.ok) {
-        notificar('Preferências de pagamento salvas!', 'sucesso');
+        const drawerCat = document.getElementById('drawerCategoriaBadge');
+        if (drawerCat) {
+          drawerCat.textContent = aceita_entrega && estado.categoriaMotorista !== 'entrega'
+            ? `HUBY ${estado.categoriaMotorista.toUpperCase()} + ENTREGA`
+            : `HUBY ${estado.categoriaMotorista.toUpperCase()}`;
+        }
+        notificar(
+          aceita_entrega
+            ? 'Preferências salvas! Modo Entrega também ativado.'
+            : 'Preferências de pagamento salvas!',
+          'sucesso'
+        );
       } else {
         notificar('Erro ao salvar preferências.', 'erro');
       }

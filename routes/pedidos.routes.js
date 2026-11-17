@@ -31,6 +31,12 @@ export function autenticarToken(req, res, next) {
 
 async function inicializarColunasPedidos() {
   try {
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_online BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_entrega BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_dinheiro BOOLEAN DEFAULT TRUE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_cartao BOOLEAN DEFAULT TRUE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_pix BOOLEAN DEFAULT TRUE;`;
+
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(50);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pgto VARCHAR(50);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_id VARCHAR(50);`;
@@ -67,6 +73,20 @@ function ehMotoristaToken(usuario) {
   return String(usuario?.role || '').toLowerCase() === 'motorista';
 }
 
+function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
+  const R = 6371.0;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 // Worker automático que ativa corridas agendadas faltando 15 minutos para o horário
 export function iniciarDespachanteAgendamentos(io) {
   setInterval(async () => {
@@ -83,7 +103,6 @@ export function iniciarDespachanteAgendamentos(io) {
       for (const p of prontas) {
         const valorNum = Number(p.valor_total || 0);
         if (io) {
-          // Emite apenas para clientes na mesma região (lógica de room no Socket.IO idealmente, mas aqui emitimos global por enquanto)
           io.emit('nova_chamada', {
             id: p.id,
             clienteId: p.cliente_id,
@@ -196,7 +215,6 @@ export default function pedidosRouter(io) {
       let vTotal = Math.max(0.50, valorCalculadoServidor);
       let descontoAplicado = 0;
 
-      // Verifica se o cliente tem desconto de 1ª viagem por indicação
       try {
         const ind = await sql`
           SELECT id, valor_desconto_indicado FROM indicacoes_huby
@@ -208,7 +226,7 @@ export default function pedidosRouter(io) {
           descontoAplicado += descInd;
           vTotal = Math.max(1.00, Number((vTotal - descInd).toFixed(2)));
         }
-      } catch (eInd) { }
+      } catch (eInd) {}
 
       if (cupomCodigo) {
         const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
@@ -280,7 +298,6 @@ export default function pedidosRouter(io) {
 
       if (statusInicialPedido === 'pendente') {
         if (io) {
-          // Dispara para todos, mas no frontend o motorista vai ignorar se estiver muito longe
           io.emit('nova_chamada', {
             id: idPedido,
             clienteId: idClienteFinal,
@@ -311,13 +328,12 @@ export default function pedidosRouter(io) {
         valorFinal: vTotal,
         desconto: descontoAplicado
       });
-
     } catch (error) {
       console.error('⚠️ ERRO AO GRAVAR PEDIDO NO BANCO:', error);
       if (cupomReservadoId) {
         try {
           await sql`UPDATE cupons_desconto SET usos_atuais = GREATEST(usos_atuais - 1, 0) WHERE id = ${cupomReservadoId};`;
-        } catch (e) { }
+        } catch (e) {}
       }
       return res.status(500).json({ erro: 'Falha ao salvar corrida na base de dados: ' + error.message });
     }
@@ -368,7 +384,7 @@ export default function pedidosRouter(io) {
     }
   });
 
- // =========================================================================
+  // =========================================================================
   // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL E FILTRO DE CATEGORIA)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
@@ -377,23 +393,9 @@ export default function pedidosRouter(io) {
         return res.status(403).json({ erro: 'Acesso restrito a motoristas parceiros.' });
       }
 
-      if (ehMotoristaToken(req.usuario)) {
-        const mot = await sql`
-          SELECT status_online FROM motoristas 
-          WHERE id::text = ${String(req.usuario.id)}::text 
-             OR usuario_id::text = ${String(req.usuario.id)}::text
-          LIMIT 1;
-        `;
-        if (mot.length > 0 && !mot[0].status_online) {
-          return res.json([]);
-        }
-      }
-
-      // O frontend agora envia a categoria do motorista na requisição
-      const { categoria, lat, lng } = req.query;
+      const { categoria, aceitaEntrega, lat, lng } = req.query;
       const motoristaLat = Number(lat);
       const motoristaLng = Number(lng);
-      
       const temCoordsValidas =
         Number.isFinite(motoristaLat) &&
         Number.isFinite(motoristaLng) &&
@@ -401,88 +403,91 @@ export default function pedidosRouter(io) {
         Math.abs(motoristaLng) <= 180 &&
         !(motoristaLat === 0 && motoristaLng === 0);
 
-      // Limpa e normaliza a categoria do motorista (carro, moto, entrega)
       let catMotorista = String(categoria || 'carro').toLowerCase().trim();
-      if (catMotorista.includes('flash') || catMotorista.includes('frete')) catMotorista = 'entrega';
-      
-      let pedidos = [];
+      let fazEntregaExtra = String(aceitaEntrega || '').toLowerCase() === 'true';
 
-      // A cláusula SQL de proximidade
-      const filtroDistancia = sql`
-        AND origem_lat IS NOT NULL
-        AND origem_lng IS NOT NULL
-        AND (
-          6371.0 * acos(
-            LEAST(1.0, GREATEST(-1.0,
-              cos(radians(${motoristaLat}::double precision)) * cos(radians(origem_lat::double precision)) *
-              cos(radians(origem_lng::double precision) - radians(${motoristaLng}::double precision)) +
-              sin(radians(${motoristaLat}::double precision)) * sin(radians(origem_lat::double precision))
-            ))
-          )
-        ) <= ${RAIO_MAXIMO_KM}
-      `;
-
-      // Aplica o filtro RÍGIDO de categoria
-      if (catMotorista === 'moto') {
-        pedidos = temCoordsValidas
-          ? await sql`
-              SELECT * FROM pedidos
-              WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND LOWER(tipo) IN ('moto', 'hubymoto', 'huby moto')
-                ${filtroDistancia}
-              ORDER BY criado_em DESC
-              LIMIT 20;
-            `
-          : await sql`
-              SELECT * FROM pedidos
-              WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND LOWER(tipo) IN ('moto', 'hubymoto', 'huby moto')
-              ORDER BY criado_em DESC
-              LIMIT 20;
-            `;
-      } else if (catMotorista === 'entrega') {
-        pedidos = temCoordsValidas
-          ? await sql`
-              SELECT * FROM pedidos
-              WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND LOWER(tipo) IN ('cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
-                ${filtroDistancia}
-              ORDER BY criado_em DESC
-              LIMIT 20;
-            `
-          : await sql`
-              SELECT * FROM pedidos
-              WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND LOWER(tipo) IN ('cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
-              ORDER BY criado_em DESC
-              LIMIT 20;
-            `;
-      } else {
-        // Se a categoria for Carro, ele só pega corridas de carro (ignorando moto e entrega)
-        pedidos = temCoordsValidas
-          ? await sql`
-              SELECT * FROM pedidos
-              WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND LOWER(tipo) NOT IN ('moto', 'hubymoto', 'huby moto', 'cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
-                ${filtroDistancia}
-              ORDER BY criado_em DESC
-              LIMIT 20;
-            `
-          : await sql`
-              SELECT * FROM pedidos
-              WHERE status IN ('pendente', 'aguardando', 'buscando')
-                AND LOWER(tipo) NOT IN ('moto', 'hubymoto', 'huby moto', 'cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash')
-              ORDER BY criado_em DESC
-              LIMIT 20;
-            `;
+      if (ehMotoristaToken(req.usuario)) {
+        try {
+          const mot = await sql`
+            SELECT status_online, categoria, COALESCE(aceita_entrega, FALSE) AS aceita_entrega
+            FROM motoristas
+            WHERE id::text = ${String(req.usuario.id)}::text
+               OR usuario_id::text = ${String(req.usuario.id)}::text
+            LIMIT 1;
+          `;
+          if (mot.length > 0) {
+            if (mot[0].status_online === false) {
+              return res.json([]);
+            }
+            if (!categoria && mot[0].categoria) {
+              catMotorista = String(mot[0].categoria).toLowerCase().trim();
+            }
+            if (aceitaEntrega === undefined || aceitaEntrega === '') {
+              fazEntregaExtra = Boolean(mot[0].aceita_entrega);
+            }
+          }
+        } catch (eMot) {
+          console.warn('Aviso ao ler status do motorista:', eMot.message);
+        }
       }
 
-      return res.json(pedidos);
+      if (catMotorista.includes('flash') || catMotorista.includes('frete') || catMotorista.includes('entrega')) {
+        catMotorista = 'entrega';
+      } else if (catMotorista.includes('moto')) {
+        catMotorista = 'moto';
+      } else {
+        catMotorista = 'carro';
+      }
+
+      const rawPedidos = await sql`
+        SELECT * FROM pedidos
+        WHERE status IN ('pendente', 'aguardando', 'buscando', 'criado')
+        ORDER BY criado_em DESC
+        LIMIT 50;
+      `;
+
+      const listaEntrega = ['cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash'];
+      const listaMoto = ['moto', 'hubymoto', 'huby moto'];
+
+      const filtrados = rawPedidos.filter((p) => {
+        const tipoPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase().trim();
+        const ehPedidoEntrega = listaEntrega.includes(tipoPedido);
+        const ehPedidoMoto = listaMoto.includes(tipoPedido);
+        const ehPedidoCarro = !ehPedidoEntrega && !ehPedidoMoto;
+
+        let compativelCategoria = false;
+        if (catMotorista === 'moto') {
+          compativelCategoria = ehPedidoMoto || (fazEntregaExtra && ehPedidoEntrega);
+        } else if (catMotorista === 'entrega') {
+          compativelCategoria = ehPedidoEntrega;
+        } else {
+          compativelCategoria = ehPedidoCarro || (fazEntregaExtra && ehPedidoEntrega);
+        }
+
+        if (!compativelCategoria) return false;
+
+        if (temCoordsValidas && p.origem_lat !== null && p.origem_lng !== null) {
+          const dist = calcularDistanciaKm(
+            motoristaLat,
+            motoristaLng,
+            Number(p.origem_lat),
+            Number(p.origem_lng)
+          );
+          if (Number.isFinite(dist) && dist > RAIO_MAXIMO_KM) {
+            return false;
+          }
+        }
+
+        return true;
+      }).slice(0, 20);
+
+      return res.json(filtrados);
     } catch (error) {
       console.error('Erro em GET /api/pedidos/pendentes:', error);
       return res.status(500).json({ erro: 'Falha ao consultar chamadas.' });
     }
   });
+
   // =========================================================================
   // 4. HISTÓRICO
   // =========================================================================
@@ -711,7 +716,7 @@ export default function pedidosRouter(io) {
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
       const { id } = req.params;
-      const usuarioId = req.usuario.id;
+      const usuarioId = String(req.usuario.id);
       const emailUsuario = req.usuario.email || '';
 
       let motoristas = await sql`
@@ -756,12 +761,12 @@ export default function pedidosRouter(io) {
       const pedidoAtualizado = await sql`
         UPDATE pedidos 
         SET status = 'a_caminho', 
-            motorista_id = ${mot.id}, 
+            motorista_id = ${String(mot.id)}, 
             motorista_nome = ${mot.nome}, 
             motorista_telefone = ${mot.telefone || ''}, 
             motorista_veiculo = ${mot.veiculo_modelo || 'Onix'}, 
             motorista_placa = ${mot.veiculo_placa || 'ABC1D23'}
-        WHERE id::text = ${id}::text 
+        WHERE id::text = ${String(id)}::text 
           AND status IN ('pendente', 'aguardando', 'buscando', 'criado')
         RETURNING *;
       `;
@@ -769,8 +774,8 @@ export default function pedidosRouter(io) {
       if (pedidoAtualizado.length === 0) {
         const jaAceito = await sql`
           SELECT * FROM pedidos 
-          WHERE id::text = ${id}::text 
-            AND (motorista_id::text = ${mot.id}::text OR status IN ('a_caminho', 'em_andamento', 'em_viagem'));
+          WHERE id::text = ${String(id)}::text 
+            AND (motorista_id::text = ${String(mot.id)}::text OR status IN ('a_caminho', 'em_andamento', 'em_viagem'));
         `;
         if (jaAceito.length > 0) {
           return res.json({ sucesso: true, pedido: jaAceito[0] });
@@ -811,6 +816,7 @@ export default function pedidosRouter(io) {
 
       res.json({ sucesso: true, pedido: payloadResposta });
     } catch (err) {
+      console.error('Erro ao aceitar pedido:', err);
       res.status(500).json({ erro: 'Falha ao aceitar pedido.' });
     }
   });
@@ -859,8 +865,8 @@ export default function pedidosRouter(io) {
         UPDATE motoristas 
         SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
             total_corridas = COALESCE(total_corridas, 0) + 1
-        WHERE id::text = ${motoristaIdReal}::text 
-           OR id::text = ${pedido.motorista_id}::text
+        WHERE id::text = ${String(motoristaIdReal)}::text 
+           OR id::text = ${String(pedido.motorista_id)}::text
         RETURNING saldo_carteira, total_corridas;
       `;
 
@@ -938,7 +944,7 @@ export default function pedidosRouter(io) {
               INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
               VALUES (${String(motoristaIdAlvo)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
             `;
-          } catch (eTrans) { }
+          } catch (eTrans) {}
         }
 
         if (pedido.cliente_id) {
@@ -1004,7 +1010,7 @@ export default function pedidosRouter(io) {
         try {
           await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
           await sql`UPDATE pedidos SET pix_txid = ${txidGerado} WHERE id::text = ${String(id)}::text;`;
-        } catch (ePed) { }
+        } catch (ePed) {}
 
         try {
           await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS txid VARCHAR(64);`;
@@ -1068,7 +1074,6 @@ export default function pedidosRouter(io) {
       const ehClienteDono = String(pedido.cliente_id) === usuarioId;
       const aindaBuscando = ['pendente', 'aguardando', 'buscando', 'criado'].includes(statusAtual) && !pedido.motorista_id;
 
-      // Cliente só pode cancelar enquanto ainda está procurando motorista (antes do aceite)
       if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
         if (!ehClienteDono || !aindaBuscando) {
           return res.status(403).json({ erro: 'Corrida já aceita. Apenas o motorista parceiro pode cancelar agora.' });
@@ -1082,7 +1087,6 @@ export default function pedidosRouter(io) {
       let taxaCancelamentoAplicada = 0;
       let repasseEsperaMotorista = 0;
 
-      // Calcula se o motorista já chegou ao local de embarque e aguardou mais de 3 minutos
       if (pedido.motorista_id && pedido.chegou_origem_em) {
         const segundosEsperados = (Date.now() - new Date(pedido.chegou_origem_em).getTime()) / 1000;
         const toleranciaExcedida = segundosEsperados >= TEMPO_TOLERANCIA_ESPERA_SEG;
@@ -1102,7 +1106,7 @@ export default function pedidosRouter(io) {
               INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
               VALUES (${String(pedido.motorista_id)}, 'motorista', 'taxa_espera_cancelamento', ${repasseEsperaMotorista}, ${String(id)});
             `;
-          } catch (eTx) { }
+          } catch (eTx) {}
         }
       }
 
@@ -1145,33 +1149,47 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 10. PREFERÊNCIAS DE PAGAMENTO DO MOTORISTA
+  // 10. PREFERÊNCIAS DE PAGAMENTO E ENTREGA DO MOTORISTA
   // =========================================================================
   router.put('/motoristas/preferencias-pagamento', autenticarToken, async (req, res) => {
     try {
       const usuarioId = req.usuario.id;
-      const { aceita_dinheiro, aceita_cartao, aceita_pix } = req.body;
+      const { aceita_dinheiro, aceita_cartao, aceita_pix, aceita_entrega } = req.body;
 
       if (!aceita_dinheiro && !aceita_cartao && !aceita_pix) {
         return res.status(400).json({ erro: 'Selecione ao menos uma forma de pagamento para trabalhar.' });
       }
 
-      const atualizado = await sql`
-        UPDATE motoristas
-        SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
-            aceita_cartao = ${Boolean(aceita_cartao)},
-            aceita_pix = ${Boolean(aceita_pix)}
-        WHERE id::text = ${String(usuarioId)}::text 
-           OR usuario_id::text = ${String(usuarioId)}::text
-        RETURNING aceita_dinheiro, aceita_cartao, aceita_pix;
-      `;
+      const temEntregaFlag = typeof aceita_entrega === 'boolean';
+
+      const atualizado = temEntregaFlag
+        ? await sql`
+            UPDATE motoristas
+            SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
+                aceita_cartao = ${Boolean(aceita_cartao)},
+                aceita_pix = ${Boolean(aceita_pix)},
+                aceita_entrega = ${Boolean(aceita_entrega)}
+            WHERE id::text = ${String(usuarioId)}::text 
+               OR usuario_id::text = ${String(usuarioId)}::text
+            RETURNING aceita_dinheiro, aceita_cartao, aceita_pix, aceita_entrega;
+          `
+        : await sql`
+            UPDATE motoristas
+            SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
+                aceita_cartao = ${Boolean(aceita_cartao)},
+                aceita_pix = ${Boolean(aceita_pix)}
+            WHERE id::text = ${String(usuarioId)}::text 
+               OR usuario_id::text = ${String(usuarioId)}::text
+            RETURNING aceita_dinheiro, aceita_cartao, aceita_pix, aceita_entrega;
+          `;
 
       if (atualizado.length === 0) {
         await sql`
           UPDATE motoristas
           SET aceita_dinheiro = ${Boolean(aceita_dinheiro)},
               aceita_cartao = ${Boolean(aceita_cartao)},
-              aceita_pix = ${Boolean(aceita_pix)}
+              aceita_pix = ${Boolean(aceita_pix)},
+              aceita_entrega = COALESCE(${temEntregaFlag ? Boolean(aceita_entrega) : null}, aceita_entrega)
           WHERE id = (SELECT id FROM motoristas ORDER BY id ASC LIMIT 1);
         `;
       }
@@ -1230,6 +1248,9 @@ export default function pedidosRouter(io) {
       let motoristas = await sql`
         SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
                foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+               COALESCE(categoria, 'carro') AS categoria,
+               COALESCE(status_online, false) AS status_online,
+               COALESCE(aceita_entrega, false) AS aceita_entrega,
                COALESCE(codigo_voz, 'Zank') AS codigo_voz,
                COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
                COALESCE(aceita_cartao, true) AS aceita_cartao,
@@ -1245,6 +1266,9 @@ export default function pedidosRouter(io) {
         motoristas = await sql`
           SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
                  foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+                 COALESCE(categoria, 'carro') AS categoria,
+                 COALESCE(status_online, false) AS status_online,
+                 COALESCE(aceita_entrega, false) AS aceita_entrega,
                  COALESCE(codigo_voz, 'Zank') AS codigo_voz,
                  COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
                  COALESCE(aceita_cartao, true) AS aceita_cartao,
@@ -1275,7 +1299,7 @@ export default function pedidosRouter(io) {
       const {
         nome, telefone, foto_perfil_url, foto_base64,
         veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-        chave_pix_padrao, codigo_voz
+        chave_pix_padrao, codigo_voz, categoria, aceita_entrega
       } = req.body;
 
       const fNome = (nome && nome.trim()) ? nome.trim() : null;
@@ -1290,6 +1314,8 @@ export default function pedidosRouter(io) {
       const fAno = (veiculo_ano && String(veiculo_ano).trim()) ? String(veiculo_ano).trim() : null;
       const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
       const fCodVoz = (codigo_voz && codigo_voz.trim()) ? codigo_voz.trim() : null;
+      const fCat = (categoria && categoria.trim()) ? categoria.trim().toLowerCase() : null;
+      const fEntrega = typeof aceita_entrega === 'boolean' ? aceita_entrega : null;
 
       let mot = await sql`
         UPDATE motoristas
@@ -1302,7 +1328,9 @@ export default function pedidosRouter(io) {
           veiculo_cor = COALESCE(${fCor}, veiculo_cor),
           veiculo_ano = COALESCE(${fAno}, veiculo_ano),
           chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
-          codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
+          codigo_voz = COALESCE(${fCodVoz}, codigo_voz),
+          categoria = COALESCE(${fCat}, categoria),
+          aceita_entrega = COALESCE(${fEntrega}, aceita_entrega)
         WHERE id::text = ${String(usuarioId)}::text 
            OR usuario_id::text = ${String(usuarioId)}::text 
            OR (email = ${emailUsuario} AND ${emailUsuario} != '')
@@ -1313,7 +1341,7 @@ export default function pedidosRouter(io) {
         mot = await sql`
           UPDATE motoristas
           SET 
-            usuario_id = ${usuarioId},
+            usuario_id = ${String(usuarioId)},
             nome = COALESCE(${fNome}, nome),
             telefone = COALESCE(${fTel}, telefone),
             foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
@@ -1322,7 +1350,9 @@ export default function pedidosRouter(io) {
             veiculo_cor = COALESCE(${fCor}, veiculo_cor),
             veiculo_ano = COALESCE(${fAno}, veiculo_ano),
             chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
-            codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
+            codigo_voz = COALESCE(${fCodVoz}, codigo_voz),
+            categoria = COALESCE(${fCat}, categoria),
+            aceita_entrega = COALESCE(${fEntrega}, aceita_entrega)
           WHERE id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1)
           RETURNING *;
         `;
@@ -1344,6 +1374,7 @@ export default function pedidosRouter(io) {
       return res.status(500).json({ erro: err.message || 'Falha ao salvar dados do perfil.' });
     }
   });
+
   // =========================================================================
   // 14. AVALIAR CORRIDA CONCLUÍDA (ESTRELAS + ETIQUETAS + COMENTÁRIO)
   // =========================================================================

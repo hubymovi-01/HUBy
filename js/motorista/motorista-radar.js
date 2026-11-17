@@ -99,9 +99,6 @@ document.addEventListener('visibilitychange', async () => {
   }
 });
 
-// ============================================================================
-// SELFIE DE VERIFICAÇÃO DE IDENTIDADE AO FICAR ONLINE
-// ============================================================================
 function selfieTurnoValida() {
   const ultimoTs = Number(localStorage.getItem('huby_ultima_selfie_ts') || 0);
   if (!ultimoTs) return false;
@@ -318,7 +315,6 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
-// Alterna o status Online exigindo selfie de verificação do turno
 export async function alternarStatusOnline(forcarEstado = null) {
   const token = localStorage.getItem('huby_token');
   const btn = document.getElementById('btnToggleStatusOnline');
@@ -462,10 +458,11 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
   try {
     const cat = estado.categoriaMotorista || 'carro';
+    const aceitaEntrega = Boolean(estado.aceitaEntrega);
     const { lat, lng } = obterCoordenadasAtuaisMotorista();
 
     const resp = await fetch(
-      `${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&lat=${lat}&lng=${lng}&t=${Date.now()}`,
+      `${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&aceitaEntrega=${aceitaEntrega}&lat=${lat}&lng=${lng}&t=${Date.now()}`,
       {
         cache: 'no-store',
         headers: {
