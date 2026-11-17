@@ -1,6 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Sincronizada em Tempo Real + Controle Exclusivo de Cancelamento pelo Motorista
+ * Versão Sincronizada em Tempo Real + Controle Exclusivo de Cancelamento + Suporte IA
  */
 
 import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
@@ -139,7 +139,6 @@ function configurarMetaDiaria() {
   atualizarBarraMetaDiaria();
 }
 
-// Substitua esta função no seu js/app-motorista.js
 function configurarCodigoVozDireto() {
   const inputComando = document.getElementById('drawerInputCodigoVoz');
   const btnSalvarComando = document.getElementById('btnSalvarCodigoVoz');
@@ -320,6 +319,172 @@ function configurarBotaoCancelarNaTelaMotorista() {
   setInterval(garantirBotaoCancelar, 1000);
 }
 
+// ============================================================================
+// CHAT DE SUPORTE INTELIGENTE (IA) COM MENSAGENS TEMPORÁRIAS (24H)
+// ============================================================================
+function inicializarChatSuporteIA() {
+  const btnAbrir = document.getElementById('btnAbrirChatSuporte');
+  const btnFechar = document.getElementById('btnFecharChatSuporte');
+  const modal = document.getElementById('modalChatSuporteIA');
+  const inputMsg = document.getElementById('inputMsgSuporte');
+  const btnEnviar = document.getElementById('btnEnviarMsgSuporte');
+  const areaMensagens = document.getElementById('suporteAreaMensagens');
+
+  if (!btnAbrir || !modal) return;
+
+  const CHAT_STORAGE_KEY = 'huby_suporte_chat_history';
+  const TEMPO_EXPIRACAO_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+  function carregarHistorico() {
+    try {
+      const dataString = localStorage.getItem(CHAT_STORAGE_KEY);
+      if (!dataString) return [];
+      
+      const data = JSON.parse(dataString);
+      const agora = new Date().getTime();
+      
+      // Limpa se passou 24h desde a última mensagem
+      if (data.ultimaAtualizacao && (agora - data.ultimaAtualizacao > TEMPO_EXPIRACAO_MS)) {
+        localStorage.removeItem(CHAT_STORAGE_KEY);
+        return [];
+      }
+      
+      return data.mensagens || [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function salvarHistorico(mensagens) {
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({
+      ultimaAtualizacao: new Date().getTime(),
+      mensagens: mensagens
+    }));
+  }
+
+  function renderizarMensagem(msg) {
+    const isUser = msg.autor === 'user';
+    const alignSelf = isUser ? 'flex-end' : 'flex-start';
+    const bgColor = isUser ? '#38BDF8' : 'rgba(16, 185, 129, 0.15)';
+    const color = isUser ? '#02131D' : '#FFF';
+    const border = isUser ? 'none' : '1px solid rgba(16, 185, 129, 0.3)';
+    const borderRadius = isUser ? '12px 12px 0 12px' : '0 12px 12px 12px';
+    const textAlign = isUser ? 'right' : 'left';
+
+    const divWrapper = document.createElement('div');
+    divWrapper.style.cssText = `align-self: ${alignSelf}; max-width: 85%;`;
+
+    const divMsg = document.createElement('div');
+    divMsg.style.cssText = `background: ${bgColor}; border: ${border}; color: ${color}; padding: 12px; border-radius: ${borderRadius}; font-size: 13px; line-height: 1.5;`;
+    divMsg.innerHTML = msg.texto; // innerHTML para suportar <br>
+
+    const smallTime = document.createElement('small');
+    smallTime.style.cssText = `display: block; color: #64748B; font-size: 10px; margin-top: 4px; text-align: ${textAlign};`;
+    const horaFormatada = new Date(msg.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    smallTime.textContent = horaFormatada;
+
+    divWrapper.appendChild(divMsg);
+    divWrapper.appendChild(smallTime);
+    areaMensagens.appendChild(divWrapper);
+    areaMensagens.scrollTop = areaMensagens.scrollHeight;
+  }
+
+  function renderizarChatInteiro() {
+    areaMensagens.innerHTML = '';
+    const mensagens = carregarHistorico();
+    
+    if (mensagens.length === 0) {
+      const msgInicial = {
+        autor: 'ia',
+        texto: 'Olá, parceiro! Sou o assistente virtual da HUBy. Como posso ajudar?<br><br><small style="color: #94A3B8;">Dica: Se for um problema sério ou urgente, digite "Falar com humano" ou "Acidente".</small>',
+        data: new Date().getTime()
+      };
+      mensagens.push(msgInicial);
+      salvarHistorico(mensagens);
+    }
+    
+    mensagens.forEach(renderizarMensagem);
+  }
+
+  async function escalarParaHumano(mensagemTexto) {
+    const token = localStorage.getItem('huby_token');
+    try {
+      await fetch(`${API_URL}/api/suporte/chamado`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          pedido_id: null,
+          assunto: 'Escalado via IA - Urgente',
+          mensagem: mensagemTexto
+        })
+      });
+    } catch (e) {
+      console.warn('Erro ao escalar ticket para o backend:', e);
+    }
+  }
+
+  async function enviarMensagem() {
+    const texto = inputMsg.value.trim();
+    if (!texto) return;
+
+    inputMsg.value = '';
+    
+    const novaMensagem = { autor: 'user', texto: texto, data: new Date().getTime() };
+    const mensagens = carregarHistorico();
+    mensagens.push(novaMensagem);
+    salvarHistorico(mensagens);
+    renderizarMensagem(novaMensagem);
+
+    const btnTexto = btnEnviar.innerHTML;
+    btnEnviar.innerHTML = '⏳';
+    btnEnviar.disabled = true;
+
+    // Simular o delay de digitação e a resposta da IA
+    setTimeout(async () => {
+      let respostaTexto = '';
+      const textoLower = texto.toLowerCase();
+
+      // Gatilhos de escalonamento automático para a tabela do painel Master
+      if (textoLower.includes('humano') || textoLower.includes('grave') || textoLower.includes('acidente') || textoLower.includes('roubo') || textoLower.includes('polícia')) {
+        respostaTexto = 'Compreendo a gravidade da situação. Acabei de transferir este relato diretamente para a nossa equipe humana. Eles analisarão o caso e entrarão em contato via e-mail e telefone o mais rápido possível.';
+        await escalarParaHumano(texto);
+      } else {
+        respostaTexto = 'Entendido! Registei o seu relato. Como sou um assistente em treinamento, salvei esta informação para ajudar no acompanhamento do seu perfil.';
+      }
+
+      const respostaIA = { autor: 'ia', texto: respostaTexto, data: new Date().getTime() };
+      const mensagensAtuais = carregarHistorico();
+      mensagensAtuais.push(respostaIA);
+      salvarHistorico(mensagensAtuais);
+      renderizarMensagem(respostaIA);
+      
+      btnEnviar.innerHTML = btnTexto;
+      btnEnviar.disabled = false;
+      inputMsg.focus();
+    }, 1200);
+  }
+
+  // Eventos de click e enter
+  btnAbrir.addEventListener('click', (e) => {
+    e.preventDefault();
+    renderizarChatInteiro();
+    modal.style.display = 'flex';
+  });
+
+  btnFechar.addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+
+  btnEnviar.addEventListener('click', enviarMensagem);
+
+  inputMsg.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') enviarMensagem();
+  });
+}
+
 function registrarEventosUI() {
   const btnOnline = document.getElementById('btnToggleStatusOnline');
   if (btnOnline) {
@@ -376,45 +541,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   inicializarCopilotoVoz();
   restaurarPreferenciaCopiloto();
+  
+  // Inicializa o chat da IA após o carregamento da página
+  inicializarChatSuporteIA();
 });
-// ============================================================================
-// SISTEMA DE SUPORTE E AJUDA (TICKETS)
-// ============================================================================
-window.abrirSuporteCorrida = async (pedidoId = null) => {
-  const mensagem = prompt('Conte-nos o que aconteceu. A nossa equipa vai analisar o seu caso:');
-
-  if (!mensagem || mensagem.trim() === '') {
-    return; // Utilizador cancelou ou não escreveu nada
-  }
-
-  const token = localStorage.getItem('huby_token');
-  if (!token) {
-    alert('A sua sessão expirou. Faça login novamente.');
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/api/suporte/chamado`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        pedido_id: pedidoId,
-        assunto: 'Problema na Viagem',
-        mensagem: mensagem.trim()
-      })
-    });
-
-    const data = await res.json();
-
-    if (res.ok) {
-      alert('✅ O seu relato foi enviado para a central HUBy. A nossa equipa vai analisar e entrar em contacto!');
-    } else {
-      alert('❌ Erro: ' + (data.erro || 'Não foi possível enviar o relato.'));
-    }
-  } catch (err) {
-    alert('❌ Erro de ligação ao contactar o suporte.');
-  }
-};
