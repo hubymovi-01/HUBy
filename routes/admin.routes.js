@@ -982,32 +982,29 @@ export default function adminRoutes(io) {
 // =========================================================================
 router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
   try {
-    const { publico, regiao, titulo, mensagem } = req.body;
+    const { publico = 'todos', regiao = 'todas', titulo, mensagem } = req.body;
 
-    if (!titulo || !mensagem) {
+    if (!String(titulo || '').trim() || !String(mensagem || '').trim()) {
       return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
     }
 
-    // Acessa o Socket.IO configurado no servidor
+    const payload = {
+      publico: String(publico).trim(),
+      regiao: String(regiao || 'todas').trim(),
+      titulo: String(titulo).trim(),
+      mensagem: String(mensagem).trim(),
+      criado_em: new Date().toISOString()
+    };
+
     const io = req.app.get('io');
     if (io) {
-      // O evento é disparado contendo os filtros. 
-      // No app (passageiro ou motorista), o script vai checar se a cidade dele bate com a 'regiao' enviada (ou se for 'todas', ele exibe).
-      io.emit('nova_notificacao_push', { 
-        publico, 
-        regiao, 
-        titulo, 
-        mensagem,
-        data: new Date().toISOString()
-      });
+      io.emit('nova_notificacao_push', payload);
     }
 
-    // Se no futuro integrar Firebase Cloud Messaging (FCM) ou OneSignal, o código de disparo irá entrar exatamente aqui.
-
-    res.json({ sucesso: true, mensagem: 'Broadcast processado e enviado aos sockets conectados.' });
+    res.json({ sucesso: true, payload });
   } catch (err) {
-    console.error('Erro no broadcast:', err);
-    res.status(500).json({ erro: 'Falha ao disparar broadcast' });
+    console.error('Erro ao disparar broadcast push:', err);
+    res.status(500).json({ erro: 'Falha ao disparar notificação push.' });
   }
 });
 
