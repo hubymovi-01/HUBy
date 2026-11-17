@@ -80,6 +80,10 @@
     <button type="button" class="tab-btn" data-tab="tabSaques">💰 Extrato de Saques</button>
     <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Condutores</button>
     <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Viagens</button>
+    <button type="button" id="btnExportarFinanceiroContabilidade"
+      style="background: rgba(16, 185, 129, 0.15); border: 1px solid #10B981; color: #10B981; padding: 10px 14px; border-radius: 8px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+      📊 Relatório Contábil (CSV)
+    </button>
     <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Tarifas & Gateway</button>
     <button type="button" class="tab-btn" data-tab="tabMarketplace">🛍️ Loja & Clube</button>
   </nav>
@@ -192,7 +196,8 @@
       <div class="card-panel">
         <h3 class="panel-primary-title">🎁 Programa Indique e Ganhe</h3>
         <p class="panel-subtitle">
-          Defina livremente os valores de recompensa para passageiros e motoristas que trouxerem novos usuários para o HUBy.
+          Defina livremente os valores de recompensa para passageiros e motoristas que trouxerem novos usuários para o
+          HUBy.
         </p>
         <form id="formConfigIndicacao">
           <div class="form-group">
@@ -239,7 +244,8 @@
       <div class="card-panel">
         <h3 class="panel-blue-title">⚡ Tarifa Dinâmica (Alta Demanda)</h3>
         <p class="panel-subtitle">
-          Multiplica o valor da corrida automaticamente quando há poucos motoristas na região ou em horários de chuva/pico.
+          Multiplica o valor da corrida automaticamente quando há poucos motoristas na região ou em horários de
+          chuva/pico.
         </p>
         <form id="formConfigDinamica">
           <div class="form-group">
@@ -460,14 +466,17 @@
 
   <!-- ABA 8: GESTÃO E EXTRATO DE SAQUES -->
   <section id="tabSaques" class="tab-pane">
-    <div class="callout-pix-automatico" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+    <div class="callout-pix-automatico"
+      style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:260px;">
         <span class="callout-icon">⚡</span>
         <div class="callout-text">
-          <strong>Central de Repasses Pix (Cash-Out API):</strong> Os saques são processados automaticamente no pedido ou podem ser disparados em lote com 1 clique para toda a frota.
+          <strong>Central de Repasses Pix (Cash-Out API):</strong> Os saques são processados automaticamente no pedido
+          ou podem ser disparados em lote com 1 clique para toda a frota.
         </div>
       </div>
-      <button type="button" id="btnPagarSaquesLote" class="btn-action" style="background:#10B981; color:#02261C; font-weight:900; border:none;">
+      <button type="button" id="btnPagarSaquesLote" class="btn-action"
+        style="background:#10B981; color:#02261C; font-weight:900; border:none;">
         ⚡ Liquidar Todos os Pendentes em Lote
       </button>
     </div>

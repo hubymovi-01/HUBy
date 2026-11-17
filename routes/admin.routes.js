@@ -1027,6 +1027,66 @@ export default function adminRoutes(io) {
       res.status(500).json({ erro: 'Falha ao gerar CSV.' });
     }
   });
+  // =========================================================================
+  // 11. RELATÓRIO FINANCEIRO PARA CONTABILIDADE (CSV)
+  // =========================================================================
+  router.get('/relatorios/financeiro.csv', autenticarCsv, verificarAdmin, async (req, res) => {
+    try {
+      // Puxa a taxa atual da plataforma para calcular a retenção
+      const tarifas = await lerTarifasDoBanco();
+      const taxaPct = Number(tarifas.taxa_plataforma ?? 15) / 100;
+
+      // Consolida saques, corridas e dados do motorista numa única super query
+      const registros = await sql`
+        WITH saques AS (
+          SELECT motorista_id, COALESCE(SUM(valor), 0) AS total_saques
+          FROM saques_motoristas
+          WHERE status = 'pago'
+          GROUP BY motorista_id
+        ),
+        corridas AS (
+          SELECT motorista_id,
+                 COUNT(id) AS total_viagens,
+                 COALESCE(SUM(valor_total) FILTER (WHERE forma_pagamento IN ('pix_mp', 'pix', 'cartao_maquininha')), 0) AS entradas_app,
+                 COALESCE(SUM(valor_total), 0) AS faturamento_bruto
+          FROM pedidos
+          WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'pago', 'finalizado')
+          GROUP BY motorista_id
+        )
+        SELECT 
+          m.id, m.nome, m.cpf, m.chave_pix_padrao, m.saldo_carteira, m.criado_em,
+          COALESCE(s.total_saques, 0) AS saques_realizados,
+          COALESCE(c.entradas_app, 0) AS entradas_app,
+          COALESCE(c.faturamento_bruto, 0) AS faturamento_bruto,
+          COALESCE(c.total_viagens, 0) AS total_viagens
+        FROM motoristas m
+        LEFT JOIN saques s ON m.id::text = s.motorista_id::text
+        LEFT JOIN corridas c ON m.id::text = c.motorista_id::text
+        ORDER BY m.nome ASC;
+      `;
+
+      // Cabeçalho com separador Ponto e Vírgula (Padrão Excel PT-BR)
+      let csv = 'ID_Motorista;Nome;CPF;Chave_PIX;Data_Cadastro;Total_Viagens;Faturamento_Bruto;Entradas_Digitais_Pix;Taxa_Plataforma_Retida;Saques_Pagos;Saldo_Atual_Carteira\n';
+      
+      const formatarMoedaBR = (num) => Number(num).toFixed(2).replace('.', ',');
+      const formatarData = (data) => new Date(data).toLocaleDateString('pt-BR');
+
+      registros.forEach(r => {
+        const fatBruto = Number(r.faturamento_bruto || 0);
+        const taxaPlataforma = fatBruto * taxaPct;
+        
+        csv += `"${r.id}";"${r.nome || ''}";"${r.cpf || ''}";"${r.chave_pix_padrao || ''}";"${formatarData(r.criado_em)}";"${r.total_viagens}";"${formatarMoedaBR(fatBruto)}";"${formatarMoedaBR(r.entradas_app)}";"${formatarMoedaBR(taxaPlataforma)}";"${formatarMoedaBR(r.saques_realizados)}";"${formatarMoedaBR(r.saldo_carteira)}"\n`;
+      });
+
+      // Força o download do arquivo no navegador
+      res.header('Content-Type', 'text/csv; charset=utf-8');
+      res.attachment(`huby-relatorio-financeiro-${Date.now()}.csv`);
+      res.send(csv);
+    } catch (err) {
+      console.error('Erro ao gerar CSV financeiro:', err);
+      res.status(500).json({ erro: 'Falha ao gerar relatório financeiro para contabilidade.' });
+    }
+  });
 
   return router;
 }

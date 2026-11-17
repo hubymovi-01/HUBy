@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
     notificarAdmin('Dados sincronizados com o servidor!', 'sucesso');
   });
   document.getElementById('btnBaixarCSV')?.addEventListener('click', () => exportarRelatorioCSV(token));
+  document.getElementById('btnExportarFinanceiroContabilidade')?.addEventListener('click', () => exportarFinanceiroCSV(token));
 
   try {
     inicializarRadarMaster(token);
@@ -1511,4 +1512,9 @@ window.resolverIncidente = async (id) => {
 function exportarRelatorioCSV(token) {
   const tokenUrl = token || localStorage.getItem('huby_token') || '';
   window.open(`${API_URL}/api/admin/relatorios/corridas.csv?token=${encodeURIComponent(tokenUrl)}`, '_blank');
+}
+
+function exportarFinanceiroCSV(token) {
+  const tokenUrl = token || localStorage.getItem('huby_token') || '';
+  window.open(`${API_URL}/api/admin/relatorios/financeiro.csv?token=${encodeURIComponent(tokenUrl)}`, '_blank');
 }
