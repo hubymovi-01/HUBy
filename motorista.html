@@ -106,15 +106,15 @@
   <!-- DRAWER LATERAL (MENU DO MOTORISTA) -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
   <aside class="driver-drawer" id="driverDrawer">
-    <div class="drawer-header">
+    
+    <div class="drawer-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
       <button type="button" class="btn-close-drawer" id="btnFecharDrawerPerfil">✕</button>
       <div class="drawer-profile-info">
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
           alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
           <strong style="font-size: 17px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
-          <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;"
-            id="drawerCategoriaBadge">HUBY CARRO</span>
+          <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;" id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
             <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
             <span id="drawerTotalViagensTxt">0 viagens</span>
@@ -127,200 +127,139 @@
       </button>
     </div>
 
-    <div class="drawer-content">
-      <!-- CENTRAL DO COPILOTO POR VOZ IA (DENTRO DO MENU DO MOTORISTA) -->
-      <div class="drawer-section-card"
-        style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div>
-            <h4 style="margin: 0; display: flex; align-items: center; gap: 6px;">
-              🎙️ Copiloto de Voz IA
-            </h4>
-            <small id="lblStatusCopilotoDrawer" style="font-size: 11px; color: #94A3B8; font-weight: 700;">
-              Desativado • Ligue para usar por voz
-            </small>
-          </div>
-          <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
-            <input type="checkbox" id="chkCopilotoAtivo"
-              style="width: 22px; height: 22px; accent-color: #10B981; cursor: pointer;">
+    <div class="drawer-content" style="padding: 16px 16px 40px 16px; overflow-y: auto;">
+      
+      <!-- CARTÃO 1: FERRAMENTAS INTELIGENTES -->
+      <div class="drawer-section-card">
+        <h4 class="drawer-section-title">⚡ Modos e Ferramentas</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+          <button type="button" id="btnAbrirMarketplaceDrawer" class="btn-drawer-tool" style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #C084FC;">
+            <span style="font-size: 18px;">🛍️</span>
+            <div><strong>HUBy Loja</strong><small>Clube & Descontos</small></div>
+          </button>
+          <button type="button" id="btnToggleHeatmap" class="btn-drawer-tool" style="background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); color: var(--amber);">
+            <span style="font-size: 18px;">🔥</span>
+            <div><strong>Mapa Calor</strong><small>Alta Demanda</small></div>
+          </button>
+          <button type="button" id="btnModoPausa" class="btn-drawer-tool" style="background: rgba(255, 255, 255, 0.05); border-color: var(--border-dark); color: #FFF;">
+            <span style="font-size: 18px;">☕</span>
+            <div><strong>Modo Pausa</strong><small>Pausa Rápida</small></div>
+          </button>
+          <button type="button" id="btnModoDestino" class="btn-drawer-tool" style="background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.3); color: var(--blue);">
+            <span style="font-size: 18px;">🏠</span>
+            <div><strong>Ir p/ Casa</strong><small>Corridas na Rota</small></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- CARTÃO 2: FORMAS DE RECEBIMENTO -->
+      <div class="drawer-section-card">
+        <h4 class="drawer-section-title">💳 Aceitação de Pagamento</h4>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
+            <span>💵 Dinheiro (Espécie)</span>
+            <input type="checkbox" id="chkAceitaDinheiro" checked style="accent-color: var(--emerald); width: 18px; height: 18px;">
+          </label>
+          <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
+            <span>💳 Maquininha Própria</span>
+            <input type="checkbox" id="chkAceitaCartao" checked style="accent-color: var(--blue); width: 18px; height: 18px;">
+          </label>
+          <label style="display: flex; align-items: center; justify-content: space-between; font-size: 13px;">
+            <span>📱 Pix Oficial (App)</span>
+            <input type="checkbox" id="chkAceitaPix" checked style="accent-color: var(--purple); width: 18px; height: 18px;">
           </label>
         </div>
+        <button type="button" id="btnSalvarPreferenciasPagto" class="btn-drawer-solid" style="margin-top: 14px;">Salvar Preferências</button>
+      </div>
 
-        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 8px;">
-          Palavra-chave para chamar a IA (funciona independente do botão Online):
-        </p>
-        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
-          <input type="text" id="drawerInputCodigoVoz" placeholder="Ex: Zanix, Zank, Falcão"
-            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 8px; padding: 8px 10px; color: #38BDF8; font-weight: 800; font-size: 12px; outline: none;">
-          <button type="button" id="btnSalvarCodigoVoz"
-            style="background: #10B981; border: none; border-radius: 8px; color: #02261C; font-weight: 900; font-size: 11px; padding: 0 12px; cursor: pointer;">Salvar</button>
-        </div>
-
-        <!-- CONFIGURAÇÕES DE VOZ, TOM E VELOCIDADE -->
-        <div
-          style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+      <!-- CARTÃO 3: COPILOTO (ACORDEÃO OCULTO) -->
+      <details class="drawer-section-card collapsible-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
+        <summary class="drawer-section-title" style="cursor: pointer; margin: 0; outline: none; color: #10B981;">
+          🎙️ Configurar Copiloto de Voz
+        </summary>
+        <div style="padding-top: 16px; display: flex; flex-direction: column; gap: 12px;">
+          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
+            Ativar Inteligência Artificial
+            <input type="checkbox" id="chkCopilotoAtivo" style="width: 20px; height: 20px; accent-color: #10B981;">
+          </label>
+          
           <div>
-            <label
-              style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Voz
-              do Assistente</label>
-            <select id="selVozCopiloto"
-              style="width: 100%; padding: 8px; border-radius: 8px; background: #090D16; color: #FFF; border: 1px solid var(--border-dark); font-size: 12px; outline: none;"></select>
+            <label style="font-size: 10px; color: var(--text-sec);">Nome de Chamada (Ex: Jarvis)</label>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <input type="text" id="drawerInputCodigoVoz" class="drawer-input" placeholder="Zanix, Falcão...">
+              <button type="button" id="btnSalvarCodigoVoz" class="btn-drawer-solid" style="width: auto; padding: 0 14px;">Salvar</button>
+            </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
             <div>
-              <label
-                style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Tom
-                da Voz</label>
-              <select id="selTomCopiloto"
-                style="width: 100%; padding: 8px; border-radius: 8px; background: #090D16; color: #FFF; border: 1px solid var(--border-dark); font-size: 12px; outline: none;">
+              <label style="font-size: 10px; color: var(--text-sec);">Tom da Voz</label>
+              <select id="selTomCopiloto" class="drawer-input">
                 <option value="0.75">Grave</option>
                 <option value="1">Normal</option>
                 <option value="1.3">Aguda</option>
               </select>
             </div>
             <div>
-              <label
-                style="display: block; font-size: 10px; font-weight: 800; color: #94A3B8; margin-bottom: 3px; text-transform: uppercase;">Velocidade</label>
-              <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05"
-                style="width: 100%; accent-color: #38BDF8; cursor: pointer;">
+              <label style="font-size: 10px; color: var(--text-sec);">Velocidade</label>
+              <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05" style="width: 100%; accent-color: #38BDF8;">
             </div>
           </div>
+          <div>
+            <label style="font-size: 10px; color: var(--text-sec);">Voz Base</label>
+            <select id="selVozCopiloto" class="drawer-input"></select>
+          </div>
+
+          <button type="button" id="btnTestarCodigoVoz" class="btn-drawer-outline">🔊 Testar Voz</button>
         </div>
+      </details>
 
-        <button type="button" id="btnTestarCodigoVoz"
-          style="width: 100%; background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); color: #38BDF8; padding: 9px; border-radius: 8px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          🔊 Testar Voz do Copiloto
-        </button>
-      </div>
-
-      <!-- FERRAMENTAS INTELIGENTES DO MOTORISTA -->
+      <!-- CARTÃO 4: VEÍCULO -->
       <div class="drawer-section-card">
-        <h4>⚡ Modos e Ferramentas</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <button type="button" id="btnAbrirMarketplaceDrawer" class="btn-drawer-tool"
-            style="background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.35); color: #C084FC;">
-            <span style="font-size: 18px;">🛍️</span>
-            <div>
-              <strong>HUBy Loja</strong>
-              <small>Clube & Descontos</small>
-            </div>
-          </button>
-
-          <button type="button" id="btnToggleHeatmap" class="btn-drawer-tool"
-            style="background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.3); color: var(--amber);">
-            <span style="font-size: 18px;">🔥</span>
-            <div>
-              <strong>Mapa Calor</strong>
-              <small>Alta Demanda</small>
-            </div>
-          </button>
-
-          <button type="button" id="btnModoPausa" class="btn-drawer-tool"
-            style="background: rgba(255, 255, 255, 0.05); border-color: var(--border-dark); color: #FFF;">
-            <span style="font-size: 18px;">☕</span>
-            <div>
-              <strong>Modo Pausa</strong>
-              <small>Pausa Rápida</small>
-            </div>
-          </button>
-
-          <button type="button" id="btnModoDestino" class="btn-drawer-tool"
-            style="background: rgba(56, 189, 248, 0.12); border-color: rgba(56, 189, 248, 0.3); color: var(--blue);">
-            <span style="font-size: 18px;">🏠</span>
-            <div>
-              <strong>Ir p/ Casa</strong>
-              <small>Corridas na Rota</small>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <!-- FORMAS DE RECEBIMENTO DO MOTORISTA -->
-      <div class="drawer-section-card">
-        <h4>💳 Formas Aceitas de Pagamento</h4>
-        <p style="font-size: 11px; color: var(--text-sec); margin: 0 0 10px;">
-          Selecione os métodos que você aceita nas viagens:
-        </p>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-          <label class="item-preferencia-pagto">
-            <span>💵 Dinheiro (Espécie)</span>
-            <input type="checkbox" id="chkAceitaDinheiro" checked style="accent-color: var(--emerald);">
-          </label>
-          <label class="item-preferencia-pagto">
-            <span>💳 Maquininha Própria</span>
-            <input type="checkbox" id="chkAceitaCartao" checked style="accent-color: var(--blue);">
-          </label>
-          <label class="item-preferencia-pagto">
-            <span>📱 Pix Oficial (Mercado Pago)</span>
-            <input type="checkbox" id="chkAceitaPix" checked style="accent-color: var(--purple);">
-          </label>
-        </div>
-        <button type="button" id="btnSalvarPreferenciasPagto"
-          style="margin-top: 12px; width: 100%; background: var(--emerald); border: none; color: #02261C; padding: 10px; border-radius: 8px; font-weight: 800; font-size: 12px; cursor: pointer;">
-          Salvar Preferências
-        </button>
-      </div>
-
-      <!-- VEÍCULO CADASTRADO -->
-      <div class="drawer-section-card">
-        <h4>🚘 Veículo Cadastrado</h4>
+        <h4 class="drawer-section-title">🚘 Veículo Cadastrado</h4>
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <strong style="font-size: 14px; color: #FFF;" id="drawerCarroModelo">Onix</strong>
-            <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata •
-              Ano: 2023</div>
+            <div style="font-size: 11px; color: var(--text-sec); margin-top: 2px;" id="drawerCarroDetalhes">Cor: Prata • Ano: 2023</div>
           </div>
-          <div class="placa-mercosul">
-            <div class="placa-mercosul-header"><span>BRASIL</span> <span>🇧🇷</span></div>
-            <div class="placa-mercosul-body" id="drawerCarroPlaca">ABC1D23</div>
+          <div class="mercosul-plate-passenger">
+            <div class="mercosul-plate-header"><span>BRASIL</span> <span>🇧🇷</span></div>
+            <div class="mercosul-plate-body" id="drawerCarroPlaca">ABC1D23</div>
           </div>
         </div>
       </div>
 
-      <!-- EXTRATO & GANHOS -->
+      <!-- EXTRATO & SAQUE PIX -->
       <div class="drawer-section-card">
-        <h4>
-          <span>💰 Extrato & Ganhos</span>
-          <span style="color: var(--emerald); font-size: 13px; font-weight: 900;" id="drawerSaldoValor">R$ 0,00</span>
+        <h4 class="drawer-section-title" style="display: flex; justify-content: space-between;">
+          <span>💰 Ganhos</span>
+          <span style="color: var(--emerald);" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
-        <div id="drawerListaExtrato" style="max-height: 140px; overflow-y: auto; padding-right: 4px;">
-          <div style="text-align: center; color: var(--text-sec); font-size: 11px; padding: 12px 0;">Consultando
-            histórico...</div>
+        <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px;">
+          <div style="text-align: center; color: var(--text-sec); padding: 10px 0;">Consultando histórico...</div>
         </div>
+        
+        <label style="font-size: 10px; color: var(--text-sec);">Chave Pix para Saques</label>
+        <div style="display: flex; gap: 6px; margin-top: 4px; margin-bottom: 10px;">
+          <input type="text" id="drawerInputChavePix" class="drawer-input" placeholder="Sua Chave Pix">
+          <button type="button" id="btnSalvarChavePix" class="btn-drawer-solid" style="width: auto; background: var(--blue); padding: 0 14px;">Salvar</button>
+        </div>
+        
+        <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline">📄 Exportar Fechamento (CSV)</button>
       </div>
 
-      <!-- CHAVE PIX PADRÃO -->
-      <div class="drawer-section-card">
-        <h4>⚡ Chave Pix Padrão</h4>
-        <div style="display: flex; gap: 6px;">
-          <input type="text" id="drawerInputChavePix" placeholder="Chave Pix para saques"
-            style="flex: 1; background: #090D16; border: 1px solid var(--border-dark); border-radius: 8px; padding: 8px 10px; color: #FFF; font-size: 12px; outline: none;">
-          <button type="button" id="btnSalvarChavePix"
-            style="background: var(--blue); border: none; border-radius: 8px; color: #000; font-weight: 800; font-size: 11px; padding: 0 12px; cursor: pointer;">Salvar</button>
-        </div>
+      <!-- BOTÕES DE SAÍDA E AJUDA -->
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
+        <button type="button" onclick="abrirSuporteCorrida()" class="btn-drawer-danger-outline">
+          🛡️ Reportar Problema ou Objeto Esquecido
+        </button>
+        <a href="./index.html" id="btnLogoutMotorista" class="btn-drawer-danger-solid" style="text-decoration: none; text-align: center; display: block; box-sizing: border-box;">
+          🚪 Encerrar Sessão / Sair
+        </a>
       </div>
 
-      <!-- EXPORTAR FECHAMENTO -->
-      <button type="button" id="btnExportarFechamentoDia"
-        style="width: 100%; background: rgba(255,255,255,0.06); border: 1px solid var(--glass-border); color: #FFF; padding: 11px; border-radius: 10px; font-weight: 700; font-size: 12px; cursor: pointer;">
-        📄 Descarregar Fechamento do Dia
-      </button>
-
-      <!-- REPORTAR PROBLEMA -->
-      <button type="button" id="btnAbrirModalIncidente"
-        style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #EF4444; padding: 10px; border-radius: 10px; font-weight: 800; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
-        🛡️ Reportar Problema ou Objeto Esquecido
-      </button>
-
-      <!-- SAIR -->
-      <a href="./index.html" id="btnLogoutMotorista"
-        style="display: block; text-align: center; text-decoration: none; margin-top: 4px; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--rose); padding: 12px; border-radius: 10px; font-weight: 800; font-size: 12px; cursor: pointer;">
-        🚪 Encerrar Sessão / Sair
-      </a>
     </div>
   </aside>
-
   <!-- MODAL DE EDIÇÃO DE PERFIL E FOTO -->
   <div id="modalEdicaoPerfil" class="modal-backdrop-custom">
     <div class="modal-box-edit">

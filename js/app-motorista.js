@@ -139,8 +139,9 @@ function configurarMetaDiaria() {
   atualizarBarraMetaDiaria();
 }
 
+// Substitua esta função no seu js/app-motorista.js
 function configurarCodigoVozDireto() {
-  const inputComando = document.getElementById('drawerInputCodigoVoz') || document.getElementById('inputCodigoVozMotorista');
+  const inputComando = document.getElementById('drawerInputCodigoVoz');
   const btnSalvarComando = document.getElementById('btnSalvarCodigoVoz');
   const btnTestarComando = document.getElementById('btnTestarCodigoVoz');
 

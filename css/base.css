@@ -375,3 +375,129 @@ input, button, select {
   transform: scale(0.98);
   background: rgba(239, 68, 68, 0.2);
 }
+/* ==========================================================================
+   ESTILOS DA GAVETA DO MOTORISTA (CLEAN UI)
+   ========================================================================== */
+.drawer-section-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.drawer-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #94A3B8;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Ferramentas Rápidas (Grid) */
+.btn-drawer-tool {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 12px 6px;
+  color: #CBD5E1;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-drawer-tool:active {
+  transform: scale(0.97);
+  filter: brightness(1.2);
+}
+
+.btn-drawer-tool strong {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.btn-drawer-tool small {
+  display: block;
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+/* Inputs e Botões Gerais da Gaveta */
+.drawer-input {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFF;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  outline: none;
+}
+
+.btn-drawer-solid {
+  width: 100%;
+  background: var(--primary-green);
+  color: #02261C;
+  border: none;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-drawer-outline {
+  width: 100%;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--primary-green);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-drawer-danger-solid {
+  width: 100%;
+  background: #EF4444;
+  color: #FFF;
+  border: none;
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-drawer-danger-outline {
+  width: 100%;
+  background: rgba(239, 68, 68, 0.1);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 12px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Detalhes expansíveis (Accordion) */
+details.collapsible-card summary::-webkit-details-marker {
+  display: none;
+}
+details.collapsible-card summary::after {
+  content: '▼';
+  float: right;
+  font-size: 10px;
+  margin-top: 2px;
+}
+details[open].collapsible-card summary::after {
+  content: '▲';
+}
