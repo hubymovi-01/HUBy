@@ -5,16 +5,14 @@ import { concluirLimpezaPosCorrida, fecharModaisPagamento } from './motorista-co
 import { notificar } from '../util/alertas-huby.js';
 
 let watchId = null;
-let modoNavegacao3DAtivo = false;
 let ultimoHeadingConhecido = 0;
 
-// INJETA OS ESTILOS 3D E ANIMAÇÕES DIRETAMENTE NO DOCUMENTO
-function injetarEstilosNavegacao3D() {
-  if (document.getElementById('huby-3d-styles')) return;
+// INJETA ESTILOS 2D E ANIMAÇÕES
+function injetarEstilosNavegacao() {
+  if (document.getElementById('huby-map-styles')) return;
   const style = document.createElement('style');
-  style.id = 'huby-3d-styles';
+  style.id = 'huby-map-styles';
   style.innerHTML = `
-    /* Animação do GPS Pulsante */
     .gps-pulse-container { display: flex; align-items: center; justify-content: center; }
     .gps-pulse-marker {
       width: 18px; height: 18px; border-radius: 50%; position: relative; z-index: 2;
@@ -31,25 +29,8 @@ function injetarEstilosNavegacao3D() {
       100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
     }
 
-    /* Transformação 3D do Mapa inteiro */
-    #mapaMotorista {
-      transition: transform 0.6s linear;
-      backface-visibility: hidden;
-      -webkit-font-smoothing: antialiased;
-    }
-    
-    /* Quando a navegação ativa, o mapa cresce para não mostrar bordas ao deitar/girar */
-    #mapaMotorista.modo-navegacao-3d {
-      width: 160vw !important;
-      height: 160vh !important;
-      top: -30vh !important;
-      left: -30vw !important;
-      transform-origin: 50% 65%; /* Puxa o eixo de rotação para o terço inferior da tela */
-    }
-
-    /* O ícone do carro precisa de transição suave para não "pular" quando o heading atualiza */
     #marcadorCarroIcone {
-      transition: transform 0.6s linear;
+      transition: transform 0.3s linear;
       position: absolute;
       top: -15px; left: -10px;
       font-size: 20px;
@@ -86,7 +67,7 @@ export function inicializarMapa() {
   const container = document.getElementById('mapaMotorista');
   if (!container) return;
 
-  injetarEstilosNavegacao3D();
+  injetarEstilosNavegacao();
 
   if (estado.mapa) {
     estado.mapa.remove();
@@ -104,7 +85,6 @@ export function inicializarMapa() {
       attribution: '&copy; OpenStreetMap'
     }).addTo(estado.mapa);
 
-    // Usa o novo GPS Pulsante
     const iconeCarroFluido = L.divIcon({
       className: 'gps-pulse-container',
       html: `
@@ -140,15 +120,13 @@ export function iniciarRastreamentoGPSContinuo() {
   }
 
   let gpsFixoMotorista = false;
-  const mapaDiv = document.getElementById('mapaMotorista');
-
+  
   watchId = navigator.geolocation.watchPosition(
     (pos) => {
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
       const velocidade = pos.coords.speed || 0; 
       
-      // Atualiza o heading apenas se estiver em movimento para evitar que o carro gire parado
       let heading = pos.coords.heading;
       if (heading === null || isNaN(heading) || velocidade < 0.5) {
         heading = ultimoHeadingConhecido;
@@ -164,45 +142,18 @@ export function iniciarRastreamentoGPSContinuo() {
         estado.markerVeiculo.setLatLng([lat, lng]);
       }
 
-      // 2. Lógica da Câmera 3D (Deita e Gira o Mapa)
-      if (estado.mapa && mapaDiv) {
-        
-        if (corridaAtiva) {
-          // MOTORISTA EM CORRIDA: MODO NAVEGAÇÃO
-          if (!modoNavegacao3DAtivo) {
-            mapaDiv.classList.add('modo-navegacao-3d');
-            estado.mapa.invalidateSize(); // Atualiza tamanho renderizado pelo Leaflet
-            modoNavegacao3DAtivo = true;
-          }
+      // 2. Lógica da Câmera (Sempre 2D, centraliza dinamicamente)
+      if (estado.mapa) {
+        // Rotaciona apenas o ícone do carro na direção do movimento
+        const elIcone = document.getElementById('marcadorCarroIcone');
+        if (elIcone) elIcone.style.transform = `rotate(${heading}deg)`;
 
-          // Inclina o mapa 55 graus (deita) e rotaciona na direção contrária do veículo
-          mapaDiv.style.transform = `perspective(1000px) rotateX(55deg) rotateZ(${-heading}deg)`;
-          
-          // Como o mapa girou, forçamos o ícone do carro a ficar sempre reto, apontando pra cima (0deg)
-          const elIcone = document.getElementById('marcadorCarroIcone');
-          if (elIcone) elIcone.style.transform = `rotate(0deg)`;
-
-          estado.mapa.panTo([lat, lng], { animate: true, duration: 0.8, easeLinearity: 0.25 });
-
+        if (!gpsFixoMotorista) {
+          estado.mapa.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
+          gpsFixoMotorista = true;
         } else {
-          // MOTORISTA LIVRE: MODO MAPA PLANO (Para ver Zonas de Calor e Bairros)
-          if (modoNavegacao3DAtivo) {
-            mapaDiv.classList.remove('modo-navegacao-3d');
-            mapaDiv.style.transform = 'none';
-            estado.mapa.invalidateSize();
-            modoNavegacao3DAtivo = false;
-          }
-
-          // O mapa está reto, então giramos o ícone do carro para a direção do movimento
-          const elIcone = document.getElementById('marcadorCarroIcone');
-          if (elIcone) elIcone.style.transform = `rotate(${heading}deg)`;
-
-          if (!gpsFixoMotorista) {
-            estado.mapa.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
-            gpsFixoMotorista = true;
-          } else {
-            estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
-          }
+          // Mantém a posição sempre no centro
+          estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
         }
       }
 
@@ -259,7 +210,7 @@ export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
         lineJoin: 'round'
       }).addTo(estado.mapa);
 
-      estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+      estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
       return;
     }
   } catch (err) {
@@ -273,7 +224,7 @@ export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
     opacity: 0.9
   }).addTo(estado.mapa);
 
-  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60] });
+  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
 }
 
 export function limparRotasMapa() {
