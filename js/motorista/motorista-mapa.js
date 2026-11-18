@@ -7,34 +7,43 @@ import { notificar } from '../util/alertas-huby.js';
 let watchId = null;
 let ultimoHeadingConhecido = 0;
 
-// INJETA ESTILOS 2D E ANIMAÇÕES
+// INJETA ESTILOS PROFISSIONAIS DE DESLIZAMENTO (Estilo Uber)
 function injetarEstilosNavegacao() {
   if (document.getElementById('huby-map-styles')) return;
   const style = document.createElement('style');
   style.id = 'huby-map-styles';
   style.innerHTML = `
+    /* O Segredo do Deslizamento: Faz o marcador do GPS andar suavemente entre as atualizações */
+    .leaflet-marker-icon.gps-pulse-container {
+      transition: transform 1s linear !important; 
+    }
+
     .gps-pulse-container { display: flex; align-items: center; justify-content: center; }
+    
     .gps-pulse-marker {
       width: 18px; height: 18px; border-radius: 50%; position: relative; z-index: 2;
-      background: #10B981; border: 3px solid #090D16; box-shadow: 0 0 12px rgba(16,185,129,0.8);
+      background: #10B981; border: 3px solid #090D16; box-shadow: 0 0 16px rgba(16,185,129,0.9);
     }
+    
     .gps-pulse-marker::after {
       content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 50px; height: 50px; background-color: rgba(16,185,129,0.3); border-radius: 50%;
-      animation: pulse-ring-mot 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; z-index: -1;
+      width: 55px; height: 55px; background-color: rgba(16,185,129,0.25); border-radius: 50%;
+      animation: pulse-ring-mot 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; z-index: -1;
     }
+    
     @keyframes pulse-ring-mot {
       0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
       20% { opacity: 1; }
       100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
     }
 
+    /* Rotação suave apenas do carro */
     #marcadorCarroIcone {
-      transition: transform 0.3s linear;
+      transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
       position: absolute;
       top: -15px; left: -10px;
       font-size: 20px;
-      text-shadow: 0 0 10px rgba(16,185,129,0.9);
+      text-shadow: 0 2px 8px rgba(0,0,0,0.8);
       z-index: 10;
       display: flex; align-items: center; justify-content: center;
     }
@@ -128,7 +137,8 @@ export function iniciarRastreamentoGPSContinuo() {
       const velocidade = pos.coords.speed || 0; 
       
       let heading = pos.coords.heading;
-      if (heading === null || isNaN(heading) || velocidade < 0.5) {
+      // Se estiver parado ou muito devagar, mantém a última direção para o carro não girar à toa
+      if (heading === null || isNaN(heading) || velocidade < 0.8) {
         heading = ultimoHeadingConhecido;
       } else {
         ultimoHeadingConhecido = heading;
@@ -137,33 +147,42 @@ export function iniciarRastreamentoGPSContinuo() {
       estado.coords = [lat, lng];
       const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
 
-      // 1. Atualiza posição no mapa
+      // 1. Atualiza a posição (o CSS fará o marcador deslizar)
       if (estado.markerVeiculo) {
         estado.markerVeiculo.setLatLng([lat, lng]);
       }
 
-      // 2. Lógica da Câmera (Sempre 2D, centraliza dinamicamente)
+      // 2. Lógica da Câmara Inteligente (Follow Mode)
       if (estado.mapa) {
-        // Rotaciona apenas o ícone do carro na direção do movimento
+        // Rotaciona de forma suave o ícone do carro na direção do movimento
         const elIcone = document.getElementById('marcadorCarroIcone');
-        if (elIcone) elIcone.style.transform = `rotate(${heading}deg)`;
+        if (elIcone) {
+          elIcone.style.transform = `rotate(${heading}deg)`;
+        }
 
-        // SE ESTIVER EM CORRIDA, O MAPA DEVE SEGUIR O CARRO BEM DE PERTO
+        // SE ESTIVER EM CORRIDA: Foca no carro de perto (Nível 18) e acompanha-o
         if (corridaAtiva) {
-          estado.mapa.setView([lat, lng], 18, { animate: true, duration: 1.0 });
+          estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0, easeLinearity: 0.25 });
+          if (estado.mapa.getZoom() < 17) {
+            estado.mapa.setZoom(18, { animate: true });
+          }
         } 
-        // SE ESTIVER LIVRE, MANTÉM A VISÃO NORMAL DO BAIRRO
+        // SE ESTIVER LIVRE: Visão do bairro (Nível 16/17)
         else {
           if (!gpsFixoMotorista) {
-            estado.mapa.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
+            estado.mapa.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
             gpsFixoMotorista = true;
           } else {
-            estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
+            // Se o motorista estiver a arrastar o dedo, não puxamos a câmara.
+            // Puxamos apenas se ele estiver em movimento livre
+            if (velocidade > 1.5) {
+               estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
+            }
           }
         }
       }
 
-      // 3. Transmite a posição pro Servidor/Passageiro
+      // 3. Transmite a posição pro Servidor/Passageiro sem sobrecarregar
       if (estado.socket && (estado.isOnline || corridaAtiva)) {
         const idMotorista = estado.motoristaId || localStorage.getItem('huby_user_id') || '';
         const idPedidoAtivo = corridaAtiva?.id || null;
@@ -183,8 +202,8 @@ export function iniciarRastreamentoGPSContinuo() {
     },
     {
       enableHighAccuracy: true,
-      maximumAge: 1000,
-      timeout: 15000
+      maximumAge: 1000,   // Aceita GPS até 1 seg antigo para fluidez
+      timeout: 10000      // Timeouts curtos para forçar re-leitura rápida
     }
   );
 }
@@ -216,9 +235,7 @@ export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
         lineJoin: 'round'
       }).addTo(estado.mapa);
 
-      // Em vez de focar na rota toda (fitBounds) que tira o carro do foco,
-      // nós mantemos o GPS seguindo o carro no watchPosition, mas damos um
-      // ligeiro zoom out inicial só para mostrar para onde o motorista vai.
+      // Quando a corrida começa, não damos zoom out na rota toda. Focamos no carro!
       const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
       if (!corridaAtiva) {
          estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
