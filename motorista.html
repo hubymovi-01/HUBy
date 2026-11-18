@@ -19,21 +19,50 @@
   <link rel="stylesheet" href="./css/base.css?v=6.0.0">
 
   <!-- Estilos Modulares do Motorista -->
-  <link rel="stylesheet" href="./css/motorista-layout.css?v=1.0.0">
+  <link rel="stylesheet" href="./css/motorista-layout.css?v=1.1.0">
   <link rel="stylesheet" href="./css/motorista-modais.css?v=1.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
   <link rel="stylesheet" href="./css/ia.css?v=1.1.0">
-  <link rel="stylesheet" href="./css/alertas.css?v=1.0.0">
+  <link rel="stylesheet" href="./css/alertas.css?v=1.1.0">
 
   <style>
-    /* 1. CORREÇÃO DO MAPA 3D (Evita fundo cinza ao inclinar a câmera) */
-    #mapaMotorista {
-      height: 120vh !important;
-      top: -10vh !important;
-      width: 100vw !important;
+    /* TRANCAR O SCROLL DO BROWSER (Impede que a UI pule/suba e desça) */
+    html, body {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
     }
 
-    /* 2. ANIMAÇÃO SUPER FLUIDA DO BOTÃO DE ACEITAR (GPU-Accelerated) */
+    /* MAPA TOTALMENTE 2D PREENCHENDO A TELA TODA */
+    #mapaMotorista {
+      position: absolute;
+      top: 0 !important;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 100vh !important;
+      width: 100vw !important;
+      z-index: 1;
+    }
+
+    /* CABEÇALHO FIXO COM AS INFORMAÇÕES (Avatar e Botão Online) */
+    .top-driver-nav {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 10px) + 12px) !important;
+      left: 14px;
+      right: 14px;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none; /* Deixa o clique passar para o mapa abaixo, exceto nos botões */
+    }
+
+    /* ANIMAÇÃO FLUIDA DO BOTÃO DE ACEITAR (GPU-Accelerated) */
     @keyframes shrinkBarSmooth {
       0% { transform: scaleX(1); background-color: #10B981; }
       50% { background-color: #F59E0B; }
@@ -44,16 +73,15 @@
       animation-timing-function: linear;
       animation-fill-mode: forwards;
       transform-origin: left;
-      /* O animation-duration será injetado pelo JS dinamicamente */
     }
   </style>
 </head>
 
 <body>
 
-  <!-- NAVEGAÇÃO SUPERIOR MINIMALISTA -->
+  <!-- NAVEGAÇÃO SUPERIOR FIXA -->
   <header class="top-driver-nav">
-    <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil">
+    <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil" style="pointer-events: auto;">
       <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
         alt="Motorista" class="avatar-mini" id="topAvatarImg">
       <div style="display: flex; flex-direction: column;">
@@ -62,7 +90,7 @@
       </div>
     </div>
 
-    <!-- BOTÃO ONLINE / OFFLINE -->
+    <!-- BOTÃO ONLINE / OFFLINE FIXO -->
     <button type="button" id="btnToggleStatusOnline"
       style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 24px; padding: 10px 18px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); backdrop-filter: blur(14px);">
       <span>⚪</span> <strong>Ficar Online</strong>
@@ -76,11 +104,11 @@
   <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
     aria-label="Abrir Chat">💬</button>
 
-  <!-- DOCK DE CORRIDAS (Limpo - Foco 100% no Mapa) -->
-  <section class="driver-dock" style="background: transparent; border: none; box-shadow: none; padding: 10px 14px; pointer-events: none;">
-    <div class="orders-feed" id="listaChamadasPendentes" style="pointer-events: auto;">
-      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
-        <span style="color: #10B981; font-weight: 800; font-size: 13px;">⚪ Fique online para receber chamadas</span>
+  <!-- DOCK INFERIOR DE CORRIDAS (Fixo em baixo) -->
+  <section class="driver-dock" style="background: rgba(14, 20, 32, 0.96); backdrop-filter: blur(18px); border-top: 1px solid var(--glass-border); padding: 14px; position: absolute; bottom: 0; left: 0; right: 0; z-index: 50; display: flex; flex-direction: column; gap: 8px;">
+    <div class="orders-feed" id="listaChamadasPendentes" style="max-height: 48vh; overflow-y: auto;">
+      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <span style="color: #94A3B8; font-weight: 800; font-size: 13px;">⚪ Fique online para receber chamadas</span>
       </div>
     </div>
   </section>
@@ -153,7 +181,7 @@
         <button type="button" id="btnSalvarPreferenciasPagto" class="btn-drawer-solid" style="margin-top: 14px;">Salvar Preferências</button>
       </div>
 
-      <!-- CARTÃO 3: COPILOTO (ACORDEÃO OCULTO) -->
+      <!-- CARTÃO 3: COPILOTO -->
       <details class="drawer-section-card collapsible-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
         <summary class="drawer-section-title" style="cursor: pointer; margin: 0; outline: none; color: #10B981;">
           🎙️ Configurar Copiloto de Voz
@@ -254,7 +282,7 @@
         <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline">📄 Exportar Fechamento (CSV)</button>
       </div>
 
-      <!-- BOTÕES DE SAÍDA E AJUDA (SUPORTE IA/HUMANO) -->
+      <!-- BOTÕES DE SAÍDA E AJUDA -->
       <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 20px;">
         <button type="button" id="btnAbrirChatSuporte" class="btn-drawer-danger-outline" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #F87171; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
           🛡️ Central de Ajuda & Suporte
