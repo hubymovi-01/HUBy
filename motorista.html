@@ -19,14 +19,14 @@
   <link rel="stylesheet" href="./css/base.css?v=6.0.0">
 
   <!-- Estilos Modulares do Motorista -->
-  <link rel="stylesheet" href="./css/motorista-layout.css?v=1.2.5">
+  <link rel="stylesheet" href="./css/motorista-layout.css?v=2.0.0">
   <link rel="stylesheet" href="./css/motorista-modais.css?v=1.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
   <link rel="stylesheet" href="./css/ia.css?v=1.1.0">
   <link rel="stylesheet" href="./css/alertas.css?v=1.1.0">
 
   <style>
-    /* ANIMAÇÃO FLUIDA DO BOTÃO DE ACEITAR (GPU-Accelerated) */
+    /* ANIMAÇÃO FLUIDA DO BOTÃO DE ACEITAR */
     @keyframes shrinkBarSmooth {
       0% { transform: scaleX(1); background-color: #10B981; }
       50% { background-color: #F59E0B; }
@@ -43,32 +43,35 @@
 
 <body>
 
-  <!-- NAVEGAÇÃO SUPERIOR FIXA -->
-  <header class="top-driver-nav">
-    <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil" style="pointer-events: auto;">
-      <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
-        alt="Motorista" class="avatar-mini" id="topAvatarImg">
-      <div style="display: flex; flex-direction: column;">
-        <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
-        <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
+  <!-- ENVOLTÓRIO DO MAPA: Ocupa tudo menos a doca -->
+  <div class="map-wrapper">
+    <!-- NAVEGAÇÃO SUPERIOR -->
+    <header class="top-driver-nav">
+      <div class="btn-driver-profile-trigger" id="btnAbrirDrawerPerfil" style="pointer-events: auto;">
+        <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
+          alt="Motorista" class="avatar-mini" id="topAvatarImg">
+        <div style="display: flex; flex-direction: column;">
+          <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
+          <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
+        </div>
       </div>
-    </div>
 
-    <!-- BOTÃO ONLINE / OFFLINE FIXO -->
-    <button type="button" id="btnToggleStatusOnline"
-      style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 24px; padding: 10px 18px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); backdrop-filter: blur(14px);">
-      <span>⚪</span> <strong>Ficar Online</strong>
-    </button>
-  </header>
+      <!-- BOTÃO ONLINE / OFFLINE -->
+      <button type="button" id="btnToggleStatusOnline"
+        style="pointer-events: auto; background: #1F2937; border: 1px solid rgba(255,255,255,0.12); color: #94A3B8; border-radius: 24px; padding: 10px 18px; font-size: 13px; font-weight: 800; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); backdrop-filter: blur(14px);">
+        <span>⚪</span> <strong>Ficar Online</strong>
+      </button>
+    </header>
 
-  <!-- MAPA PRINCIPAL -->
-  <div id="mapaMotorista"></div>
+    <!-- MAPA -->
+    <div id="mapaMotorista"></div>
 
-  <!-- BOTÃO CHAT FLUTUANTE DA CORRIDA -->
-  <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
-    aria-label="Abrir Chat">💬</button>
+    <!-- BOTÃO CHAT FLUTUANTE DA CORRIDA -->
+    <button type="button" id="btnAbrirChat" class="btn-floating-chat" style="display: none;"
+      aria-label="Abrir Chat">💬</button>
+  </div>
 
-  <!-- DOCK INFERIOR DE CORRIDAS (Controlado apenas pelo motorista-layout.css) -->
+  <!-- DOCK INFERIOR (Separada do mapa, nunca será cortada) -->
   <section class="driver-dock">
     <div class="orders-feed" id="listaChamadasPendentes">
       <div class="dock-empty">

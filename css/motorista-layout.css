@@ -1,4 +1,4 @@
-/* css/motorista-layout.css - Layout Base, Topo, Dock e Drawer (Blindado contra barras de telemóvel) */
+/* css/motorista-layout.css - Layout Base, Topo, Dock e Drawer (BLINDADO COM FLEXBOX E DVH) */
 
 :root {
   --bg-dark: #090D16;
@@ -22,28 +22,33 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Prende o site ao tamanho real da janela, sem vazar */
+/* 1. O CORPO PASSA A SER UM FLEX CONTAINER COM DVH (Altura Dinâmica Perfeita) */
 html, body {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 100%; 
+  inset: 0;
+  width: 100vw;
+  height: 100dvh; /* A solução definitiva para browsers mobile */
   overflow: hidden;
   margin: 0;
   padding: 0;
   background: var(--bg-dark);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  flex-direction: column;
 }
 
-/* MAPA 2D */
+/* 2. ENVOLTÓRIO DO MAPA: Ocupa todo o espaço que sobrar (flex: 1) */
+.map-wrapper {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* MAPA 2D DENTRO DO ENVOLTÓRIO */
 #mapaMotorista {
   position: absolute;
-  inset: 0 !important;
-  height: 100% !important;
-  width: 100% !important;
+  inset: 0;
   z-index: 1;
 }
 
@@ -51,7 +56,7 @@ html, body {
   filter: brightness(0.65) invert(1) contrast(2.8) hue-rotate(200deg) saturate(0.3);
 }
 
-/* TOPO */
+/* TOPO MINIMALISTA */
 .top-driver-nav {
   position: absolute;
   top: calc(env(safe-area-inset-top, 10px) + 12px);
@@ -98,10 +103,10 @@ html, body {
   pointer-events: auto;
 }
 
-/* CHAT FLUTUANTE */
+/* BOTÃO CHAT FLUTUANTE (Fica colado à parte de baixo do mapa) */
 .btn-floating-chat {
   position: absolute;
-  bottom: calc(55vh + env(safe-area-inset-bottom, 10px) + 20px); 
+  bottom: 16px; 
   right: 16px;
   width: 46px;
   height: 46px;
@@ -118,13 +123,10 @@ html, body {
   font-size: 20px;
 }
 
-/* DOCK INFERIOR (Onde ficava espremido) */
+/* 3. A DOCA INFERIOR ENTRA NO FLUXO (Impossível ser cortada) */
 .driver-dock {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 50;
+  flex-shrink: 0; /* Impede a doca de ser espremida */
+  position: relative;
   background: rgba(14, 20, 32, 0.96);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -135,10 +137,48 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 55vh; /* Limita a altura para que NUNCA suba demasiado e empurre a tela */
+  z-index: 50;
+  max-height: 60dvh;
 }
 
-/* LISTA DE CHAMADAS (Scrollável) */
+.wallet-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 9px 14px;
+  flex-shrink: 0;
+}
+
+.wallet-meta small {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-sec);
+  letter-spacing: 0.4px;
+}
+
+.wallet-meta .val-saldo {
+  font-size: 19px;
+  font-weight: 900;
+  color: var(--emerald);
+  letter-spacing: -0.3px;
+}
+
+.btn-action-pix {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  color: var(--emerald);
+  padding: 8px 13px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .orders-feed {
   overflow-y: auto;
   flex: 1;
@@ -156,7 +196,7 @@ html, body {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* GAVETA (DRAWER) */
+/* DRAWER LATERAL */
 .drawer-overlay {
   position: fixed;
   inset: 0;
@@ -169,10 +209,7 @@ html, body {
   transition: opacity 0.3s ease;
 }
 
-.drawer-overlay.active {
-  opacity: 1;
-  pointer-events: auto;
-}
+.drawer-overlay.active { opacity: 1; pointer-events: auto; }
 
 .driver-drawer {
   position: fixed;
@@ -191,9 +228,7 @@ html, body {
   box-shadow: 16px 0 40px rgba(0, 0, 0, 0.8);
 }
 
-.driver-drawer.active {
-  left: 0;
-}
+.driver-drawer.active { left: 0; }
 
 .drawer-header {
   padding: 24px 18px 18px;
@@ -219,47 +254,8 @@ html, body {
   justify-content: center;
 }
 
-.drawer-profile-info {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 4px;
-}
-
-.drawer-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: 2.5px solid var(--emerald);
-  object-fit: cover;
-  background: #1E293B;
-  box-shadow: 0 4px 14px var(--emerald-glow);
-}
-
-.drawer-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.drawer-section-card {
-  background: rgba(255, 255, 255, 0.035);
-  border: 1px solid var(--glass-border);
-  border-radius: 14px;
-  padding: 14px;
-}
-
-.drawer-section-card h4 {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: #CBD5E1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+.drawer-profile-info { display: flex; align-items: center; gap: 14px; margin-top: 4px; }
+.drawer-avatar { width: 64px; height: 64px; border-radius: 50%; border: 2.5px solid var(--emerald); object-fit: cover; background: #1E293B; box-shadow: 0 4px 14px var(--emerald-glow); }
+.drawer-content { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.drawer-section-card { background: rgba(255, 255, 255, 0.035); border: 1px solid var(--glass-border); border-radius: 14px; padding: 14px; }
+.drawer-section-card h4 { margin: 0 0 10px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; color: #CBD5E1; display: flex; justify-content: space-between; align-items: center; }
