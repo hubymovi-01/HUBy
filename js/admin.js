@@ -1,10 +1,11 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Com Gestão de Patrocinadores & Galeria)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
 let chartFinanceiroInstance = null;
 let chartCategoriasInstance = null;
 let motoristaFocadoModalId = null;
+let bannerBase64Temporario = null;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
@@ -98,6 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   configurarNavegacaoAbas();
   configurarFiltroPeriodo(token);
+  configurarFormPatrocinadores(token);
   configurarFormGrowthEDinamica(token);
   configurarFormZonasRisco(token);
   configurarFormCupons(token);
@@ -144,6 +146,7 @@ async function sincronizarTudo(token) {
   await carregarDadosSocios(token);
 
   Promise.allSettled([
+    carregarTabelaPatrocinadores(token),
     carregarConfigGrowthEDinamica(token),
     carregarTabelaZonasRisco(token),
     carregarTabelaCupons(token),
@@ -151,7 +154,7 @@ async function sincronizarTudo(token) {
     carregarTabelaSaques(token),
     carregarTabelaMarketplace(token),
     carregarGatewayConfig(token),
-    carregarTabelaSuporte(token) // Carrega a tabela de suporte
+    carregarTabelaSuporte(token)
   ]);
 }
 
@@ -515,7 +518,7 @@ window.solicitarSaqueSocio = async (socioId) => {
 };
 
 // ============================================================================
-// GESTÃO DO CLUBE HUBy / MARKETPLACE
+// GESTÃO DO CLUBE HUBy / MARKETPLACE (MOTORISTAS)
 // ============================================================================
 async function carregarTabelaMarketplace(token) {
   const tbody = document.getElementById('tabelaMarketplaceBody');
@@ -1353,6 +1356,7 @@ function configurarNavegacaoAbas() {
           }
         }
 
+        if (tabAlvoId === 'tabPatrocinadores') carregarTabelaPatrocinadores(token);
         if (tabAlvoId === 'tabSocios') carregarDadosSocios(token);
         if (tabAlvoId === 'tabGrowth') carregarConfigGrowthEDinamica(token);
         if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
@@ -1361,7 +1365,7 @@ function configurarNavegacaoAbas() {
         if (tabAlvoId === 'tabConfig') carregarTarifasConfig(token);
         if (tabAlvoId === 'tabMarketplace') carregarTabelaMarketplace(token);
         if (tabAlvoId === 'tabFrota') carregarTabelaFrota(token, false);
-        if (tabAlvoId === 'tabSuporte') carregarTabelaSuporte(token); // NOVO
+        if (tabAlvoId === 'tabSuporte') carregarTabelaSuporte(token);
 
         if (tabAlvoId.toLowerCase().includes('radar')) {
           setTimeout(() => {
@@ -1598,11 +1602,10 @@ window.responderChamadoMaster = async (ticketId, nomeAutor) => {
     notificarAdmin('Erro de ligação ao responder chamado.', 'erro');
   }
 };
+
 // ============================================================================
 // 13. GESTÃO DE PATROCINADORES E BANNERS DA GALERIA (COM COMPRESSOR CANVAS)
 // ============================================================================
-let bannerBase64Temporario = null;
-
 function comprimirImagemGaleriaParaBase64(file, maxWidth = 860, quality = 0.82) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
