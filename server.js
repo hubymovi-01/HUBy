@@ -106,6 +106,27 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('posicao_motorista_atualizada', dados);
   });
 
+  // Relays instantâneos entre Motorista 3D e Passageiro
+  socket.on('motorista_aceitou', (dados) => {
+    socket.broadcast.emit('corrida_aceita', dados);
+  });
+
+  socket.on('motorista_chegou', (dados) => {
+    socket.broadcast.emit('motorista_chegou_local', dados);
+  });
+
+  socket.on('corrida_iniciada', (dados) => {
+    socket.broadcast.emit('passageiro_a_bordo', dados);
+  });
+
+  socket.on('corrida_finalizada_motorista', (dados) => {
+    socket.broadcast.emit('corrida_finalizada', dados);
+  });
+
+  socket.on('corrida_cancelada_motorista', (dados) => {
+    socket.broadcast.emit('corrida_cancelada', { ...dados, canceladoPor: 'motorista' });
+  });
+
   socket.on('disconnect', () => {
     console.log(`Utilizador desconectado do radar: ${socket.id}`);
   });
@@ -160,10 +181,10 @@ const limitarCadastro = criarLimitador({
 });
 
 // ============================================================================
-// 2. PARSERS DE DADOS (JSON E FOTOS EM BASE64)
+// 2. PARSERS DE DADOS (JSON E BANNERS DA GALERIA EM BASE64)
 // ============================================================================
-app.use(express.json({ limit: '8mb' }));
-app.use(express.urlencoded({ limit: '8mb', extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ============================================================================
 // 3. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
@@ -361,6 +382,26 @@ async function inicializarBanco() {
       );
     `;
 
+    // TABELA DE PATROCINADORES E BANNERS PUBLICITÁRIOS (CONTROLO TOTAL DO ADMIN)
+    await sql`
+      CREATE TABLE IF NOT EXISTS patrocinadores_banners (
+        id SERIAL PRIMARY KEY,
+        nome_empresa TEXT NOT NULL,
+        titulo_oferta TEXT NOT NULL,
+        categoria TEXT DEFAULT 'destaque',
+        descricao TEXT,
+        cupom_codigo TEXT,
+        whatsapp_link TEXT,
+        imagem_base64 TEXT NOT NULL,
+        exibir_popup BOOLEAN DEFAULT TRUE,
+        prioridade INT DEFAULT 1,
+        ativo BOOLEAN DEFAULT TRUE,
+        visualizacoes INT DEFAULT 0,
+        cliques INT DEFAULT 0,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS usuario_id TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS veiculo_ano TEXT;`;
@@ -386,12 +427,12 @@ async function inicializarBanco() {
 inicializarBanco();
 
 // ============================================================================
-// 4. ROTAS BASE E STATUS
+// 4. ROTAS BASE, TARIFAS E PUBLICIDADE DE PATROCINADORES
 // ============================================================================
 app.get('/', (req, res) => {
   res.json({
     status: 'HUBy API Online (Modularizada)',
-    versao: '2.3.0',
+    versao: '2.4.0',
     sentryAtivo: Boolean(process.env.SENTRY_DSN),
     banco: 'Neon PostgreSQL'
   });
@@ -409,6 +450,157 @@ app.get('/api/config/tarifas', async (req, res) => {
     km_entrega: tarifas.entrega?.km,
     tarifas
   });
+});
+
+// Middleware de validação Admin para rotas de patrocinadores
+function autenticarAdminLocal(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ erro: 'Token não fornecido.' });
+  const token = authHeader.replace('Bearer ', '').trim();
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const role = String(decoded.role || decoded.funcao || '').toLowerCase();
+    if (role !== 'admin' && role !== 'administrador') {
+      return res.status(403).json({ erro: 'Acesso restrito ao administrador.' });
+    }
+    req.usuario = decoded;
+    next();
+  } catch (e) {
+    return res.status(401).json({ erro: 'Sessão inválida ou expirada.' });
+  }
+}
+
+// 4.1. Rota pública para o passageiro carregar banners ativos (Pop-up e Vitrine)
+app.get('/api/patrocinadores/ativos', async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'no-store');
+    const lista = await sql`
+      SELECT id, nome_empresa, titulo_oferta, categoria, descricao, cupom_codigo,
+             whatsapp_link, imagem_base64, exibir_popup, prioridade
+      FROM patrocinadores_banners
+      WHERE ativo = TRUE
+      ORDER BY prioridade DESC, id DESC;
+    `;
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao carregar patrocinadores.' });
+  }
+});
+
+// 4.2. Registo de visualizações e cliques em tempo real
+app.post('/api/patrocinadores/:id/interacao', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const tipo = req.body?.tipo === 'clique' ? 'clique' : 'view';
+    if (tipo === 'clique') {
+      await sql`UPDATE patrocinadores_banners SET cliques = COALESCE(cliques, 0) + 1 WHERE id = ${id};`;
+    } else {
+      await sql`UPDATE patrocinadores_banners SET visualizacoes = COALESCE(visualizacoes, 0) + 1 WHERE id = ${id};`;
+    }
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.json({ sucesso: false });
+  }
+});
+
+// 4.3. Rotas do Administrador Master (Listar tudo, Publicar da Galeria, Alternar Popup/Status e Excluir)
+app.get('/api/patrocinadores/admin', autenticarAdminLocal, async (req, res) => {
+  try {
+    const lista = await sql`
+      SELECT * FROM patrocinadores_banners
+      ORDER BY ativo DESC, prioridade DESC, id DESC;
+    `;
+    res.json(lista);
+  } catch (err) {
+    res.status(500).json({ erro: 'Falha ao listar patrocinadores no painel.' });
+  }
+});
+
+app.post('/api/patrocinadores/admin', autenticarAdminLocal, async (req, res) => {
+  try {
+    const {
+      nome_empresa,
+      titulo_oferta,
+      categoria = 'destaque',
+      descricao = '',
+      cupom_codigo = '',
+      whatsapp_link = '',
+      imagem_base64,
+      exibir_popup = true,
+      prioridade = 1
+    } = req.body || {};
+
+    if (!nome_empresa || !titulo_oferta || !imagem_base64) {
+      return res.status(400).json({ erro: 'Envie o nome da empresa, título e a imagem do banner da galeria.' });
+    }
+
+    const [novo] = await sql`
+      INSERT INTO patrocinadores_banners (
+        nome_empresa, titulo_oferta, categoria, descricao, cupom_codigo,
+        whatsapp_link, imagem_base64, exibir_popup, prioridade, ativo
+      ) VALUES (
+        ${String(nome_empresa).trim()},
+        ${String(titulo_oferta).trim()},
+        ${String(categoria).trim()},
+        ${String(descricao).trim()},
+        ${String(cupom_codigo).trim().toUpperCase()},
+        ${String(whatsapp_link).trim()},
+        ${imagem_base64},
+        ${Boolean(exibir_popup)},
+        ${Number(prioridade) || 1},
+        TRUE
+      )
+      RETURNING *;
+    `;
+
+    io.emit('patrocinadores_atualizados');
+    res.status(201).json(novo);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao publicar banner do patrocinador.' });
+  }
+});
+
+app.put('/api/patrocinadores/admin/:id/toggle-ativo', autenticarAdminLocal, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [atualizado] = await sql`
+      UPDATE patrocinadores_banners
+      SET ativo = NOT ativo
+      WHERE id = ${id}
+      RETURNING id, ativo;
+    `;
+    io.emit('patrocinadores_atualizados');
+    res.json(atualizado);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao alterar status do banner.' });
+  }
+});
+
+app.put('/api/patrocinadores/admin/:id/toggle-popup', autenticarAdminLocal, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const [atualizado] = await sql`
+      UPDATE patrocinadores_banners
+      SET exibir_popup = NOT exibir_popup
+      WHERE id = ${id}
+      RETURNING id, exibir_popup;
+    `;
+    io.emit('patrocinadores_atualizados');
+    res.json(atualizado);
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao alterar destaque no Pop-up.' });
+  }
+});
+
+app.delete('/api/patrocinadores/admin/:id', autenticarAdminLocal, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    await sql`DELETE FROM patrocinadores_banners WHERE id = ${id};`;
+    io.emit('patrocinadores_atualizados');
+    res.json({ sucesso: true });
+  } catch (err) {
+    res.status(500).json({ erro: 'Erro ao remover patrocinador.' });
+  }
 });
 
 // ============================================================================
