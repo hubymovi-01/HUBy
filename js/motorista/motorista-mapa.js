@@ -148,12 +148,18 @@ export function iniciarRastreamentoGPSContinuo() {
         const elIcone = document.getElementById('marcadorCarroIcone');
         if (elIcone) elIcone.style.transform = `rotate(${heading}deg)`;
 
-        if (!gpsFixoMotorista) {
-          estado.mapa.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
-          gpsFixoMotorista = true;
-        } else {
-          // Mantém a posição sempre no centro
-          estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
+        // SE ESTIVER EM CORRIDA, O MAPA DEVE SEGUIR O CARRO BEM DE PERTO
+        if (corridaAtiva) {
+          estado.mapa.setView([lat, lng], 18, { animate: true, duration: 1.0 });
+        } 
+        // SE ESTIVER LIVRE, MANTÉM A VISÃO NORMAL DO BAIRRO
+        else {
+          if (!gpsFixoMotorista) {
+            estado.mapa.flyTo([lat, lng], 17, { animate: true, duration: 1.0 });
+            gpsFixoMotorista = true;
+          } else {
+            estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
+          }
         }
       }
 
@@ -210,7 +216,13 @@ export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
         lineJoin: 'round'
       }).addTo(estado.mapa);
 
-      estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
+      // Em vez de focar na rota toda (fitBounds) que tira o carro do foco,
+      // nós mantemos o GPS seguindo o carro no watchPosition, mas damos um
+      // ligeiro zoom out inicial só para mostrar para onde o motorista vai.
+      const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
+      if (!corridaAtiva) {
+         estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
+      }
       return;
     }
   } catch (err) {
@@ -223,8 +235,11 @@ export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
     dashArray: '8, 8',
     opacity: 0.9
   }).addTo(estado.mapa);
-
-  estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
+  
+  const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
+  if (!corridaAtiva) {
+     estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
+  }
 }
 
 export function limparRotasMapa() {
