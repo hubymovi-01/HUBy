@@ -24,6 +24,29 @@
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
   <link rel="stylesheet" href="./css/ia.css?v=1.1.0">
   <link rel="stylesheet" href="./css/alertas.css?v=1.0.0">
+
+  <style>
+    /* 1. CORREÇÃO DO MAPA 3D (Evita fundo cinza ao inclinar a câmera) */
+    #mapaMotorista {
+      height: 120vh !important;
+      top: -10vh !important;
+      width: 100vw !important;
+    }
+
+    /* 2. ANIMAÇÃO SUPER FLUIDA DO BOTÃO DE ACEITAR (GPU-Accelerated) */
+    @keyframes shrinkBarSmooth {
+      0% { transform: scaleX(1); background-color: #10B981; }
+      50% { background-color: #F59E0B; }
+      100% { transform: scaleX(0); background-color: #EF4444; }
+    }
+    .huby-progress-bar {
+      animation-name: shrinkBarSmooth;
+      animation-timing-function: linear;
+      animation-fill-mode: forwards;
+      transform-origin: left;
+      /* O animation-duration será injetado pelo JS dinamicamente */
+    }
+  </style>
 </head>
 
 <body>
@@ -189,11 +212,32 @@
 
       <!-- CARTÃO 5: EXTRATO, METAS & SAQUE PIX -->
       <div class="drawer-section-card">
-        <h4 class="drawer-section-title" style="display: flex; justify-content: space-between;">
-          <span>💰 Ganhos Disponíveis</span>
+        <h4 class="drawer-section-title" style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+          <span>💰 Ganhos e Metas</span>
           <span style="color: var(--emerald);" id="drawerSaldoValor">R$ 0,00</span>
         </h4>
-        <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 10px;">
+
+        <!-- META DIÁRIA EM DESTAQUE NA GAVETA -->
+        <div style="background: rgba(0, 0, 0, 0.2); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 10px; padding: 12px; margin-bottom: 16px; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <div>
+              <small style="font-size: 10px; font-weight: 800; color: #94A3B8; text-transform: uppercase;">Hoje</small>
+              <div style="font-size: 18px; font-weight: 900; color: #FFF;" id="lblGanhosHojeValor">R$ 0,00</div>
+            </div>
+            <div style="text-align: right;">
+              <button type="button" id="btnEditarMetaDiaria" style="background: none; border: none; color: #38BDF8; font-size: 11px; font-weight: 700; cursor: pointer; padding: 0;">✏️ Alterar Meta</button>
+              <small style="display: block; font-size: 11px; color: #94A3B8; margin-top: 2px;" id="lblCorridasHojeQtd">0 viagens</small>
+            </div>
+          </div>
+          <div style="background: rgba(255, 255, 255, 0.1); border-radius: 6px; height: 6px; overflow: hidden; margin-top: 6px;">
+            <div id="barraProgressoMeta" style="background: #38BDF8; width: 0%; height: 100%; transition: width 0.4s ease;"></div>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94A3B8; margin-top: 6px;">
+            <span id="lblMetaDiariaTxt">Meta: R$ 200,00 (0%)</span>
+          </div>
+        </div>
+
+        <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 14px;">
           <div style="text-align: center; color: var(--text-sec); padding: 10px 0;">Consultando histórico...</div>
         </div>
         
@@ -203,17 +247,11 @@
           <button type="button" id="btnSalvarChavePix" class="btn-drawer-solid" style="width: auto; background: var(--blue); padding: 0 14px;">Salvar</button>
         </div>
         
-        <!-- BOTOES MOVIDOS DA TELA PRINCIPAL -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-          <button type="button" id="btnAbrirModalSaque" class="btn-drawer-solid" style="background: var(--emerald); color: #02261C;">
-            💸 Sacar Pix
-          </button>
-          <button type="button" id="btnEditarMetaDiaria" class="btn-drawer-outline" style="border-color: #38BDF8; color: #38BDF8;">
-            🎯 Definir Meta
-          </button>
-        </div>
+        <button type="button" id="btnAbrirModalSaque" class="btn-drawer-solid" style="background: var(--emerald); color: #02261C; margin-bottom: 8px;">
+          💸 Sacar Pix para Conta
+        </button>
         
-        <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline" style="margin-top: 8px;">📄 Exportar Fechamento (CSV)</button>
+        <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline">📄 Exportar Fechamento (CSV)</button>
       </div>
 
       <!-- BOTÕES DE SAÍDA E AJUDA (SUPORTE IA/HUMANO) -->

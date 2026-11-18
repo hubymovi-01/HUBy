@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Cancelamento pelo Motorista, Rota Suave e Pix
+// js/motorista/motorista-corrida.js - Gestão de Corridas e Correção do Mapa 3D
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -12,10 +12,27 @@ import { notificar, confirmarAcao } from '../util/alertas-huby.js';
 let processandoPagamento = false;
 let intervalPollingPixMotorista = null;
 
+// Função master para corrigir a quebra do mapa quando redimensionado ou inclinado em 3D
+export function reajustarMapa(recentralizarCoords = null) {
+  if (!estado.mapa) return;
+  
+  const refresh = () => {
+    estado.mapa.invalidateSize(true);
+    // Dispara um pequeno evento na view para recarregar tiles que ficaram cinzentos nas pontas
+    estado.mapa.fire('viewreset');
+  };
+
+  // Roda em cascata (50ms, 200ms, 400ms, 700ms) para acompanhar toda a transição de CSS da doca sem quebrar
+  [50, 200, 400, 700].forEach(ms => setTimeout(refresh, ms));
+
+  if (recentralizarCoords) {
+    setTimeout(() => estado.mapa.panTo(recentralizarCoords, { animate: true }), 300);
+  }
+}
+
 export function obterValoresSincronizadosPedido(dados = {}) {
   const distKm = parseFloat(dados.dist || dados.distancia_km || dados.distanciaKm || 0);
   const categoria = String(dados.categoria || dados.tipo || estado.categoriaMotorista || 'carro').toLowerCase();
-
   let valorBruto = Number(dados.preco || dados.valor_total || dados.valorTotal || 0);
 
   if (distKm > 0 && (!valorBruto || valorBruto <= 0)) {
@@ -35,9 +52,6 @@ export function obterValoresSincronizadosPedido(dados = {}) {
   };
 }
 
-// ============================================================================
-// CANCELAR CORRIDA EXCLUSIVO PELO MOTORISTA PARCEIRO
-// ============================================================================
 export async function executarCancelamentoCorridaMotorista(dados) {
   const pedidoId = dados?.id || estado.pedidoAceitoAtual?.id || estado.pedidoAtivo?.id;
   if (!pedidoId) {
@@ -54,9 +68,7 @@ export async function executarCancelamentoCorridaMotorista(dados) {
       });
 
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(json.erro || 'Não foi possível cancelar a corrida.');
-      }
+      if (!res.ok) throw new Error(json.erro || 'Não foi possível cancelar a corrida.');
 
       pararMonitoramentoDesvios();
       limparRotasMapa();
@@ -74,6 +86,7 @@ export async function executarCancelamentoCorridaMotorista(dados) {
       notificar(json.mensagem || 'Corrida cancelada com sucesso.', 'alerta');
       await carregarPerfil();
       iniciarRadarChamadas();
+      reajustarMapa(estado.coords);
     } catch (err) {
       notificar(err.message || 'Erro ao cancelar corrida.', 'erro');
     }
@@ -91,15 +104,12 @@ export async function executarCancelamentoCorridaMotorista(dados) {
   }
 }
 
-// ============================================================================
-// 1. PRÉ-VISUALIZAÇÃO DA ROTA ANTES DE ACEITAR (Correção Anti-Bug no Mapa)
-// ============================================================================
 export async function preVisualizarRotaPedido(dados) {
   await sincronizarTarifasServidor();
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
   pararMonitoramentoDesvios();
-  limparRotasMapa(); // Limpa as rotas de busca antes de desenhar a rota oficial
+  limparRotasMapa(); 
 
   const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
   const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
@@ -109,7 +119,6 @@ export async function preVisualizarRotaPedido(dados) {
 
   const { valorBrutoFmt, repasseFmt } = obterValoresSincronizadosPedido(dados);
 
-  // Injetamos a UI antes para que o Container já tenha o tamanho exato, evitando salto na Leaflet (Glitch)
   container.innerHTML = `
     <div id="modalPreviaRotaCorrida" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -143,7 +152,6 @@ export async function preVisualizarRotaPedido(dados) {
     </div>
   `;
 
-  // Só agora traçamos a rota com o container já estável.
   if (estado.mapa) {
     estado.markerOrigem = L.marker(coordsOrigem, {
       icon: L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
@@ -156,11 +164,14 @@ export async function preVisualizarRotaPedido(dados) {
     await tracarRotaRealRuas(coordsOrigem, coordsDestino, '#F59E0B');
   }
 
+  reajustarMapa();
+
   document.getElementById('btnCancelarPreviaRota')?.addEventListener('click', () => {
     limparRotasMapa();
     pararMonitoramentoDesvios();
     estado.pedidoEmAnalise = null;
     iniciarRadarChamadas();
+    reajustarMapa(estado.coords);
   });
 
   document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', (e) => {
@@ -177,9 +188,6 @@ export async function aceitarPedidoPrevia() {
   }
 }
 
-// ============================================================================
-// 2. ACEITAR CORRIDA E FLUXO A CAMINHO DO EMBARQUE
-// ============================================================================
 export async function aceitarCorrida(dados) {
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
@@ -202,6 +210,7 @@ export async function aceitarCorrida(dados) {
       pararMonitoramentoDesvios();
       estado.pedidoEmAnalise = null;
       iniciarRadarChamadas();
+      reajustarMapa(estado.coords);
     }
   } catch (err) {
     iniciarFaseBuscarPassageiro(dados);
@@ -283,6 +292,7 @@ async function iniciarFaseBuscarPassageiro(dados) {
   }
 
   iniciarMonitoramentoDesvios(coordsOrigem);
+  reajustarMapa();
 
   document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async () => {
     try {
@@ -299,9 +309,6 @@ async function iniciarFaseBuscarPassageiro(dados) {
   document.getElementById('btnCancelarCorridaMotoristaAtiva')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
 }
 
-// ============================================================================
-// 3. PASSAGEIRO A BORDO -> EM VIAGEM AO DESTINO
-// ============================================================================
 export async function confirmarEmbarqueEIrAoDestino(dados) {
   try {
     await fetch(`${API_URL}/api/pedidos/${dados.id}/embarque`, {
@@ -371,6 +378,7 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
   }
 
   iniciarMonitoramentoDesvios(coordsDestino);
+  reajustarMapa();
 
   document.getElementById('btnConcluirCorrida')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
   document.getElementById('btnCancelarCorridaMotoristaViagem')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
@@ -576,4 +584,5 @@ export async function concluirLimpezaPosCorrida() {
   await carregarGanhosHoje();
   await carregarExtratoFinanceiro();
   iniciarRadarChamadas();
+  reajustarMapa();
 }

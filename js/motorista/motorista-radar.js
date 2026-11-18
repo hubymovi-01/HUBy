@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar de Chamadas + Cerca Virtual + Selfie + UI Premium
+// js/motorista/motorista-radar.js - Radar Fluido com Animação CSS (Zero Stuttering)
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -138,7 +138,7 @@ function solicitarSelfieVerificacaoOnline() {
         </div>
         <h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 900;">Selfie de Verificação</h3>
         <p style="margin: 0 0 14px; font-size: 12px; color: #94A3B8; line-height: 1.4;">
-          Enquadre o seu rosto no centro em local iluminado para confirmar sua identidade antes de ficar online.
+          Enquadre o seu rosto no centro para confirmar sua identidade antes de ficar online.
         </p>
 
         <div style="position: relative; width: 220px; height: 260px; margin: 0 auto 14px; border-radius: 50%; overflow: hidden; border: 3px solid #10B981; background: #05080F; box-shadow: 0 0 24px rgba(16,185,129,0.25);">
@@ -298,9 +298,7 @@ export function extrairDadosDoBotao(btn) {
     dist: km,
     dur,
     coordsOrig,
-    coordsDest,
-    forma_pagamento: btn.getAttribute('data-pagamento') || 'dinheiro',
-    observacoes: btn.getAttribute('data-obs') || ''
+    coordsDest
   };
 }
 
@@ -435,11 +433,10 @@ function renderizarRadarOffline() {
   const feedEl = document.getElementById('listaChamadasPendentes');
   if (feedEl) {
     feedEl.style.display = 'block';
+    estado.ultimoRenderIds = null;
     feedEl.innerHTML = `
-      <div class="dock-empty" style="text-align: center; color: #94A3B8; font-size: 13px; padding: 22px 10px; background: rgba(15,23,42,0.6); border: 1px dashed rgba(255,255,255,0.12); border-radius: 12px;">
-        <span style="font-size: 24px; display: block; margin-bottom: 6px;">⚪</span>
-        <strong>Você está offline</strong><br>
-        <span style="font-size: 11.5px; color: #64748B;">Toque no botão "Ficar Online" para validar sua selfie e receber chamadas.</span>
+      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <span style="color: #94A3B8; font-weight: 800; font-size: 13px;">⚪ Fique online para receber chamadas</span>
       </div>
     `;
   }
@@ -506,25 +503,23 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
         })
       : [];
 
-    const idsAtuais = chamadasFiltradas.map((p) => p.id);
-
-    if (!idsAtuais.length) {
+    const idsAtuaisStr = chamadasFiltradas.map(p => p.id).join(',');
+    
+    if (!chamadasFiltradas.length) {
       pararAlertaSonoroChamada();
       renderizarRadar([]);
       return;
     }
 
-    if (!estado.chamadasAnterioresIds) estado.chamadasAnterioresIds = new Set();
-
-    const existeNovaChamada = idsAtuais.some((id) => !estado.chamadasAnterioresIds.has(id));
-
-    if (existeNovaChamada || tocarSomForcado) {
+    const listaMudou = estado.ultimoRenderIds !== idsAtuaisStr;
+    
+    if (listaMudou || tocarSomForcado) {
       iniciarAlertaSonoroChamada();
       dispararNotificacaoNovaChamada(chamadasFiltradas.length);
+      estado.ultimoRenderIds = idsAtuaisStr;
+      renderizarRadar(chamadasFiltradas);
     }
 
-    estado.chamadasAnterioresIds = new Set(idsAtuais);
-    renderizarRadar(chamadasFiltradas);
   } catch (err) {
     console.warn('Erro no radar:', err);
     renderizarRadar([]);
@@ -534,7 +529,6 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 function renderizarRadar(pedidos) {
   const feedEl = document.getElementById('listaChamadasPendentes');
   if (!feedEl) return;
-
   feedEl.style.display = 'block';
 
   if (!estado.isOnline) {
@@ -543,7 +537,11 @@ function renderizarRadar(pedidos) {
   }
 
   if (!pedidos || pedidos.length === 0) {
-    feedEl.innerHTML = '<div class="dock-empty" style="text-align: center; color: #10B981; font-size: 12px; padding: 18px 0; font-weight: 700;">🟢 Online • Aguardando novas chamadas na região...</div>';
+    estado.ultimoRenderIds = null;
+    feedEl.innerHTML = `
+      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <span style="color: #10B981; font-weight: 800; font-size: 13px;">🟢 Aguardando novas chamadas...</span>
+      </div>`;
     return;
   }
 
@@ -568,18 +566,15 @@ function renderizarRadar(pedidos) {
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
     const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
 
-    // Dados que não apareciam e agora vão aparecer:
     const pgto = p.forma_pagamento || p.metodo_pgto || 'dinheiro';
     let pgtoIcon = '💵 Dinheiro';
     if (pgto.includes('cartao') || pgto.includes('maquininha')) pgtoIcon = '💳 Cartão (Máquina)';
     if (pgto.includes('pix')) pgtoIcon = '📱 Pix App';
 
-    // Agendamento
     const agendamento = p.agendado_para 
       ? `<span style="display: block; color: #F59E0B; font-weight: 700; margin-top: 4px;">⏰ Agendada para: ${new Date(p.agendado_para).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>` 
       : '';
 
-    // Observações
     let obsText = '';
     if (p.paradas && Array.isArray(p.paradas) && p.paradas.length > 0) {
       let extraTrocoOuObs = p.paradas.find(item => item.nota);
@@ -588,24 +583,18 @@ function renderizarRadar(pedidos) {
       }
     }
 
-    // Calcula tempo restante da barra
     const inicio = estado.temposPedidosTela[p.id] || agora;
-    const tempoDecorrido = agora - inicio;
-    const percentualRestante = Math.max(0, 100 - ((tempoDecorrido / TEMPO_EXPIRACAO_TELA_MS) * 100));
-    
-    let corBarra = '#059669'; // Verde mais fechado (Base)
-    if (percentualRestante <= 50) corBarra = '#D97706'; // Laranja
-    if (percentualRestante <= 20) corBarra = '#DC2626'; // Vermelho
+    const tempoQuePassou = agora - inicio;
+    const tempoRestanteSeg = Math.max(0, (TEMPO_EXPIRACAO_TELA_MS - tempoQuePassou) / 1000);
 
     return `
-      <div class="order-card" style="position: relative; background: #0E131F; border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+      <div class="order-card" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.08);">
         
         <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Recusar"
           style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.06); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; cursor: pointer; z-index: 10;">
           ✕
         </button>
 
-        <!-- Cabeçalho (Badge, Km e Valor) -->
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; padding-right: 35px;">
           <div>
             <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-bottom: 4px;">
@@ -623,42 +612,26 @@ function renderizarRadar(pedidos) {
           </div>
         </div>
 
-        <!-- Rota -->
         <div style="font-size: 13px; line-height: 1.4; color: #E2E8F0; padding-left: 10px; border-left: 2px solid rgba(255,255,255,0.1); margin-bottom: 10px;">
           <span style="display: block; margin-bottom: 6px;"><strong style="color: #10B981;">A</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
           <span style="display: block;"><strong style="color: #EF4444;">B</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
         </div>
 
-        <!-- Informações do Pedido -->
         <div style="background: rgba(255, 255, 255, 0.03); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 11.5px; color: #CBD5E1;">
           <span style="display: block; margin-bottom: 2px;"><strong>Pagamento:</strong> ${pgtoIcon}</span>
           ${agendamento}
           ${obsText}
         </div>
 
-        <!-- BOTÃO DE ACEITE PREMIUM COM BARRA DE TEMPO INTERNA -->
-        <button type="button" 
-                class="btn-accept-order" 
-                style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"
-                data-id="${p.id}" 
-                data-cat="${catPedido}"
-                data-preco="${valorBruto}"
-                data-repasse="${repasseFormat}"
-                data-origem="${p.origem_endereco || 'Local do passageiro'}"
-                data-destino="${p.destino_endereco}"
-                data-dist="${distKm}"
-                data-dur="${p.duracao_min || 5}"
-                data-lat-orig="${latOrig}" 
-                data-lng-orig="${lngOrig}" 
-                data-lat-dest="${latDest}" 
-                data-lng-dest="${lngDest}"
-                data-pagamento="${pgto}"
-                data-obs="${obsText ? 'Sim' : 'Não'}">
+        <button type="button" class="btn-accept-order" 
+          style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"
+          data-id="${p.id}" data-cat="${catPedido}" data-preco="${valorBruto}" data-repasse="${repasseFormat}"
+          data-origem="${p.origem_endereco || 'Local do passageiro'}" data-destino="${p.destino_endereco}"
+          data-dist="${distKm}" data-dur="${p.duracao_min || 5}" data-lat-orig="${latOrig}" 
+          data-lng-orig="${lngOrig}" data-lat-dest="${latDest}" data-lng-dest="${lngDest}"
+          data-pagamento="${pgto}" data-obs="${obsText ? 'Sim' : 'Não'}">
           
-          <!-- Fundo da barra de progresso -->
-          <div style="position: absolute; top: 0; left: 0; bottom: 0; width: ${percentualRestante}%; background: ${corBarra}; z-index: 1; transition: width 4s linear, background-color 1s ease;"></div>
-          
-          <!-- Texto do Botão -->
+          <div class="huby-progress-bar" style="position: absolute; top: 0; left: 0; bottom: 0; width: 100%; background: #059669; z-index: 1; transform-origin: left; animation-duration: ${tempoRestanteSeg}s;"></div>
           <span style="position: relative; z-index: 2; text-shadow: 0 1px 2px rgba(255,255,255,0.3);">🚀 Aceitar Corrida</span>
         </button>
       </div>
