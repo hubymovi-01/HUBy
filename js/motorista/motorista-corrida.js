@@ -13,21 +13,29 @@ let processandoPagamento = false;
 let intervalPollingPixMotorista = null;
 
 // Função master para corrigir a quebra do mapa quando redimensionado ou inclinado em 3D
-export function reajustarMapa(recentralizarCoords = null) {
+export function reajustarMapa() {
   if (!estado.mapa) return;
   
   const refresh = () => {
     estado.mapa.invalidateSize(true);
-    // Dispara um pequeno evento na view para recarregar tiles que ficaram cinzentos nas pontas
-    estado.mapa.fire('viewreset');
+    estado.mapa.fire('viewreset'); // Força a re-renderização das tiles do mapa
   };
 
   // Roda em cascata (50ms, 200ms, 400ms, 700ms) para acompanhar toda a transição de CSS da doca sem quebrar
   [50, 200, 400, 700].forEach(ms => setTimeout(refresh, ms));
 
-  if (recentralizarCoords) {
-    setTimeout(() => estado.mapa.panTo(recentralizarCoords, { animate: true }), 300);
-  }
+  // Centraliza o mapa dinamicamente
+  setTimeout(() => {
+    if (estado.markerOrigem && estado.markerDestino) {
+      // Se houver origem e destino, cria um "Group" e ajusta a visualização para caber ambos
+      const grupoMarkers = new L.featureGroup([estado.markerOrigem, estado.markerDestino]);
+      estado.mapa.fitBounds(grupoMarkers.getBounds(), { padding: [50, 50], animate: true });
+    } else if (estado.markerOrigem) {
+       estado.mapa.panTo(estado.markerOrigem.getLatLng(), { animate: true });
+    } else if (estado.coords) {
+       estado.mapa.panTo(estado.coords, { animate: true });
+    }
+  }, 300);
 }
 
 export function obterValoresSincronizadosPedido(dados = {}) {
@@ -86,7 +94,7 @@ export async function executarCancelamentoCorridaMotorista(dados) {
       notificar(json.mensagem || 'Corrida cancelada com sucesso.', 'alerta');
       await carregarPerfil();
       iniciarRadarChamadas();
-      reajustarMapa(estado.coords);
+      reajustarMapa();
     } catch (err) {
       notificar(err.message || 'Erro ao cancelar corrida.', 'erro');
     }
@@ -171,7 +179,7 @@ export async function preVisualizarRotaPedido(dados) {
     pararMonitoramentoDesvios();
     estado.pedidoEmAnalise = null;
     iniciarRadarChamadas();
-    reajustarMapa(estado.coords);
+    reajustarMapa();
   });
 
   document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', (e) => {
@@ -210,7 +218,7 @@ export async function aceitarCorrida(dados) {
       pararMonitoramentoDesvios();
       estado.pedidoEmAnalise = null;
       iniciarRadarChamadas();
-      reajustarMapa(estado.coords);
+      reajustarMapa();
     }
   } catch (err) {
     iniciarFaseBuscarPassageiro(dados);
