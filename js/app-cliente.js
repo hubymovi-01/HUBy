@@ -1,4 +1,4 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Limpo e Funcional)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Com Publicidade, Vitrine de Parceiros e Sincronia 3D)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=6';
@@ -19,6 +19,8 @@ import {
 
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
+let cachePatrocinadoresAtivos = [];
+let categoriaFiltroParceiro = 'todos';
 
 function escaparHTML(str) {
   if (!str) return '';
@@ -519,7 +521,7 @@ function configurarSistemaAgendamento() {
 
   btnAgendar.addEventListener('click', () => {
     const dataInputStr = prompt("Para quando deseja agendar? (Digite no formato AAAA-MM-DD HH:MM)\n\nEx: 2026-12-25 14:30\n(O mínimo é 30 minutos de antecedência)");
-    if (!dataInputStr) return; // Cancelou
+    if (!dataInputStr) return;
 
     const datePattern = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
     const m = dataInputStr.match(datePattern);
@@ -705,9 +707,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarAlternanciaSatélite();
   configurarLocaisFavoritosMenu();
 
-  // ----------------------------------------------------
-  // CONFIGURAÇÃO DOS RECURSOS (PAGAMENTO, OBS, CUPOM)
-  // ----------------------------------------------------
   configurarSeletorPagamentoRapido();
   configurarCupomDesconto();
   configurarNotaMotorista();
@@ -871,6 +870,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   conectarSocketEPollingCliente();
+  inicializarPatrocinadoresCliente();
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(err => console.warn('SW:', err));
@@ -1098,6 +1098,10 @@ function conectarSocketEPollingCliente() {
       sincronizarPrecosDaRotaAtual();
     });
 
+    socket.on('patrocinadores_atualizados', () => {
+      carregarBannersPatrocinadores(false);
+    });
+
     socket.on('corrida_aceita', (data) => {
       const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
       if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
@@ -1107,6 +1111,21 @@ function conectarSocketEPollingCliente() {
         alertaProximidadeEmitido = false;
         alternarModoVisualViagemAtiva(true);
         renderizarMotoristaChegando({ id: data.pedidoId || pedidoAtivo, ...data.motorista });
+      }
+    });
+
+    socket.on('motorista_chegou_local', (data) => {
+      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+      if (!pedidoAtivo || String(data?.pedidoId) === String(pedidoAtivo)) {
+        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarAlertaChamada) {
+          sonsHUBy.tocarAlertaChamada();
+        }
+        notificar('📍 O seu motorista acabou de chegar ao local de embarque!', 'sucesso');
+        const lblStatus = document.getElementById('lblStatusTextoPassageiro');
+        if (lblStatus) {
+          lblStatus.textContent = '📍 O MOTORISTA CHEGOU! DIRIJA-SE AO VEÍCULO';
+          lblStatus.style.color = '#10B981';
+        }
       }
     });
 
@@ -1210,7 +1229,7 @@ function conectarSocketEPollingCliente() {
       if (!res.ok) return;
       const p = await res.json();
 
-      if (p.status === 'a_caminho' || p.status === 'aceito' || p.status === 'em_andamento') {
+      if (p.status === 'a_caminho' || p.status === 'aceito' || p.status === 'em_andamento' || p.status === 'chegou_local') {
         alternarModoVisualViagemAtiva(true);
         renderizarMotoristaChegando({
           id: p.id || pedidoId,
@@ -1383,11 +1402,12 @@ function finalizarViagemCliente(data) {
     setTimeout(() => location.reload(), 1500);
   }
 }
+
 window.abrirSuporteCorrida = async (pedidoId = null) => {
   const mensagem = prompt('Conte-nos o que aconteceu. A nossa equipa vai analisar o seu caso:');
 
   if (!mensagem || mensagem.trim() === '') {
-    return; // Utilizador cancelou ou não escreveu nada
+    return;
   }
 
   const token = localStorage.getItem('huby_token');
@@ -1421,3 +1441,181 @@ window.abrirSuporteCorrida = async (pedidoId = null) => {
     alert('❌ Erro de ligação ao contactar o suporte.');
   }
 };
+
+// ============================================================================
+// SISTEMA DE PUBLICIDADE: POP-UP DE ENTRADA (COM X) + VITRINE DE PARCEIROS
+// ============================================================================
+function formatarUrlContatoPatrocinador(raw) {
+  const limpo = String(raw || '').trim();
+  if (!limpo) return '#';
+  if (limpo.startsWith('http://') || limpo.startsWith('https://')) return limpo;
+  const digitos = limpo.replace(/\D/g, '');
+  if (digitos.length >= 10) {
+    const ddi = digitos.startsWith('55') ? digitos : `55${digitos}`;
+    return `https://wa.me/${ddi}?text=${encodeURIComponent('Olá! Vi o anúncio de vocês no aplicativo HUBy e quero aproveitar a oferta!')}`;
+  }
+  return '#';
+}
+
+function registrarInteracaoBanner(id, tipo = 'view') {
+  if (!id) return;
+  fetch(`${API_URL}/api/patrocinadores/${id}/interacao`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo })
+  }).catch(() => {});
+}
+
+async function carregarBannersPatrocinadores(exibirPopupEntrada = true) {
+  try {
+    const res = await fetch(`${API_URL}/api/patrocinadores/ativos?t=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const lista = await res.json();
+    cachePatrocinadoresAtivos = Array.isArray(lista) ? lista : [];
+
+    renderizarVitrineParceirosCliente();
+
+    const corridaAtiva = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+    if (exibirPopupEntrada && !corridaAtiva) {
+      const candidatosPopup = cachePatrocinadoresAtivos.filter(p => p.exibir_popup !== false);
+      if (candidatosPopup.length > 0) {
+        const idx = Math.floor(Math.random() * candidatosPopup.length);
+        abrirPopupPatrocinadorDestaque(candidatosPopup[idx]);
+      }
+    }
+  } catch (e) {}
+}
+
+function abrirPopupPatrocinadorDestaque(p) {
+  const modal = document.getElementById('modalPopupPatrocinador');
+  if (!modal || !p) return;
+
+  const elImg = document.getElementById('popupSponsorImg');
+  const elEmpresa = document.getElementById('popupSponsorEmpresa');
+  const elTitulo = document.getElementById('popupSponsorTitulo');
+  const elDesc = document.getElementById('popupSponsorDesc');
+
+  if (elImg) elImg.src = p.imagem_base64;
+  if (elEmpresa) elEmpresa.textContent = p.nome_empresa || 'Parceiro Oficial';
+  if (elTitulo) elTitulo.textContent = p.titulo_oferta || '';
+  if (elDesc) elDesc.textContent = p.descricao || '';
+
+  const cupomBox = document.getElementById('popupSponsorCupomBox');
+  const cupomTxt = document.getElementById('popupSponsorCupomCodigo');
+  if (p.cupom_codigo && cupomBox && cupomTxt) {
+    cupomTxt.textContent = p.cupom_codigo;
+    cupomBox.style.display = 'block';
+  } else if (cupomBox) {
+    cupomBox.style.display = 'none';
+  }
+
+  const btnAcao = document.getElementById('btnAcaoPopupPatrocinador');
+  if (btnAcao) {
+    const urlDestino = formatarUrlContatoPatrocinador(p.whatsapp_link);
+    btnAcao.href = urlDestino;
+    btnAcao.style.display = urlDestino === '#' ? 'none' : 'flex';
+    btnAcao.onclick = () => {
+      registrarInteracaoBanner(p.id, 'clique');
+      modal.style.display = 'none';
+    };
+  }
+
+  modal.style.display = 'flex';
+  registrarInteracaoBanner(p.id, 'view');
+}
+
+function renderizarVitrineParceirosCliente() {
+  const container = document.getElementById('listaCardsParceirosCliente');
+  if (!container) return;
+
+  const filtrados = categoriaFiltroParceiro === 'todos'
+    ? cachePatrocinadoresAtivos
+    : cachePatrocinadoresAtivos.filter(p => String(p.categoria).toLowerCase() === categoriaFiltroParceiro);
+
+  if (filtrados.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 32px 16px; color: #94A3B8;">
+        <div style="font-size: 32px; margin-bottom: 8px;">✨</div>
+        <strong style="color: #FFF; display: block; margin-bottom: 4px;">Novos parceiros em breve!</strong>
+        <small>Em breve novas ofertas exclusivas nesta categoria.</small>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtrados.map(p => {
+    const urlContato = formatarUrlContatoPatrocinador(p.whatsapp_link);
+    return `
+      <div style="background: #0F1624; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.45);">
+        <div style="position: relative; width: 100%; height: 175px; background: #090D16;">
+          <img src="${p.imagem_base64}" alt="${escaparHTML(p.nome_empresa)}" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+          ${p.cupom_codigo ? `
+            <span style="position: absolute; bottom: 10px; right: 10px; background: rgba(9,13,22,0.92); border: 1px dashed #10B981; color: #10B981; font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 8px;">
+              🏷️ CUPOM: ${escaparHTML(p.cupom_codigo)}
+            </span>
+          ` : ''}
+        </div>
+        <div style="padding: 14px;">
+          <small style="color: #10B981; font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;">
+            ${escaparHTML(p.nome_empresa)}
+          </small>
+          <h4 style="margin: 3px 0 6px; font-size: 15px; font-weight: 900; color: #FFF;">
+            ${escaparHTML(p.titulo_oferta)}
+          </h4>
+          ${p.descricao ? `<p style="margin: 0 0 12px; font-size: 12px; color: #94A3B8; line-height: 1.4;">${escaparHTML(p.descricao)}</p>` : ''}
+          ${urlContato !== '#' ? `
+            <a href="${urlContato}" target="_blank" rel="noopener"
+              onclick="window.registrarCliqueParceiroVitrine(${p.id})"
+              style="width: 100%; background: rgba(16, 185, 129, 0.16); border: 1px solid #10B981; color: #10B981; font-weight: 900; padding: 10px; border-radius: 10px; font-size: 12px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px;">
+              📲 Falar com Parceiro / Ver Oferta
+            </a>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.registrarCliqueParceiroVitrine = (id) => {
+  registrarInteracaoBanner(id, 'clique');
+};
+
+function inicializarPatrocinadoresCliente() {
+  const modalPopup = document.getElementById('modalPopupPatrocinador');
+  const modalVitrine = document.getElementById('modalVitrineParceiros');
+
+  document.getElementById('btnFecharPopupPatrocinador')?.addEventListener('click', () => {
+    if (modalPopup) modalPopup.style.display = 'none';
+  });
+
+  modalPopup?.addEventListener('click', (e) => {
+    if (e.target === modalPopup) modalPopup.style.display = 'none';
+  });
+
+  const abrirVitrine = (e) => {
+    if (e) e.preventDefault();
+    fecharDrawer();
+    if (modalPopup) modalPopup.style.display = 'none';
+    renderizarVitrineParceirosCliente();
+    if (modalVitrine) modalVitrine.style.display = 'flex';
+  };
+
+  document.getElementById('btnNavParceiros')?.addEventListener('click', abrirVitrine);
+  document.getElementById('menuItemParceiros')?.addEventListener('click', abrirVitrine);
+  document.getElementById('btnVerTodosParceirosPopup')?.addEventListener('click', abrirVitrine);
+
+  document.getElementById('btnFecharVitrineParceiros')?.addEventListener('click', () => {
+    if (modalVitrine) modalVitrine.style.display = 'none';
+  });
+
+  document.querySelectorAll('#filtrosVitrineParceiros .partner-filter-pill').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#filtrosVitrineParceiros .partner-filter-pill').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      categoriaFiltroParceiro = btn.getAttribute('data-cat') || 'todos';
+      renderizarVitrineParceirosCliente();
+    });
+  });
+
+  carregarBannersPatrocinadores(true);
+}

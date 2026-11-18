@@ -1598,3 +1598,205 @@ window.responderChamadoMaster = async (ticketId, nomeAutor) => {
     notificarAdmin('Erro de ligação ao responder chamado.', 'erro');
   }
 };
+// ============================================================================
+// 13. GESTÃO DE PATROCINADORES E BANNERS DA GALERIA (COM COMPRESSOR CANVAS)
+// ============================================================================
+let bannerBase64Temporario = null;
+
+function comprimirImagemGaleriaParaBase64(file, maxWidth = 860, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let w = img.width;
+        let h = img.height;
+        if (w > maxWidth) {
+          h = Math.round((h * maxWidth) / w);
+          w = maxWidth;
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = ev.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function configurarFormPatrocinadores(token) {
+  const inputGaleria = document.getElementById('inputBannerGaleria');
+  const imgPreview = document.getElementById('imgPreviewBannerAdmin');
+  const lblStatus = document.getElementById('lblStatusUploadBanner');
+  const form = document.getElementById('formNovoPatrocinador');
+
+  inputGaleria?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (lblStatus) lblStatus.textContent = '⏳ Otimizando imagem da galeria...';
+    try {
+      bannerBase64Temporario = await comprimirImagemGaleriaParaBase64(file);
+      if (imgPreview) {
+        imgPreview.src = bannerBase64Temporario;
+        imgPreview.style.display = 'block';
+      }
+      if (lblStatus) lblStatus.textContent = '✅ Banner carregado! (Toque para trocar)';
+    } catch (err) {
+      notificarAdmin('Erro ao ler imagem da galeria.', 'erro');
+    }
+  });
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!bannerBase64Temporario) {
+      notificarAdmin('Escolha uma imagem da galeria para o banner antes de publicar.', 'aviso');
+      return;
+    }
+
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Publicando no App...';
+    }
+
+    const payload = {
+      nome_empresa: document.getElementById('patNomeEmpresa').value.trim(),
+      titulo_oferta: document.getElementById('patTituloOferta').value.trim(),
+      categoria: document.getElementById('patCategoria').value,
+      cupom_codigo: document.getElementById('patCupom').value.trim().toUpperCase(),
+      descricao: document.getElementById('patDescricao').value.trim(),
+      whatsapp_link: document.getElementById('patWhatsappLink').value.trim(),
+      prioridade: parseInt(document.getElementById('patPrioridade').value, 10) || 5,
+      exibir_popup: document.getElementById('patExibirPopup').checked,
+      imagem_base64: bannerBase64Temporario
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/patrocinadores/admin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.erro || 'Falha ao publicar patrocinador.');
+
+      notificarAdmin('🌟 Banner do patrocinador publicado com sucesso no app!', 'sucesso');
+      form.reset();
+      bannerBase64Temporario = null;
+      if (imgPreview) imgPreview.style.display = 'none';
+      if (lblStatus) lblStatus.textContent = 'Toque para escolher imagem da Galeria';
+      await carregarTabelaPatrocinadores(token);
+    } catch (err) {
+      notificarAdmin(err.message, 'erro');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '🚀 Publicar Banner no App do Cliente';
+      }
+    }
+  });
+}
+
+async function carregarTabelaPatrocinadores(token) {
+  const tbody = document.getElementById('tabelaPatrocinadoresBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/patrocinadores/admin?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error();
+    const lista = await res.json();
+
+    if (!Array.isArray(lista) || lista.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum banner de patrocinador cadastrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = lista.map(p => `
+      <tr>
+        <td>
+          <img src="${p.imagem_base64}" alt="${escaparHTML(p.nome_empresa)}"
+            style="width: 68px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;"
+            onclick="abrirFotoDocumento('${p.imagem_base64}', 'Banner - ${escaparHTML(p.nome_empresa)}')" />
+        </td>
+        <td>
+          <strong>${escaparHTML(p.nome_empresa)}</strong><br>
+          <small style="color: #38BDF8; font-weight: 700;">${escaparHTML(p.titulo_oferta)}</small>
+          ${p.cupom_codigo ? `<br><span style="font-size:10px; background:rgba(16,185,129,0.15); color:#10B981; padding:1px 6px; border-radius:4px; font-weight:800;">CUPOM: ${escaparHTML(p.cupom_codigo)}</span>` : ''}
+        </td>
+        <td>
+          <button type="button" class="btn-tbl ${p.exibir_popup ? 'app' : 'alt'}" onclick="alternarPopupPatrocinador(${p.id})">
+            ${p.exibir_popup ? '🚀 Sim (No Pop-up)' : '⚪ Só na Vitrine'}
+          </button>
+        </td>
+        <td>
+          <small style="color:#CBD5E1; display:block;">👁️ <strong>${Number(p.visualizacoes || 0)}</strong> views</small>
+          <small style="color:#10B981; display:block;">👆 <strong>${Number(p.cliques || 0)}</strong> cliques</small>
+        </td>
+        <td>
+          <span class="badge ${p.ativo ? 'badge-ativo' : 'badge-inativo'}">${p.ativo ? 'ATIVO' : 'PAUSADO'}</span>
+        </td>
+        <td>
+          <div style="display:flex; gap:6px;">
+            <button type="button" class="btn-tbl alt" onclick="alternarStatusPatrocinador(${p.id})">${p.ativo ? 'Pausar' : 'Ativar'}</button>
+            <button type="button" class="btn-tbl rej" onclick="excluirPatrocinador(${p.id})">Excluir</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum patrocinador cadastrado.</td></tr>';
+  }
+}
+
+window.alternarStatusPatrocinador = async (id) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/patrocinadores/admin/${id}/toggle-ativo`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      notificarAdmin('Status do patrocinador atualizado!', 'sucesso');
+      carregarTabelaPatrocinadores(token);
+    }
+  } catch (e) {}
+};
+
+window.alternarPopupPatrocinador = async (id) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/patrocinadores/admin/${id}/toggle-popup`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      notificarAdmin('Destaque do Pop-up atualizado!', 'sucesso');
+      carregarTabelaPatrocinadores(token);
+    }
+  } catch (e) {}
+};
+
+window.excluirPatrocinador = async (id) => {
+  if (!confirm('Deseja remover este patrocinador permanentemente?')) return;
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/patrocinadores/admin/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      notificarAdmin('Patrocinador removido.', 'aviso');
+      carregarTabelaPatrocinadores(token);
+    }
+  } catch (e) {}
+};

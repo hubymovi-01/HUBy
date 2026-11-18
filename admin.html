@@ -70,6 +70,7 @@
   <!-- ABAS DE NAVEGAÇÃO -->
   <nav class="tabs-nav">
     <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
+    <button type="button" class="tab-btn" data-tab="tabPatrocinadores">🌟 Patrocinadores & Banners</button>
     <button type="button" class="tab-btn" data-tab="tabSocios">🤝 Divisão Sócios</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
     <button type="button" class="tab-btn" data-tab="tabGrowth">🎁 Indicação & Dinâmica</button>
@@ -81,8 +82,7 @@
     <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Condutores</button>
     <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Viagens</button>
     <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Tarifas & Gateway</button>
-    <button type="button" class="tab-btn" data-tab="tabMarketplace">🛍️ Loja & Clube</button>
-    <!-- NOVO BOTÃO DA ABA DE SUPORTE -->
+    <button type="button" class="tab-btn" data-tab="tabMarketplace">🛍️ Loja Motorista</button>
     <button type="button" class="tab-btn" data-tab="tabSuporte">🎧 Suporte & Ajuda</button>
   </nav>
 
@@ -100,6 +100,115 @@
     </div>
   </section>
 
+  <!-- ABA NOVA: GESTÃO DE PATROCINADORES E BANNERS PUBLICITÁRIOS (DA GALERIA) -->
+  <section id="tabPatrocinadores" class="tab-pane" style="display: none;">
+    <div class="split-grid">
+      <div class="card-panel">
+        <h3 class="panel-primary-title">🌟 Novo Banner de Patrocinador</h3>
+        <p class="panel-subtitle">
+          Escolha a arte diretamente da sua galeria. Você controla se o banner aparece no Pop-up ao abrir o app e na Vitrine de Parceiros.
+        </p>
+
+        <form id="formNovoPatrocinador">
+          <!-- UPLOAD DA GALERIA COM PREVIEW -->
+          <div class="form-group">
+            <label>Arte do Banner (Da Galeria do Celular / PC)</label>
+            <label for="inputBannerGaleria"
+              style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(16, 185, 129, 0.08); border: 2px dashed rgba(16, 185, 129, 0.45); border-radius: 14px; padding: 16px; cursor: pointer; text-align: center; transition: all 0.2s;">
+              <span style="font-size: 26px;">🖼️</span>
+              <strong style="color: #10B981; font-size: 13px;" id="lblStatusUploadBanner">Toque para escolher imagem da Galeria</strong>
+              <small style="color: #94A3B8; font-size: 11px;">Otimização automática em Alta Definição</small>
+              <img id="imgPreviewBannerAdmin" src="" alt="Prévia do Banner"
+                style="display: none; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-top: 8px; border: 1px solid rgba(255,255,255,0.15);" />
+            </label>
+            <input type="file" id="inputBannerGaleria" accept="image/*" style="display: none;">
+          </div>
+
+          <div class="form-group">
+            <label>Nome do Patrocinador / Loja</label>
+            <input type="text" id="patNomeEmpresa" placeholder="Ex: Supermercado São João" required>
+          </div>
+
+          <div class="form-group">
+            <label>Título da Oferta ou Chamada</label>
+            <input type="text" id="patTituloOferta" placeholder="Ex: 15% OFF em compras pelo App!" required>
+          </div>
+
+          <div class="flex-row-gap">
+            <div class="form-group flex-1">
+              <label>Categoria na Vitrine</label>
+              <select id="patCategoria">
+                <option value="destaque">⭐ Destaque VIP</option>
+                <option value="alimentacao">🍔 Alimentação & Delivery</option>
+                <option value="moda">👗 Moda & Lojas</option>
+                <option value="saude">💊 Farmácia & Saúde</option>
+                <option value="servicos">🔧 Serviços & Automotivo</option>
+              </select>
+            </div>
+            <div class="form-group flex-1">
+              <label>Cupom (Opcional)</label>
+              <input type="text" id="patCupom" placeholder="Ex: HUBY10" class="input-uppercase">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Descrição Curta / Endereço</label>
+            <textarea id="patDescricao" rows="2" placeholder="Ex: Praça Honório Santos, Centro. Entregas rápidas!"></textarea>
+          </div>
+
+          <div class="flex-row-gap">
+            <div class="form-group flex-1">
+              <label>WhatsApp ou Link Instagram</label>
+              <input type="text" id="patWhatsappLink" placeholder="Ex: 89999999999 ou https://...">
+            </div>
+            <div class="form-group flex-1">
+              <label>Ordem / Prioridade</label>
+              <select id="patPrioridade">
+                <option value="10">🔥 Máxima (Topo + 1º Pop-up)</option>
+                <option value="5" selected>⭐ Alta</option>
+                <option value="1">📌 Normal</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 10px 12px; border-radius: 10px; margin-bottom: 14px;">
+            <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin: 0; color: #FFF; font-size: 13px;">
+              <span>🚀 Exibir no <strong>Pop-up de Entrada</strong> quando o cliente abrir o app</span>
+              <input type="checkbox" id="patExibirPopup" checked style="width: 20px; height: 20px; accent-color: #10B981;">
+            </label>
+          </div>
+
+          <button type="submit" class="btn-action btn-full-center">
+            🚀 Publicar Banner no App do Cliente
+          </button>
+        </form>
+      </div>
+
+      <div class="table-responsive">
+        <div class="table-header-title">
+          📢 Campanhas Publicitárias Ativas & Métricas de Cliques
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Banner</th>
+              <th>Patrocinador / Oferta</th>
+              <th>Pop-up Inicial</th>
+              <th>Métricas</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaPatrocinadoresBody">
+            <tr>
+              <td colspan="6" class="table-empty-row">Carregando patrocinadores...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
   <!-- ABA 2: DIVISÃO DOS SÓCIOS (50% / 50%) -->
   <section id="tabSocios" class="tab-pane">
     <div class="section-header-box">
@@ -110,7 +219,6 @@
     </div>
 
     <div class="socios-cards-grid">
-      <!-- Sócio 1 -->
       <div class="card-panel border-socio-1">
         <div class="socio-top-bar">
           <div>
@@ -131,7 +239,6 @@
         </button>
       </div>
 
-      <!-- Sócio 2 -->
       <div class="card-panel border-socio-2">
         <div class="socio-top-bar">
           <div>
@@ -153,7 +260,6 @@
       </div>
     </div>
 
-    <!-- Histórico de Retiradas -->
     <div class="table-responsive">
       <div class="table-header-title">
         📋 Histórico de Saques e Retiradas da Diretoria
@@ -186,16 +292,13 @@
     <div id="mapaRadarContainer"></div>
   </section>
 
-  <!-- ABA NOVA: CONTROLE DE INDICAÇÃO & TARIFA DINÂMICA -->
+  <!-- ABA CONTROLE DE INDICAÇÃO & TARIFA DINÂMICA -->
   <section id="tabGrowth" class="tab-pane">
     <div class="config-grid-layout">
-
-      <!-- PAINEL 1: PROGRAMA INDIQUE E GANHE -->
       <div class="card-panel">
         <h3 class="panel-primary-title">🎁 Programa Indique e Ganhe</h3>
         <p class="panel-subtitle">
-          Defina livremente os valores de recompensa para passageiros e motoristas que trouxerem novos usuários para o
-          HUBy.
+          Defina livremente os valores de recompensa para passageiros e motoristas que trouxerem novos usuários para o HUBy.
         </p>
         <form id="formConfigIndicacao">
           <div class="form-group">
@@ -205,7 +308,6 @@
               <option value="false">⚪ Pausado (Sem Bônus)</option>
             </select>
           </div>
-
           <div class="flex-row-gap">
             <div class="form-group flex-1">
               <label>Desconto p/ Amigo Indicado (R$)</label>
@@ -216,11 +318,9 @@
               <input type="number" step="0.50" min="0" id="indBonusIndicador" value="5.00" required>
             </div>
           </div>
-
           <div class="categoria-divisor">
             <strong class="categoria-header-txt">🚗 Indicação de Novos Motoristas</strong>
           </div>
-
           <div class="flex-row-gap">
             <div class="form-group flex-1">
               <label>Bônus Indicação Motorista (R$)</label>
@@ -231,19 +331,16 @@
               <input type="number" min="1" max="200" id="indMetaCorridasMotorista" value="15" required>
             </div>
           </div>
-
           <button type="submit" class="btn-action btn-full-center mt-10">
             💾 Salvar Regras de Indicação
           </button>
         </form>
       </div>
 
-      <!-- PAINEL 2: TARIFA DINÂMICA (SURGE PRICING) -->
       <div class="card-panel">
         <h3 class="panel-blue-title">⚡ Tarifa Dinâmica (Alta Demanda)</h3>
         <p class="panel-subtitle">
-          Multiplica o valor da corrida automaticamente quando há poucos motoristas na região ou em horários de
-          chuva/pico.
+          Multiplica o valor da corrida automaticamente quando há poucos motoristas na região ou em horários de chuva/pico.
         </p>
         <form id="formConfigDinamica">
           <div class="form-group">
@@ -253,7 +350,6 @@
               <option value="false">⚪ Desativada (Sempre 1.0x)</option>
             </select>
           </div>
-
           <div class="flex-row-gap">
             <div class="form-group flex-1">
               <label>Gatilho (Chamadas Pendentes)</label>
@@ -264,7 +360,6 @@
               <input type="number" step="0.1" min="1.0" max="4.0" id="dinMultiplicadorMax" value="1.8" required>
             </div>
           </div>
-
           <div class="form-group">
             <label>Multiplicador Manual Forçado (Chuva / Evento)</label>
             <select id="dinMultiplicadorManual">
@@ -275,13 +370,11 @@
               <option value="2.0">2.0x (Dobro • Alta Escassez)</option>
             </select>
           </div>
-
           <button type="submit" class="btn-action btn-blue-full mt-10">
             ⚡ Aplicar Regra Dinâmica Agora
           </button>
         </form>
       </div>
-
     </div>
   </section>
 
@@ -433,11 +526,9 @@
     </div>
   </section>
 
- <!-- ABA 7: BROADCAST PUSH (Elegante e Regionalizado) -->
+  <!-- ABA 7: BROADCAST PUSH -->
   <section id="tabBroadcast" class="tab-pane">
     <div class="card-panel max-w-600" style="margin: 0 auto;">
-      
-      <!-- Cabeçalho Elegante -->
       <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
         <div style="width: 48px; height: 48px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px;">📢</div>
         <div>
@@ -482,7 +573,7 @@
         </button>
       </form>
     </div>
-  </section>>
+  </section>
 
   <!-- ABA 8: GESTÃO E EXTRATO DE SAQUES -->
   <section id="tabSaques" class="tab-pane">
@@ -572,8 +663,6 @@
   <!-- ABA 11: TARIFAS & GATEWAY MERCADO PAGO -->
   <section id="tabConfig" class="tab-pane">
     <div class="config-grid-layout">
-
-      <!-- CONFIGURAÇÃO COMPLETA DAS TARIFAS -->
       <div class="card-panel">
         <h3 class="panel-primary-title">⚙️ Tabela Tarifária Dinâmica</h3>
         <form id="formConfiguracoes">
@@ -581,68 +670,34 @@
             <label>Taxa de Retenção HUBy (%)</label>
             <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
           </div>
-
           <div class="categoria-divisor">
             <strong class="categoria-header-txt">🚗 HUBy Carro</strong>
           </div>
           <div class="tarifa-inputs-row">
-            <div class="form-group">
-              <label>Base (R$)</label>
-              <input type="number" step="0.50" id="tarifaCarroBase" value="6.00" required>
-            </div>
-            <div class="form-group">
-              <label>Km (R$)</label>
-              <input type="number" step="0.10" id="tarifaCarroKm" value="2.20" required>
-            </div>
-            <div class="form-group">
-              <label>Min (R$)</label>
-              <input type="number" step="0.05" id="tarifaCarroMin" value="0.30" required>
-            </div>
+            <div class="form-group"><label>Base (R$)</label><input type="number" step="0.50" id="tarifaCarroBase" value="6.00" required></div>
+            <div class="form-group"><label>Km (R$)</label><input type="number" step="0.10" id="tarifaCarroKm" value="2.20" required></div>
+            <div class="form-group"><label>Min (R$)</label><input type="number" step="0.05" id="tarifaCarroMin" value="0.30" required></div>
           </div>
-
           <div class="categoria-divisor">
             <strong class="categoria-header-txt">🏍️ HUBy Moto</strong>
           </div>
           <div class="tarifa-inputs-row">
-            <div class="form-group">
-              <label>Base (R$)</label>
-              <input type="number" step="0.50" id="tarifaMotoBase" value="4.00" required>
-            </div>
-            <div class="form-group">
-              <label>Km (R$)</label>
-              <input type="number" step="0.10" id="tarifaMotoKm" value="1.40" required>
-            </div>
-            <div class="form-group">
-              <label>Min (R$)</label>
-              <input type="number" step="0.05" id="tarifaMotoMin" value="0.20" required>
-            </div>
+            <div class="form-group"><label>Base (R$)</label><input type="number" step="0.50" id="tarifaMotoBase" value="4.00" required></div>
+            <div class="form-group"><label>Km (R$)</label><input type="number" step="0.10" id="tarifaMotoKm" value="1.40" required></div>
+            <div class="form-group"><label>Min (R$)</label><input type="number" step="0.05" id="tarifaMotoMin" value="0.20" required></div>
           </div>
-
           <div class="categoria-divisor">
             <strong class="categoria-header-txt">📦 HUBy Flash (Entrega)</strong>
           </div>
           <div class="tarifa-inputs-row">
-            <div class="form-group">
-              <label>Base (R$)</label>
-              <input type="number" step="0.50" id="tarifaFlashBase" value="5.00" required>
-            </div>
-            <div class="form-group">
-              <label>Km (R$)</label>
-              <input type="number" step="0.10" id="tarifaFlashKm" value="1.80" required>
-            </div>
-            <div class="form-group">
-              <label>Min (R$)</label>
-              <input type="number" step="0.05" id="tarifaFlashMin" value="0.25" required>
-            </div>
+            <div class="form-group"><label>Base (R$)</label><input type="number" step="0.50" id="tarifaFlashBase" value="5.00" required></div>
+            <div class="form-group"><label>Km (R$)</label><input type="number" step="0.10" id="tarifaFlashKm" value="1.80" required></div>
+            <div class="form-group"><label>Min (R$)</label><input type="number" step="0.05" id="tarifaFlashMin" value="0.25" required></div>
           </div>
-
-          <button type="submit" class="btn-action btn-full-center mt-10">
-            💾 Salvar Tarifas no Banco
-          </button>
+          <button type="submit" class="btn-action btn-full-center mt-10">💾 Salvar Tarifas no Banco</button>
         </form>
       </div>
 
-      <!-- CREDENCIAIS GATEWAY MERCADO PAGO -->
       <div class="card-panel">
         <h3 class="panel-blue-title">💳 Gateway de Pagamento (Mercado Pago)</h3>
         <p class="panel-subtitle">
@@ -661,12 +716,9 @@
             <label>Taxa Estimada do Gateway (%)</label>
             <input type="number" step="0.01" id="mpTaxaPercentual" value="0.99" placeholder="0.99">
           </div>
-          <button type="submit" class="btn-action btn-blue-full">
-            Salvar Chaves Mercado Pago
-          </button>
+          <button type="submit" class="btn-action btn-blue-full">Salvar Chaves Mercado Pago</button>
         </form>
       </div>
-
     </div>
   </section>
 
@@ -674,7 +726,7 @@
   <section id="tabMarketplace" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
-        <h3 class="panel-clean-title">Adicionar Parceria / Benefício</h3>
+        <h3 class="panel-clean-title">Adicionar Parceria / Benefício (Motoristas)</h3>
         <form id="formNovoMarketplace">
           <div class="form-group">
             <label>Categoria</label>
@@ -687,36 +739,15 @@
               <option value="saude">Saúde / Odonto</option>
             </select>
           </div>
-          <div class="form-group">
-            <label>Título da Oferta</label>
-            <input type="text" id="mkpTitulo" placeholder="Ex: Lavagem Completa" required>
-          </div>
-          <div class="form-group">
-            <label>Nome da Empresa</label>
-            <input type="text" id="mkpEmpresa" placeholder="Ex: Lava Jato do Zé" required>
-          </div>
-          <div class="form-group">
-            <label>Descrição Curta</label>
-            <textarea id="mkpDescricao" rows="2" placeholder="Descreva os detalhes da parceria..." required></textarea>
-          </div>
+          <div class="form-group"><label>Título da Oferta</label><input type="text" id="mkpTitulo" placeholder="Ex: Lavagem Completa" required></div>
+          <div class="form-group"><label>Nome da Empresa</label><input type="text" id="mkpEmpresa" placeholder="Ex: Lava Jato do Zé" required></div>
+          <div class="form-group"><label>Descrição Curta</label><textarea id="mkpDescricao" rows="2" placeholder="Descreva os detalhes da parceria..." required></textarea></div>
           <div class="flex-row-gap">
-            <div class="form-group flex-1">
-              <label>Preço Original (R$)</label>
-              <input type="number" step="0.50" id="mkpPrecoDe" placeholder="40.00" required>
-            </div>
-            <div class="form-group flex-1">
-              <label>Preço P/ Motorista (R$)</label>
-              <input type="number" step="0.50" id="mkpPrecoPor" placeholder="20.00" required>
-            </div>
+            <div class="form-group flex-1"><label>Preço Original (R$)</label><input type="number" step="0.50" id="mkpPrecoDe" placeholder="40.00" required></div>
+            <div class="form-group flex-1"><label>Preço P/ Motorista (R$)</label><input type="number" step="0.50" id="mkpPrecoPor" placeholder="20.00" required></div>
           </div>
-          <div class="form-group">
-            <label>WhatsApp Comercial</label>
-            <input type="tel" id="mkpWhatsapp" placeholder="Apenas números com DDD" required>
-          </div>
-          <div class="form-group">
-            <label>URL da Imagem de Capa (opcional)</label>
-            <input type="url" id="mkpImagemUrl" placeholder="https://...">
-          </div>
+          <div class="form-group"><label>WhatsApp Comercial</label><input type="tel" id="mkpWhatsapp" placeholder="Apenas números com DDD" required></div>
+          <div class="form-group"><label>URL da Imagem de Capa (opcional)</label><input type="url" id="mkpImagemUrl" placeholder="https://..."></div>
           <button type="submit" class="btn-action btn-full-center">Publicar Parceria no App</button>
         </form>
       </div>
@@ -743,12 +774,11 @@
     </div>
   </section>
 
-  <!-- NOVA ABA 13: SUPORTE & AJUDA -->
+  <!-- ABA 13: SUPORTE & AJUDA -->
   <section id="tabSuporte" class="tab-pane" style="display: none;">
     <div class="card glass-panel" style="padding: 20px;">
       <h3 style="margin-bottom: 5px;">🎧 Chamados de Suporte</h3>
       <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Passageiros e motoristas que relataram problemas</p>
-      
       <div class="table-responsive">
         <table class="table-huby">
           <thead>
@@ -792,7 +822,7 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <!-- MÓDULO PRINCIPAL DO ADMIN -->
-  <script type="module" src="./js/admin.js?v=6.5.0"></script>
+  <script type="module" src="./js/admin.js?v=7.0.0"></script>
 </body>
 
 </html>

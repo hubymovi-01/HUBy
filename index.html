@@ -45,6 +45,76 @@
       }
     })();
   </script>
+
+  <style>
+    /* ANIMAÇÃO E ESTILO DO POP-UP DE PATROCINADOR E VITRINE */
+    @keyframes popInSponsor {
+      0% { opacity: 0; transform: scale(0.9) translateY(15px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .sponsor-popup-card {
+      position: relative;
+      width: 100%;
+      max-width: 370px;
+      background: #111827;
+      border: 1.5px solid rgba(16, 185, 129, 0.45);
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9);
+      animation: popInSponsor 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-close-sponsor-x {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 10;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(9, 13, 22, 0.85);
+      border: 1.5px solid rgba(255, 255, 255, 0.25);
+      color: #FFF;
+      font-size: 16px;
+      font-weight: 900;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+    .sponsor-tag-badge {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      background: rgba(16, 185, 129, 0.92);
+      color: #02261C;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    .partner-filter-pill {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #CBD5E1;
+      padding: 7px 13px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .partner-filter-pill.active {
+      background: rgba(16, 185, 129, 0.22);
+      border-color: #10B981;
+      color: #10B981;
+    }
+  </style>
 </head>
 
 <body class="client-viewport">
@@ -63,7 +133,7 @@
   <!-- MAPA PRINCIPAL -->
   <div id="mapaCliente"></div>
 
-  <!-- NAVEGAÇÃO SUPERIOR FIXA -->
+  <!-- NAVEGAÇÃO SUPERIOR FIXA (Com botão de Parceiros & Viagens) -->
   <header class="top-nav-bar">
     <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
       <span></span><span></span><span></span>
@@ -71,14 +141,21 @@
     <div class="brand-pill">
       <span class="hub-txt">HUB</span><span class="y-txt">y</span>
     </div>
-    <button type="button" id="btnNavViagens" class="btn-action-pill">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-        stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"></circle>
-        <polyline points="12 6 12 12 16 14"></polyline>
-      </svg>
-      <span>Viagens</span>
-    </button>
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <button type="button" id="btnNavParceiros" class="btn-action-pill"
+        style="background: rgba(16, 185, 129, 0.16); border-color: rgba(16, 185, 129, 0.45); color: #10B981;">
+        <span>✨</span>
+        <span>Parceiros</span>
+      </button>
+      <button type="button" id="btnNavViagens" class="btn-action-pill">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+        <span>Viagens</span>
+      </button>
+    </div>
   </header>
 
   <!-- BARRA DE PESQUISA FLUTUANTE MODERNA COM IA -->
@@ -87,7 +164,6 @@
       <div class="search-dot-accent"></div>
       <input type="text" id="inputPesquisaLocal" placeholder="Para onde você quer ir?" autocomplete="off" />
 
-      <!-- BOTÃO DE IA / MICROFONE -->
       <button type="button" id="btnBuscaIA" class="search-icon" aria-label="Busca Inteligente"
         style="color: #38BDF8; margin-right: 2px;">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -117,14 +193,10 @@
     <div class="drawer-profile" id="drawerPerfilBox"></div>
 
     <nav class="drawer-nav">
-      <!-- FAVORITOS -->
       <div style="display: flex; justify-content: space-between; align-items: center; margin: 4px 10px 4px;">
-        <span
-          style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus
-          Favoritos</span>
+        <span style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus Favoritos</span>
       </div>
 
-      <!-- Item Casa -->
       <div class="drawer-fav-card">
         <div class="fav-main-action" id="actionIrCasa">
           <span class="d-icon">🏠</span>
@@ -133,11 +205,9 @@
             <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa"
-          aria-label="Editar Casa">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa" aria-label="Editar Casa">✏️</button>
       </div>
 
-      <!-- Item Trabalho -->
       <div class="drawer-fav-card">
         <div class="fav-main-action" id="actionIrTrabalho">
           <span class="d-icon">🏢</span>
@@ -146,13 +216,21 @@
             <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho"
-          aria-label="Editar Trabalho">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho" aria-label="Editar Trabalho">✏️</button>
       </div>
 
       <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
 
-      <!-- ITENS GERAIS DO MENU -->
+      <!-- ITEM DE DESTAQUE: VITRINE DE PARCEIROS & PATROCINADORES -->
+      <a href="#" id="menuItemParceiros" class="drawer-item"
+        style="border: 1px solid rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.1); margin-bottom: 4px;">
+        <span class="d-icon">✨</span>
+        <div class="d-info">
+          <strong style="color: #10B981;">Parceiros & Ofertas</strong>
+          <small>Descontos exclusivos dos patrocinadores</small>
+        </div>
+      </a>
+
       <a href="#" id="menuItemViagens" class="drawer-item">
         <span class="d-icon">📋</span>
         <div class="d-info"><strong>Minhas Viagens</strong><small>Histórico e recibos de corridas</small></div>
@@ -165,8 +243,6 @@
         <span class="d-icon">🛡️</span>
         <div class="d-info"><strong>Contato de Segurança</strong><small>Compartilhar trajeto e emergência</small></div>
       </a>
-      
-      <!-- MENU DE INDICAÇÃO -->
       <a href="#" id="menuItemIndique" class="drawer-item">
         <span class="d-icon">🎁</span>
         <div class="d-info"><strong>Indique e Ganhe</strong><small>Ganhe R$ 5,00 por amigo indicado</small></div>
@@ -179,8 +255,7 @@
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
         style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 4px;">
         <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
-            financeiro</small></div>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
       </a>
       <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
@@ -190,15 +265,13 @@
 
     <div class="drawer-footer">
       <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Sair ou Mudar de Conta</button>
-      <span class="version-tag">HUBy v2.2 • 2026</span>
+      <span class="version-tag">HUBy v2.4 • 2026</span>
     </div>
   </aside>
 
   <!-- BOTÃO FLUTUANTE DE CAMADA (SATÉLITE / DARK) -->
-  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer"
-    aria-label="Alternar Satélite">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-      stroke-linecap="round" stroke-linejoin="round">
+  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
       <polyline points="12 17 12 22 22 17"></polyline>
       <polyline points="12 12 12 17 22 12"></polyline>
@@ -207,8 +280,7 @@
 
   <!-- BOTÃO FLUTUANTE DE GPS -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-      stroke-linecap="round" stroke-linejoin="round">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
       <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -228,7 +300,6 @@
   <section class="client-dock-sheet pro-dock">
     <div class="sheet-drag-handle"></div>
 
-    <!-- CABEÇALHO DO PERCURSO EM TIMELINE -->
     <div id="blocoResumo" class="trip-summary-card-pro">
       <div class="route-timeline">
         <div class="timeline-dot pickup"></div>
@@ -251,52 +322,26 @@
       </div>
     </div>
 
-    <!-- SELETOR HORIZONTAL DE 3 COLUNAS -->
     <div class="categories-container" id="sliderCategorias">
       <div class="category-card-pro active" data-id="carro">
-        <div class="cat-left">
-          <span class="cat-emoji">🚗</span>
-        </div>
-        <div class="cat-center">
-          <div class="cat-name-row">
-            <strong>HUBy Carro</strong>
-          </div>
-        </div>
-        <div class="cat-right">
-          <span class="cat-price-est" id="priceEstCarro">--</span>
-        </div>
+        <div class="cat-left"><span class="cat-emoji">🚗</span></div>
+        <div class="cat-center"><div class="cat-name-row"><strong>HUBy Carro</strong></div></div>
+        <div class="cat-right"><span class="cat-price-est" id="priceEstCarro">--</span></div>
       </div>
 
       <div class="category-card-pro" data-id="moto">
-        <div class="cat-left">
-          <span class="cat-emoji">🏍️</span>
-        </div>
-        <div class="cat-center">
-          <div class="cat-name-row">
-            <strong>HUBy Moto</strong>
-          </div>
-        </div>
-        <div class="cat-right">
-          <span class="cat-price-est" id="priceEstMoto">--</span>
-        </div>
+        <div class="cat-left"><span class="cat-emoji">🏍️</span></div>
+        <div class="cat-center"><div class="cat-name-row"><strong>HUBy Moto</strong></div></div>
+        <div class="cat-right"><span class="cat-price-est" id="priceEstMoto">--</span></div>
       </div>
 
       <div class="category-card-pro" data-id="entrega">
-        <div class="cat-left">
-          <span class="cat-emoji">📦</span>
-        </div>
-        <div class="cat-center">
-          <div class="cat-name-row">
-            <strong>HUBy Flash</strong>
-          </div>
-        </div>
-        <div class="cat-right">
-          <span class="cat-price-est" id="priceEstEntrega">--</span>
-        </div>
+        <div class="cat-left"><span class="cat-emoji">📦</span></div>
+        <div class="cat-center"><div class="cat-name-row"><strong>HUBy Flash</strong></div></div>
+        <div class="cat-right"><span class="cat-price-est" id="priceEstEntrega">--</span></div>
       </div>
     </div>
 
-    <!-- FORMULÁRIO DE ENTREGA -->
     <div id="blocoDetalhesEntrega" style="display: none;" class="delivery-details-pro">
       <div class="delivery-header-title">📋 Especificações da Encomenda</div>
       <input type="text" id="inputRecebedor" placeholder="Nome e telefone de quem vai receber" />
@@ -309,21 +354,17 @@
       </select>
     </div>
 
-    <!-- LINHA DE UTILITÁRIOS: PAGAMENTO, CUPOM, NOTAS E AGENDAMENTO -->
     <div class="dock-quick-actions-row pro-actions">
-      <!-- 1. Pagamento -->
       <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" title="Forma de Pagamento">
         <span class="pill-icon" id="iconFormaPagamento">💵</span>
         <span class="pill-text" id="txtFormaPagamentoSelecionada">Dinheiro</span>
       </button>
 
-      <!-- 2. Cupom -->
       <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill" title="Adicionar Cupom">
         <span class="pill-icon">🏷️</span>
         <span class="pill-text">Cupom</span>
       </button>
 
-      <!-- 3. Observações -->
       <div style="position: relative; flex: 1;">
         <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Adicionar nota">
           <span class="pill-icon">📝</span>
@@ -332,7 +373,6 @@
         <button type="button" id="btnLimparNotaMotorista" class="btn-clear-badge" style="display: none;">✕</button>
       </div>
       
-      <!-- 4. Agendamento -->
       <div style="position: relative; flex: 1;">
         <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Agendar Viagem">
           <span class="pill-icon">⏰</span>
@@ -342,12 +382,10 @@
       </div>
     </div>
 
-    <!-- BADGES VISUAIS (Quando a nota ou cupom é aplicado) -->
     <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none;"></div>
     <div id="txtAgendamentoBadge" class="badge-nota-motorista" style="display: none; background: rgba(245, 158, 11, 0.15); color: #F59E0B;"></div>
     <div id="tagCupomAtivo" class="badge-nota-motorista" style="display: none; background: rgba(16, 185, 129, 0.15); color: #10B981;"></div>
 
-    <!-- RADAR DE BUSCA -->
     <div id="cardStatusViagem" class="active-ride-card modern-radar" style="display: none;">
       <div class="ride-header">
         <div class="pulse-radar"></div>
@@ -358,10 +396,8 @@
       </div>
     </div>
 
-    <!-- PAINEL MOTORISTA ACEITOU -->
     <div id="painelMotoristaAceitou" style="display: none; width: 100%;"></div>
 
-    <!-- BOTÃO PRINCIPAL COM PREÇO EMBUTIDO -->
     <button type="button" id="btnPedirHuby" class="btn-main-action pro-btn">
       <span class="btn-text">Confirmar HUBy Carro</span>
       <span class="btn-price-preview" id="txtPrecoEstimado">--</span>
@@ -369,6 +405,68 @@
   </section>
 
   <!-- ==================== MODAIS ==================== -->
+
+  <!-- 1. POP-UP SPLASH DE PATROCINADOR AO ENTRAR NO APP (BOTÃO X PARA FECHAR) -->
+  <div id="modalPopupPatrocinador" class="modal-backdrop" style="display: none; z-index: 10050; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
+    <div class="sponsor-popup-card">
+      <span class="sponsor-tag-badge" id="popupSponsorTag">✨ Parceiro Oficial</span>
+      <button type="button" id="btnFecharPopupPatrocinador" class="btn-close-sponsor-x" aria-label="Fechar Anúncio">✕</button>
+
+      <div style="width: 100%; max-height: 360px; overflow: hidden; background: #090D16;">
+        <img id="popupSponsorImg" src="" alt="Banner Patrocinador" style="width: 100%; height: 100%; max-height: 360px; object-fit: cover; display: block;">
+      </div>
+
+      <div style="padding: 18px;">
+        <small id="popupSponsorEmpresa" style="color: #10B981; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; display: block; margin-bottom: 4px;"></small>
+        <h3 id="popupSponsorTitulo" style="margin: 0 0 6px; font-size: 18px; font-weight: 900; color: #FFF; line-height: 1.25;"></h3>
+        <p id="popupSponsorDesc" style="margin: 0 0 14px; font-size: 12px; color: #94A3B8; line-height: 1.4;"></p>
+
+        <div id="popupSponsorCupomBox" style="display: none; background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; text-align: center;">
+          <small style="color: #94A3B8; font-size: 10px; display: block;">CUPOM EXCLUSIVO</small>
+          <strong id="popupSponsorCupomCodigo" style="color: #10B981; font-size: 16px; font-weight: 900; letter-spacing: 1.5px;"></strong>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button type="button" id="btnVerTodosParceirosPopup"
+            style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; font-size: 12px; cursor: pointer;">
+            Ver Todos
+          </button>
+          <a id="btnAcaoPopupPatrocinador" href="#" target="_blank" rel="noopener"
+            style="flex: 1.6; background: #10B981; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; font-size: 13px; text-decoration: none; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            📲 Aproveitar Oferta
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. VITRINE / NAVEGAÇÃO DE TODOS OS PARCEIROS (PATROCINADORES) -->
+  <div id="modalVitrineParceiros" class="modal-backdrop" style="display: none; z-index: 10040; background: rgba(6, 10, 18, 0.9); backdrop-filter: blur(12px);">
+    <div class="modal-card modal-wide" style="max-width: 440px; max-height: 88dvh; display: flex; flex-direction: column; padding: 18px;">
+      <div class="modal-header-row" style="margin-bottom: 10px;">
+        <div>
+          <h3 style="margin: 0; font-size: 18px; color: #FFF; font-weight: 900;">✨ Parceiros & Patrocinadores</h3>
+          <small style="color: #94A3B8; font-size: 11px;">Lojas e serviços recomendados para clientes HUBy</small>
+        </div>
+        <button type="button" id="btnFecharVitrineParceiros" class="btn-icon-close">✕</button>
+      </div>
+
+      <!-- FILTROS POR CATEGORIA -->
+      <div id="filtrosVitrineParceiros" style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px;">
+        <button type="button" class="partner-filter-pill active" data-cat="todos">Todos</button>
+        <button type="button" class="partner-filter-pill" data-cat="destaque">⭐ Destaques</button>
+        <button type="button" class="partner-filter-pill" data-cat="alimentacao">🍔 Alimentação</button>
+        <button type="button" class="partner-filter-pill" data-cat="moda">👗 Moda & Lojas</button>
+        <button type="button" class="partner-filter-pill" data-cat="saude">💊 Saúde</button>
+        <button type="button" class="partner-filter-pill" data-cat="servicos">🔧 Serviços</button>
+      </div>
+
+      <!-- LISTA DE CARDS DOS PATROCINADORES -->
+      <div id="listaCardsParceirosCliente" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px;">
+        <p class="loading-txt">Carregando parceiros oficiais...</p>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL SELETOR DE PAGAMENTO RAPIDO -->
   <div id="modalSeletorPagamentoRapido" class="modal-backdrop" style="display: none; z-index: 10006;">
@@ -381,24 +479,15 @@
       <div class="opcoes-pagamento-rapido-grid">
         <div class="opcao-pagamento-rapido ativa" data-metodo="dinheiro" data-nome="Dinheiro" data-icone="💵">
           <span class="op-icon">💵</span>
-          <div class="op-text">
-            <strong>Dinheiro</strong>
-            <small>Pagar direto ao motorista</small>
-          </div>
+          <div class="op-text"><strong>Dinheiro</strong><small>Pagar direto ao motorista</small></div>
         </div>
         <div class="opcao-pagamento-rapido" data-metodo="pix" data-nome="Pix App" data-icone="💠">
           <span class="op-icon">💠</span>
-          <div class="op-text">
-            <strong>Pix App</strong>
-            <small>Transfira pela chave oficial</small>
-          </div>
+          <div class="op-text"><strong>Pix App</strong><small>Transfira pela chave oficial</small></div>
         </div>
         <div class="opcao-pagamento-rapido" data-metodo="cartao_maquininha" data-nome="Máquina" data-icone="💳">
           <span class="op-icon">💳</span>
-          <div class="op-text">
-            <strong>Maquininha</strong>
-            <small>Débito/Crédito no embarque</small>
-          </div>
+          <div class="op-text"><strong>Maquininha</strong><small>Débito/Crédito no embarque</small></div>
         </div>
       </div>
     </div>
@@ -506,7 +595,6 @@
       }
     }
 
-    // Indique e Ganhe
     document.getElementById('menuItemIndique')?.addEventListener('click', async (e) => {
       e.preventDefault();
       document.getElementById('menuBackdrop')?.click();
@@ -537,7 +625,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=9.50.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=10.0.0"></script>
   <!-- INTELIGÊNCIA ARTIFICIAL E COMANDOS DE VOZ DO PASSAGEIRO -->
   <script type="module" src="./js/ia/cliente-ia.js?v=2.0.0"></script>
   <!-- RECIBO E PUSH -->
