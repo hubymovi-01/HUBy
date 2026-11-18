@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Pagamentos Seguros e Sincronização em Tempo Real
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Pagamentos Seguros e Navegação 3D
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -12,25 +12,31 @@ import { notificar, confirmarAcao } from '../util/alertas-huby.js';
 let processandoPagamento = false;
 let intervalPollingPixMotorista = null;
 
-// Função master para ajustar mapa dinamicamente
+// Função master para ajustar o mapa 3D sem tirar a câmara do veículo durante a corrida
 export function reajustarMapa() {
   if (!estado.mapa) return;
-  
+
   const refresh = () => {
     estado.mapa.invalidateSize(true);
-    estado.mapa.fire('viewreset');
+    if (typeof estado.mapa.fire === 'function') {
+      estado.mapa.fire('viewreset');
+    }
   };
 
-  [50, 200, 400, 700].forEach(ms => setTimeout(refresh, ms));
+  [50, 250, 600].forEach(ms => setTimeout(refresh, ms));
+
+  const corridaEmAndamento = !!(estado.pedidoAtivo || estado.pedidoAceitoAtual);
 
   setTimeout(() => {
-    if (estado.markerOrigem && estado.markerDestino) {
-      const grupoMarkers = new L.featureGroup([estado.markerOrigem, estado.markerDestino]);
+    if (!estado.mapa) return;
+
+    // Se estiver apenas em pré-visualização (antes de aceitar), mostra a rota toda (Origem A + Destino B)
+    if (!corridaEmAndamento && estado.markerOrigem && estado.markerDestino && window.L) {
+      const grupoMarkers = window.L.featureGroup([estado.markerOrigem, estado.markerDestino]);
       estado.mapa.fitBounds(grupoMarkers.getBounds(), { padding: [50, 50], animate: true });
-    } else if (estado.markerOrigem) {
-       estado.mapa.panTo(estado.markerOrigem.getLatLng(), { animate: true });
     } else if (estado.coords) {
-       estado.mapa.panTo(estado.coords, { animate: true });
+      // Se estiver em corrida ou livre, mantém a câmara 3D focada no veículo do motorista
+      estado.mapa.panTo(estado.coords, { animate: true, forcar: true });
     }
   }, 300);
 }
@@ -75,7 +81,6 @@ export async function executarCancelamentoCorridaMotorista(dados) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.erro || 'Não foi possível cancelar a corrida.');
 
-      // Sincroniza em tempo real com o passageiro
       if (estado.socket) {
         estado.socket.emit('corrida_cancelada_motorista', { pedidoId: pedidoId });
       }
@@ -127,7 +132,7 @@ export async function preVisualizarRotaPedido(dados) {
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
-  const { valorBrutoFmt, repasseFmt } = obterValoresSincronizadosPedido(dados);
+  const { repasseFmt } = obterValoresSincronizadosPedido(dados);
 
   container.innerHTML = `
     <div id="modalPreviaRotaCorrida" style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--amber); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
@@ -162,13 +167,13 @@ export async function preVisualizarRotaPedido(dados) {
     </div>
   `;
 
-  if (estado.mapa) {
-    estado.markerOrigem = L.marker(coordsOrigem, {
-      icon: L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+  if (estado.mapa && window.L) {
+    estado.markerOrigem = window.L.marker(coordsOrigem, {
+      icon: window.L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
     }).addTo(estado.mapa);
 
-    estado.markerDestino = L.marker(coordsDestino, {
-      icon: L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+    estado.markerDestino = window.L.marker(coordsDestino, {
+      icon: window.L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
     }).addTo(estado.mapa);
 
     await tracarRotaRealRuas(coordsOrigem, coordsDestino, '#F59E0B');
@@ -185,7 +190,7 @@ export async function preVisualizarRotaPedido(dados) {
   });
 
   document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', (e) => {
-    const btn = e.target;
+    const btn = e.currentTarget;
     btn.disabled = true;
     btn.innerHTML = '⏳ Confirmando...';
     aceitarCorrida(dados);
@@ -214,7 +219,6 @@ export async function aceitarCorrida(dados) {
     if (res.ok || resJson.sucesso) {
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
       
-      // Sincronização em tempo real imediata
       if (estado.socket) {
         estado.socket.emit('motorista_aceitou', { 
           pedidoId: dados.id, 
@@ -233,7 +237,7 @@ export async function aceitarCorrida(dados) {
     }
   } catch (err) {
     notificar('Falha de conexão ao aceitar a corrida. Tentando novamente...', 'erro');
-    iniciarFaseBuscarPassageiro(dados); // Permite fluidez offline/online
+    iniciarFaseBuscarPassageiro(dados);
   }
 }
 
@@ -303,9 +307,9 @@ async function iniciarFaseBuscarPassageiro(dados) {
     </div>
   `;
 
-  if (estado.mapa) {
-    estado.markerOrigem = L.marker(coordsOrigem, {
-      icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+  if (estado.mapa && window.L) {
+    estado.markerOrigem = window.L.marker(coordsOrigem, {
+      icon: window.L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
     }).addTo(estado.mapa);
 
     await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
@@ -315,7 +319,7 @@ async function iniciarFaseBuscarPassageiro(dados) {
   reajustarMapa();
 
   document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async (e) => {
-    const btn = e.target;
+    const btn = e.currentTarget;
     btn.innerHTML = '⏳ Avisando...';
     try {
       await fetch(`${API_URL}/api/pedidos/${dados.id}/status`, {
@@ -402,9 +406,9 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
     </div>
   `;
 
-  if (estado.mapa) {
-    estado.markerDestino = L.marker(coordsDestino, {
-      icon: L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+  if (estado.mapa && window.L) {
+    estado.markerDestino = window.L.marker(coordsDestino, {
+      icon: window.L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
     }).addTo(estado.mapa);
 
     await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
@@ -417,9 +421,6 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
   document.getElementById('btnCancelarCorridaMotoristaViagem')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
 }
 
-// ============================================================================
-// MODAL DE LIQUIDAÇÃO SEGURA COM FILTRO DE PREFERÊNCIAS
-// ============================================================================
 export function abrirModalOpcoesPagamento(dados) {
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
   const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
@@ -488,7 +489,6 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     if (formaPagamento === 'pix_mp') {
       exibirQrCodePixMotorista(data.pix);
     } else {
-      // Dinheiro ou Maquininha concluem instantaneamente
       if (estado.socket) {
         estado.socket.emit('corrida_finalizada_motorista', { 
           pedidoId: pedidoId, 
@@ -503,8 +503,8 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     }
   } catch (err) {
     notificar(err.message || 'Erro ao finalizar corrida. Tente novamente.', 'erro');
-    botoes.forEach(b => b.style.opacity = '1');
   } finally {
+    botoes.forEach(b => b.style.opacity = '1');
     processandoPagamento = false;
   }
 }
