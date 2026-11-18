@@ -7,43 +7,35 @@ import { notificar } from '../util/alertas-huby.js';
 let watchId = null;
 let ultimoHeadingConhecido = 0;
 
-// INJETA ESTILOS PROFISSIONAIS DE DESLIZAMENTO (Estilo Uber)
 function injetarEstilosNavegacao() {
   if (document.getElementById('huby-map-styles')) return;
   const style = document.createElement('style');
   style.id = 'huby-map-styles';
   style.innerHTML = `
-    /* O Segredo do Deslizamento: Faz o marcador do GPS andar suavemente entre as atualizações */
     .leaflet-marker-icon.gps-pulse-container {
-      transition: transform 1s linear !important; 
+      transition: transform 1.2s cubic-bezier(0.25, 1, 0.5, 1) !important; 
     }
-
     .gps-pulse-container { display: flex; align-items: center; justify-content: center; }
-    
     .gps-pulse-marker {
-      width: 18px; height: 18px; border-radius: 50%; position: relative; z-index: 2;
+      width: 20px; height: 20px; border-radius: 50%; position: relative; z-index: 2;
       background: #10B981; border: 3px solid #090D16; box-shadow: 0 0 16px rgba(16,185,129,0.9);
     }
-    
     .gps-pulse-marker::after {
       content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 55px; height: 55px; background-color: rgba(16,185,129,0.25); border-radius: 50%;
-      animation: pulse-ring-mot 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; z-index: -1;
+      width: 60px; height: 60px; background-color: rgba(16,185,129,0.25); border-radius: 50%;
+      animation: pulse-ring-mot 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; z-index: -1;
     }
-    
     @keyframes pulse-ring-mot {
       0% { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
       20% { opacity: 1; }
       100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
     }
-
-    /* Rotação suave apenas do carro */
     #marcadorCarroIcone {
-      transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
       position: absolute;
-      top: -15px; left: -10px;
-      font-size: 20px;
-      text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+      top: -16px; left: -11px;
+      font-size: 22px;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.9);
       z-index: 10;
       display: flex; align-items: center; justify-content: center;
     }
@@ -54,18 +46,14 @@ function injetarEstilosNavegacao() {
 export function inicializarSocket() {
   if (typeof io !== 'undefined') {
     const token = localStorage.getItem('huby_token');
-    estado.socket = io(API_URL, {
-      auth: { token: token || '' }
-    });
+    estado.socket = io(API_URL, { auth: { token: token || '' } });
 
     estado.socket.on('corrida_finalizada', (dados) => {
       const pedidoIdAtual = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
       if (pedidoIdAtual && String(dados.pedidoId) === String(pedidoIdAtual)) {
         fecharModaisPagamento();
         notificar('🎉 Pagamento confirmado pelo Mercado Pago! Corrida concluída.', 'sucesso');
-        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
-          sonsHUBy.tocarMetaBatida();
-        }
+        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
         concluirLimpezaPosCorrida();
       }
     });
@@ -86,7 +74,8 @@ export function inicializarMapa() {
   try {
     estado.mapa = L.map('mapaMotorista', {
       zoomControl: false,
-      attributionControl: false
+      attributionControl: false,
+      keepBuffer: 6 // Pré-carrega ruas fora da tela para evitar partes cinzentas ao deslizar
     }).setView(estado.coords, 16);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -96,37 +85,29 @@ export function inicializarMapa() {
 
     const iconeCarroFluido = L.divIcon({
       className: 'gps-pulse-container',
-      html: `
-        <div class="gps-pulse-marker">
-          <div id="marcadorCarroIcone">🚘</div>
-        </div>
-      `,
+      html: `<div class="gps-pulse-marker"><div id="marcadorCarroIcone">🚘</div></div>`,
       iconSize: [48, 48],
       iconAnchor: [24, 24]
     });
 
-    estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarroFluido }).addTo(estado.mapa);
+    estado.markerVeiculo = L.marker(estado.coords, { icon: iconeCarroFluido, zIndexOffset: 1000 }).addTo(estado.mapa);
 
-    setTimeout(() => {
-      if (estado.mapa) estado.mapa.invalidateSize();
-    }, 300);
+    // O SEGREDO PROFISSIONAL: ResizeObserver mata o bug do "fundo cinza" de vez!
+    new ResizeObserver(() => {
+      if (estado.mapa) {
+        requestAnimationFrame(() => estado.mapa.invalidateSize());
+      }
+    }).observe(container);
 
     iniciarRastreamentoGPSContinuo();
-
   } catch (err) {
     console.error('Erro ao iniciar mapa do motorista:', err);
   }
 }
 
 export function iniciarRastreamentoGPSContinuo() {
-  if (!('geolocation' in navigator)) {
-    console.warn('Geolocalização não suportada pelo navegador.');
-    return;
-  }
-
-  if (watchId !== null) {
-    navigator.geolocation.clearWatch(watchId);
-  }
+  if (!('geolocation' in navigator)) return;
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 
   let gpsFixoMotorista = false;
   
@@ -137,8 +118,7 @@ export function iniciarRastreamentoGPSContinuo() {
       const velocidade = pos.coords.speed || 0; 
       
       let heading = pos.coords.heading;
-      // Se estiver parado ou muito devagar, mantém a última direção para o carro não girar à toa
-      if (heading === null || isNaN(heading) || velocidade < 0.8) {
+      if (heading === null || isNaN(heading) || velocidade < 0.5) {
         heading = ultimoHeadingConhecido;
       } else {
         ultimoHeadingConhecido = heading;
@@ -147,129 +127,71 @@ export function iniciarRastreamentoGPSContinuo() {
       estado.coords = [lat, lng];
       const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
 
-      // 1. Atualiza a posição (o CSS fará o marcador deslizar)
       if (estado.markerVeiculo) {
         estado.markerVeiculo.setLatLng([lat, lng]);
       }
 
-      // 2. Lógica da Câmara Inteligente (Follow Mode)
       if (estado.mapa) {
-        // Rotaciona de forma suave o ícone do carro na direção do movimento
         const elIcone = document.getElementById('marcadorCarroIcone');
-        if (elIcone) {
-          elIcone.style.transform = `rotate(${heading}deg)`;
-        }
+        if (elIcone) elIcone.style.transform = `rotate(${heading}deg)`;
 
-        // SE ESTIVER EM CORRIDA: Foca no carro de perto (Nível 18) e acompanha-o
         if (corridaAtiva) {
-          estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0, easeLinearity: 0.25 });
-          if (estado.mapa.getZoom() < 17) {
-            estado.mapa.setZoom(18, { animate: true });
-          }
-        } 
-        // SE ESTIVER LIVRE: Visão do bairro (Nível 16/17)
-        else {
+          // Câmara fluida e colada no carro (Waze/Uber mode)
+          estado.mapa.panTo([lat, lng], { animate: true, duration: 1.2, easeLinearity: 0.1 });
+          if (estado.mapa.getZoom() < 18) estado.mapa.setZoom(18, { animate: true });
+        } else {
           if (!gpsFixoMotorista) {
-            estado.mapa.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
+            estado.mapa.flyTo([lat, lng], 16, { animate: true, duration: 1.5 });
             gpsFixoMotorista = true;
-          } else {
-            // Se o motorista estiver a arrastar o dedo, não puxamos a câmara.
-            // Puxamos apenas se ele estiver em movimento livre
-            if (velocidade > 1.5) {
-               estado.mapa.panTo([lat, lng], { animate: true, duration: 1.0 });
-            }
+          } else if (velocidade > 1.0) {
+            estado.mapa.panTo([lat, lng], { animate: true, duration: 1.2 });
           }
         }
       }
 
-      // 3. Transmite a posição pro Servidor/Passageiro sem sobrecarregar
       if (estado.socket && (estado.isOnline || corridaAtiva)) {
-        const idMotorista = estado.motoristaId || localStorage.getItem('huby_user_id') || '';
-        const idPedidoAtivo = corridaAtiva?.id || null;
-
         estado.socket.emit('posicao_motorista', {
-          motoristaId: idMotorista,
-          pedidoId: idPedidoAtivo,
-          lat: lat,
-          lng: lng,
-          heading: heading,
-          emCorrida: !!corridaAtiva
+          motoristaId: estado.motoristaId || localStorage.getItem('huby_user_id') || '',
+          pedidoId: corridaAtiva?.id || null,
+          lat, lng, heading, emCorrida: !!corridaAtiva
         });
       }
     },
-    (err) => {
-      console.warn('Aviso de GPS:', err.message);
-    },
-    {
-      enableHighAccuracy: true,
-      maximumAge: 1000,   // Aceita GPS até 1 seg antigo para fluidez
-      timeout: 10000      // Timeouts curtos para forçar re-leitura rápida
-    }
+    (err) => console.warn('Aviso de GPS:', err.message),
+    { enableHighAccuracy: true, maximumAge: 500, timeout: 5000 }
   );
 }
 
 export async function tracarRotaRealRuas(origem, destino, cor = '#10B981') {
   if (!estado.mapa) return;
-
-  if (estado.linhaRota) {
-    estado.mapa.removeLayer(estado.linhaRota);
-    estado.linhaRota = null;
-  }
-
-  const [latOrig, lngOrig] = origem;
-  const [latDest, lngDest] = destino;
+  limparRotasMapa();
 
   try {
-    const url = `https://router.project-osrm.org/route/v1/driving/${lngOrig},${latOrig};${lngDest},${latDest}?overview=full&geometries=geojson`;
+    const url = `https://router.project-osrm.org/route/v1/driving/${origem[1]},${origem[0]};${destino[1]},${destino[0]}?overview=full&geometries=geojson`;
     const resp = await fetch(url);
     const data = await resp.json();
 
     if (data.code === 'Ok' && data.routes && data.routes[0]) {
       const coordenadasCurvas = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+      estado.linhaRota = L.polyline(coordenadasCurvas, { color: cor, weight: 6, opacity: 0.9, lineCap: 'round' }).addTo(estado.mapa);
 
-      estado.linhaRota = L.polyline(coordenadasCurvas, {
-        color: cor,
-        weight: 6,
-        opacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(estado.mapa);
-
-      // Quando a corrida começa, não damos zoom out na rota toda. Focamos no carro!
-      const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
-      if (!corridaAtiva) {
-         estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
+      if (!estado.pedidoAtivo && !estado.pedidoAceitoAtual) {
+         estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60], animate: true });
       }
       return;
     }
   } catch (err) {
-    console.warn('Falha no OSRM, aplicando rota direta:', err);
+    console.warn('OSRM indisponível, rota direta aplicada');
   }
 
-  estado.linhaRota = L.polyline([origem, destino], {
-    color: cor,
-    weight: 5,
-    dashArray: '8, 8',
-    opacity: 0.9
-  }).addTo(estado.mapa);
-  
-  const corridaAtiva = estado.pedidoAtivo || estado.pedidoAceitoAtual;
-  if (!corridaAtiva) {
-     estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [50, 50] });
+  estado.linhaRota = L.polyline([origem, destino], { color: cor, weight: 5, dashArray: '8, 8', opacity: 0.9 }).addTo(estado.mapa);
+  if (!estado.pedidoAtivo && !estado.pedidoAceitoAtual) {
+     estado.mapa.fitBounds(estado.linhaRota.getBounds(), { padding: [60, 60], animate: true });
   }
 }
 
 export function limparRotasMapa() {
-  if (estado.linhaRota && estado.mapa) {
-    estado.mapa.removeLayer(estado.linhaRota);
-    estado.linhaRota = null;
-  }
-  if (estado.markerOrigem && estado.mapa) {
-    estado.mapa.removeLayer(estado.markerOrigem);
-    estado.markerOrigem = null;
-  }
-  if (estado.markerDestino && estado.mapa) {
-    estado.mapa.removeLayer(estado.markerDestino);
-    estado.markerDestino = null;
-  }
+  if (estado.linhaRota && estado.mapa) { estado.mapa.removeLayer(estado.linhaRota); estado.linhaRota = null; }
+  if (estado.markerOrigem && estado.mapa) { estado.mapa.removeLayer(estado.markerOrigem); estado.markerOrigem = null; }
+  if (estado.markerDestino && estado.mapa) { estado.mapa.removeLayer(estado.markerDestino); estado.markerDestino = null; }
 }
