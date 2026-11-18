@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas e Correção do Mapa 3D
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Pagamentos Seguros e Sincronização em Tempo Real
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -12,22 +12,19 @@ import { notificar, confirmarAcao } from '../util/alertas-huby.js';
 let processandoPagamento = false;
 let intervalPollingPixMotorista = null;
 
-// Função master para corrigir a quebra do mapa quando redimensionado ou inclinado em 3D
+// Função master para ajustar mapa dinamicamente
 export function reajustarMapa() {
   if (!estado.mapa) return;
   
   const refresh = () => {
     estado.mapa.invalidateSize(true);
-    estado.mapa.fire('viewreset'); // Força a re-renderização das tiles do mapa
+    estado.mapa.fire('viewreset');
   };
 
-  // Roda em cascata (50ms, 200ms, 400ms, 700ms) para acompanhar toda a transição de CSS da doca sem quebrar
   [50, 200, 400, 700].forEach(ms => setTimeout(refresh, ms));
 
-  // Centraliza o mapa dinamicamente
   setTimeout(() => {
     if (estado.markerOrigem && estado.markerDestino) {
-      // Se houver origem e destino, cria um "Group" e ajusta a visualização para caber ambos
       const grupoMarkers = new L.featureGroup([estado.markerOrigem, estado.markerDestino]);
       estado.mapa.fitBounds(grupoMarkers.getBounds(), { padding: [50, 50], animate: true });
     } else if (estado.markerOrigem) {
@@ -77,6 +74,11 @@ export async function executarCancelamentoCorridaMotorista(dados) {
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.erro || 'Não foi possível cancelar a corrida.');
+
+      // Sincroniza em tempo real com o passageiro
+      if (estado.socket) {
+        estado.socket.emit('corrida_cancelada_motorista', { pedidoId: pedidoId });
+      }
 
       pararMonitoramentoDesvios();
       limparRotasMapa();
@@ -211,6 +213,15 @@ export async function aceitarCorrida(dados) {
 
     if (res.ok || resJson.sucesso) {
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      
+      // Sincronização em tempo real imediata
+      if (estado.socket) {
+        estado.socket.emit('motorista_aceitou', { 
+          pedidoId: dados.id, 
+          motoristaId: estado.motoristaId 
+        });
+      }
+
       iniciarFaseBuscarPassageiro(dados);
     } else {
       notificar(resJson.erro || 'Esta corrida já não está disponível.', 'alerta');
@@ -221,7 +232,8 @@ export async function aceitarCorrida(dados) {
       reajustarMapa();
     }
   } catch (err) {
-    iniciarFaseBuscarPassageiro(dados);
+    notificar('Falha de conexão ao aceitar a corrida. Tentando novamente...', 'erro');
+    iniciarFaseBuscarPassageiro(dados); // Permite fluidez offline/online
   }
 }
 
@@ -302,15 +314,25 @@ async function iniciarFaseBuscarPassageiro(dados) {
   iniciarMonitoramentoDesvios(coordsOrigem);
   reajustarMapa();
 
-  document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async () => {
+  document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async (e) => {
+    const btn = e.target;
+    btn.innerHTML = '⏳ Avisando...';
     try {
       await fetch(`${API_URL}/api/pedidos/${dados.id}/status`, {
         method: 'PUT',
         headers: obterHeaders(),
         body: JSON.stringify({ status: 'chegou_local' })
       });
-    } catch (e) {}
-    notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
+      if (estado.socket) estado.socket.emit('motorista_chegou', { pedidoId: dados.id });
+      notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
+      btn.innerHTML = '✅ Passageiro Avisado';
+      btn.style.background = 'rgba(16, 185, 129, 0.2)';
+      btn.style.borderColor = '#10B981';
+      btn.style.color = '#10B981';
+    } catch (err) {
+      notificar('Erro de conexão ao avisar passageiro.', 'erro');
+      btn.innerHTML = '📍 Cheguei Aqui';
+    }
   });
 
   document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
@@ -323,7 +345,10 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
       method: 'PUT',
       headers: obterHeaders()
     });
-  } catch (e) { }
+    if (estado.socket) estado.socket.emit('corrida_iniciada', { pedidoId: dados.id });
+  } catch (e) {
+    console.warn('Iniciando viagem em modo offline temporário');
+  }
 
   estado.etapaCorridaAtual = 'em_viagem';
   if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
@@ -393,7 +418,7 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
 }
 
 // ============================================================================
-// 4. MODAL DE LIQUIDAÇÃO COM FILTRO DE PREFERÊNCIAS DO CONDUTOR
+// MODAL DE LIQUIDAÇÃO SEGURA COM FILTRO DE PREFERÊNCIAS
 // ============================================================================
 export function abrirModalOpcoesPagamento(dados) {
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
@@ -436,6 +461,8 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
   processandoPagamento = true;
 
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
+  const botoes = modal ? modal.querySelectorAll('.btn-metodo-pagto') : [];
+  botoes.forEach(b => b.style.opacity = '0.5');
 
   try {
     const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`, {
@@ -449,11 +476,11 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     try {
       data = JSON.parse(textoResposta);
     } catch (eJson) {
-      throw new Error('O servidor respondeu com um formato inesperado. Tente novamente.');
+      throw new Error('Falha ao processar pagamento com o servidor.');
     }
 
     if (!res.ok) {
-      throw new Error(data.erro || `Falha na liquidação (Código HTTP: ${res.status})`);
+      throw new Error(data.erro || `Falha na liquidação (HTTP: ${res.status})`);
     }
 
     if (modal) modal.style.display = 'none';
@@ -461,13 +488,22 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
     if (formaPagamento === 'pix_mp') {
       exibirQrCodePixMotorista(data.pix);
     } else {
+      // Dinheiro ou Maquininha concluem instantaneamente
+      if (estado.socket) {
+        estado.socket.emit('corrida_finalizada_motorista', { 
+          pedidoId: pedidoId, 
+          formaPagamento: formaPagamento 
+        });
+      }
+
       const taxa = Number(TAXA_PLATAFORMA_ATUAL || 15);
       notificar(`✅ Corrida encerrada com sucesso! Taxa de ${taxa}% atualizada na carteira.`, 'sucesso');
       if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
       await concluirLimpezaPosCorrida();
     }
   } catch (err) {
-    notificar(err.message || 'Erro ao finalizar corrida.', 'erro');
+    notificar(err.message || 'Erro ao finalizar corrida. Tente novamente.', 'erro');
+    botoes.forEach(b => b.style.opacity = '1');
   } finally {
     processandoPagamento = false;
   }
@@ -510,6 +546,13 @@ export function exibirQrCodePixMotorista(pix) {
       lblValor.innerHTML = `<span style="color:#10B981;">✅ PIX CONFIRMADO! (+R$ ${repasseFmt})</span>`;
     }
 
+    if (estado.socket) {
+      estado.socket.emit('corrida_finalizada_motorista', { 
+        pedidoId: pedidoId, 
+        formaPagamento: 'pix_mp' 
+      });
+    }
+
     notificar(`🎉 Pagamento Pix confirmado! +R$ ${repasseFmt} (${100 - taxaPct}%) creditados na sua carteira!`, 'sucesso', 5000);
 
     setTimeout(async () => {
@@ -529,10 +572,7 @@ export function exibirQrCodePixMotorista(pix) {
     try {
       if (txid) {
         const urlStatus = `${API_URL}/api/carteira/pix/status/${encodeURIComponent(txid)}?pedidoId=${encodeURIComponent(pedidoId)}&t=${Date.now()}`;
-        const res = await fetch(urlStatus, {
-          cache: 'no-store',
-          headers: obterHeaders()
-        });
+        const res = await fetch(urlStatus, { cache: 'no-store', headers: obterHeaders() });
         if (res.ok) {
           const statusData = await res.json();
           if (statusData.status === 'pago') {
@@ -542,10 +582,7 @@ export function exibirQrCodePixMotorista(pix) {
         }
       }
       if (pedidoId) {
-        const resPed = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(pedidoId)}/status?t=${Date.now()}`, {
-          cache: 'no-store',
-          headers: obterHeaders()
-        });
+        const resPed = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(pedidoId)}/status?t=${Date.now()}`, { cache: 'no-store', headers: obterHeaders() });
         if (resPed.ok) {
           const p = await resPed.json();
           if (String(p.status).toLowerCase() === 'concluido') {
