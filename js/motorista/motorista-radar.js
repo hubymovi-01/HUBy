@@ -107,14 +107,32 @@ function selfieTurnoValida() {
   return (Date.now() - ultimoTs) < VALIDADE_SELFIE_MS;
 }
 
+function comprimirImagemArquivoParaBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Falha ao ler a foto selecionada.'));
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Imagem inválida.'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const largura = 360;
+        const altura = Math.round((img.height / img.width) * largura) || 480;
+        canvas.width = largura;
+        canvas.height = altura;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, largura, altura);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function solicitarSelfieVerificacaoOnline() {
   return new Promise((resolve) => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      notificar('Câmera indisponível neste dispositivo. Permita o acesso à câmera.', 'erro');
-      resolve(false);
-      return;
-    }
-
     document.getElementById('modalSelfieVerificacaoHUBy')?.remove();
 
     const overlay = document.createElement('div');
@@ -141,12 +159,18 @@ function solicitarSelfieVerificacaoOnline() {
           Enquadre o seu rosto no centro para confirmar sua identidade antes de ficar online.
         </p>
 
-        <div style="position: relative; width: 220px; height: 260px; margin: 0 auto 14px; border-radius: 50%; overflow: hidden; border: 3px solid #10B981; background: #05080F; box-shadow: 0 0 24px rgba(16,185,129,0.25);">
+        <div style="position: relative; width: 220px; height: 260px; margin: 0 auto 14px; border-radius: 50%; overflow: hidden; border: 3px solid #10B981; background: #05080F; box-shadow: 0 0 24px rgba(16,185,129,0.25); display: flex; align-items: center; justify-content: center;">
           <video id="videoSelfieMotorista" autoplay playsinline muted
             style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
           <img id="previewSelfieCapturada" alt="Prévia Selfie"
             style="display: none; width: 100%; height: 100%; object-fit: cover;">
+          <div id="placeholderCameraNativa" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px; color: #94A3B8;">
+            <span style="font-size: 44px; margin-bottom: 6px;">🤳</span>
+            <small style="font-size: 11px; font-weight: 700; color: #CBD5E1;">Toque no botão verde abaixo para abrir a câmara</small>
+          </div>
         </div>
+
+        <input type="file" id="inputSelfieNativaMobile" accept="image/*" capture="user" style="display: none;">
 
         <div id="statusSelfieTexto" style="font-size: 11.5px; color: #38BDF8; font-weight: 700; margin-bottom: 12px;">
           Iniciando câmera frontal...
@@ -169,12 +193,21 @@ function solicitarSelfieVerificacaoOnline() {
 
     const video = overlay.querySelector('#videoSelfieMotorista');
     const previewImg = overlay.querySelector('#previewSelfieCapturada');
+    const placeholderNativo = overlay.querySelector('#placeholderCameraNativa');
+    const inputNativo = overlay.querySelector('#inputSelfieNativaMobile');
     const statusTxt = overlay.querySelector('#statusSelfieTexto');
     const btnCapturar = overlay.querySelector('#btnCapturarSelfieOnline');
     const btnCancelar = overlay.querySelector('#btnCancelarSelfieOnline');
+
     let streamAtivo = null;
+    let modoCameraNativa = false;
+    let timerFallback = null;
 
     const encerrarCameraEModal = (sucesso) => {
+      if (timerFallback) {
+        clearTimeout(timerFallback);
+        timerFallback = null;
+      }
       if (streamAtivo) {
         try {
           streamAtivo.getTracks().forEach((t) => t.stop());
@@ -185,31 +218,21 @@ function solicitarSelfieVerificacaoOnline() {
       resolve(sucesso);
     };
 
-    btnCancelar.onclick = () => encerrarCameraEModal(false);
+    const ativarModoCameraNativa = () => {
+      if (modoCameraNativa) return;
+      modoCameraNativa = true;
+      if (video) video.style.display = 'none';
+      if (placeholderNativo) placeholderNativo.style.display = 'flex';
+      if (statusTxt) {
+        statusTxt.textContent = 'Pronto para capturar selfie pela câmara do telemóvel';
+        statusTxt.style.color = '#10B981';
+      }
+      btnCapturar.disabled = false;
+      btnCapturar.style.opacity = '1';
+      btnCapturar.textContent = '📸 Abrir Câmara';
+    };
 
-    navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 640 } },
-      audio: false
-    }).then((stream) => {
-      streamAtivo = stream;
-      video.srcObject = stream;
-      video.onloadedmetadata = () => {
-        video.play().catch(() => {});
-        if (statusTxt) {
-          statusTxt.textContent = 'Posicione o rosto dentro da moldura';
-          statusTxt.style.color = '#10B981';
-        }
-        btnCapturar.disabled = false;
-        btnCapturar.style.opacity = '1';
-      };
-    }).catch(() => {
-      notificar('Não foi possível acessar a câmera frontal. Verifique a permissão do navegador.', 'erro');
-      encerrarCameraEModal(false);
-    });
-
-    btnCapturar.onclick = async () => {
-      if (!video || !video.videoWidth) return;
-
+    const enviarSelfieParaServidor = async (selfieBase64) => {
       btnCapturar.disabled = true;
       btnCapturar.textContent = 'Validando...';
       if (statusTxt) {
@@ -217,22 +240,11 @@ function solicitarSelfieVerificacaoOnline() {
         statusTxt.style.color = '#38BDF8';
       }
 
-      const canvas = document.createElement('canvas');
-      const largura = 360;
-      const altura = Math.round((video.videoHeight / video.videoWidth) * largura) || 480;
-      canvas.width = largura;
-      canvas.height = altura;
-
-      const ctx = canvas.getContext('2d');
-      ctx.translate(largura, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, 0, 0, largura, altura);
-
-      const selfieBase64 = canvas.toDataURL('image/jpeg', 0.72);
       if (previewImg) {
         previewImg.src = selfieBase64;
         previewImg.style.display = 'block';
-        video.style.display = 'none';
+        if (video) video.style.display = 'none';
+        if (placeholderNativo) placeholderNativo.style.display = 'none';
       }
 
       try {
@@ -258,10 +270,107 @@ function solicitarSelfieVerificacaoOnline() {
       } catch (err) {
         notificar(err.message || 'Erro ao enviar selfie.', 'erro');
         if (previewImg) previewImg.style.display = 'none';
-        video.style.display = 'block';
+        if (modoCameraNativa) {
+          if (placeholderNativo) placeholderNativo.style.display = 'flex';
+          btnCapturar.textContent = '📸 Tirar Novamente';
+        } else {
+          if (video) video.style.display = 'block';
+          btnCapturar.textContent = '📸 Tentar Novamente';
+        }
         btnCapturar.disabled = false;
-        btnCapturar.textContent = '📸 Tentar Novamente';
+        btnCapturar.style.opacity = '1';
       }
+    };
+
+    btnCancelar.onclick = () => encerrarCameraEModal(false);
+
+    inputNativo.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const base64 = await comprimirImagemArquivoParaBase64(file);
+        await enviarSelfieParaServidor(base64);
+      } catch (err) {
+        notificar(err.message || 'Não foi possível processar a foto.', 'erro');
+      } finally {
+        inputNativo.value = '';
+      }
+    });
+
+    // Se o streaming ao vivo não iniciar em 2.5s (comum no Android WebView / Expo Go), ativa captura nativa
+    timerFallback = setTimeout(() => {
+      if (!video || !video.videoWidth) {
+        ativarModoCameraNativa();
+      }
+    }, 2500);
+
+    const iniciarStreamAoVivo = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        ativarModoCameraNativa();
+        return;
+      }
+
+      try {
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user' },
+            audio: false
+          });
+        } catch (e) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false
+          });
+        }
+
+        streamAtivo = stream;
+        video.srcObject = stream;
+
+        const confirmarVideoPronto = () => {
+          if (modoCameraNativa) return;
+          if (timerFallback) {
+            clearTimeout(timerFallback);
+            timerFallback = null;
+          }
+          video.play().catch(() => {});
+          if (statusTxt) {
+            statusTxt.textContent = 'Posicione o rosto dentro da moldura';
+            statusTxt.style.color = '#10B981';
+          }
+          btnCapturar.disabled = false;
+          btnCapturar.style.opacity = '1';
+          btnCapturar.textContent = '📸 Tirar Selfie';
+        };
+
+        video.onloadedmetadata = confirmarVideoPronto;
+        video.onplaying = confirmarVideoPronto;
+      } catch (err) {
+        ativarModoCameraNativa();
+      }
+    };
+
+    iniciarStreamAoVivo();
+
+    btnCapturar.onclick = async () => {
+      if (modoCameraNativa || !video || !video.videoWidth) {
+        inputNativo.click();
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      const largura = 360;
+      const altura = Math.round((video.videoHeight / video.videoWidth) * largura) || 480;
+      canvas.width = largura;
+      canvas.height = altura;
+
+      const ctx = canvas.getContext('2d');
+      ctx.translate(largura, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, 0, 0, largura, altura);
+
+      const selfieBase64 = canvas.toDataURL('image/jpeg', 0.72);
+      await enviarSelfieParaServidor(selfieBase64);
     };
   });
 }
