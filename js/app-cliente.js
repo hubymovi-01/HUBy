@@ -1,7 +1,7 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Com Publicidade, Vitrine de Parceiros e Sincronia 3D)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Com Publicidade, Vitrine de Parceiros, Mapa 3D e De Onde -> Para Onde)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
-import { configurarPesquisaLocal } from './pesquisa.js?v=6';
+import { configurarPesquisaLocal } from './pesquisa.js?v=7';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
@@ -101,6 +101,7 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     document.getElementById('cardStatusViagem'),
     document.getElementById('containerParadasIntermediarias'),
     document.getElementById('btnAddParada'),
+    document.querySelector('.search-mode-tabs'),
     document.querySelector('.modern-search'),
     document.querySelector('.quick-features-bar'),
     document.querySelector('.dock-quick-actions-row')
@@ -310,14 +311,8 @@ function configurarBarraPesquisaAnimada() {
     }
 
     if (estadoCliente.hubyMapa) {
-      if (estadoCliente.hubyMapa.rotaLayer && estadoCliente.hubyMapa.map) {
-        estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.rotaLayer);
-        estadoCliente.hubyMapa.rotaLayer = null;
-      }
-      if (estadoCliente.hubyMapa.markerDestino && estadoCliente.hubyMapa.map) {
-        estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.markerDestino);
-        estadoCliente.hubyMapa.markerDestino = null;
-      }
+      estadoCliente.hubyMapa.limparRota?.();
+      estadoCliente.hubyMapa.limparDestino?.();
     }
 
     if (txtDestino) txtDestino.textContent = 'Selecione no mapa ou pesquise';
@@ -335,35 +330,15 @@ function configurarBarraPesquisaAnimada() {
 
 function configurarAlternanciaSatélite() {
   const btnCamada = document.getElementById('btnAlternarCamadaMapa');
-  let modoSatelite = false;
-  let layerSatelite = null;
 
   btnCamada?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!estadoCliente.hubyMapa || !estadoCliente.hubyMapa.map) return;
-    const map = estadoCliente.hubyMapa.map;
-
-    modoSatelite = !modoSatelite;
-
-    if (modoSatelite) {
-      btnCamada.classList.add('modo-satelite');
-      if (!layerSatelite) {
-        layerSatelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          maxZoom: 19,
-          attribution: 'Esri Satellite'
-        });
-      }
-      layerSatelite.addTo(map);
-      notificar('Visão Satélite ativada', 'info');
-    } else {
-      btnCamada.classList.remove('modo-satelite');
-      if (layerSatelite && map.hasLayer(layerSatelite)) {
-        map.removeLayer(layerSatelite);
-      }
-      notificar('Mapa Noturno ativado', 'info');
-    }
+    if (!estadoCliente.hubyMapa) return;
+    const ativo = estadoCliente.hubyMapa.alternarSatelite();
+    btnCamada.classList.toggle('modo-satelite', ativo);
+    notificar(ativo ? 'Visão Satélite 3D ativada' : 'Mapa Noturno 3D ativado', 'info');
   });
 }
 
@@ -416,7 +391,7 @@ function configurarLocaisFavoritosMenu() {
     }
 
     try {
-      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1`);
+      const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(endereco)}&limit=1&countrycodes=br&accept-language=pt-BR`);
       const dados = await resp.json();
 
       if (dados && dados.length > 0) {
@@ -446,11 +421,13 @@ function configurarLocaisFavoritosMenu() {
     notificar(`Toque no mapa para indicar "${labelAlvo}"`, 'info');
 
     if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
-      const mapaLeaflet = estadoCliente.hubyMapa.map;
+      const mapaInstancia = estadoCliente.hubyMapa.map;
 
       function onToqueMapa(e) {
-        mapaLeaflet.off('click', onToqueMapa);
-        const { lat, lng } = e.latlng;
+        const lat = e.lngLat ? e.lngLat.lat : e.latlng?.lat;
+        const lng = e.lngLat ? e.lngLat.lng : e.latlng?.lng;
+        if (lat === undefined || lng === undefined) return;
+
         const coords = [lat, lng];
         const nomeFormatado = `${labelAlvo} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
 
@@ -463,7 +440,7 @@ function configurarLocaisFavoritosMenu() {
         notificar(`Localização de "${labelAlvo}" salva!`, 'sucesso');
       }
 
-      mapaLeaflet.once('click', onToqueMapa);
+      mapaInstancia.once('click', onToqueMapa);
     }
   });
 
@@ -492,6 +469,7 @@ function configurarLocaisFavoritosMenu() {
 
     if (estadoCliente.hubyMapa) {
       const origem = estadoCliente.coordsOrigem ||
+        estadoCliente.hubyMapa.coordsOrigem ||
         (estadoCliente.hubyMapa.posicaoAtual ? [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng] : null) ||
         [-8.3582, -42.2476];
       const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
@@ -606,6 +584,10 @@ async function iniciarSubmissaoPedidoFinal() {
     estadoCliente.rotaAtual.cupomCodigo = estadoRecursos.cupomAtivo.codigo;
   }
 
+  if (estadoCliente.enderecoOrigem) {
+    estadoCliente.rotaAtual.origemEndereco = estadoCliente.enderecoOrigem;
+  }
+
   estadoCliente.rotaAtual.subTipoId = estadoCliente.categoriaSelecionada || 'carro';
   estadoCliente.rotaAtual.subTipoLabel = `HUBy ${String(estadoCliente.categoriaSelecionada).charAt(0).toUpperCase() + String(estadoCliente.categoriaSelecionada).slice(1)}`;
 
@@ -661,45 +643,110 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     estadoCliente.hubyMapa.obterGPS?.((pos) => {
-      if (pos && pos.lat && pos.lng) {
+      if (pos && pos.lat && pos.lng && !estadoCliente.enderecoOrigem) {
         estadoCliente.coordsOrigem = [pos.lat, pos.lng];
       }
     });
 
     setTimeout(() => {
-      if (estadoCliente.hubyMapa?.map) {
-        estadoCliente.hubyMapa.map.invalidateSize();
-      }
+      estadoCliente.hubyMapa?.invalidarTamanho?.();
     }, 250);
   } catch (err) {
     console.warn('Aviso no mapa:', err);
   }
 
-  if (estadoCliente.hubyMapa) {
-    configurarPesquisaLocal(estadoCliente.hubyMapa, async (rota, coords, nomeCurto) => {
-      await sincronizarTarifasServidor();
+  const aplicarOrigemPersonalizada = async (coordsOrigemNova, nomeOrigem) => {
+    estadoCliente.coordsOrigem = coordsOrigemNova;
+    estadoCliente.enderecoOrigem = nomeOrigem;
+
+    const txtOrigem = document.getElementById('txtOrigemSelecionada');
+    const lblTabOrigem = document.getElementById('lblTabOrigem');
+    const btnResetGPS = document.getElementById('btnUsarMeuGPSOrigem');
+
+    if (txtOrigem) {
+      txtOrigem.textContent = nomeOrigem;
+      txtOrigem.style.color = '#10B981';
+      txtOrigem.style.fontWeight = '800';
+    }
+    if (lblTabOrigem) {
+      lblTabOrigem.textContent = `Partida: ${nomeOrigem.length > 18 ? nomeOrigem.slice(0, 18) + '…' : nomeOrigem}`;
+    }
+    if (btnResetGPS) btnResetGPS.style.display = 'inline-block';
+
+    if (estadoCliente.coordsDestino && estadoCliente.hubyMapa) {
+      const rota = await estadoCliente.hubyMapa.calcularRota(coordsOrigemNova, estadoCliente.coordsDestino, '#F59E0B', true);
       estadoCliente.rotaAtual = rota;
-      estadoCliente.coordsDestino = coords;
-
-      const txtDestino = document.getElementById('txtDestinoSelecionado');
-      const inputPesquisa = document.getElementById('inputPesquisaLocal');
-      const btnLimpar = document.getElementById('btnLimparPesquisa');
-      const searchBox = document.querySelector('.modern-search');
-      const listaResultados = document.getElementById('listaResultadosPesquisa');
-
-      if (txtDestino) txtDestino.textContent = nomeCurto;
-      if (inputPesquisa) {
-        inputPesquisa.value = nomeCurto;
-        if (btnLimpar) btnLimpar.style.display = 'flex';
-      }
-      if (searchBox) searchBox.classList.add('active');
-      if (listaResultados) {
-        listaResultados.innerHTML = '';
-        listaResultados.style.display = 'none';
-      }
-
       sincronizarPrecosDaRotaAtual();
+    }
+  };
+
+  const restaurarOrigemMeuGPS = () => {
+    estadoCliente.enderecoOrigem = null;
+    const txtOrigem = document.getElementById('txtOrigemSelecionada');
+    const lblTabOrigem = document.getElementById('lblTabOrigem');
+    const btnResetGPS = document.getElementById('btnUsarMeuGPSOrigem');
+
+    if (txtOrigem) {
+      txtOrigem.textContent = 'Local de embarque atual (GPS)';
+      txtOrigem.style.color = '';
+      txtOrigem.style.fontWeight = '';
+    }
+    if (lblTabOrigem) lblTabOrigem.textContent = 'Partida: Meu GPS';
+    if (btnResetGPS) btnResetGPS.style.display = 'none';
+
+    estadoCliente.hubyMapa?.obterGPS(async (pos) => {
+      if (pos?.lat && pos?.lng) {
+        estadoCliente.coordsOrigem = [pos.lat, pos.lng];
+        if (estadoCliente.coordsDestino) {
+          const rota = await estadoCliente.hubyMapa.calcularRota([pos.lat, pos.lng], estadoCliente.coordsDestino, '#F59E0B', true);
+          estadoCliente.rotaAtual = rota;
+          sincronizarPrecosDaRotaAtual();
+        }
+      }
     });
+  };
+
+  document.getElementById('rowEditarOrigem')?.addEventListener('click', (e) => {
+    if (e.target.id === 'btnUsarMeuGPSOrigem') return;
+    window.definirModoBuscaHUBy?.('origem', true);
+  });
+
+  document.getElementById('btnUsarMeuGPSOrigem')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    restaurarOrigemMeuGPS();
+    notificar('Partida redefinida para sua localização GPS atual.', 'info');
+  });
+
+  if (estadoCliente.hubyMapa) {
+    configurarPesquisaLocal(
+      estadoCliente.hubyMapa,
+      async (rota, coords, nomeCurto) => {
+        await sincronizarTarifasServidor();
+        estadoCliente.rotaAtual = rota;
+        estadoCliente.coordsDestino = coords;
+
+        const txtDestino = document.getElementById('txtDestinoSelecionado');
+        const inputPesquisa = document.getElementById('inputPesquisaLocal');
+        const btnLimpar = document.getElementById('btnLimparPesquisa');
+        const searchBox = document.querySelector('.modern-search');
+        const listaResultados = document.getElementById('listaResultadosPesquisa');
+
+        if (txtDestino) txtDestino.textContent = nomeCurto;
+        if (inputPesquisa) {
+          inputPesquisa.value = nomeCurto;
+          if (btnLimpar) btnLimpar.style.display = 'flex';
+        }
+        if (searchBox) searchBox.classList.add('active');
+        if (listaResultados) {
+          listaResultados.innerHTML = '';
+          listaResultados.style.display = 'none';
+        }
+
+        sincronizarPrecosDaRotaAtual();
+      },
+      aplicarOrigemPersonalizada
+    );
   }
 
   configurarParadasIntermediariasSemPrompt();
@@ -755,25 +802,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (estadoCliente.hubyMapa) {
-      let origem = estadoCliente.coordsOrigem;
+      let origem = estadoCliente.coordsOrigem || estadoCliente.hubyMapa.coordsOrigem;
 
       if (!origem && estadoCliente.hubyMapa.posicaoAtual) {
         origem = [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng];
       }
 
-      if (!origem && estadoCliente.hubyMapa.userMarker) {
-        const markerPos = estadoCliente.hubyMapa.userMarker.getLatLng();
-        origem = [markerPos.lat, markerPos.lng];
-      }
-
-      if (!origem && estadoCliente.hubyMapa.markerOrigem) {
-        const markerPos = estadoCliente.hubyMapa.markerOrigem.getLatLng();
-        origem = [markerPos.lat, markerPos.lng];
-      }
-
       if (!origem) {
-        const centroPadrao = estadoCliente.hubyMapa.map?.getCenter();
-        origem = centroPadrao ? [centroPadrao.lat, centroPadrao.lng] : [-8.3582, -42.2476];
+        origem = [-8.3582, -42.2476];
       }
 
       estadoCliente.coordsOrigem = origem;
@@ -787,12 +823,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         sincronizarPrecosDaRotaAtual();
-
-        setTimeout(() => {
-          if (estadoCliente.hubyMapa.map) {
-            estadoCliente.hubyMapa.map.invalidateSize();
-          }
-        }, 150);
       } catch (errRota) {
         console.error('❌ Erro ao traçar rota no mapa:', errRota);
       }
@@ -807,19 +837,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     btnGPS.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
-      if (estadoCliente.hubyMapa) {
-        estadoCliente.hubyMapa.obterGPS((posicaoReal) => {
-          if (posicaoReal && posicaoReal.lat && posicaoReal.lng) {
-            estadoCliente.coordsOrigem = [posicaoReal.lat, posicaoReal.lng];
-          }
-          if (estadoCliente.coordsDestino) {
-            estadoCliente.hubyMapa.calcularRota([posicaoReal.lat, posicaoReal.lng], estadoCliente.coordsDestino, '#F59E0B', true).then(rota => {
-              estadoCliente.rotaAtual = rota;
-              sincronizarPrecosDaRotaAtual();
-            });
-          }
-        });
-      }
+      restaurarOrigemMeuGPS();
     });
   }
 
