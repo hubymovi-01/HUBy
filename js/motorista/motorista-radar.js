@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar Fluido com Animação CSS (Zero Stuttering)
+// js/motorista/motorista-radar.js - Radar Sincronizado + Aba de Agendamentos + Selfie Nativa Expo
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -7,11 +7,32 @@ import { notificar } from '../util/alertas-huby.js';
 let intervalAlertaChamada = null;
 let wakeLockSentinela = null;
 let gpsFallbackEmAndamento = false;
+let abaRadarAtual = 'agora'; // 'agora' | 'agendados'
+let ultimosPedidosAgora = [];
+let ultimosPedidosAgendados = [];
 
-const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000; // 12 horas por turno
-const TEMPO_EXPIRACAO_TELA_MS = 30 * 1000; // 30 Segundos para a chamada sumir da tela
+const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000;
+const TEMPO_EXPIRACAO_TELA_MS = 30 * 1000;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
+
+function extrairMetadadosSincronizados(p) {
+  let obs = String(p.observacao || '').trim();
+  let cupom = String(p.cupom_codigo || p.cupomCodigo || '').trim();
+  let descontoPct = 0;
+  let agendadoPara = p.agendado_para || p.agendadoPara || null;
+
+  if (Array.isArray(p.paradas)) {
+    for (const item of p.paradas) {
+      if (item?.nota && !obs) obs = String(item.nota).trim();
+      if (item?.cupom && !cupom) cupom = String(item.cupom).trim();
+      if (item?.desconto_pct) descontoPct = Number(item.desconto_pct);
+      if (item?.agendado_para && !agendadoPara) agendadoPara = item.agendado_para;
+    }
+  }
+
+  return { obs, cupom, descontoPct, agendadoPara };
+}
 
 function aplicarEstadoVisualOnline(online) {
   const ativo = Boolean(online);
@@ -82,7 +103,7 @@ async function requisitarWakeLock() {
       wakeLockSentinela.addEventListener('release', () => {
         wakeLockSentinela = null;
       });
-    } catch (err) { }
+    } catch (err) {}
   }
 }
 
@@ -90,7 +111,7 @@ function libertarWakeLock() {
   if (wakeLockSentinela) {
     try {
       wakeLockSentinela.release();
-    } catch (e) { }
+    } catch (e) {}
     wakeLockSentinela = null;
   }
 }
@@ -120,7 +141,6 @@ function comprimirImagemArquivoParaBase64(file) {
         const altura = Math.round((img.height / img.width) * largura) || 480;
         canvas.width = largura;
         canvas.height = altura;
-
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, largura, altura);
         resolve(canvas.toDataURL('image/jpeg', 0.72));
@@ -134,26 +154,15 @@ function comprimirImagemArquivoParaBase64(file) {
 function solicitarSelfieVerificacaoOnline() {
   return new Promise((resolve) => {
     document.getElementById('modalSelfieVerificacaoHUBy')?.remove();
-
     const dentroDoAppNativo = Boolean(window.ReactNativeWebView);
 
     const overlay = document.createElement('div');
     overlay.id = 'modalSelfieVerificacaoHUBy';
-    overlay.style.cssText = [
-      'position: fixed',
-      'inset: 0',
-      'z-index: 100080',
-      'background: rgba(6, 10, 18, 0.94)',
-      'backdrop-filter: blur(12px)',
-      'display: flex',
-      'align-items: center',
-      'justify-content: center',
-      'padding: 16px'
-    ].join(';');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:100080;background:rgba(6,10,18,0.94);backdrop-filter:blur(12px);display:flex;align-items:center;justify-content:center;padding:16px;';
 
     overlay.innerHTML = `
       <div style="background: #0E1422; border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 22px; width: 100%; max-width: 370px; padding: 20px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.85); color: #FFF;">
-        <div style="display: inline-block; background: rgba(16,185,129,0.15); color: #10B981; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
+        <div style="display: inline-block; background: rgba(16,185,129,0.15); color: #10B981; font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 999px; margin-bottom: 8px; text-transform: uppercase;">
           🛡️ Segurança do Turno
         </div>
         <h3 style="margin: 0 0 4px; font-size: 17px; font-weight: 900;">Selfie de Verificação</h3>
@@ -161,11 +170,9 @@ function solicitarSelfieVerificacaoOnline() {
           Enquadre o seu rosto no centro para confirmar sua identidade antes de ficar online.
         </p>
 
-        <div style="position: relative; width: 220px; height: 260px; margin: 0 auto 14px; border-radius: 50%; overflow: hidden; border: 3px solid #10B981; background: #05080F; box-shadow: 0 0 24px rgba(16,185,129,0.25); display: flex; align-items: center; justify-content: center;">
-          <video id="videoSelfieMotorista" autoplay playsinline muted
-            style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
-          <img id="previewSelfieCapturada" alt="Prévia Selfie"
-            style="display: none; width: 100%; height: 100%; object-fit: cover;">
+        <div style="position: relative; width: 220px; height: 260px; margin: 0 auto 14px; border-radius: 50%; overflow: hidden; border: 3px solid #10B981; background: #05080F; display: flex; align-items: center; justify-content: center;">
+          <video id="videoSelfieMotorista" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);"></video>
+          <img id="previewSelfieCapturada" alt="Prévia Selfie" style="display: none; width: 100%; height: 100%; object-fit: cover;">
           <div id="placeholderCameraNativa" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px; color: #94A3B8;">
             <span style="font-size: 44px; margin-bottom: 6px;">🤳</span>
             <small style="font-size: 11px; font-weight: 700; color: #CBD5E1;">Toque no botão verde abaixo para abrir a câmara</small>
@@ -173,20 +180,11 @@ function solicitarSelfieVerificacaoOnline() {
         </div>
 
         <input type="file" id="inputSelfieNativaMobile" accept="image/*" capture="user" style="display: none;">
-
-        <div id="statusSelfieTexto" style="font-size: 11.5px; color: #38BDF8; font-weight: 700; margin-bottom: 12px;">
-          Iniciando câmera frontal...
-        </div>
+        <div id="statusSelfieTexto" style="font-size: 11.5px; color: #38BDF8; font-weight: 700; margin-bottom: 12px;">Iniciando câmera frontal...</div>
 
         <div style="display: flex; gap: 8px;">
-          <button type="button" id="btnCancelarSelfieOnline"
-            style="flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer;">
-            Cancelar
-          </button>
-          <button type="button" id="btnCapturarSelfieOnline" disabled
-            style="flex: 1.6; background: #10B981; border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer; opacity: 0.6;">
-            📸 Tirar Selfie
-          </button>
+          <button type="button" id="btnCancelarSelfieOnline" style="flex: 1; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.14); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer;">Cancelar</button>
+          <button type="button" id="btnCapturarSelfieOnline" disabled style="flex: 1.6; background: #10B981; border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; font-size: 13px; cursor: pointer; opacity: 0.6;">📸 Tirar Selfie</button>
         </div>
       </div>
     `;
@@ -207,15 +205,9 @@ function solicitarSelfieVerificacaoOnline() {
 
     const encerrarCameraEModal = (sucesso) => {
       window.__receberSelfieNativaHUBy = null;
-      if (timerFallback) {
-        clearTimeout(timerFallback);
-        timerFallback = null;
-      }
+      if (timerFallback) clearTimeout(timerFallback);
       if (streamAtivo) {
-        try {
-          streamAtivo.getTracks().forEach((t) => t.stop());
-        } catch (e) { }
-        streamAtivo = null;
+        try { streamAtivo.getTracks().forEach((t) => t.stop()); } catch (e) {}
       }
       overlay.remove();
       resolve(sucesso);
@@ -238,11 +230,6 @@ function solicitarSelfieVerificacaoOnline() {
     const enviarSelfieParaServidor = async (selfieBase64) => {
       btnCapturar.disabled = true;
       btnCapturar.textContent = 'Validando...';
-      if (statusTxt) {
-        statusTxt.textContent = 'Enviando verificação de identidade...';
-        statusTxt.style.color = '#38BDF8';
-      }
-
       if (previewImg) {
         previewImg.src = selfieBase64;
         previewImg.style.display = 'block';
@@ -260,11 +247,8 @@ function solicitarSelfieVerificacaoOnline() {
           },
           body: JSON.stringify({ selfie_base64: selfieBase64 })
         });
-
         const data = await resp.json().catch(() => ({}));
-        if (!resp.ok) {
-          throw new Error(data.erro || 'Falha ao validar selfie.');
-        }
+        if (!resp.ok) throw new Error(data.erro || 'Falha ao validar selfie.');
 
         localStorage.setItem('huby_ultima_selfie_ts', String(Date.now()));
         if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
@@ -273,21 +257,15 @@ function solicitarSelfieVerificacaoOnline() {
       } catch (err) {
         notificar(err.message || 'Erro ao enviar selfie.', 'erro');
         if (previewImg) previewImg.style.display = 'none';
-        if (modoCameraNativa) {
-          if (placeholderNativo) placeholderNativo.style.display = 'flex';
-          btnCapturar.textContent = '📸 Tirar Novamente';
-        } else {
-          if (video) video.style.display = 'block';
-          btnCapturar.textContent = '📸 Tentar Novamente';
-        }
+        if (modoCameraNativa && placeholderNativo) placeholderNativo.style.display = 'flex';
         btnCapturar.disabled = false;
         btnCapturar.style.opacity = '1';
+        btnCapturar.textContent = '📸 Tentar Novamente';
       }
     };
 
     window.__receberSelfieNativaHUBy = async (dataUrl) => {
-      if (!dataUrl) return;
-      await enviarSelfieParaServidor(dataUrl);
+      if (dataUrl) await enviarSelfieParaServidor(dataUrl);
     };
 
     btnCancelar.onclick = () => encerrarCameraEModal(false);
@@ -299,7 +277,7 @@ function solicitarSelfieVerificacaoOnline() {
         const base64 = await comprimirImagemArquivoParaBase64(file);
         await enviarSelfieParaServidor(base64);
       } catch (err) {
-        notificar(err.message || 'Não foi possível processar a foto.', 'erro');
+        notificar(err.message, 'erro');
       } finally {
         inputNativo.value = '';
       }
@@ -309,9 +287,7 @@ function solicitarSelfieVerificacaoOnline() {
       ativarModoCameraNativa();
     } else {
       timerFallback = setTimeout(() => {
-        if (!video || !video.videoWidth) {
-          ativarModoCameraNativa();
-        }
+        if (!video || !video.videoWidth) ativarModoCameraNativa();
       }, 2500);
 
       (async () => {
@@ -322,27 +298,16 @@ function solicitarSelfieVerificacaoOnline() {
         try {
           let stream;
           try {
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: { facingMode: 'user' },
-              audio: false
-            });
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
           } catch (e) {
-            stream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false
-            });
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
           }
-
           streamAtivo = stream;
           video.srcObject = stream;
-
           const confirmarVideoPronto = () => {
             if (modoCameraNativa) return;
-            if (timerFallback) {
-              clearTimeout(timerFallback);
-              timerFallback = null;
-            }
-            video.play().catch(() => { });
+            if (timerFallback) clearTimeout(timerFallback);
+            video.play().catch(() => {});
             if (statusTxt) {
               statusTxt.textContent = 'Posicione o rosto dentro da moldura';
               statusTxt.style.color = '#10B981';
@@ -351,7 +316,6 @@ function solicitarSelfieVerificacaoOnline() {
             btnCapturar.style.opacity = '1';
             btnCapturar.textContent = '📸 Tirar Selfie';
           };
-
           video.onloadedmetadata = confirmarVideoPronto;
           video.onplaying = confirmarVideoPronto;
         } catch (err) {
@@ -365,25 +329,20 @@ function solicitarSelfieVerificacaoOnline() {
         window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'ABRIR_CAMERA_SELFIE' }));
         return;
       }
-
       if (modoCameraNativa || !video || !video.videoWidth) {
         inputNativo.click();
         return;
       }
-
       const canvas = document.createElement('canvas');
       const largura = 360;
       const altura = Math.round((video.videoHeight / video.videoWidth) * largura) || 480;
       canvas.width = largura;
       canvas.height = altura;
-
       const ctx = canvas.getContext('2d');
       ctx.translate(largura, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0, largura, altura);
-
-      const selfieBase64 = canvas.toDataURL('image/jpeg', 0.72);
-      await enviarSelfieParaServidor(selfieBase64);
+      await enviarSelfieParaServidor(canvas.toDataURL('image/jpeg', 0.72));
     };
   });
 }
@@ -481,11 +440,31 @@ export async function alternarStatusOnline(forcarEstado = null) {
       },
       body: JSON.stringify({ online: novoStatus })
     });
-  } catch (err) {
-    console.warn('Aviso de rede ao persistir status online:', err);
-  }
+  } catch (err) {}
 
   return novoStatus;
+}
+
+function verificarAlertasAgendamentosAceitos() {
+  const agenda = JSON.parse(localStorage.getItem('huby_motorista_agenda') || '[]');
+  if (!agenda.length) return;
+  const agora = Date.now();
+  let alterou = false;
+
+  for (const item of agenda) {
+    const ts = new Date(item.agendado_para).getTime();
+    const diffMin = (ts - agora) / 60000;
+    if (!item.notificado && diffMin <= 15 && diffMin >= -30) {
+      item.notificado = true;
+      alterou = true;
+      if (sonsHUBy?.tocarAlertaChamada) sonsHUBy.tocarAlertaChamada();
+      notificar(`⏰ AGENDAMENTO DISPONÍVEL AGORA: ${item.origem} → ${item.destino}`, 'alerta', 9000);
+    }
+  }
+
+  if (alterou) {
+    localStorage.setItem('huby_motorista_agenda', JSON.stringify(agenda));
+  }
 }
 
 export function iniciarRadarChamadas() {
@@ -537,6 +516,7 @@ export function iniciarRadarChamadas() {
       pararRadarChamadas();
       return;
     }
+    verificarAlertasAgendamentosAceitos();
     if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
       buscarChamadasPendentes(false);
     }
@@ -599,15 +579,23 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     const pedidos = await resp.json();
     const agora = Date.now();
-
     if (!estado.temposPedidosTela) estado.temposPedidosTela = {};
 
-    const chamadasFiltradas = Array.isArray(pedidos)
-      ? pedidos.filter((p) => {
-        if (estado.pedidosIgnorados?.has(String(p.id))) return false;
+    const agoraList = [];
+    const agendadosList = [];
+
+    if (Array.isArray(pedidos)) {
+      for (const p of pedidos) {
+        if (estado.pedidosIgnorados?.has(String(p.id))) continue;
+
+        const meta = extrairMetadadosSincronizados(p);
+        if (meta.agendadoPara) {
+          agendadosList.push(p);
+          continue;
+        }
 
         if (typeof window.pedidoCompativelComRotaCasa === 'function') {
-          if (!window.pedidoCompativelComRotaCasa(p)) return false;
+          if (!window.pedidoCompativelComRotaCasa(p)) continue;
         }
 
         if (!estado.temposPedidosTela[p.id]) {
@@ -618,37 +606,140 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
         if (tempoQuePassou >= TEMPO_EXPIRACAO_TELA_MS) {
           if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
           estado.pedidosIgnorados.add(String(p.id));
-          return false;
+          continue;
         }
 
-        return true;
-      })
-      : [];
+        agoraList.push(p);
+      }
+    }
 
-    const idsAtuaisStr = chamadasFiltradas.map(p => p.id).join(',');
+    ultimosPedidosAgora = agoraList;
+    ultimosPedidosAgendados = agendadosList;
 
-    if (!chamadasFiltradas.length) {
+    const idsCombinados = `${abaRadarAtual}|${agoraList.map(p => p.id).join(',')}|${agendadosList.map(p => p.id).join(',')}`;
+
+    if (agoraList.length === 0) {
       pararAlertaSonoroChamada();
-      renderizarRadar([]);
-      return;
-    }
-
-    const listaMudou = estado.ultimoRenderIds !== idsAtuaisStr;
-
-    if (listaMudou || tocarSomForcado) {
+    } else if (estado.ultimoRenderIds !== idsCombinados || tocarSomForcado) {
       iniciarAlertaSonoroChamada();
-      dispararNotificacaoNovaChamada(chamadasFiltradas.length);
-      estado.ultimoRenderIds = idsAtuaisStr;
-      renderizarRadar(chamadasFiltradas);
+      dispararNotificacaoNovaChamada(agoraList.length);
     }
 
+    if (estado.ultimoRenderIds !== idsCombinados || tocarSomForcado) {
+      estado.ultimoRenderIds = idsCombinados;
+      renderizarRadar();
+    }
   } catch (err) {
-    console.warn('Erro no radar:', err);
     renderizarRadar([]);
   }
 }
 
-function renderizarRadar(pedidos) {
+function renderizarCardPedidoMotorista(p, ehAgendado = false) {
+  const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
+  const agora = Date.now();
+  const meta = extrairMetadadosSincronizados(p);
+
+  const catPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
+  const distKm = parseFloat(p.distancia_km || p.distanciaKm || 1.0);
+
+  let valorBruto = Number(p.valor_total || 0);
+  if (!valorBruto || valorBruto <= 0) {
+    valorBruto = calcularPreco(catPedido, distKm).valorTotal;
+  }
+
+  const repasseBruto = valorBruto * fatorMotorista;
+  const repasseFormat = repasseBruto.toFixed(2).replace('.', ',');
+  const valorDisplay = `R$ ${repasseFormat}`;
+
+  const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
+  const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
+  const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
+  const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
+
+  const dataAgObj = meta.agendadoPara ? new Date(meta.agendadoPara) : null;
+  const agendadoDisponivelAgora = dataAgObj ? (dataAgObj.getTime() - agora <= 15 * 60 * 1000) : false;
+
+  const agendamentoHTML = dataAgObj
+    ? `<div style="background: rgba(245, 158, 11, 0.16); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 11.5px; color: #FBBF24; font-weight: 800;">
+        ⏰ Agendado: ${dataAgObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        ${agendadoDisponivelAgora ? '<span style="background:#10B981;color:#02261C;padding:2px 6px;border-radius:6px;margin-left:6px;font-size:10px;">DISPONÍVEL AGORA</span>' : ''}
+      </div>`
+    : '';
+
+  const cupomHTML = meta.cupom
+    ? `<div style="background: rgba(16, 185, 129, 0.14); border-left: 2.5px solid #10B981; padding: 5px 8px; margin-bottom: 6px; font-size: 11px; color: #34D399; font-weight: 800;">
+        🏷️ Cupom aplicado: ${meta.cupom}${meta.descontoPct ? ` (-${meta.descontoPct}%)` : ''}
+      </div>`
+    : '';
+
+  const obsHTML = meta.obs
+    ? `<div style="background: rgba(56, 189, 248, 0.14); border-left: 2.5px solid #38BDF8; padding: 6px 8px; margin-bottom: 6px; font-size: 11.5px; color: #BAE6FD; font-weight: 700;">
+        📝 Obs do passageiro: ${meta.obs}
+      </div>`
+    : '';
+
+  const inicio = estado.temposPedidosTela?.[p.id] || agora;
+  const tempoRestanteSeg = Math.max(0, (TEMPO_EXPIRACAO_TELA_MS - (agora - inicio)) / 1000);
+
+  const botaoAcaoHTML = ehAgendado
+    ? `<button type="button" class="btn-accept-scheduled"
+        style="width: 100%; background: ${agendadoDisponivelAgora ? '#10B981' : '#F59E0B'}; border: none; border-radius: 10px; padding: 13px; font-weight: 900; font-size: 14px; color: #090D16; cursor: pointer; text-transform: uppercase;"
+        data-id="${p.id}" data-cat="${catPedido}" data-preco="${valorBruto}" data-repasse="${repasseFormat}"
+        data-origem="${p.origem_endereco || 'Local do passageiro'}" data-destino="${p.destino_endereco || 'Destino'}"
+        data-dist="${distKm}" data-dur="${p.duracao_min || 5}" data-lat-orig="${latOrig}"
+        data-lng-orig="${lngOrig}" data-lat-dest="${latDest}" data-lng-dest="${lngDest}"
+        data-agendado="${meta.agendadoPara || ''}">
+        ${agendadoDisponivelAgora ? '🚀 Iniciar Corrida Agendada' : '📅 Aceitar Agendamento'}
+      </button>`
+    : `<button type="button" class="btn-accept-order"
+        style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"
+        data-id="${p.id}" data-cat="${catPedido}" data-preco="${valorBruto}" data-repasse="${repasseFormat}"
+        data-origem="${p.origem_endereco || 'Local do passageiro'}" data-destino="${p.destino_endereco}"
+        data-dist="${distKm}" data-dur="${p.duracao_min || 5}" data-lat-orig="${latOrig}"
+        data-lng-orig="${lngOrig}" data-lat-dest="${latDest}" data-lng-dest="${lngDest}">
+        <div class="huby-progress-bar" style="position: absolute; top: 0; left: 0; bottom: 0; width: 100%; background: #059669; z-index: 1; transform-origin: left; animation-duration: ${tempoRestanteSeg}s;"></div>
+        <span style="position: relative; z-index: 2; text-shadow: 0 1px 2px rgba(255,255,255,0.3);">🚀 Aceitar Corrida</span>
+      </button>`;
+
+  return `
+    <div class="order-card" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid ${ehAgendado ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255,255,255,0.08)'};">
+      <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Recusar"
+        style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.06); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; cursor: pointer; z-index: 10;">
+        ✕
+      </button>
+
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-right: 35px;">
+        <div>
+          <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-bottom: 4px;">
+            ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
+          </span>
+          <div style="font-size: 12px; color: #94A3B8; font-weight: 600;">
+            📏 ${distKm.toFixed(1)} km • ⏱️ ${p.duracao_min || 5} min
+          </div>
+        </div>
+        <div style="text-align: right;">
+          <span style="font-size: 20px; font-weight: 900; color: #10B981; display: block; letter-spacing: -0.5px;">
+            ${valorDisplay}
+          </span>
+          <small style="font-size: 10px; color: #64748B; text-transform: uppercase;">Ganhos (Líquido)</small>
+        </div>
+      </div>
+
+      <div style="font-size: 13px; line-height: 1.4; color: #E2E8F0; padding-left: 10px; border-left: 2px solid rgba(255,255,255,0.1); margin-bottom: 8px;">
+        <span style="display: block; margin-bottom: 5px;"><strong style="color: #10B981;">A</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
+        <span style="display: block;"><strong style="color: #EF4444;">B</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
+      </div>
+
+      ${agendamentoHTML}
+      ${cupomHTML}
+      ${obsHTML}
+
+      ${botaoAcaoHTML}
+    </div>
+  `;
+}
+
+function renderizarRadar(listaForcada = null) {
   const feedEl = document.getElementById('listaChamadasPendentes');
   if (!feedEl) return;
   feedEl.style.display = 'block';
@@ -658,107 +749,53 @@ function renderizarRadar(pedidos) {
     return;
   }
 
-  if (!pedidos || pedidos.length === 0) {
+  if (Array.isArray(listaForcada) && listaForcada.length === 0 && ultimosPedidosAgora.length === 0 && ultimosPedidosAgendados.length === 0) {
     estado.ultimoRenderIds = null;
-    feedEl.innerHTML = `
-      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
-        <span style="color: #10B981; font-weight: 800; font-size: 13px;">🟢 Aguardando novas chamadas...</span>
-      </div>`;
-    return;
   }
 
-  const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
-  const agora = Date.now();
+  const qtdAgora = ultimosPedidosAgora.length;
+  const qtdAgendados = ultimosPedidosAgendados.length;
 
-  feedEl.innerHTML = pedidos.map((p) => {
-    const catPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
-    const distKm = parseFloat(p.distancia_km || p.distanciaKm || 1.0);
+  const navAbasHTML = `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+      <button type="button" id="tabRadarAgora"
+        style="padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 900; cursor: pointer; border: 1px solid ${abaRadarAtual === 'agora' ? '#10B981' : 'rgba(255,255,255,0.1)'}; background: ${abaRadarAtual === 'agora' ? 'rgba(16,185,129,0.2)' : 'rgba(15,23,42,0.85)'}; color: ${abaRadarAtual === 'agora' ? '#10B981' : '#94A3B8'};">
+        📡 Agora (${qtdAgora})
+      </button>
+      <button type="button" id="tabRadarAgendados"
+        style="padding: 8px; border-radius: 10px; font-size: 12px; font-weight: 900; cursor: pointer; border: 1px solid ${abaRadarAtual === 'agendados' ? '#F59E0B' : 'rgba(255,255,255,0.1)'}; background: ${abaRadarAtual === 'agendados' ? 'rgba(245,158,11,0.2)' : 'rgba(15,23,42,0.85)'}; color: ${abaRadarAtual === 'agendados' ? '#FBBF24' : '#94A3B8'};">
+        📅 Agendados (${qtdAgendados})
+      </button>
+    </div>
+  `;
 
-    let valorBruto = Number(p.valor_total || 0);
-    if (!valorBruto || valorBruto <= 0) {
-      valorBruto = calcularPreco(catPedido, distKm).valorTotal;
-    }
+  const listaExibir = abaRadarAtual === 'agendados' ? ultimosPedidosAgendados : ultimosPedidosAgora;
 
-    const repasseBruto = valorBruto * fatorMotorista;
-    const repasseFormat = repasseBruto.toFixed(2).replace('.', ',');
-    const valorDisplay = `R$ ${repasseFormat}`;
-
-    const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
-    const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
-    const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
-    const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
-
-    const pgto = p.forma_pagamento || p.metodo_pgto || 'dinheiro';
-    let pgtoIcon = '💵 Dinheiro';
-    if (pgto.includes('cartao') || pgto.includes('maquininha')) pgtoIcon = '💳 Cartão (Máquina)';
-    if (pgto.includes('pix')) pgtoIcon = '📱 Pix App';
-
-    const agendamento = p.agendado_para
-      ? `<span style="display: block; color: #F59E0B; font-weight: 700; margin-top: 4px;">⏰ Agendada para: ${new Date(p.agendado_para).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>`
-      : '';
-
-    let obsText = '';
-    if (p.paradas && Array.isArray(p.paradas) && p.paradas.length > 0) {
-      let extraTrocoOuObs = p.paradas.find(item => item.nota);
-      if (extraTrocoOuObs) {
-        obsText = `<span style="display: block; background: rgba(245, 158, 11, 0.1); border-left: 2px solid #F59E0B; padding: 6px; margin-top: 6px; font-size: 11px; color: #FCD34D;">📝 Obs: ${extraTrocoOuObs.nota}</span>`;
-      }
-    }
-
-    const inicio = estado.temposPedidosTela[p.id] || agora;
-    const tempoQuePassou = agora - inicio;
-    const tempoRestanteSeg = Math.max(0, (TEMPO_EXPIRACAO_TELA_MS - tempoQuePassou) / 1000);
-
-    return `
-      <div class="order-card" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.08);">
-        
-        <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Recusar"
-          style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.06); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; cursor: pointer; z-index: 10;">
-          ✕
-        </button>
-
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; padding-right: 35px;">
-          <div>
-            <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-bottom: 4px;">
-              ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
-            </span>
-            <div style="font-size: 12px; color: #94A3B8; font-weight: 600;">
-              📏 ${distKm.toFixed(1)} km • ⏱️ ${p.duracao_min || 5} min
-            </div>
-          </div>
-          <div style="text-align: right;">
-            <span style="font-size: 20px; font-weight: 900; color: #10B981; display: block; letter-spacing: -0.5px;">
-              ${valorDisplay}
-            </span>
-            <small style="font-size: 10px; color: #64748B; text-transform: uppercase;">Ganhos (Líquido)</small>
-          </div>
-        </div>
-
-        <div style="font-size: 13px; line-height: 1.4; color: #E2E8F0; padding-left: 10px; border-left: 2px solid rgba(255,255,255,0.1); margin-bottom: 10px;">
-          <span style="display: block; margin-bottom: 6px;"><strong style="color: #10B981;">A</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
-          <span style="display: block;"><strong style="color: #EF4444;">B</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
-        </div>
-
-        <div style="background: rgba(255, 255, 255, 0.03); border-radius: 8px; padding: 10px; margin-bottom: 12px; font-size: 11.5px; color: #CBD5E1;">
-          <span style="display: block; margin-bottom: 2px;"><strong>Pagamento:</strong> ${pgtoIcon}</span>
-          ${agendamento}
-          ${obsText}
-        </div>
-
-        <button type="button" class="btn-accept-order" 
-          style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"
-          data-id="${p.id}" data-cat="${catPedido}" data-preco="${valorBruto}" data-repasse="${repasseFormat}"
-          data-origem="${p.origem_endereco || 'Local do passageiro'}" data-destino="${p.destino_endereco}"
-          data-dist="${distKm}" data-dur="${p.duracao_min || 5}" data-lat-orig="${latOrig}" 
-          data-lng-orig="${lngOrig}" data-lat-dest="${latDest}" data-lng-dest="${lngDest}"
-          data-pagamento="${pgto}" data-obs="${obsText ? 'Sim' : 'Não'}">
-          
-          <div class="huby-progress-bar" style="position: absolute; top: 0; left: 0; bottom: 0; width: 100%; background: #059669; z-index: 1; transform-origin: left; animation-duration: ${tempoRestanteSeg}s;"></div>
-          <span style="position: relative; z-index: 2; text-shadow: 0 1px 2px rgba(255,255,255,0.3);">🚀 Aceitar Corrida</span>
-        </button>
+  let corpoHTML = '';
+  if (listaExibir.length === 0) {
+    const msgVazio = abaRadarAtual === 'agendados'
+      ? '📅 Nenhuma solicitação agendada no momento'
+      : '🟢 Aguardando novas chamadas...';
+    corpoHTML = `
+      <div class="dock-empty" style="background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <span style="color: ${abaRadarAtual === 'agendados' ? '#FBBF24' : '#10B981'}; font-weight: 800; font-size: 13px;">${msgVazio}</span>
       </div>
     `;
-  }).join('');
+  } else {
+    corpoHTML = listaExibir.map((p) => renderizarCardPedidoMotorista(p, abaRadarAtual === 'agendados')).join('');
+  }
+
+  feedEl.innerHTML = navAbasHTML + corpoHTML;
+
+  feedEl.querySelector('#tabRadarAgora')?.addEventListener('click', () => {
+    abaRadarAtual = 'agora';
+    renderizarRadar();
+  });
+
+  feedEl.querySelector('#tabRadarAgendados')?.addEventListener('click', () => {
+    abaRadarAtual = 'agendados';
+    renderizarRadar();
+  });
 
   feedEl.querySelectorAll('.btn-dispensar-pedido').forEach((btn) => {
     btn.addEventListener('click', (e) => {
@@ -774,9 +811,42 @@ function renderizarRadar(pedidos) {
     btn.addEventListener('click', () => {
       pararAlertaSonoroChamada();
       sonsHUBy.tocarSucessoAceite();
-
       const dadosExtraidos = extrairDadosDoBotao(btn);
       preVisualizarRotaPedido(dadosExtraidos);
+    });
+  });
+
+  feedEl.querySelectorAll('.btn-accept-scheduled').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const dadosExtraidos = extrairDadosDoBotao(btn);
+      const agendadoStr = btn.getAttribute('data-agendado');
+      const dataAg = agendadoStr ? new Date(agendadoStr) : null;
+      const disponivelAgora = dataAg ? (dataAg.getTime() - Date.now() <= 15 * 60 * 1000) : true;
+
+      if (disponivelAgora) {
+        sonsHUBy.tocarSucessoAceite();
+        preVisualizarRotaPedido(dadosExtraidos);
+        return;
+      }
+
+      // Guarda na agenda do motorista e remove da lista pendente até a hora marcada
+      const agenda = JSON.parse(localStorage.getItem('huby_motorista_agenda') || '[]');
+      if (!agenda.some(a => String(a.id) === String(dadosExtraidos.id))) {
+        agenda.push({
+          ...dadosExtraidos,
+          agendado_para: agendadoStr,
+          notificado: false
+        });
+        localStorage.setItem('huby_motorista_agenda', JSON.stringify(agenda));
+      }
+
+      if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
+      estado.pedidosIgnorados.add(String(dadosExtraidos.id));
+
+      sonsHUBy.tocarSucessoAceite();
+      const horaFmt = dataAg ? dataAg.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      notificar(`📅 Agendamento confirmado para ${horaFmt}! Avisaremos quando estiver na hora.`, 'sucesso', 5000);
+      buscarChamadasPendentes(false);
     });
   });
 }

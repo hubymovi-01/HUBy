@@ -1,11 +1,11 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Interface Limpa + Mapa 3D + De Onde -> Para Onde)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Chamada Livre + Modais Modernos + Sincronização Total)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=8';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, resetarPainelCliente } from './cliente/cliente-pedidos.js?v=3.0.0';
+import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, resetarPainelCliente } from './cliente/cliente-pedidos.js?v=4.0.0';
 import { configurarChatCliente, encerrarMonitoramentoChatCliente } from './cliente/cliente-chat.js';
 import { notificar } from './util/alertas-huby.js';
 import { abrirPromptParada } from './cliente-ui.js';
@@ -13,9 +13,10 @@ import {
   configurarSeletorPagamentoRapido,
   configurarNotaMotorista,
   configurarCupomDesconto,
+  configurarAgendamentoCorrida,
   criarOuAtualizarVeiculoMapa,
   estadoRecursos
-} from './cliente/cliente-recursos.js';
+} from './cliente/cliente-recursos.js?v=2.0.0';
 
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
@@ -101,7 +102,6 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     document.getElementById('cardStatusViagem'),
     document.getElementById('containerParadasIntermediarias'),
     document.getElementById('btnAddParada'),
-    document.getElementById('gavetaMaisOpcoes'),
     document.querySelector('.dock-quick-actions-row')
   ];
 
@@ -144,7 +144,8 @@ function atualizarValoresCardsPro(precoBase, distanciaForcadaKm = null) {
   }
 
   const fatorDesconto = estadoRecursos.descontoPercentual > 0 ? (1 - estadoRecursos.descontoPercentual) : 1;
-  const paradasExtras = (estadoCliente.paradasIntermediarias?.length || 0) * 3.00;
+  const paradasReais = (estadoCliente.paradasIntermediarias || []).filter(p => !p.nota);
+  const paradasExtras = paradasReais.length * 2.50;
 
   let numCarro, numMoto, numEntrega;
 
@@ -423,61 +424,6 @@ function configurarLocaisFavoritosMenu() {
   });
 }
 
-function configurarSistemaAgendamento() {
-  const btnAgendar = document.getElementById('btnAgendarViagem');
-  const btnLimparAgendamento = document.getElementById('btnLimparAgendamento');
-  const badgeAgendamento = document.getElementById('txtAgendamentoBadge');
-  
-  if (!btnAgendar) return;
-
-  btnAgendar.addEventListener('click', () => {
-    const dataInputStr = prompt("Para quando deseja agendar? (Digite no formato AAAA-MM-DD HH:MM)\n\nEx: 2026-12-25 14:30\n(O mínimo é 30 minutos de antecedência)");
-    if (!dataInputStr) return;
-
-    const datePattern = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
-    const m = dataInputStr.match(datePattern);
-    
-    if (!m) {
-      notificar('Formato de data inválido. Use AAAA-MM-DD HH:MM', 'erro');
-      return;
-    }
-
-    const dtAgendada = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:00`);
-    const diffMs = dtAgendada.getTime() - Date.now();
-
-    if (isNaN(dtAgendada.getTime()) || diffMs < (25 * 60 * 1000)) {
-      notificar('A hora de agendamento deve ser pelo menos 30 minutos a partir de agora.', 'erro');
-      return;
-    }
-
-    estadoRecursos.dataAgendada = dtAgendada.toISOString();
-    btnAgendar.style.background = 'rgba(245, 158, 11, 0.2)';
-    btnAgendar.style.color = '#F59E0B';
-    btnAgendar.style.borderColor = '#F59E0B';
-
-    if (badgeAgendamento) {
-      badgeAgendamento.style.display = 'block';
-      badgeAgendamento.innerHTML = `⏰ Agendada para: <strong>${dtAgendada.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short'})}</strong>`;
-    }
-    
-    if (btnLimparAgendamento) btnLimparAgendamento.style.display = 'flex';
-    notificar('Viagem agendada! Confirme no botão principal.', 'sucesso');
-  });
-
-  if (btnLimparAgendamento) {
-    btnLimparAgendamento.addEventListener('click', (e) => {
-      e.stopPropagation();
-      estadoRecursos.dataAgendada = null;
-      btnAgendar.style.background = '';
-      btnAgendar.style.color = '';
-      btnAgendar.style.borderColor = '';
-      if (badgeAgendamento) badgeAgendamento.style.display = 'none';
-      btnLimparAgendamento.style.display = 'none';
-      notificar('Agendamento removido.', 'info');
-    });
-  }
-}
-
 async function iniciarSubmissaoPedidoFinal() {
   if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
     await cancelarBusca();
@@ -488,30 +434,15 @@ async function iniciarSubmissaoPedidoFinal() {
     return;
   }
 
-  const textNota = estadoRecursos?.notaMotorista || '';
-  if (textNota && !estadoCliente.paradasIntermediarias) {
-    estadoCliente.paradasIntermediarias = [];
-  }
-  if (textNota) {
-    const indexNota = estadoCliente.paradasIntermediarias.findIndex(p => p.nota);
-    if (indexNota > -1) {
-      estadoCliente.paradasIntermediarias[indexNota].nota = textNota;
-    } else {
-      estadoCliente.paradasIntermediarias.push({ nota: textNota });
-    }
+  estadoCliente.rotaAtual.forma_pagamento = 'livre';
+  estadoCliente.rotaAtual.metodo_pgto = 'livre';
+
+  if (estadoRecursos?.cupomAplicado) {
+    estadoCliente.rotaAtual.cupomCodigo = estadoRecursos.cupomAplicado;
   }
 
-  const dataAgendada = estadoRecursos?.dataAgendada || null;
-  if (dataAgendada) {
-    estadoCliente.rotaAtual.agendadoPara = dataAgendada;
-  }
-
-  const metodoLocal = localStorage.getItem('huby_metodo_pgto_padrao') || 'dinheiro';
-  estadoCliente.rotaAtual.forma_pagamento = metodoLocal;
-  estadoCliente.rotaAtual.metodo_pgto = metodoLocal;
-
-  if (estadoRecursos?.cupomAtivo) {
-    estadoCliente.rotaAtual.cupomCodigo = estadoRecursos.cupomAtivo.codigo;
+  if (estadoRecursos?.dataAgendada) {
+    estadoCliente.rotaAtual.agendadoPara = estadoRecursos.dataAgendada;
   }
 
   if (estadoCliente.enderecoOrigem) {
@@ -522,7 +453,7 @@ async function iniciarSubmissaoPedidoFinal() {
   estadoCliente.rotaAtual.subTipoLabel = `HUBy ${String(estadoCliente.categoriaSelecionada).charAt(0).toUpperCase() + String(estadoCliente.categoriaSelecionada).slice(1)}`;
 
   sincronizarPrecosDaRotaAtual();
-  await submeterPedido(); 
+  await submeterPedido();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -657,9 +588,32 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarLocaisFavoritosMenu();
 
   configurarSeletorPagamentoRapido();
-  configurarCupomDesconto();
+  configurarCupomDesconto(() => sincronizarPrecosDaRotaAtual());
   configurarNotaMotorista();
-  configurarSistemaAgendamento();
+  configurarAgendamentoCorrida(() => atualizarBotaoChamar());
+
+  // Sentinela de notificações de agendamentos do passageiro
+  setInterval(() => {
+    const lista = JSON.parse(localStorage.getItem('huby_meus_agendamentos') || '[]');
+    if (!lista.length) return;
+    const agora = Date.now();
+    let alterou = false;
+
+    for (const item of lista) {
+      const ts = new Date(item.agendado_para).getTime();
+      const diffMin = (ts - agora) / 60000;
+      if (!item.notificado_hora && diffMin <= 10 && diffMin >= -30) {
+        item.notificado_hora = true;
+        alterou = true;
+        if (sonsHUBy?.tocarAlertaChamada) sonsHUBy.tocarAlertaChamada();
+        notificar(`⏰ Sua corrida agendada para ${item.destino} está disponível agora!`, 'sucesso', 9000);
+      }
+    }
+
+    if (alterou) {
+      localStorage.setItem('huby_meus_agendamentos', JSON.stringify(lista));
+    }
+  }, 15000);
 
   const processarDestinoIA = async (e) => {
     const dados = e.detail || {};
@@ -743,9 +697,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
       }
 
-      const nomeExibicao = estadoCliente.categoriaSelecionada === 'moto' ? 'Moto' : (estadoCliente.categoriaSelecionada === 'entrega' ? 'Flash' : 'Carro');
-      const btnText = document.querySelector('.pro-btn .btn-text');
-      if (btnText) btnText.textContent = `Confirmar HUBy ${nomeExibicao}`;
+      atualizarBotaoChamar();
 
       if (estadoCliente.rotaAtual || estadoCliente.coordsDestino) {
         sincronizarPrecosDaRotaAtual();
@@ -777,7 +729,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 });
 
-// FLUXO DE PAGAMENTO PIX DINÂMICO
+// FLUXO DE PAGAMENTO PIX DINÂMICO (CARTEIRA / CORRIDA)
 function configurarFluxoPagamentoMercadoPago() {
   const modalPagamento = document.getElementById('modalPagamento');
   const btnFecharPagamento = document.getElementById('btnFecharPagamento');
@@ -880,7 +832,6 @@ async function requisitarPixMercadoPago(valor) {
     }
 
     iniciarMonitoramentoPix(data.txid, valor);
-
   } catch (err) {
     if (txtStatus) {
       txtStatus.textContent = `❌ ${err.message}`;
@@ -925,7 +876,7 @@ function iniciarMonitoramentoPix(txid, valor) {
           if (modalPagamento) modalPagamento.style.display = 'none';
         }, 2200);
       }
-    } catch (e) { }
+    } catch (e) {}
   }, 3000);
 }
 
@@ -1153,7 +1104,7 @@ function conectarSocketEPollingCliente() {
           notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
         }
       }
-    } catch (e) { }
+    } catch (e) {}
   }, 3500);
 }
 

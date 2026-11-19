@@ -1,140 +1,285 @@
-// js/cliente/cliente-recursos.js - Módulo de Pagamento Rápido, Cupom, Nota e Ícone do Veículo
+// js/cliente/cliente-recursos.js - Módulo de Cupom, Observação, Agendamento e Veículo 3D
 import { estadoCliente } from './cliente-estado.js';
-import { notificarCliente, abrirPromptParada } from '../cliente-ui.js';
+import { notificar } from '../util/alertas-huby.js';
 import { atualizarResumoValores } from './cliente-pedidos.js';
 
-// 1. DADOS DE ESTADO ADICIONAIS
 export const estadoRecursos = {
-  formaPagamento: 'dinheiro', // 'dinheiro' | 'pix' | 'cartao'
+  formaPagamento: 'livre',
   cupomAplicado: null,
   descontoPercentual: 0,
   notaMotorista: '',
+  dataAgendada: null,
   markerVeiculoAnimado: null
 };
 
-// Cupons promocionais disponíveis
 const CUPONS_VALIDOS = {
-  'HUBY10': 0.10,      // 10% de desconto
-  'PRIMEIRA10': 0.10,  // 10% de desconto
-  'HUBYVIP': 0.15      // 15% de desconto
+  'HUBY10': 0.10,
+  'PRIMEIRA10': 0.10,
+  'HUBYVIP': 0.15
 };
 
-// 2. CONFIGURAR SELETOR RÁPIDO DE PAGAMENTO
 export function configurarSeletorPagamentoRapido() {
-  const btnTrigger = document.getElementById('btnTriggerPagamento');
-  const modalMetodos = document.getElementById('modalSeletorPagamentoRapido');
-  const txtForma = document.getElementById('txtFormaPagamentoSelecionada');
-  const iconForma = document.getElementById('iconFormaPagamento');
-
-  btnTrigger?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (modalMetodos) modalMetodos.style.display = 'flex';
-  });
-
-  document.querySelectorAll('.opcao-pagamento-rapido').forEach(item => {
-    item.addEventListener('click', () => {
-      const metodo = item.getAttribute('data-metodo');
-      const nome = item.getAttribute('data-nome');
-      const icone = item.getAttribute('data-icone');
-
-      estadoRecursos.formaPagamento = metodo;
-      if (txtForma) txtForma.textContent = nome;
-      if (iconForma) iconForma.textContent = icone;
-
-      document.querySelectorAll('.opcao-pagamento-rapido').forEach(i => i.classList.remove('ativa'));
-      item.classList.add('ativa');
-
-      if (modalMetodos) modalMetodos.style.display = 'none';
-      notificarCliente(`Forma de pagamento: ${nome}`, 'info');
-    });
-  });
-
-  document.getElementById('btnFecharModalPgtoRapido')?.addEventListener('click', () => {
-    if (modalMetodos) modalMetodos.style.display = 'none';
-  });
+  // Chamada livre sem seletor de pagamento na tela inicial
 }
 
-// 3. CONFIGURAR NOTA / OBSERVAÇÃO PARA O MOTORISTA
-// Localize e substitua apenas a função configurarNotaMotorista()
+// 1. OBSERVAÇÃO PARA O MOTORISTA (MODAL MODERNO)
 export function configurarNotaMotorista() {
   const btnNota = document.getElementById('btnAdicionarNotaMotorista');
   const btnLimparNota = document.getElementById('btnLimparNotaMotorista');
   const badgeText = document.getElementById('txtNotaMotoristaBadge');
+  const modal = document.getElementById('modalObservacaoHUBy');
+  const inputObs = document.getElementById('inputObsMotoristaModal');
+  const btnFechar = document.getElementById('btnFecharModalObs');
+  const btnCancelar = document.getElementById('btnCancelarModalObs');
+  const btnConfirmar = document.getElementById('btnConfirmarModalObs');
 
-  if (!btnNota) return;
+  if (!btnNota || !modal) return;
+
+  const fecharModal = () => {
+    modal.style.display = 'none';
+  };
 
   btnNota.addEventListener('click', () => {
-    const msg = prompt('Informe a sua observação para o motorista (Ex: Levar troco para 50, Estou no portão azul...):', estadoRecursos.notaMotorista || '');
-    
-    if (msg !== null && msg.trim() !== '') {
-      estadoRecursos.notaMotorista = msg.trim();
-      btnNota.style.background = 'rgba(56, 189, 248, 0.2)';
-      btnNota.style.color = '#38BDF8';
-      
-      if (badgeText) {
-        badgeText.style.display = 'block';
-        badgeText.innerHTML = `📝 Observação: <strong>${estadoRecursos.notaMotorista}</strong>`;
-      }
-      if (btnLimparNota) btnLimparNota.style.display = 'flex';
-      
-      notificar('Observação adicionada ao pedido!', 'sucesso');
+    if (inputObs) {
+      inputObs.value = estadoRecursos.notaMotorista || '';
+      setTimeout(() => inputObs.focus(), 80);
     }
+    modal.style.display = 'flex';
   });
 
-  if (btnLimparNota) {
-    btnLimparNota.addEventListener('click', (e) => {
-      e.stopPropagation(); // Evita clicar no botão principal de nota
-      estadoRecursos.notaMotorista = '';
-      btnNota.style.background = '';
-      btnNota.style.color = '';
-      if (badgeText) badgeText.style.display = 'none';
-      btnLimparNota.style.display = 'none';
-      notificar('Observação removida.', 'info');
+  btnFechar?.addEventListener('click', fecharModal);
+  btnCancelar?.addEventListener('click', fecharModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) fecharModal();
+  });
+
+  document.querySelectorAll('.chip-obs-rapida').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const texto = chip.getAttribute('data-obs') || '';
+      if (inputObs) {
+        inputObs.value = inputObs.value.trim() ? `${inputObs.value.trim()} • ${texto}` : texto;
+      }
     });
-  }
-}
+  });
 
-// 4. CONFIGURAR CUPOM DE DESCONTO
-export function configurarCupomDesconto() {
-  const btnCupom = document.getElementById('btnAplicarCupom');
-  const tagCupom = document.getElementById('tagCupomAtivo');
-
-  btnCupom?.addEventListener('click', () => {
-    if (estadoRecursos.cupomAplicado) {
-      // Se já tem cupom, tocar para remover
-      estadoRecursos.cupomAplicado = null;
-      estadoRecursos.descontoPercentual = 0;
-      if (tagCupom) tagCupom.style.display = 'none';
-      btnCupom.textContent = '🏷️ Cupom';
-      atualizarResumoValores();
-      notificarCliente('Cupom removido.', 'info');
+  btnConfirmar?.addEventListener('click', () => {
+    const msg = (inputObs?.value || '').trim();
+    if (!msg) {
+      notificar('Digite uma observação antes de salvar.', 'alerta');
       return;
     }
 
-    abrirPromptParada({
-      titulo: 'Aplicar Cupom de Desconto',
-      placeholder: 'Digite o código (Ex: HUBY10)',
-      onConfirmar: (codigoDigitado) => {
-        const codigo = codigoDigitado.trim().toUpperCase();
-        if (CUPONS_VALIDOS[codigo]) {
-          estadoRecursos.cupomAplicado = codigo;
-          estadoRecursos.descontoPercentual = CUPONS_VALIDOS[codigo];
+    estadoRecursos.notaMotorista = msg;
+    btnNota.style.background = 'rgba(56, 189, 248, 0.2)';
+    btnNota.style.color = '#38BDF8';
+    btnNota.style.borderColor = '#38BDF8';
 
-          if (tagCupom) {
-            tagCupom.textContent = `${codigo} (-${CUPONS_VALIDOS[codigo] * 100}%)`;
-            tagCupom.style.display = 'inline-block';
-          }
-          btnCupom.textContent = '✕ Remover';
+    if (badgeText) {
+      badgeText.style.display = 'block';
+      badgeText.innerHTML = `📝 Obs: <strong>${msg}</strong>`;
+    }
+    if (btnLimparNota) btnLimparNota.style.display = 'flex';
 
-          // Recalcula o resumo de valores
-          atualizarResumoComDesconto();
-          notificarCliente(`Cupom ${codigo} aplicado com sucesso!`, 'sucesso');
-        } else {
-          notificarCliente('Cupom inválido ou expirado.', 'alerta');
-        }
-      }
+    fecharModal();
+    notificar('Observação salva e sincronizada!', 'sucesso');
+  });
+
+  btnLimparNota?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    estadoRecursos.notaMotorista = '';
+    btnNota.style.background = '';
+    btnNota.style.color = '';
+    btnNota.style.borderColor = '';
+    if (badgeText) badgeText.style.display = 'none';
+    btnLimparNota.style.display = 'none';
+    notificar('Observação removida.', 'info');
+  });
+}
+
+// 2. CUPOM PROMOCIONAL (MODAL MODERNO)
+export function configurarCupomDesconto(aoAtualizarPrecoCallback = null) {
+  const btnCupom = document.getElementById('btnAplicarCupom');
+  const lblBtnCupom = document.getElementById('lblBtnCupom');
+  const tagCupom = document.getElementById('tagCupomAtivo');
+  const modal = document.getElementById('modalCupomHUBy');
+  const inputCupom = document.getElementById('inputCupomDesconto');
+  const btnFechar = document.getElementById('btnFecharModalCupom');
+  const btnCancelar = document.getElementById('btnCancelarModalCupom');
+  const btnConfirmar = document.getElementById('btnConfirmarModalCupom');
+
+  if (!btnCupom || !modal) return;
+
+  const fecharModal = () => {
+    modal.style.display = 'none';
+  };
+
+  btnCupom.addEventListener('click', () => {
+    if (estadoRecursos.cupomAplicado) {
+      estadoRecursos.cupomAplicado = null;
+      estadoRecursos.descontoPercentual = 0;
+      if (tagCupom) tagCupom.style.display = 'none';
+      if (lblBtnCupom) lblBtnCupom.textContent = 'Cupom';
+      btnCupom.style.background = '';
+      btnCupom.style.color = '';
+      btnCupom.style.borderColor = '';
+      if (inputCupom) inputCupom.value = '';
+      atualizarResumoValores();
+      if (typeof aoAtualizarPrecoCallback === 'function') aoAtualizarPrecoCallback();
+      notificar('Cupom removido.', 'info');
+      return;
+    }
+
+    if (inputCupom) {
+      inputCupom.value = '';
+      setTimeout(() => inputCupom.focus(), 80);
+    }
+    modal.style.display = 'flex';
+  });
+
+  btnFechar?.addEventListener('click', fecharModal);
+  btnCancelar?.addEventListener('click', fecharModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) fecharModal();
+  });
+
+  document.querySelectorAll('.chip-cupom-rapido').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      if (inputCupom) inputCupom.value = chip.getAttribute('data-code') || '';
     });
+  });
+
+  btnConfirmar?.addEventListener('click', () => {
+    const codigo = (inputCupom?.value || '').trim().toUpperCase();
+    if (!codigo) {
+      notificar('Informe o código do cupom.', 'alerta');
+      return;
+    }
+
+    if (!CUPONS_VALIDOS[codigo]) {
+      notificar('Cupom inválido ou expirado.', 'alerta');
+      return;
+    }
+
+    estadoRecursos.cupomAplicado = codigo;
+    estadoRecursos.descontoPercentual = CUPONS_VALIDOS[codigo];
+
+    const pct = Math.round(CUPONS_VALIDOS[codigo] * 100);
+    if (tagCupom) {
+      tagCupom.innerHTML = `🏷️ Cupom <strong>${codigo}</strong> aplicado (-${pct}%)`;
+      tagCupom.style.display = 'block';
+    }
+    if (lblBtnCupom) lblBtnCupom.textContent = 'Remover';
+    btnCupom.style.background = 'rgba(16, 185, 129, 0.2)';
+    btnCupom.style.color = '#10B981';
+    btnCupom.style.borderColor = '#10B981';
+
+    atualizarResumoComDesconto();
+    if (typeof aoAtualizarPrecoCallback === 'function') aoAtualizarPrecoCallback();
+    fecharModal();
+    notificar(`Cupom ${codigo} (-${pct}%) aplicado!`, 'sucesso');
+  });
+}
+
+// 3. AGENDAMENTO DE CORRIDA (MODAL VISUAL COM DATA E HORA NATIVA)
+export function configurarAgendamentoCorrida(aoAtualizarBotaoCallback = null) {
+  const btnAgendar = document.getElementById('btnAgendarViagem');
+  const btnLimparAgendamento = document.getElementById('btnLimparAgendamento');
+  const badgeAgendamento = document.getElementById('txtAgendamentoBadge');
+  const modal = document.getElementById('modalAgendamentoHUBy');
+  const inputDataHora = document.getElementById('inputDataHoraAgendamento');
+  const btnFechar = document.getElementById('btnFecharModalAgendamento');
+  const btnCancelar = document.getElementById('btnCancelarModalAgendamento');
+  const btnConfirmar = document.getElementById('btnConfirmarModalAgendamento');
+
+  if (!btnAgendar || !modal) return;
+
+  const formatarParaInputLocal = (dateObj) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}T${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
+  };
+
+  const fecharModal = () => {
+    modal.style.display = 'none';
+  };
+
+  btnAgendar.addEventListener('click', () => {
+    const padrao = new Date(Date.now() + 45 * 60 * 1000);
+    if (inputDataHora) {
+      inputDataHora.min = formatarParaInputLocal(new Date(Date.now() + 25 * 60 * 1000));
+      inputDataHora.value = estadoRecursos.dataAgendada
+        ? formatarParaInputLocal(new Date(estadoRecursos.dataAgendada))
+        : formatarParaInputLocal(padrao);
+    }
+    modal.style.display = 'flex';
+  });
+
+  btnFechar?.addEventListener('click', fecharModal);
+  btnCancelar?.addEventListener('click', fecharModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) fecharModal();
+  });
+
+  document.querySelectorAll('.chip-tempo-rapido').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const mins = Number(chip.getAttribute('data-min') || 45);
+      const alvo = new Date(Date.now() + mins * 60 * 1000);
+      if (inputDataHora) inputDataHora.value = formatarParaInputLocal(alvo);
+    });
+  });
+
+  document.querySelector('.chip-amanha-manha')?.addEventListener('click', () => {
+    const amanha = new Date();
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(8, 0, 0, 0);
+    if (inputDataHora) inputDataHora.value = formatarParaInputLocal(amanha);
+  });
+
+  btnConfirmar?.addEventListener('click', () => {
+    const val = inputDataHora?.value;
+    if (!val) {
+      notificar('Selecione a data e o horário.', 'alerta');
+      return;
+    }
+
+    const dtAgendada = new Date(val);
+    if (isNaN(dtAgendada.getTime()) || dtAgendada.getTime() - Date.now() < 20 * 60 * 1000) {
+      notificar('Escolha um horário com pelo menos 25 minutos de antecedência.', 'alerta');
+      return;
+    }
+
+    estadoRecursos.dataAgendada = dtAgendada.toISOString();
+    btnAgendar.style.background = 'rgba(245, 158, 11, 0.2)';
+    btnAgendar.style.color = '#FBBF24';
+    btnAgendar.style.borderColor = '#F59E0B';
+
+    const formatado = dtAgendada.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    if (badgeAgendamento) {
+      badgeAgendamento.style.display = 'block';
+      badgeAgendamento.innerHTML = `⏰ Agendada para: <strong>${formatado}</strong>`;
+    }
+    if (btnLimparAgendamento) btnLimparAgendamento.style.display = 'flex';
+    if (typeof aoAtualizarBotaoCallback === 'function') aoAtualizarBotaoCallback();
+
+    fecharModal();
+    notificar(`Agendamento definido para ${formatado}!`, 'sucesso');
+  });
+
+  btnLimparAgendamento?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    estadoRecursos.dataAgendada = null;
+    btnAgendar.style.background = '';
+    btnAgendar.style.color = '';
+    btnAgendar.style.borderColor = '';
+    if (badgeAgendamento) badgeAgendamento.style.display = 'none';
+    btnLimparAgendamento.style.display = 'none';
+    if (typeof aoAtualizarBotaoCallback === 'function') aoAtualizarBotaoCallback();
+    notificar('Agendamento removido.', 'info');
   });
 }
 
@@ -154,31 +299,18 @@ export function atualizarResumoComDesconto() {
   }
 }
 
-// MARCADOR VEICULAR COM SILHUETA AUTOMÓVEL NÍTIDA
-export function criarOuAtualizarVeiculoMapa(mapaLeaflet, lat, lng, heading = 0, categoria = 'carro') {
-  if (!mapaLeaflet) return;
-
-  const iconeSVG = categoria === 'moto' ? `
-    <div style="transform: rotate(${heading}deg); transition: transform 0.4s ease; width: 36px; height: 36px; background: #090D16; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,0.6);">
-      <span style="font-size: 18px; line-height: 1;">🏍️</span>
-    </div>
-  ` : `
-    <div style="transform: rotate(${heading}deg); transition: transform 0.4s ease; width: 38px; height: 38px; background: #090D16; border: 2px solid #10B981; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.7);">
-      <span style="font-size: 20px; line-height: 1;">🚗</span>
-    </div>
-  `;
-
-  const iconePersonalizado = L.divIcon({
-    html: iconeSVG,
-    className: 'huby-vehicle-marker-wrapper',
-    iconSize: [38, 38],
-    iconAnchor: [19, 19]
-  });
+export function criarOuAtualizarVeiculoMapa(mapaInstancia, lat, lng, heading = 0, categoria = 'carro') {
+  if (!mapaInstancia || !window.maplibregl) return;
 
   if (!estadoRecursos.markerVeiculoAnimado) {
-    estadoRecursos.markerVeiculoAnimado = L.marker([lat, lng], { icon: iconePersonalizado, zIndexOffset: 1000 }).addTo(mapaLeaflet);
+    const el = document.createElement('div');
+    el.style.cssText = 'width:38px;height:38px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,0.75);font-size:19px;';
+    el.textContent = categoria === 'moto' ? '🏍️' : '🚗';
+
+    estadoRecursos.markerVeiculoAnimado = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([lng, lat])
+      .addTo(mapaInstancia);
   } else {
-    estadoRecursos.markerVeiculoAnimado.setLatLng([lat, lng]);
-    estadoRecursos.markerVeiculoAnimado.setIcon(iconePersonalizado);
+    estadoRecursos.markerVeiculoAnimado.setLngLat([lng, lat]);
   }
 }

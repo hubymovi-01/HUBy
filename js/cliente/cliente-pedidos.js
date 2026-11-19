@@ -1,21 +1,20 @@
-// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Busca e Radar HUBy Sincronizado
+// js/cliente/cliente-pedidos.js - Gestão de Pedidos, Agendamentos e Radar HUBy Sincronizado
 import { API_URL, calcularPreco, sincronizarTarifasServidor, sonsHUBy } from '../config.js';
 import { estadoCliente } from './cliente-estado.js';
 import { configurarChatCliente, encerrarMonitoramentoChatCliente } from './cliente-chat.js';
+import { estadoRecursos } from './cliente-recursos.js';
 import { notificar } from '../util/alertas-huby.js';
 
-export function atualizarBotaoChamar(resumo = null) {
+export function atualizarBotaoChamar() {
   const btn = document.getElementById('btnPedirHuby');
   if (!btn) return;
 
-  // Esconde definitivamente se o motorista já aceitou
   const painelAceito = document.getElementById('painelMotoristaAceitou');
   if (painelAceito && painelAceito.style.display === 'block') {
     btn.style.setProperty('display', 'none', 'important');
     return;
   }
 
-  // Enquanto procura motorista, exibe o botão vermelho "Cancelar Chamada"
   if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
     btn.style.setProperty('display', 'flex', 'important');
     btn.style.background = '#ef4444';
@@ -28,10 +27,11 @@ export function atualizarBotaoChamar(resumo = null) {
   btn.style.setProperty('display', 'flex', 'important');
   btn.style.background = '';
 
+  const ehAgendado = Boolean(estadoRecursos?.dataAgendada);
   const labels = {
-    carro: 'Confirmar HUBy Carro',
-    moto: 'Confirmar HUBy Moto',
-    entrega: 'Confirmar HUBy Flash'
+    carro: ehAgendado ? 'Agendar HUBy Carro' : 'Confirmar HUBy Carro',
+    moto: ehAgendado ? 'Agendar HUBy Moto' : 'Confirmar HUBy Moto',
+    entrega: ehAgendado ? 'Agendar HUBy Flash' : 'Confirmar HUBy Flash'
   };
   const spanText = btn.querySelector('.btn-text');
   if (spanText) {
@@ -63,9 +63,14 @@ export function atualizarResumoValores() {
   const calc = calcularPreco(categoria, Math.max(0.2, distanciaKm));
   let precoFinal = calc.valorTotal;
 
-  const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
-  precoFinal = Number((precoFinal + (qtdParadas * 2.50)).toFixed(2));
+  const qtdParadas = (estadoCliente.paradasIntermediarias || []).filter(p => !p.nota).length;
+  precoFinal = precoFinal + (qtdParadas * 2.50);
 
+  if (estadoRecursos?.descontoPercentual > 0) {
+    precoFinal = precoFinal * (1 - estadoRecursos.descontoPercentual);
+  }
+
+  precoFinal = Number(precoFinal.toFixed(2));
   estadoCliente.precoFinalCalculado = precoFinal;
   estadoCliente.rotaAtual.preco = precoFinal;
 
@@ -103,16 +108,25 @@ export async function submeterPedido() {
   atualizarResumoValores();
 
   const clienteId = localStorage.getItem('huby_user_id');
+  const clienteNome = localStorage.getItem('huby_user_name') || 'Passageiro HUBy';
   const novoId = 'ped_' + Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
 
   const kmTotal = Number(estadoCliente.distanciaTotalComParadas || estadoCliente.rotaAtual.distanciaKm || 1.0);
   const duracaoTotal = Number(estadoCliente.duracaoTotalComParadas || estadoCliente.rotaAtual.duracaoMin || 5);
   const precoInfo = calcularPreco(estadoCliente.categoriaSelecionada || 'carro', kmTotal);
-  const qtdParadas = estadoCliente.paradasIntermediarias?.length || 0;
-  const precoDefinitivo = Number((precoInfo.valorTotal + (qtdParadas * 2.50)).toFixed(2));
-  const cupomCodigo = document.getElementById('inputCupomDesconto')?.value.trim().toUpperCase() || null;
+  const paradasReais = (estadoCliente.paradasIntermediarias || []).filter(p => !p.nota);
+  let precoDefinitivo = precoInfo.valorTotal + (paradasReais.length * 2.50);
 
-  const coordsOrigemArr = estadoCliente.hubyMapa?.coordsOrigem || [-8.3582, -42.2476];
+  if (estadoRecursos?.descontoPercentual > 0) {
+    precoDefinitivo = precoDefinitivo * (1 - estadoRecursos.descontoPercentual);
+  }
+  precoDefinitivo = Number(precoDefinitivo.toFixed(2));
+
+  const cupomCodigo = estadoRecursos?.cupomAplicado || null;
+  const observacaoTexto = (estadoRecursos?.notaMotorista || '').trim();
+  const agendadoPara = estadoRecursos?.dataAgendada || null;
+
+  const coordsOrigemArr = estadoCliente.coordsOrigem || estadoCliente.hubyMapa?.coordsOrigem || [-8.3582, -42.2476];
   const coordsDestinoArr = estadoCliente.coordsDestino;
 
   const latOrigNum = parseFloat(coordsOrigemArr[0]);
@@ -120,34 +134,48 @@ export async function submeterPedido() {
   const latDestNum = parseFloat(coordsDestinoArr[0]);
   const lngDestNum = parseFloat(coordsDestinoArr[1]);
 
-  let metodoPgto = 'dinheiro';
-  const metodoRapido = document.querySelector('.opcao-pagamento-rapido.ativa')?.getAttribute('data-metodo');
-  if (metodoRapido) {
-    metodoPgto = metodoRapido;
-  }
+  const inputOrigemEl = document.getElementById('inputOrigemLocal');
+  const nomeOrigem = (estadoCliente.enderecoOrigem || inputOrigemEl?.value?.trim())
+    ? (estadoCliente.enderecoOrigem || inputOrigemEl.value.trim())
+    : `Local atual (${latOrigNum.toFixed(4)}, ${lngOrigNum.toFixed(4)})`;
 
   const txtDestino = document.getElementById('txtDestinoSelecionado');
-  let nomeDestino = txtDestino ? txtDestino.textContent : `Destino (${latDestNum.toFixed(4)}, ${lngDestNum.toFixed(4)})`;
+  const inputDestinoEl = document.getElementById('inputPesquisaLocal');
+  let nomeDestino = (inputDestinoEl?.value?.trim() || txtDestino?.textContent || '').trim();
+  if (!nomeDestino || nomeDestino === 'Selecione no mapa ou pesquise') {
+    nomeDestino = `Destino (${latDestNum.toFixed(4)}, ${lngDestNum.toFixed(4)})`;
+  }
 
   if (estadoCliente.categoriaSelecionada === 'entrega') {
     const recebedor = document.getElementById('inputRecebedor')?.value || 'Não informado';
     const tipoItemEl = document.getElementById('selectTipoItem');
-    const tipoItem = tipoItemEl && tipoItemEl.value !== "" ? tipoItemEl.options[tipoItemEl.selectedIndex].text : 'Encomenda';
+    const tipoItem = tipoItemEl && tipoItemEl.value !== '' ? tipoItemEl.options[tipoItemEl.selectedIndex].text : 'Encomenda';
     nomeDestino += ` | 📦 Recebedor: ${recebedor} | 🏷️ ${tipoItem}`;
   }
 
-  const notaMotorista = document.getElementById('txtNotaMotoristaBadge')?.textContent || '';
+  // Envia metadados estruturados também em paradas para garantir leitura mesmo se alguma coluna variar no SQL
+  const paradasSincronizadas = [...paradasReais];
+  if (observacaoTexto || cupomCodigo || agendadoPara) {
+    paradasSincronizadas.push({
+      nota: observacaoTexto || null,
+      cupom: cupomCodigo || null,
+      desconto_pct: estadoRecursos?.descontoPercentual ? Math.round(estadoRecursos.descontoPercentual * 100) : 0,
+      agendado_para: agendadoPara || null,
+      cliente_nome: clienteNome
+    });
+  }
 
   const payload = {
     id: novoId,
     clienteId: clienteId || null,
     cliente_id: clienteId || null,
+    cliente_nome: clienteNome,
     tipo: estadoCliente.categoriaSelecionada || 'carro',
     sub_tipo_id: estadoCliente.categoriaSelecionada || 'carro',
     sub_tipo_label: precoInfo.categoria || 'HUBy Carro',
-    origem_endereco: `Partida (${latOrigNum.toFixed(4)}, ${lngOrigNum.toFixed(4)})`,
+    origem_endereco: nomeOrigem,
     destino_endereco: nomeDestino,
-    origem: `Partida (${latOrigNum.toFixed(4)}, ${lngOrigNum.toFixed(4)})`,
+    origem: nomeOrigem,
     destino: nomeDestino,
     origem_lat: latOrigNum,
     origem_lng: lngOrigNum,
@@ -161,11 +189,14 @@ export async function submeterPedido() {
     duracaoMin: duracaoTotal,
     valor_total: precoDefinitivo,
     valorTotal: precoDefinitivo,
-    metodo_pagamento: metodoPgto,
-    metodoPgto: metodoPgto,
-    cupomCodigo: cupomCodigo,
-    observacao: notaMotorista,
-    paradas: estadoCliente.paradasIntermediarias || []
+    metodo_pagamento: 'livre',
+    metodoPgto: 'livre',
+    cupomCodigo,
+    cupom_codigo: cupomCodigo,
+    observacao: observacaoTexto,
+    agendado_para: agendadoPara,
+    agendadoPara,
+    paradas: paradasSincronizadas
   };
 
   const btn = document.getElementById('btnPedirHuby');
@@ -174,8 +205,7 @@ export async function submeterPedido() {
     if (btn) {
       btn.disabled = true;
       const span = btn.querySelector('.btn-text');
-      if (span) span.textContent = 'A solicitar condutor...';
-      else btn.textContent = 'A solicitar condutor...';
+      if (span) span.textContent = agendadoPara ? 'A registrar agendamento...' : 'A solicitar condutor...';
     }
 
     const resp = await fetch(`${API_URL}/api/pedidos`, {
@@ -197,8 +227,42 @@ export async function submeterPedido() {
       throw new Error(dadosResposta.erro || 'Falha ao registrar pedido.');
     }
 
-    if (dadosResposta.desconto > 0) {
-      notificar(`Cupom aplicado: -R$ ${Number(dadosResposta.desconto).toFixed(2).replace('.', ',')}`, 'sucesso');
+    // Se for corrida AGENDADA, não trava a tela do passageiro em radar imediato: salva e notifica quando o motorista aceitar e na hora marcada!
+    if (agendadoPara) {
+      const listaAgendadosCliente = JSON.parse(localStorage.getItem('huby_meus_agendamentos') || '[]');
+      listaAgendadosCliente.push({
+        id: novoId,
+        origem: nomeOrigem,
+        destino: nomeDestino,
+        agendado_para: agendadoPara,
+        valor: precoDefinitivo,
+        notificado_hora: false,
+        aceito_por: null
+      });
+      localStorage.setItem('huby_meus_agendamentos', JSON.stringify(listaAgendadosCliente));
+
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      const horaFmt = new Date(agendadoPara).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      notificar(`✅ Solicitação agendada para ${horaFmt}! Avisaremos assim que um motorista aceitar e na hora da viagem.`, 'sucesso', 6000);
+
+      // Limpa estado do agendamento atual após enviar
+      estadoRecursos.dataAgendada = null;
+      const badgeAg = document.getElementById('txtAgendamentoBadge');
+      const btnLimparAg = document.getElementById('btnLimparAgendamento');
+      const btnAg = document.getElementById('btnAgendarViagem');
+      if (badgeAg) badgeAg.style.display = 'none';
+      if (btnLimparAg) btnLimparAg.style.display = 'none';
+      if (btnAg) {
+        btnAg.style.background = '';
+        btnAg.style.color = '';
+        btnAg.style.borderColor = '';
+      }
+
+      if (btn) {
+        btn.disabled = false;
+        atualizarBotaoChamar();
+      }
+      return;
     }
 
     estadoCliente.pedidoAtivoId = novoId;
@@ -329,19 +393,7 @@ export function iniciarPollingStatus() {
           if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
           estadoCliente.motoristaAceitouTocado = true;
         }
-
         atualizarInterfaceMotoristaAceitou(pedido);
-
-        if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && typeof L !== 'undefined' && !estadoCliente.markerMotoristaAaminho) {
-          const iconeCondutor = L.divIcon({
-            className: 'huby-pin-motorista',
-            html: '<div style="width:28px;height:28px;background:#090D16;border:2.5px solid #10B981;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(16,185,129,0.9);font-size:14px;">🚘</div>',
-            iconSize: [28, 28],
-            iconAnchor: [14, 14]
-          });
-          estadoCliente.markerMotoristaAaminho = L.marker(estadoCliente.hubyMapa.coordsOrigem, { icon: iconeCondutor }).addTo(estadoCliente.hubyMapa.map);
-        }
-
       } else if (pedido.status === 'concluido') {
         clearInterval(estadoCliente.intervalPolling);
         if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
@@ -363,9 +415,7 @@ export function iniciarPollingStatus() {
         }
         resetarPainelCliente();
       }
-    } catch (e) {
-      console.warn('Polling status:', e);
-    }
+    } catch (e) {}
   }, 3000);
 }
 
@@ -452,7 +502,6 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
 export async function cancelarBusca() {
   const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
 
-  // Limpa localmente primeiro para não disparar aviso falso via socket/polling
   estadoCliente.pedidoAtivoId = null;
   localStorage.removeItem('huby_pedido_ativo_id');
 
@@ -474,9 +523,7 @@ export async function cancelarBusca() {
         },
         body: JSON.stringify({ motivo: 'Cancelado pelo passageiro durante a busca' })
       });
-    } catch (err) {
-      console.warn('Erro ao cancelar busca:', err);
-    }
+    } catch (err) {}
   }
 }
 
@@ -494,18 +541,8 @@ export function resetarPainelCliente() {
   const divTempo = document.getElementById('boxCronometroChegada');
   if (divTempo) divTempo.remove();
 
-  if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.rotaLayer && estadoCliente.hubyMapa.map) {
-    estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.rotaLayer);
-    estadoCliente.hubyMapa.rotaLayer = null;
-  }
-  if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.markerDestino && estadoCliente.hubyMapa.map) {
-    estadoCliente.hubyMapa.map.removeLayer(estadoCliente.hubyMapa.markerDestino);
-    estadoCliente.hubyMapa.markerDestino = null;
-  }
-  if (estadoCliente.markerMotoristaAaminho && estadoCliente.hubyMapa && estadoCliente.hubyMapa.map) {
-    estadoCliente.hubyMapa.map.removeLayer(estadoCliente.markerMotoristaAaminho);
-    estadoCliente.markerMotoristaAaminho = null;
-  }
+  estadoCliente.hubyMapa?.limparRota?.();
+  estadoCliente.hubyMapa?.limparDestino?.();
 
   const cardStatus = document.getElementById('cardStatusViagem');
   const blocoResumo = document.getElementById('blocoResumo');
