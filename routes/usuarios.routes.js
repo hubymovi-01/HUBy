@@ -1,22 +1,11 @@
-// routes/usuarios.routes.js - Autenticação Unificada HUBy (Passageiro, Motorista com Aprovação Automática e Admin 2FA)
+// routes/usuarios.routes.js - Autenticação Unificada HUBy (Passageiro, Motorista Aprovado Automaticamente e Admin Direto)
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 import { sql, JWT_SECRET } from '../db.js';
 
 export const usuariosRouter = express.Router();
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER || 'hubymobilidade@gmail.com',
-    pass: process.env.EMAIL_PASS || ''
-  }
-});
 
 function autenticar(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -34,27 +23,39 @@ function autenticar(req, res, next) {
   }
 }
 
-async function garantirTabela2FA() {
+async function garantirEstruturaContas() {
   try {
-    await sql`
-      CREATE TABLE IF NOT EXISTS admin_2fa_codes (
-        id SERIAL PRIMARY KEY,
-        usuario_id TEXT NOT NULL,
-        codigo VARCHAR(6) NOT NULL,
-        usado BOOLEAN DEFAULT FALSE,
-        expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
-        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `;
-  } catch (e) {}
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha_hash TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS senha_hash TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_numero TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_aprovacao TEXT DEFAULT 'aprovado';`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_online BOOLEAN DEFAULT FALSE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS motivo_recusa TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS categoria TEXT DEFAULT 'carro';`;
+  } catch (e) {
+    console.warn('Aviso ao sincronizar estrutura de contas:', e.message);
+  }
 }
-garantirTabela2FA();
+garantirEstruturaContas();
+
+async function conferirSenha(senhaInformada, hashOuSenha) {
+  if (!hashOuSenha) return true;
+  const valor = String(hashOuSenha);
+  if (valor.startsWith('$2a$') || valor.startsWith('$2b$') || valor.startsWith('$2y$')) {
+    return bcrypt.compare(String(senhaInformada), valor);
+  }
+  return valor === String(senhaInformada);
+}
 
 // ============================================================================
 // 1. CADASTRO UNIFICADO (/cadastro e /registo) - MOTORISTA APROVADO NA HORA
 // ============================================================================
 async function handleCadastroUnificado(req, res) {
   try {
+    await garantirEstruturaContas();
+
     const {
       nome, email, telefone, cpf, senha, role,
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
@@ -106,7 +107,7 @@ async function handleCadastroUnificado(req, res) {
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash},
             ${cnhLimpa}, ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${veiculo_cor || 'Prata'}, ${veiculo_ano || '2023'},
-            ${chave_pix_padrao || null}, ${fotoVeiculo || null}, 0.00, 'aprovado', TRUE, 5.00, 0
+            ${chave_pix_padrao || null}, ${fotoVeiculo || null}, 0.00, 'aprovado', FALSE, 5.00, 0
           );
         `;
       } catch (errMot) {
@@ -179,10 +180,12 @@ usuariosRouter.post('/cadastro', handleCadastroUnificado);
 usuariosRouter.post('/registo', handleCadastroUnificado);
 
 // ============================================================================
-// 2. LOGIN DE PASSAGEIRO E ADMIN (COM 2FA PARA ADMIN)
+// 2. LOGIN DE PASSAGEIRO E ADMIN (DIRETO, SEM 2FA)
 // ============================================================================
 usuariosRouter.post('/login', async (req, res) => {
   try {
+    await garantirEstruturaContas();
+
     const identificador = req.body.identificador || req.body.email;
     const senha = req.body.senha;
 
@@ -194,7 +197,7 @@ usuariosRouter.post('/login', async (req, res) => {
     const idNumeros = String(identificador).replace(/\D/g, '');
 
     const users = await sql`
-      SELECT id, nome, email, telefone, role, senha_hash
+      SELECT *
       FROM usuarios
       WHERE LOWER(TRIM(email)) = ${idLimpo}
          OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
@@ -207,45 +210,32 @@ usuariosRouter.post('/login', async (req, res) => {
     }
 
     const user = users[0];
-    if (user.senha_hash) {
-      const senhaOk = await bcrypt.compare(String(senha), user.senha_hash);
-      if (!senhaOk) {
-        return res.status(401).json({ erro: 'Palavra-passe incorreta.' });
-      }
+    const hashArmazenado = user.senha_hash || user.senha;
+    const senhaValida = await conferirSenha(senha, hashArmazenado);
+
+    if (!senhaValida) {
+      return res.status(401).json({ erro: 'Credenciais inválidas.' });
     }
 
     const role = String(user.role || 'cliente').trim().toLowerCase();
 
     if (role === 'admin' || role === 'administrador') {
-      const codigo6Digitos = String(crypto.randomInt(100000, 999999));
-      const expira = new Date(Date.now() + 10 * 60 * 1000);
-
-      await sql`
-        INSERT INTO admin_2fa_codes (usuario_id, codigo, expira_em)
-        VALUES (${user.id}, ${codigo6Digitos}, ${expira});
-      `;
-
-      let emailEnviado = false;
-      if (process.env.EMAIL_PASS) {
-        try {
-          await transporter.sendMail({
-            from: `"HUBy Segurança" <${process.env.EMAIL_USER || 'hubymobilidade@gmail.com'}>`,
-            to: user.email,
-            subject: '🔐 Código de Segurança do Painel Master',
-            html: `<div style="font-family:Arial,sans-serif;padding:20px;"><h2>HUBy Master</h2><p>Seu código de acesso: <strong style="font-size:24px;">${codigo6Digitos}</strong></p></div>`
-          });
-          emailEnviado = true;
-        } catch (eMail) {
-          console.warn('Aviso SMTP 2FA:', eMail.message);
-        }
-      }
+      const token = jwt.sign(
+        { id: user.id, nome: user.nome, email: user.email, role: 'admin' },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
 
       return res.json({
-        requer_2fa: true,
-        email: user.email,
-        usuario_id: user.id,
-        codigoTeste: emailEnviado ? undefined : codigo6Digitos,
-        mensagem: `Um código de 6 dígitos foi enviado para ${user.email}.`
+        sucesso: true,
+        token,
+        usuario: {
+          id: user.id,
+          nome: user.nome,
+          email: user.email,
+          telefone: user.telefone,
+          role: 'admin'
+        }
       });
     }
 
@@ -278,53 +268,13 @@ usuariosRouter.post('/login', async (req, res) => {
   }
 });
 
-usuariosRouter.post('/validar-2fa', async (req, res) => {
-  try {
-    const { usuario_id, codigo } = req.body;
-    if (!usuario_id || !codigo || String(codigo).length !== 6) {
-      return res.status(400).json({ erro: 'Código de 6 dígitos inválido.' });
-    }
-
-    const checks = await sql`
-      SELECT id FROM admin_2fa_codes
-      WHERE usuario_id = ${usuario_id}
-        AND codigo = ${String(codigo)}
-        AND usado = FALSE
-        AND expira_em > NOW()
-      ORDER BY id DESC LIMIT 1;
-    `;
-
-    if (checks.length === 0) {
-      return res.status(401).json({ erro: 'Código incorreto ou expirado.' });
-    }
-
-    await sql`UPDATE admin_2fa_codes SET usado = TRUE WHERE id = ${checks[0].id};`;
-
-    const users = await sql`SELECT id, nome, email, role FROM usuarios WHERE id = ${usuario_id} LIMIT 1;`;
-    if (users.length === 0) return res.status(404).json({ erro: 'Administrador não localizado.' });
-
-    const admin = users[0];
-    const token = jwt.sign(
-      { id: admin.id, nome: admin.nome, email: admin.email, role: 'admin' },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    return res.json({
-      sucesso: true,
-      token,
-      usuario: { id: admin.id, nome: admin.nome, email: admin.email, role: 'admin' }
-    });
-  } catch (err) {
-    return res.status(500).json({ erro: 'Falha ao validar código 2FA.' });
-  }
-});
-
 // ============================================================================
 // 3. LOGIN DE MOTORISTA PARCEIRO (E-MAIL + CNH + PLACA, SEM BLOQUEIO DE ADMIN)
 // ============================================================================
 usuariosRouter.post('/login-motorista', async (req, res) => {
   try {
+    await garantirEstruturaContas();
+
     const { email, cnh, veiculo_placa } = req.body;
 
     if (!email || !cnh || !veiculo_placa) {
