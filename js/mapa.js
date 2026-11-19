@@ -261,9 +261,13 @@ export class HubyMapa {
     this._ultimaGeometriaRota = null;
     if (!this.map) return;
     try {
-      if (this.map.getLayer('huby-rota-linha')) this.map.removeLayer('huby-rota-linha');
-      if (this.map.getLayer('huby-rota-borda')) this.map.removeLayer('huby-rota-borda');
-      if (this.map.getSource('huby-rota-source')) this.map.removeSource('huby-rota-source');
+      const sourceExistente = this.map.getSource('huby-rota-source');
+      if (sourceExistente) {
+        sourceExistente.setData({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
     } catch (e) {}
   }
 
