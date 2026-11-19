@@ -9,6 +9,38 @@
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/auth.css">
   <style>
+    .password-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+
+    .password-wrapper input {
+      width: 100%;
+      padding-right: 44px !important;
+    }
+
+    .btn-toggle-senha {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      color: #94A3B8;
+      cursor: pointer;
+      padding: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .btn-toggle-senha.ativo {
+      color: #10B981;
+    }
+
     .upload-group {
       display: flex;
       flex-direction: column;
@@ -148,7 +180,15 @@
 
         <div class="input-group">
           <label>Palavra-passe</label>
-          <input type="password" id="cadSenha" placeholder="••••••••" required>
+          <div class="password-wrapper">
+            <input type="password" id="cadSenha" placeholder="••••••••" required>
+            <button type="button" class="btn-toggle-senha" data-target="cadSenha" aria-label="Mostrar ou ocultar palavra-passe" title="Mostrar ou ocultar palavra-passe">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="input-group">
@@ -249,6 +289,20 @@
 
   <script type="module">
     import { API_URL } from './js/config.js';
+
+    const svgOlhoAberto = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const svgOlhoFechado = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+    document.querySelectorAll('.btn-toggle-senha').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById(btn.dataset.target);
+        if (!input) return;
+        const visivel = input.type === 'text';
+        input.type = visivel ? 'password' : 'text';
+        btn.innerHTML = visivel ? svgOlhoAberto : svgOlhoFechado;
+        btn.classList.toggle('ativo', !visivel);
+      });
+    });
 
     let roleAtual = 'cliente';
     let cnhBase64 = null;
