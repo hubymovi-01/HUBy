@@ -661,6 +661,55 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarNotaMotorista();
   configurarSistemaAgendamento();
 
+  const processarDestinoIA = async (e) => {
+    const dados = e.detail || {};
+    const nome = dados.nome || 'Destino Selecionado';
+
+    let coordsDestino = null;
+    if (Array.isArray(dados.coords) && dados.coords.length === 2) {
+      coordsDestino = [parseFloat(dados.coords[0]), parseFloat(dados.coords[1])];
+    } else if (dados.lat && dados.lng) {
+      coordsDestino = [parseFloat(dados.lat), parseFloat(dados.lng)];
+    }
+
+    if (!coordsDestino || isNaN(coordsDestino[0]) || isNaN(coordsDestino[1])) return;
+
+    await sincronizarTarifasServidor();
+    estadoCliente.coordsDestino = coordsDestino;
+
+    const txtDestino = document.getElementById('txtDestinoSelecionado');
+    const inputPesquisa = document.getElementById('inputPesquisaLocal');
+    const btnLimpar = document.getElementById('btnLimparPesquisa');
+    const listaResultados = document.getElementById('listaResultadosPesquisa');
+
+    if (txtDestino) txtDestino.textContent = nome;
+    if (inputPesquisa) {
+      inputPesquisa.value = nome;
+      inputPesquisa.blur();
+    }
+    if (btnLimpar) btnLimpar.style.display = 'inline-block';
+    if (listaResultados) {
+      listaResultados.innerHTML = '';
+      listaResultados.style.display = 'none';
+    }
+
+    if (estadoCliente.hubyMapa) {
+      const origem = estadoCliente.coordsOrigem ||
+        estadoCliente.hubyMapa.coordsOrigem ||
+        (estadoCliente.hubyMapa.posicaoAtual ? [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng] : null) ||
+        [-8.3582, -42.2476];
+
+      estadoCliente.coordsOrigem = origem;
+
+      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coordsDestino, '#10B981', true);
+      estadoCliente.rotaAtual = rota;
+      sincronizarPrecosDaRotaAtual();
+    }
+  };
+
+  window.removeEventListener('huby_local_selecionado_ia', processarDestinoIA);
+  window.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
+
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
     btnGPS.addEventListener('click', (e) => {
