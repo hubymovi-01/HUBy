@@ -1,7 +1,7 @@
-// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Com Publicidade, Vitrine de Parceiros, Mapa 3D e De Onde -> Para Onde)
+// js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Interface Limpa + Mapa 3D + De Onde -> Para Onde)
 import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
-import { configurarPesquisaLocal } from './pesquisa.js?v=7';
+import { configurarPesquisaLocal } from './pesquisa.js?v=8';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
@@ -101,9 +101,7 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     document.getElementById('cardStatusViagem'),
     document.getElementById('containerParadasIntermediarias'),
     document.getElementById('btnAddParada'),
-    document.querySelector('.search-mode-tabs'),
-    document.querySelector('.modern-search'),
-    document.querySelector('.quick-features-bar'),
+    document.getElementById('gavetaMaisOpcoes'),
     document.querySelector('.dock-quick-actions-row')
   ];
 
@@ -241,68 +239,26 @@ function configurarParadasIntermediariasSemPrompt() {
   });
 }
 
-function configurarBarraPesquisaAnimada() {
-  const searchBox = document.querySelector('.modern-search');
-  const btnLupa = document.getElementById('btnAcionarPesquisa');
-  const btnBuscaIA = document.getElementById('btnBuscaIA');
+function configurarLimpezaDestino() {
   const inputPesquisa = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
   const listaResultados = document.getElementById('listaResultadosPesquisa');
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const containerParadas = document.getElementById('containerParadasIntermediarias');
 
-  function atualizarVisibilidadeLimpar() {
-    if (btnLimpar) {
-      btnLimpar.style.display = inputPesquisa?.value.trim() ? 'flex' : 'none';
-    }
-  }
-
-  function recolherBarra() {
-    searchBox?.classList.remove('active');
-    if (inputPesquisa) {
-      inputPesquisa.value = '';
-      inputPesquisa.blur();
-    }
-    if (listaResultados) {
-      listaResultados.innerHTML = '';
-      listaResultados.style.display = 'none';
-    }
-    atualizarVisibilidadeLimpar();
-  }
-
-  inputPesquisa?.addEventListener('input', atualizarVisibilidadeLimpar);
-
-  inputPesquisa?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    searchBox?.classList.add('active');
-    atualizarVisibilidadeLimpar();
-  });
-
-  btnLupa?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    searchBox?.classList.add('active');
-    inputPesquisa?.focus();
-    atualizarVisibilidadeLimpar();
-  });
-
-  searchBox?.addEventListener('click', (e) => {
-    if (
-      e.target === btnLimpar || btnLimpar?.contains(e.target) ||
-      e.target === btnBuscaIA || btnBuscaIA?.contains(e.target)
-    ) {
-      return;
-    }
-    searchBox?.classList.add('active');
-    inputPesquisa?.focus();
-    atualizarVisibilidadeLimpar();
-  });
-
   btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    recolherBarra();
+    if (inputPesquisa) {
+      inputPesquisa.value = '';
+      inputPesquisa.focus();
+    }
+    btnLimpar.style.display = 'none';
+    if (listaResultados) {
+      listaResultados.innerHTML = '';
+      listaResultados.style.display = 'none';
+    }
 
     estadoCliente.coordsDestino = null;
     estadoCliente.rotaAtual = null;
@@ -319,26 +275,6 @@ function configurarBarraPesquisaAnimada() {
     if (containerParadas) containerParadas.innerHTML = '';
     atualizarValoresCardsPro(0);
     atualizarResumoValores();
-  });
-
-  document.getElementById('mapaCliente')?.addEventListener('click', () => {
-    if (searchBox?.classList.contains('active') && !inputPesquisa?.value.trim()) {
-      recolherBarra();
-    }
-  });
-}
-
-function configurarAlternanciaSatélite() {
-  const btnCamada = document.getElementById('btnAlternarCamadaMapa');
-
-  btnCamada?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!estadoCliente.hubyMapa) return;
-    const ativo = estadoCliente.hubyMapa.alternarSatelite();
-    btnCamada.classList.toggle('modo-satelite', ativo);
-    notificar(ativo ? 'Visão Satélite 3D ativada' : 'Mapa Noturno 3D ativado', 'info');
   });
 }
 
@@ -461,18 +397,18 @@ function configurarLocaisFavoritosMenu() {
     estadoCliente.coordsDestino = coords;
     const txtDestino = document.getElementById('txtDestinoSelecionado');
     const inputPesquisa = document.getElementById('inputPesquisaLocal');
-    const searchBox = document.querySelector('.modern-search');
+    const btnLimpar = document.getElementById('btnLimparPesquisa');
 
     if (txtDestino) txtDestino.textContent = enderecoSalvo;
     if (inputPesquisa) inputPesquisa.value = enderecoSalvo;
-    if (searchBox) searchBox.classList.add('active');
+    if (btnLimpar) btnLimpar.style.display = 'inline-block';
 
     if (estadoCliente.hubyMapa) {
       const origem = estadoCliente.coordsOrigem ||
         estadoCliente.hubyMapa.coordsOrigem ||
         (estadoCliente.hubyMapa.posicaoAtual ? [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng] : null) ||
         [-8.3582, -42.2476];
-      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#F59E0B', true);
+      const rota = await estadoCliente.hubyMapa.calcularRota(origem, coords, '#10B981', true);
       estadoCliente.rotaAtual = rota;
       sincronizarPrecosDaRotaAtual();
     }
@@ -487,9 +423,6 @@ function configurarLocaisFavoritosMenu() {
   });
 }
 
-// ----------------------------------------------------------------------
-// SISTEMA DE AGENDAMENTO E OBSERVAÇÃO DECORADA
-// ----------------------------------------------------------------------
 function configurarSistemaAgendamento() {
   const btnAgendar = document.getElementById('btnAgendarViagem');
   const btnLimparAgendamento = document.getElementById('btnLimparAgendamento');
@@ -545,9 +478,6 @@ function configurarSistemaAgendamento() {
   }
 }
 
-// ----------------------------------------------------------------------
-// PREPARAR E ENVIAR PEDIDO AO SERVIDOR COM PAGAMENTO, CUPOM E NOTAS
-// ----------------------------------------------------------------------
 async function iniciarSubmissaoPedidoFinal() {
   if (estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id')) {
     await cancelarBusca();
@@ -601,7 +531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     splash.style.opacity = '0';
     setTimeout(() => {
       if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
-    }, 400);
+    }, 350);
   }
 
   await sincronizarTarifasServidor();
@@ -622,18 +552,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const txtDestino = document.getElementById('txtDestinoSelecionado');
       const inputPesquisa = document.getElementById('inputPesquisaLocal');
-      const searchBox = document.querySelector('.modern-search');
       const btnLimpar = document.getElementById('btnLimparPesquisa');
       const listaResultados = document.getElementById('listaResultadosPesquisa');
 
       const textoDestino = `Destino (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`;
 
       if (txtDestino) txtDestino.textContent = textoDestino;
-      if (inputPesquisa) {
-        inputPesquisa.value = textoDestino;
-        if (btnLimpar) btnLimpar.style.display = 'flex';
-      }
-      if (searchBox) searchBox.classList.add('active');
+      if (inputPesquisa) inputPesquisa.value = textoDestino;
+      if (btnLimpar) btnLimpar.style.display = 'inline-block';
       if (listaResultados) {
         listaResultados.innerHTML = '';
         listaResultados.style.display = 'none';
@@ -692,37 +618,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   };
 
-  const restaurarOrigemMeuGPS = () => {
-    estadoCliente.enderecoOrigem = null;
-    const txtOrigem = document.getElementById('txtOrigemSelecionada');
-    const lblTabOrigem = document.getElementById('lblTabOrigem');
-    const btnResetGPS = document.getElementById('btnUsarMeuGPSOrigem');
-
-    if (txtOrigem) {
-      txtOrigem.textContent = 'Local de embarque atual (GPS)';
-      txtOrigem.style.color = '';
-      txtOrigem.style.fontWeight = '';
-    }
-    if (lblTabOrigem) lblTabOrigem.textContent = 'Partida: Meu GPS';
-    if (btnResetGPS) btnResetGPS.style.display = 'none';
-
-    estadoCliente.hubyMapa?.obterGPS(async (pos) => {
-      if (pos?.lat && pos?.lng) {
-        estadoCliente.coordsOrigem = [pos.lat, pos.lng];
-        if (estadoCliente.coordsDestino) {
-          const rota = await estadoCliente.hubyMapa.calcularRota([pos.lat, pos.lng], estadoCliente.coordsDestino, '#F59E0B', true);
-          estadoCliente.rotaAtual = rota;
-          sincronizarPrecosDaRotaAtual();
-        }
-      }
-    });
-  };
-
-  document.getElementById('rowEditarOrigem')?.addEventListener('click', (e) => {
-    if (e.target.id === 'btnUsarMeuGPSOrigem') return;
-    window.definirModoBuscaHUBy?.('origem', true);
-  });
-
   document.getElementById('btnUsarMeuGPSOrigem')?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -741,15 +636,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const txtDestino = document.getElementById('txtDestinoSelecionado');
         const inputPesquisa = document.getElementById('inputPesquisaLocal');
         const btnLimpar = document.getElementById('btnLimparPesquisa');
-        const searchBox = document.querySelector('.modern-search');
         const listaResultados = document.getElementById('listaResultadosPesquisa');
 
         if (txtDestino) txtDestino.textContent = nomeCurto;
-        if (inputPesquisa) {
-          inputPesquisa.value = nomeCurto;
-          if (btnLimpar) btnLimpar.style.display = 'flex';
-        }
-        if (searchBox) searchBox.classList.add('active');
+        if (inputPesquisa) inputPesquisa.value = nomeCurto;
+        if (btnLimpar) btnLimpar.style.display = 'inline-block';
         if (listaResultados) {
           listaResultados.innerHTML = '';
           listaResultados.style.display = 'none';
@@ -762,87 +653,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   configurarParadasIntermediariasSemPrompt();
-  configurarBarraPesquisaAnimada();
-  configurarAlternanciaSatélite();
+  configurarLimpezaDestino();
   configurarLocaisFavoritosMenu();
 
   configurarSeletorPagamentoRapido();
   configurarCupomDesconto();
   configurarNotaMotorista();
   configurarSistemaAgendamento();
-
-  const processarDestinoIA = async (e) => {
-    const dados = e.detail || {};
-    const nome = dados.nome || 'Destino Selecionado';
-
-    let coordsDestino = null;
-    if (Array.isArray(dados.coords) && dados.coords.length === 2) {
-      coordsDestino = [parseFloat(dados.coords[0]), parseFloat(dados.coords[1])];
-    } else if (dados.lat && dados.lng) {
-      coordsDestino = [parseFloat(dados.lat), parseFloat(dados.lng)];
-    }
-
-    if (!coordsDestino || isNaN(coordsDestino[0]) || isNaN(coordsDestino[1])) {
-      return;
-    }
-
-    await sincronizarTarifasServidor();
-    estadoCliente.coordsDestino = coordsDestino;
-
-    const txtDestino = document.getElementById('txtDestinoSelecionado');
-    const inputPesquisa = document.getElementById('inputPesquisaLocal');
-    const btnLimpar = document.getElementById('btnLimparPesquisa');
-    const searchBox = document.querySelector('.modern-search');
-    const listaResultados = document.getElementById('listaResultadosPesquisa');
-
-    if (txtDestino) {
-      txtDestino.textContent = nome;
-      txtDestino.style.color = '#38BDF8';
-      txtDestino.style.fontWeight = '800';
-    }
-
-    if (inputPesquisa) {
-      inputPesquisa.value = nome;
-      inputPesquisa.blur();
-      if (btnLimpar) btnLimpar.style.display = 'flex';
-    }
-
-    if (searchBox) searchBox.classList.add('active');
-    if (listaResultados) {
-      listaResultados.innerHTML = '';
-      listaResultados.style.display = 'none';
-    }
-
-    if (estadoCliente.hubyMapa) {
-      let origem = estadoCliente.coordsOrigem || estadoCliente.hubyMapa.coordsOrigem;
-
-      if (!origem && estadoCliente.hubyMapa.posicaoAtual) {
-        origem = [estadoCliente.hubyMapa.posicaoAtual.lat, estadoCliente.hubyMapa.posicaoAtual.lng];
-      }
-
-      if (!origem) {
-        origem = [-8.3582, -42.2476];
-      }
-
-      estadoCliente.coordsOrigem = origem;
-
-      try {
-        const rota = await estadoCliente.hubyMapa.calcularRota(origem, coordsDestino, '#38BDF8', true);
-        estadoCliente.rotaAtual = rota;
-
-        if (rota?.geometria && typeof estadoCliente.hubyMapa.desenharRota === 'function') {
-          estadoCliente.hubyMapa.desenharRota(rota.geometria, '#38BDF8');
-        }
-
-        sincronizarPrecosDaRotaAtual();
-      } catch (errRota) {
-        console.error('❌ Erro ao traçar rota no mapa:', errRota);
-      }
-    }
-  };
-
-  window.removeEventListener('huby_local_selecionado_ia', processarDestinoIA);
-  window.addEventListener('huby_local_selecionado_ia', processarDestinoIA);
 
   const btnGPS = document.getElementById('btnLocalizarGPS');
   if (btnGPS) {
@@ -856,7 +673,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   configurarDrawerMenu();
   verificarAcessoAdminMenu();
 
-  document.getElementById('btnNavViagens')?.addEventListener('click', carregarEExibirHistoricoModal);
   document.getElementById('menuItemViagens')?.addEventListener('click', () => {
     fecharDrawer();
     carregarEExibirHistoricoModal();
@@ -1630,7 +1446,6 @@ function inicializarPatrocinadoresCliente() {
     if (modalVitrine) modalVitrine.style.display = 'flex';
   };
 
-  document.getElementById('btnNavParceiros')?.addEventListener('click', abrirVitrine);
   document.getElementById('menuItemParceiros')?.addEventListener('click', abrirVitrine);
   document.getElementById('btnVerTodosParceirosPopup')?.addEventListener('click', abrirVitrine);
 
