@@ -27,7 +27,7 @@
         <span class="hub-txt">HUB</span><span class="y-txt">y</span>
         <span class="admin-pill-tag">ADMIN MASTER</span>
       </div>
-      <small class="brand-subtitle">Painel Executivo e Centro de Despacho Operacional</small>
+      <small class="brand-subtitle">Painel Executivo • Conta Corporativa & Centro Operacional</small>
     </div>
     <div class="header-actions">
       <select id="selectFiltroPeriodo" class="select-periodo" title="Filtrar Período">
@@ -43,14 +43,14 @@
     </div>
   </header>
 
-  <!-- CARTÕES DE MÉTRICAS -->
+  <!-- CARTÕES DE MÉTRICAS (CAIXA ÚNICO CORPORATIVO) -->
   <section class="metrics-grid">
     <div class="metric-card">
       <div class="metric-title">Faturamento Bruto</div>
       <div id="metricBruto" class="metric-value">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Lucro HUBy (15%)</div>
+      <div class="metric-title">Caixa Empresa HUBy (15%)</div>
       <div id="metricLiquido" class="metric-value text-blue">R$ 0,00</div>
     </div>
     <div class="metric-card">
@@ -71,14 +71,13 @@
   <nav class="tabs-nav">
     <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
     <button type="button" class="tab-btn" data-tab="tabPatrocinadores">🌟 Patrocinadores & Banners</button>
-    <button type="button" class="tab-btn" data-tab="tabSocios">🤝 Divisão Sócios</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
     <button type="button" class="tab-btn" data-tab="tabGrowth">🎁 Indicação & Dinâmica</button>
     <button type="button" class="tab-btn" data-tab="tabCupons">🎟️ Cupons & Descontos</button>
     <button type="button" class="tab-btn" data-tab="tabZonas">🛡️ Zonas de Risco</button>
     <button type="button" class="tab-btn" data-tab="tabSeguranca">🚨 Incidentes & SOS</button>
     <button type="button" class="tab-btn" data-tab="tabBroadcast">📢 Notificações Push</button>
-    <button type="button" class="tab-btn" data-tab="tabSaques">💰 Extrato de Saques</button>
+    <button type="button" class="tab-btn" data-tab="tabSaques">💰 Repasses Motoristas</button>
     <button type="button" class="tab-btn" data-tab="tabFrota">🚗 Condutores</button>
     <button type="button" class="tab-btn" data-tab="tabViagens">🗺️ Viagens</button>
     <button type="button" class="tab-btn" data-tab="tabConfig">⚙️ Tarifas & Gateway</button>
@@ -90,7 +89,7 @@
   <section id="tabMetricas" class="tab-pane active">
     <div class="charts-container">
       <div class="chart-box">
-        <h4 class="chart-title">Divisão de Receitas</h4>
+        <h4 class="chart-title">Distribuição Financeira (Frota vs. Caixa Empresa)</h4>
         <canvas id="chartFinanceiro"></canvas>
       </div>
       <div class="chart-box">
@@ -100,8 +99,8 @@
     </div>
   </section>
 
-  <!-- ABA NOVA: GESTÃO DE PATROCINADORES E BANNERS PUBLICITÁRIOS (DA GALERIA) -->
-  <section id="tabPatrocinadores" class="tab-pane" style="display: none;">
+  <!-- ABA 2: GESTÃO DE PATROCINADORES E BANNERS PUBLICITÁRIOS -->
+  <section id="tabPatrocinadores" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
         <h3 class="panel-primary-title">🌟 Novo Banner de Patrocinador</h3>
@@ -110,7 +109,6 @@
         </p>
 
         <form id="formNovoPatrocinador">
-          <!-- UPLOAD DA GALERIA COM PREVIEW -->
           <div class="form-group">
             <label>Arte do Banner (Da Galeria do Celular / PC)</label>
             <label for="inputBannerGaleria"
@@ -209,80 +207,6 @@
     </div>
   </section>
 
-  <!-- ABA 2: DIVISÃO DOS SÓCIOS (50% / 50%) -->
-  <section id="tabSocios" class="tab-pane">
-    <div class="section-header-box">
-      <h3 class="section-title">🤝 Painel de Retiradas dos Sócios</h3>
-      <p class="section-desc">
-        Divisão automatizada da taxa de retenção da plataforma (15%). Cada sócio possui 50% de participação líquida.
-      </p>
-    </div>
-
-    <div class="socios-cards-grid">
-      <div class="card-panel border-socio-1">
-        <div class="socio-top-bar">
-          <div>
-            <strong id="socio1Nome" class="socio-nome text-blue">Sócio 1 (50%)</strong>
-            <small id="socio1Chave" class="socio-chave">Chave Pix: pix1@huby.app.br</small>
-          </div>
-          <button type="button" class="btn-tbl alt" onclick="editarDadosSocio(1)">✏️ Editar</button>
-        </div>
-
-        <div class="socio-saldo-box">
-          <small class="saldo-label">Saldo Disponível para Saque</small>
-          <div id="socio1Saldo" class="saldo-valor text-primary">R$ 0,00</div>
-          <small id="socio1TotalSacado" class="saldo-retirado">Total já retirado: R$ 0,00</small>
-        </div>
-
-        <button type="button" class="btn-action btn-saque-socio-1" onclick="solicitarSaqueSocio(1)">
-          💸 Transferir Minha Parte via Pix
-        </button>
-      </div>
-
-      <div class="card-panel border-socio-2">
-        <div class="socio-top-bar">
-          <div>
-            <strong id="socio2Nome" class="socio-nome text-purple">Sócio 2 (50%)</strong>
-            <small id="socio2Chave" class="socio-chave">Chave Pix: pix2@huby.app.br</small>
-          </div>
-          <button type="button" class="btn-tbl alt btn-purple-alt" onclick="editarDadosSocio(2)">✏️ Editar</button>
-        </div>
-
-        <div class="socio-saldo-box">
-          <small class="saldo-label">Saldo Disponível para Saque</small>
-          <div id="socio2Saldo" class="saldo-valor text-primary">R$ 0,00</div>
-          <small id="socio2TotalSacado" class="saldo-retirado">Total já retirado: R$ 0,00</small>
-        </div>
-
-        <button type="button" class="btn-action btn-saque-socio-2" onclick="solicitarSaqueSocio(2)">
-          💸 Transferir Minha Parte via Pix
-        </button>
-      </div>
-    </div>
-
-    <div class="table-responsive">
-      <div class="table-header-title">
-        📋 Histórico de Saques e Retiradas da Diretoria
-      </div>
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Sócio</th>
-            <th>Chave Pix de Destino</th>
-            <th>Valor Retirado</th>
-            <th>Data e Hora</th>
-          </tr>
-        </thead>
-        <tbody id="tabelaRetiradasSociosBody">
-          <tr>
-            <td colspan="5" class="table-empty-row">Nenhuma retirada registrada até o momento.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-
   <!-- ABA 3: RADAR EM TEMPO REAL -->
   <section id="tabRadar" class="tab-pane">
     <div class="radar-header-bar">
@@ -292,7 +216,7 @@
     <div id="mapaRadarContainer"></div>
   </section>
 
-  <!-- ABA CONTROLE DE INDICAÇÃO & TARIFA DINÂMICA -->
+  <!-- ABA 4: INDICAÇÃO & TARIFA DINÂMICA -->
   <section id="tabGrowth" class="tab-pane">
     <div class="config-grid-layout">
       <div class="card-panel">
@@ -378,7 +302,7 @@
     </div>
   </section>
 
-  <!-- ABA 4: ZONAS DE RISCO -->
+  <!-- ABA 5: ZONAS DE RISCO -->
   <section id="tabZonas" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -450,7 +374,7 @@
     </div>
   </section>
 
-  <!-- ABA 5: CUPONS & MARKETING -->
+  <!-- ABA 6: CUPONS & MARKETING -->
   <section id="tabCupons" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -503,7 +427,7 @@
     </div>
   </section>
 
-  <!-- ABA 6: SEGURANÇA E SOS -->
+  <!-- ABA 7: SEGURANÇA E SOS -->
   <section id="tabSeguranca" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -526,7 +450,7 @@
     </div>
   </section>
 
-  <!-- ABA 7: BROADCAST PUSH -->
+  <!-- ABA 8: BROADCAST PUSH -->
   <section id="tabBroadcast" class="tab-pane">
     <div class="card-panel max-w-600" style="margin: 0 auto;">
       <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
@@ -552,8 +476,8 @@
             <select id="broadRegiao" class="drawer-input" style="margin-top: 4px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(0,0,0,0.4);">
               <option value="todas">🌐 Todas as Regiões (Global)</option>
               <option value="sao_joao_pi">📍 São João do Piauí - PI</option>
-              <option value="sao_paulo_sp">📍 São Paulo - SP</option>
               <option value="teresina_pi">📍 Teresina - PI</option>
+              <option value="sao_paulo_sp">📍 São Paulo - SP</option>
             </select>
           </div>
         </div>
@@ -575,15 +499,15 @@
     </div>
   </section>
 
-  <!-- ABA 8: GESTÃO E EXTRATO DE SAQUES -->
+  <!-- ABA 9: GESTÃO E EXTRATO DE SAQUES DOS MOTORISTAS -->
   <section id="tabSaques" class="tab-pane">
     <div class="callout-pix-automatico"
       style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:260px;">
         <span class="callout-icon">⚡</span>
         <div class="callout-text">
-          <strong>Central de Repasses Pix (Cash-Out API):</strong> Os saques são processados automaticamente no pedido
-          ou podem ser disparados em lote com 1 clique para toda a frota.
+          <strong>Central de Repasses Pix (Frota):</strong> Os saques dos motoristas são processados automaticamente no pedido
+          ou podem ser liquidados em lote com 1 clique.
         </div>
       </div>
       <button type="button" id="btnPagarSaquesLote" class="btn-action"
@@ -612,7 +536,7 @@
     </div>
   </section>
 
-  <!-- ABA 9: GESTÃO DE CONDUTORES -->
+  <!-- ABA 10: GESTÃO DE CONDUTORES -->
   <section id="tabFrota" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -636,7 +560,7 @@
     </div>
   </section>
 
-  <!-- ABA 10: MONITOR DE VIAGENS -->
+  <!-- ABA 11: MONITOR DE VIAGENS -->
   <section id="tabViagens" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -646,7 +570,7 @@
             <th>Modalidade</th>
             <th>Distância</th>
             <th>Total</th>
-            <th>Taxa HUBy</th>
+            <th>Taxa Empresa</th>
             <th>Motorista</th>
             <th>Status</th>
           </tr>
@@ -660,14 +584,14 @@
     </div>
   </section>
 
-  <!-- ABA 11: TARIFAS & GATEWAY MERCADO PAGO -->
+  <!-- ABA 12: TARIFAS & GATEWAY MERCADO PAGO -->
   <section id="tabConfig" class="tab-pane">
     <div class="config-grid-layout">
       <div class="card-panel">
         <h3 class="panel-primary-title">⚙️ Tabela Tarifária Dinâmica</h3>
         <form id="formConfiguracoes">
           <div class="form-group">
-            <label>Taxa de Retenção HUBy (%)</label>
+            <label>Taxa de Retenção Corporativa HUBy (%)</label>
             <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
           </div>
           <div class="categoria-divisor">
@@ -701,7 +625,7 @@
       <div class="card-panel">
         <h3 class="panel-blue-title">💳 Gateway de Pagamento (Mercado Pago)</h3>
         <p class="panel-subtitle">
-          Insira suas credenciais de produção para geração de Pix real e liquidação bancária instantânea.
+          Insira suas credenciais de produção da conta corporativa para geração de Pix real e liquidação instantânea.
         </p>
         <form id="formMercadoPagoConfig">
           <div class="form-group">
@@ -722,7 +646,7 @@
     </div>
   </section>
 
-  <!-- ABA 12: LOJA / MARKETPLACE PARCEIRO -->
+  <!-- ABA 13: LOJA / MARKETPLACE PARCEIRO -->
   <section id="tabMarketplace" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -774,30 +698,29 @@
     </div>
   </section>
 
-  <!-- ABA 13: SUPORTE & AJUDA -->
-  <section id="tabSuporte" class="tab-pane" style="display: none;">
-    <div class="card glass-panel" style="padding: 20px;">
-      <h3 style="margin-bottom: 5px;">🎧 Chamados de Suporte</h3>
-      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">Passageiros e motoristas que relataram problemas</p>
-      <div class="table-responsive">
-        <table class="table-huby">
-          <thead>
-            <tr>
-              <th>Data</th>
-              <th>Utilizador</th>
-              <th>Viagem (ID)</th>
-              <th>Mensagem / Relato</th>
-              <th>Status</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="tabelaSuporteBody">
-            <tr>
-              <td colspan="6" class="table-empty-row">A carregar chamados de suporte...</td>
-            </tr>
-          </tbody>
-        </table>
+  <!-- ABA 14: SUPORTE & AJUDA -->
+  <section id="tabSuporte" class="tab-pane">
+    <div class="table-responsive">
+      <div class="table-header-title">
+        🎧 Chamados de Suporte • Passageiros e Motoristas
       </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Utilizador</th>
+            <th>Viagem (ID)</th>
+            <th>Mensagem / Relato</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaSuporteBody">
+          <tr>
+            <td colspan="6" class="table-empty-row">A carregar chamados de suporte...</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 
@@ -816,13 +739,44 @@
     </div>
   </div>
 
+  <!-- MODAL CORPORATIVO PARA EDIÇÃO DE VALIDADES, RESPOSTAS DE SUPORTE E MOTIVO DE RECUSA -->
+  <div id="modalAcaoAdmin" class="modal-preview" style="z-index: 10050;">
+    <div class="modal-preview-box" style="max-width: 400px; text-align: left;">
+      <div class="modal-header-row" style="margin-bottom: 8px;">
+        <h4 id="tituloModalAcaoAdmin" class="modal-title">Ação Administrativa</h4>
+        <button type="button" id="btnFecharModalAcaoAdmin" class="modal-btn-close">✕</button>
+      </div>
+      <p id="subtituloModalAcaoAdmin" style="font-size: 12px; color: #94A3B8; margin: 0 0 14px;"></p>
+
+      <div id="campoGrupo1ModalAdmin" class="form-group">
+        <label id="labelCampo1ModalAdmin">Campo 1</label>
+        <input type="text" id="inputCampo1ModalAdmin" />
+      </div>
+
+      <div id="campoGrupo2ModalAdmin" class="form-group" style="display: none;">
+        <label id="labelCampo2ModalAdmin">Campo 2</label>
+        <input type="text" id="inputCampo2ModalAdmin" />
+      </div>
+
+      <div id="campoGrupoTextoModalAdmin" class="form-group" style="display: none;">
+        <label id="labelCampoTextoModalAdmin">Mensagem</label>
+        <textarea id="textareaModalAdmin" rows="3"></textarea>
+      </div>
+
+      <div class="modal-actions-row" style="margin-top: 14px;">
+        <button type="button" id="btnCancelarModalAcaoAdmin" class="btn-action secondary" style="flex: 1; justify-content: center;">Cancelar</button>
+        <button type="button" id="btnConfirmarModalAcaoAdmin" class="btn-action" style="flex: 1.5; justify-content: center;">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPTS GLOBAIS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <!-- MÓDULO PRINCIPAL DO ADMIN -->
-  <script type="module" src="./js/admin.js?v=7.0.0"></script>
+  <script type="module" src="./js/admin.js?v=8.0.0"></script>
 </body>
 
 </html>

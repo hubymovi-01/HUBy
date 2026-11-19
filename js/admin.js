@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Com Gestão de Patrocinadores & Galeria)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Caixa Único Corporativo + Sem Divisão de Sócios)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -38,6 +38,84 @@ function notificarAdmin(mensagem, tipo = 'sucesso') {
     toast.style.transition = 'all 0.25s ease';
     setTimeout(() => toast.remove(), 260);
   }, 4200);
+}
+
+// ============================================================================
+// MODAL CORPORATIVO (SUBSTITUI TODOS OS PROMPT() NATIVOS DO NAVEGADOR)
+// ============================================================================
+function abrirModalFormularioAdmin({
+  titulo,
+  subtitulo = '',
+  campo1 = null,
+  campo2 = null,
+  textarea = null,
+  textoConfirmar = 'Salvar',
+  onConfirmar
+}) {
+  const modal = document.getElementById('modalAcaoAdmin');
+  if (!modal) return;
+
+  document.getElementById('tituloModalAcaoAdmin').textContent = titulo;
+  document.getElementById('subtituloModalAcaoAdmin').textContent = subtitulo;
+
+  const g1 = document.getElementById('campoGrupo1ModalAdmin');
+  const in1 = document.getElementById('inputCampo1ModalAdmin');
+  if (campo1) {
+    g1.style.display = 'block';
+    document.getElementById('labelCampo1ModalAdmin').textContent = campo1.label;
+    in1.type = campo1.type || 'text';
+    in1.placeholder = campo1.placeholder || '';
+    in1.value = campo1.value || '';
+  } else {
+    g1.style.display = 'none';
+  }
+
+  const g2 = document.getElementById('campoGrupo2ModalAdmin');
+  const in2 = document.getElementById('inputCampo2ModalAdmin');
+  if (campo2) {
+    g2.style.display = 'block';
+    document.getElementById('labelCampo2ModalAdmin').textContent = campo2.label;
+    in2.type = campo2.type || 'text';
+    in2.placeholder = campo2.placeholder || '';
+    in2.value = campo2.value || '';
+  } else {
+    g2.style.display = 'none';
+  }
+
+  const gTxt = document.getElementById('campoGrupoTextoModalAdmin');
+  const txtArea = document.getElementById('textareaModalAdmin');
+  if (textarea) {
+    gTxt.style.display = 'block';
+    document.getElementById('labelCampoTextoModalAdmin').textContent = textarea.label;
+    txtArea.placeholder = textarea.placeholder || '';
+    txtArea.value = textarea.value || '';
+  } else {
+    gTxt.style.display = 'none';
+  }
+
+  const btnConf = document.getElementById('btnConfirmarModalAcaoAdmin');
+  btnConf.textContent = textoConfirmar;
+
+  const fechar = () => {
+    modal.style.display = 'none';
+  };
+
+  document.getElementById('btnFecharModalAcaoAdmin').onclick = fechar;
+  document.getElementById('btnCancelarModalAcaoAdmin').onclick = fechar;
+  modal.onclick = (e) => {
+    if (e.target === modal) fechar();
+  };
+
+  btnConf.onclick = async () => {
+    await onConfirmar({
+      valor1: in1.value,
+      valor2: in2.value,
+      texto: txtArea.value,
+      fechar
+    });
+  };
+
+  modal.style.display = 'flex';
 }
 
 // ============================================================================
@@ -143,7 +221,6 @@ async function sincronizarTudo(token) {
   await carregarTabelaFrota(token, true);
   await carregarTabelaViagens(token);
   await carregarMetricasECards(token, periodoAtual);
-  await carregarDadosSocios(token);
 
   Promise.allSettled([
     carregarTabelaPatrocinadores(token),
@@ -335,8 +412,8 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
       type: 'doughnut',
       data: {
         labels: [
-          `Repasse Condutores (${motPct}%): R$ ${Number(repasse || 0).toFixed(2).replace('.', ',')}`,
-          `Saldo Líquido HUBy (${taxaPct}%): R$ ${Number(lucro || 0).toFixed(2).replace('.', ',')}`
+          `Repasse Frota (${motPct}%): R$ ${Number(repasse || 0).toFixed(2).replace('.', ',')}`,
+          `Caixa Corporativo HUBy (${taxaPct}%): R$ ${Number(lucro || 0).toFixed(2).replace('.', ',')}`
         ],
         datasets: [{
           data: [valRepasse, valLucro],
@@ -399,125 +476,6 @@ function renderizarGraficos(bruto, lucro, repasse, categorias) {
 }
 
 // ============================================================================
-// 3. DIVISÃO DOS SÓCIOS (50% / 50%)
-// ============================================================================
-async function carregarDadosSocios(token) {
-  const tbodyRetiradas = document.getElementById('tabelaRetiradasSociosBody');
-  try {
-    const res = await fetch(`${API_URL}/api/socios/saldo-divisao?t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    const socios = data.socios || [];
-
-    if (socios[0]) {
-      const disp1 = Number(socios[0].saldoDisponivel ?? socios[0].saldo_disponivel ?? 0);
-      const sac1 = Number(socios[0].jaSacado ?? socios[0].total_retirado ?? 0);
-      document.getElementById('socio1Nome').textContent = `${socios[0].nome} (${socios[0].porcentagem}%)`;
-      document.getElementById('socio1Chave').textContent = `Chave Pix: ${socios[0].chave_pix || 'Não cadastrada'}`;
-      document.getElementById('socio1Saldo').textContent = `R$ ${disp1.toFixed(2).replace('.', ',')}`;
-      const elSacado1 = document.getElementById('socio1TotalSacado');
-      if (elSacado1) elSacado1.textContent = `Total já retirado: R$ ${sac1.toFixed(2).replace('.', ',')}`;
-      window._socio1Max = disp1;
-    }
-
-    if (socios[1]) {
-      const disp2 = Number(socios[1].saldoDisponivel ?? socios[1].saldo_disponivel ?? 0);
-      const sac2 = Number(socios[1].jaSacado ?? socios[1].total_retirado ?? 0);
-      document.getElementById('socio2Nome').textContent = `${socios[1].nome} (${socios[1].porcentagem}%)`;
-      document.getElementById('socio2Chave').textContent = `Chave Pix: ${socios[1].chave_pix || 'Não cadastrada'}`;
-      document.getElementById('socio2Saldo').textContent = `R$ ${disp2.toFixed(2).replace('.', ',')}`;
-      const elSacado2 = document.getElementById('socio2TotalSacado');
-      if (elSacado2) elSacado2.textContent = `Total já retirado: R$ ${sac2.toFixed(2).replace('.', ',')}`;
-      window._socio2Max = disp2;
-    }
-
-    if (tbodyRetiradas && data.historicoRetiradas) {
-      if (!data.historicoRetiradas.length) {
-        tbodyRetiradas.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma retirada registrada até o momento.</td></tr>';
-      } else {
-        tbodyRetiradas.innerHTML = data.historicoRetiradas.map(r => `
-          <tr>
-            <td><strong>#${escaparHTML(r.id)}</strong></td>
-            <td><strong>${escaparHTML(r.socio_nome)}</strong></td>
-            <td><code>${escaparHTML(r.chave_pix)}</code></td>
-            <td style="color: var(--primary); font-weight: 800;">R$ ${Number(r.valor).toFixed(2).replace('.', ',')}</td>
-            <td>${new Date(r.criado_em).toLocaleString('pt-BR')}</td>
-          </tr>
-        `).join('');
-      }
-    }
-  } catch (e) {
-    if (tbodyRetiradas) {
-      tbodyRetiradas.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma retirada registrada até o momento.</td></tr>';
-    }
-  }
-}
-
-window.editarDadosSocio = async (socioId) => {
-  const token = localStorage.getItem('huby_token');
-  const nome = prompt(`Informe o Nome do Sócio ${socioId}:`);
-  if (!nome) return;
-  const chave_pix = prompt(`Informe a Chave Pix de recebimento do Sócio ${socioId}:`);
-  if (!chave_pix) return;
-
-  try {
-    const res = await fetch(`${API_URL}/api/socios/atualizar/${socioId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ nome, chave_pix })
-    });
-    if (res.ok) {
-      notificarAdmin('Dados do sócio atualizados com sucesso!', 'sucesso');
-      carregarDadosSocios(token);
-    } else {
-      notificarAdmin('Erro ao atualizar dados do sócio.', 'erro');
-    }
-  } catch (e) {
-    notificarAdmin('Erro de conexão ao atualizar dados do sócio.', 'erro');
-  }
-};
-
-window.solicitarSaqueSocio = async (socioId) => {
-  const token = localStorage.getItem('huby_token');
-  const maxDisponivel = socioId === 1 ? (window._socio1Max || 0) : (window._socio2Max || 0);
-
-  if (maxDisponivel <= 0) {
-    notificarAdmin('Não há saldo disponível para retirada no momento.', 'aviso');
-    return;
-  }
-
-  const valorStr = prompt(`Informe o valor da retirada (Disponível: R$ ${maxDisponivel.toFixed(2).replace('.', ',')}):`, maxDisponivel.toFixed(2));
-  if (!valorStr) return;
-
-  const valor = parseFloat(valorStr.replace(',', '.'));
-  if (!valor || valor <= 0 || valor > maxDisponivel) {
-    notificarAdmin('Valor inválido ou superior ao saldo disponível.', 'erro');
-    return;
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/api/socios/retirar/${socioId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ socio_id: socioId, valor })
-    });
-
-    const data = await res.json();
-    if (res.ok) {
-      notificarAdmin(data.mensagem || 'Retirada registrada com sucesso!', 'sucesso');
-      carregarDadosSocios(token);
-    } else {
-      notificarAdmin(data.erro || 'Falha ao registrar retirada.', 'erro');
-    }
-  } catch (e) {
-    notificarAdmin('Erro de conexão ao processar retirada.', 'erro');
-  }
-};
-
-// ============================================================================
 // GESTÃO DO CLUBE HUBy / MARKETPLACE (MOTORISTAS)
 // ============================================================================
 async function carregarTabelaMarketplace(token) {
@@ -549,8 +507,8 @@ async function carregarTabelaMarketplace(token) {
         <td><span class="badge ${i.ativo ? 'badge-ativo' : 'badge-inativo'}">${i.ativo ? 'Disponível' : 'Oculto'}</span></td>
         <td>
           <div style="display:flex; gap:6px;">
-            <button class="btn-tbl alt" onclick="alternarStatusMarketplace('${escaparHTML(i.id)}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
-            <button class="btn-tbl rej" onclick="excluirItemMarketplace('${escaparHTML(i.id)}')">Excluir</button>
+            <button type="button" class="btn-tbl alt" onclick="alternarStatusMarketplace('${escaparHTML(i.id)}')">${i.ativo ? 'Ocultar' : 'Exibir'}</button>
+            <button type="button" class="btn-tbl rej" onclick="excluirItemMarketplace('${escaparHTML(i.id)}')">Excluir</button>
           </div>
         </td>
       </tr>
@@ -637,7 +595,7 @@ window.excluirItemMarketplace = async (id) => {
 };
 
 // ============================================================================
-// 4. GESTÃO DE FROTA, DOCUMENTOS E ALERTA DE VALIDADE (CNH / CRLV)
+// GESTÃO DE FROTA, DOCUMENTOS E ALERTA DE VALIDADE (CNH / CRLV)
 // ============================================================================
 async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
   const tbody = document.getElementById('tabelaFrotaBody');
@@ -698,10 +656,10 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
           <td>
             <div style="display:flex; flex-direction:column; gap:4px;">
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                ${m.doc_crlv_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_crlv_url)}', 'CRLV do Veículo - ${nomeSeguro}', '${idSeguro}')">CRLV</button>` : ''}
-                ${m.doc_cnh_url ? `<button class="btn-tbl alt" onclick="abrirFotoDocumento('${escaparHTML(m.doc_cnh_url)}', 'CNH - ${nomeSeguro}', '${idSeguro}')">CNH</button>` : ''}
-                ${m.ultima_selfie_url ? `<button class="btn-tbl app" onclick="abrirFotoDocumento('${escaparHTML(m.ultima_selfie_url)}', 'Selfie Turno - ${nomeSeguro}', '${idSeguro}')">🤳 Selfie</button>` : ''}
-                <button class="btn-tbl alt" title="Editar datas de validade" onclick="editarValidadeDocumentos('${idSeguro}', '${escaparHTML(m.cnh_validade || '')}', '${escaparHTML(m.crlv_validade || '')}')">📅 Validades</button>
+                ${m.doc_crlv_url ? `<button type="button" class="btn-tbl alt btn-doc-zoom" data-url="${escaparHTML(m.doc_crlv_url)}" data-titulo="CRLV - ${nomeSeguro}" data-mot-id="${idSeguro}">CRLV</button>` : ''}
+                ${m.doc_cnh_url ? `<button type="button" class="btn-tbl alt btn-doc-zoom" data-url="${escaparHTML(m.doc_cnh_url)}" data-titulo="CNH - ${nomeSeguro}" data-mot-id="${idSeguro}">CNH</button>` : ''}
+                ${m.ultima_selfie_url ? `<button type="button" class="btn-tbl app btn-doc-zoom" data-url="${escaparHTML(m.ultima_selfie_url)}" data-titulo="Selfie Turno - ${nomeSeguro}" data-mot-id="${idSeguro}">🤳 Selfie</button>` : ''}
+                <button type="button" class="btn-tbl alt btn-edit-validade" data-mot-id="${idSeguro}" data-nome="${nomeSeguro}" data-cnh="${escaparHTML(m.cnh_validade || '')}" data-crlv="${escaparHTML(m.crlv_validade || '')}">📅 Validades</button>
               </div>
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
                 ${valCnh.html}
@@ -712,18 +670,39 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
           <td>
             <div style="display:flex; gap:4px;">
               ${statusLimpo !== 'aprovado' ? `
-                <button class="btn-tbl app" onclick="alterarStatusCondutor('${idSeguro}', 'aprovar')">Aprovar</button>
+                <button type="button" class="btn-tbl app" onclick="alterarStatusCondutor('${idSeguro}', 'aprovar')">Aprovar</button>
               ` : ''}
               ${statusLimpo !== 'recusado' && statusLimpo !== 'bloqueado' ? `
-                <button class="btn-tbl rej" onclick="alterarStatusCondutor('${idSeguro}', 'recusar')">Recusar</button>
+                <button type="button" class="btn-tbl rej" onclick="alterarStatusCondutor('${idSeguro}', 'recusar')">Recusar</button>
               ` : `
-                <button class="btn-tbl app" onclick="alterarStatusCondutor('${idSeguro}', 'aprovar')">Liberar</button>
+                <button type="button" class="btn-tbl app" onclick="alterarStatusCondutor('${idSeguro}', 'aprovar')">Liberar</button>
               `}
             </div>
           </td>
         </tr>
       `;
     }).join('');
+
+    tbody.querySelectorAll('.btn-doc-zoom').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.abrirFotoDocumento(
+          btn.getAttribute('data-url'),
+          btn.getAttribute('data-titulo'),
+          btn.getAttribute('data-mot-id')
+        );
+      });
+    });
+
+    tbody.querySelectorAll('.btn-edit-validade').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.editarValidadeDocumentos(
+          btn.getAttribute('data-mot-id'),
+          btn.getAttribute('data-cnh'),
+          btn.getAttribute('data-crlv'),
+          btn.getAttribute('data-nome')
+        );
+      });
+    });
 
     const tabBtnFrota = document.querySelector('[data-tab="tabFrota"]');
     if (tabBtnFrota) {
@@ -745,40 +724,55 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
   }
 }
 
-window.editarValidadeDocumentos = async (motoristaId, cnhAtual, crlvAtual) => {
+window.editarValidadeDocumentos = (motoristaId, cnhAtual, crlvAtual, nomeCondutor = 'Condutor') => {
   const token = localStorage.getItem('huby_token');
-  const novaCnh = prompt('Validade da CNH (formato AAAA-MM-DD):', cnhAtual || '2028-12-31');
-  if (novaCnh === null) return;
 
-  const novoCrlv = prompt('Validade do CRLV (formato AAAA-MM-DD):', crlvAtual || '2027-10-31');
-  if (novoCrlv === null) return;
+  abrirModalFormularioAdmin({
+    titulo: `📅 Validade de Documentos • ${nomeCondutor}`,
+    subtitulo: 'Defina as datas de vencimento da CNH e do CRLV para monitoramento preventivo.',
+    campo1: {
+      label: 'Validade da CNH',
+      type: 'date',
+      value: cnhAtual ? String(cnhAtual).slice(0, 10) : ''
+    },
+    campo2: {
+      label: 'Validade do CRLV',
+      type: 'date',
+      value: crlvAtual ? String(crlvAtual).slice(0, 10) : ''
+    },
+    textoConfirmar: '💾 Salvar Validades',
+    onConfirmar: async ({ valor1, valor2, fechar }) => {
+      try {
+        const res = await fetch(`${API_URL}/api/admin/motoristas/${motoristaId}/validade-documentos`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            cnh_validade: valor1.trim() || null,
+            crlv_validade: valor2.trim() || null
+          })
+        });
 
-  try {
-    const res = await fetch(`${API_URL}/api/admin/motoristas/${motoristaId}/validade-documentos`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        cnh_validade: novaCnh.trim() || null,
-        crlv_validade: novoCrlv.trim() || null
-      })
-    });
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.erro || 'Erro ao salvar datas.');
+        }
 
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      throw new Error(d.erro || 'Erro ao salvar datas.');
+        fechar();
+        notificarAdmin('Datas de validade da CNH e CRLV atualizadas!', 'sucesso');
+        await carregarTabelaFrota(token, false);
+      } catch (err) {
+        notificarAdmin(err.message, 'erro');
+      }
     }
-
-    notificarAdmin('Datas de validade da CNH e CRLV atualizadas!', 'sucesso');
-    await carregarTabelaFrota(token, false);
-  } catch (err) {
-    notificarAdmin(err.message, 'erro');
-  }
+  });
 };
 
-// 5. Zonas de Risco
+// ============================================================================
+// ZONAS DE RISCO
+// ============================================================================
 async function carregarTabelaZonasRisco(token) {
   const tbody = document.getElementById('tabelaZonasBody');
   if (!tbody) return;
@@ -803,7 +797,7 @@ async function carregarTabelaZonasRisco(token) {
         <td><span class="badge ${z.nivel_risco === 'alto' ? 'badge-recusado' : 'badge-pendente'}">${escaparHTML((z.nivel_risco || 'ALTO').toUpperCase())}</span></td>
         <td>${Number(z.raio_metros || 500)}m</td>
         <td><code style="color:var(--blue);">${escaparHTML(z.horario_inicio || '20:00')} às ${escaparHTML(z.horario_fim || '05:00')}</code></td>
-        <td><button class="btn-tbl rej" onclick="excluirZonaRisco(${Number(z.id)})">Remover</button></td>
+        <td><button type="button" class="btn-tbl rej" onclick="excluirZonaRisco(${Number(z.id)})">Remover</button></td>
       </tr>
     `).join('');
   } catch (e) {
@@ -841,7 +835,9 @@ function configurarFormZonasRisco(token) {
   });
 }
 
-// 6. Cupons de Desconto
+// ============================================================================
+// CUPONS DE DESCONTO
+// ============================================================================
 async function carregarTabelaCupons(token) {
   const tbody = document.getElementById('tabelaCuponsBody');
   if (!tbody) return;
@@ -868,8 +864,8 @@ async function carregarTabelaCupons(token) {
         <td><span class="badge ${c.ativo ? 'badge-ativo' : 'badge-inativo'}">${c.ativo ? 'Ativo' : 'Pausado'}</span></td>
         <td>
           <div style="display:flex; gap:6px;">
-            <button class="btn-tbl alt" onclick="alternarCupom('${escaparHTML(c.id)}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
-            <button class="btn-tbl rej" onclick="excluirCupom('${escaparHTML(c.id)}')">Excluir</button>
+            <button type="button" class="btn-tbl alt" onclick="alternarCupom('${escaparHTML(c.id)}')">${c.ativo ? 'Pausar' : 'Ativar'}</button>
+            <button type="button" class="btn-tbl rej" onclick="excluirCupom('${escaparHTML(c.id)}')">Excluir</button>
           </div>
         </td>
       </tr>
@@ -907,7 +903,9 @@ function configurarFormCupons(token) {
   });
 }
 
-// 7. Incidentes e SOS
+// ============================================================================
+// INCIDENTES E SOS
+// ============================================================================
 async function carregarTabelaSeguranca(token) {
   const tbody = document.getElementById('tabelaSegurancaBody');
   if (!tbody) return;
@@ -933,7 +931,7 @@ async function carregarTabelaSeguranca(token) {
         <td>${escaparHTML(i.descricao || 'Alerta reportado')}</td>
         <td>${new Date(i.criado_em).toLocaleString('pt-BR')}</td>
         <td><span class="badge ${i.resolvido ? 'badge-concluido' : 'badge-pendente'}">${i.resolvido ? 'Resolvido' : 'Pendente'}</span></td>
-        <td>${!i.resolvido ? `<button class="btn-tbl app" onclick="resolverIncidente(${Number(i.id)})">Resolver</button>` : '---'}</td>
+        <td>${!i.resolvido ? `<button type="button" class="btn-tbl app" onclick="resolverIncidente(${Number(i.id)})">Resolver</button>` : '---'}</td>
       </tr>
     `).join('');
   } catch (e) {
@@ -942,7 +940,7 @@ async function carregarTabelaSeguranca(token) {
 }
 
 // ============================================================================
-// 8. MODERAÇÃO, DISPARO EM LOTE E EXTRATO DE SAQUES DOS MOTORISTAS
+// MODERAÇÃO, DISPARO EM LOTE E EXTRATO DE SAQUES DOS MOTORISTAS
 // ============================================================================
 function configurarBotaoSaqueLote(token) {
   const btnLote = document.getElementById('btnPagarSaquesLote');
@@ -1044,8 +1042,8 @@ async function carregarTabelaSaques(token) {
           <td>
             ${s.status === 'pendente' ? `
               <div style="display:flex; gap:6px;">
-                <button class="btn-tbl app" onclick="processarSaqueMaster(${Number(s.id)}, 'pago')">⚡ Disparar Pix</button>
-                <button class="btn-tbl rej" onclick="processarSaqueMaster(${Number(s.id)}, 'recusado')">Recusar</button>
+                <button type="button" class="btn-tbl app" onclick="processarSaqueMaster(${Number(s.id)}, 'pago')">⚡ Disparar Pix</button>
+                <button type="button" class="btn-tbl rej" onclick="processarSaqueMaster(${Number(s.id)}, 'recusado')">Recusar</button>
               </div>
             ` : `<small style="color:var(--muted);">${s.status === 'pago' ? '✅ Liquidado' : 'Estornado'}</small>`}
           </td>
@@ -1066,7 +1064,9 @@ async function carregarTabelaSaques(token) {
   }
 }
 
-// 9. Monitor de Viagens
+// ============================================================================
+// MONITOR DE VIAGENS
+// ============================================================================
 async function carregarTabelaViagens(token) {
   const tbody = document.getElementById('tabelaCorridasBody');
   if (!tbody) return;
@@ -1109,7 +1109,9 @@ async function carregarTabelaViagens(token) {
   }
 }
 
-// 10. Parâmetros e Tarifas Dinâmicas
+// ============================================================================
+// PARÂMETROS E TARIFAS DINÂMICAS
+// ============================================================================
 async function carregarTarifasConfig(token) {
   const preencherInputs = (cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
@@ -1203,7 +1205,9 @@ function configurarFormTarifas(token) {
   });
 }
 
-// 11. Gateway de Pagamento
+// ============================================================================
+// GATEWAY DE PAGAMENTO MERCADO PAGO
+// ============================================================================
 async function carregarGatewayConfig(token) {
   try {
     const res = await fetch(`${API_URL}/api/admin/gateway/mercadopago`, {
@@ -1247,6 +1251,9 @@ function configurarFormMercadoPago(token) {
   });
 }
 
+// ============================================================================
+// DISPARO DE NOTIFICAÇÕES PUSH
+// ============================================================================
 function configurarFormBroadcast(token) {
   document.getElementById('formBroadcast')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1285,7 +1292,7 @@ function configurarFormBroadcast(token) {
   });
 }
 
-function configurarModalDocumentos(token) {
+function configurarModalDocumentos() {
   const modal = document.getElementById('modalPreviewFoto');
   const btnFechar = document.getElementById('btnFecharModalPreview');
   const btnAprovar = document.getElementById('btnAprovarDocModal');
@@ -1357,7 +1364,6 @@ function configurarNavegacaoAbas() {
         }
 
         if (tabAlvoId === 'tabPatrocinadores') carregarTabelaPatrocinadores(token);
-        if (tabAlvoId === 'tabSocios') carregarDadosSocios(token);
         if (tabAlvoId === 'tabGrowth') carregarConfigGrowthEDinamica(token);
         if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
         if (tabAlvoId === 'tabCupons') carregarTabelaCupons(token);
@@ -1392,7 +1398,6 @@ function conectarSocketAdmin() {
     await carregarTabelaViagens(token);
     await carregarTabelaFrota(token, false);
     await carregarMetricasECards(token, periodo);
-    await carregarDadosSocios(token);
   });
 
   socket.on('novo_saque_solicitado', async (dados) => {
@@ -1420,7 +1425,9 @@ function conectarSocketAdmin() {
   });
 }
 
-// Ações Globais
+// ============================================================================
+// AÇÕES GLOBAIS
+// ============================================================================
 window.excluirZonaRisco = async (id) => {
   if (!confirm('Deseja realmente remover esta zona de risco?')) return;
   const token = localStorage.getItem('huby_token');
@@ -1483,33 +1490,48 @@ window.alterarStatusCondutor = async (id, acao) => {
 
 window.processarSaqueMaster = async (id, status) => {
   const token = localStorage.getItem('huby_token');
-  let motivo = '';
+
+  const executarRequisicao = async (motivo = '') => {
+    try {
+      const res = await fetch(`${API_URL}/api/carteira/admin/saques/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ status, motivo_recusa: motivo })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
+
+      notificarAdmin(data.mensagem || (status === 'pago' ? '⚡ Saque Pix liquidado!' : 'Saque recusado e valor estornado.'), status === 'pago' ? 'sucesso' : 'aviso');
+      await carregarTabelaSaques(token);
+      await carregarTabelaFrota(token, false);
+      await carregarMetricasECards(token);
+    } catch (e) {
+      notificarAdmin(e.message, 'erro');
+    }
+  };
 
   if (status === 'recusado') {
-    motivo = prompt('Informe o motivo da recusa (o valor será estornado para a carteira do parceiro):');
-    if (motivo === null) return;
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/api/carteira/admin/saques/${id}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
+    abrirModalFormularioAdmin({
+      titulo: `Recusar Saque #${id}`,
+      subtitulo: 'O valor será estornado automaticamente para a carteira do motorista.',
+      textarea: {
+        label: 'Motivo da Recusa',
+        placeholder: 'Ex: Chave Pix inválida ou divergente do titular...'
       },
-      body: JSON.stringify({ status, motivo_recusa: motivo })
+      textoConfirmar: 'Confirmar Recusa e Estornar',
+      onConfirmar: async ({ texto, fechar }) => {
+        fechar();
+        await executarRequisicao(texto.trim() || 'Recusado pela administração');
+      }
     });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.erro || 'Falha ao processar saque.');
-
-    notificarAdmin(data.mensagem || (status === 'pago' ? '⚡ Saque Pix liquidado!' : 'Saque recusado e valor estornado.'), status === 'pago' ? 'sucesso' : 'aviso');
-    await carregarTabelaSaques(token);
-    await carregarTabelaFrota(token, false);
-    await carregarMetricasECards(token);
-  } catch (e) {
-    notificarAdmin(e.message, 'erro');
+    return;
   }
+
+  await executarRequisicao('');
 };
 
 window.resolverIncidente = async (id) => {
@@ -1533,7 +1555,7 @@ function exportarRelatorioCSV(token) {
 }
 
 // ============================================================================
-// 12. GESTÃO DE SUPORTE E TICKETS
+// GESTÃO DE SUPORTE E TICKETS
 // ============================================================================
 async function carregarTabelaSuporte(token) {
   const tbody = document.getElementById('tabelaSuporteBody');
@@ -1555,56 +1577,80 @@ async function carregarTabelaSuporte(token) {
       const badgeClass = c.status === 'pendente' ? 'badge-pendente' : 'badge-concluido';
       const msgCurta = c.mensagem.length > 45 ? c.mensagem.slice(0, 45) + '...' : c.mensagem;
       const dataBR = new Date(c.criado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+      const nomeAutorSeguro = escaparHTML(c.usuario_nome);
 
       return `
         <tr>
           <td>${dataBR}</td>
-          <td><strong>${escaparHTML(c.usuario_nome)}</strong><br><small style="color:var(--muted); text-transform:capitalize;">${escaparHTML(c.tipo_usuario)}</small></td>
+          <td><strong>${nomeAutorSeguro}</strong><br><small style="color:var(--muted); text-transform:capitalize;">${escaparHTML(c.tipo_usuario)}</small></td>
           <td>${c.pedido_id ? `<code style="color:var(--blue);">#${String(c.pedido_id).slice(-6)}</code>` : 'Geral'}</td>
           <td title="${escaparHTML(c.mensagem)}">${escaparHTML(msgCurta)}</td>
           <td><span class="badge ${badgeClass}">${escaparHTML(String(c.status).toUpperCase())}</span></td>
           <td>
             ${c.status === 'pendente'
-              ? `<button class="btn-tbl app" onclick="responderChamadoMaster(${c.id}, '${escaparHTML(c.usuario_nome)}')">Responder</button>`
+              ? `<button type="button" class="btn-tbl app btn-responder-ticket" data-ticket-id="${Number(c.id)}" data-autor="${nomeAutorSeguro}">Responder</button>`
               : `<small style="color:var(--primary); font-weight:700;">✅ Respondido</small>`
             }
           </td>
         </tr>
       `;
     }).join('');
+
+    tbody.querySelectorAll('.btn-responder-ticket').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.responderChamadoMaster(
+          Number(btn.getAttribute('data-ticket-id')),
+          btn.getAttribute('data-autor')
+        );
+      });
+    });
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Erro ao carregar chamados de suporte.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum chamado de suporte pendente.</td></tr>';
   }
 }
 
-window.responderChamadoMaster = async (ticketId, nomeAutor) => {
+window.responderChamadoMaster = (ticketId, nomeAutor) => {
   const token = localStorage.getItem('huby_token');
-  const resposta = prompt(`Respondendo ao chamado de ${nomeAutor}.\nDigite a sua resposta (resolução do problema):`);
-  
-  if (!resposta || resposta.trim() === '') return;
 
-  try {
-    const res = await fetch(`${API_URL}/api/suporte/admin/chamados/${ticketId}/responder`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ resposta: resposta.trim() })
-    });
-    
-    const data = await res.json();
-    
-    if (res.ok) {
-      notificarAdmin('Resposta registada e chamado encerrado com sucesso!', 'sucesso');
-      carregarTabelaSuporte(token);
-    } else {
-      notificarAdmin(data.erro || 'Erro ao enviar resposta.', 'erro');
+  abrirModalFormularioAdmin({
+    titulo: `🎧 Responder Chamado #${ticketId}`,
+    subtitulo: `Enviando retorno oficial para ${nomeAutor}.`,
+    textarea: {
+      label: 'Resposta / Resolução',
+      placeholder: 'Digite a resposta detalhada para encerrar o chamado...'
+    },
+    textoConfirmar: '📨 Enviar Resposta',
+    onConfirmar: async ({ texto, fechar }) => {
+      if (!texto || !texto.trim()) {
+        notificarAdmin('Digite uma resposta antes de enviar.', 'aviso');
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/api/suporte/admin/chamados/${ticketId}/responder`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ resposta: texto.trim() })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+          fechar();
+          notificarAdmin('Resposta registada e chamado encerrado com sucesso!', 'sucesso');
+          carregarTabelaSuporte(token);
+        } else {
+          notificarAdmin(data.erro || 'Erro ao enviar resposta.', 'erro');
+        }
+      } catch (e) {
+        notificarAdmin('Erro de ligação ao responder chamado.', 'erro');
+      }
     }
-  } catch (e) {
-    notificarAdmin('Erro de ligação ao responder chamado.', 'erro');
-  }
+  });
 };
 
 // ============================================================================
-// 13. GESTÃO DE PATROCINADORES E BANNERS DA GALERIA (COM COMPRESSOR CANVAS)
+// GESTÃO DE PATROCINADORES E BANNERS DA GALERIA
 // ============================================================================
 function comprimirImagemGaleriaParaBase64(file, maxWidth = 860, quality = 0.82) {
   return new Promise((resolve, reject) => {
@@ -1727,9 +1773,9 @@ async function carregarTabelaPatrocinadores(token) {
     tbody.innerHTML = lista.map(p => `
       <tr>
         <td>
-          <img src="${p.imagem_base64}" alt="${escaparHTML(p.nome_empresa)}"
-            style="width: 68px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;"
-            onclick="abrirFotoDocumento('${p.imagem_base64}', 'Banner - ${escaparHTML(p.nome_empresa)}')" />
+          <img src="${p.imagem_base64}" alt="${escaparHTML(p.nome_empresa)}" class="img-banner-zoom"
+            data-titulo="Banner - ${escaparHTML(p.nome_empresa)}"
+            style="width: 68px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;" />
         </td>
         <td>
           <strong>${escaparHTML(p.nome_empresa)}</strong><br>
@@ -1756,6 +1802,12 @@ async function carregarTabelaPatrocinadores(token) {
         </td>
       </tr>
     `).join('');
+
+    tbody.querySelectorAll('.img-banner-zoom').forEach(img => {
+      img.addEventListener('click', () => {
+        window.abrirFotoDocumento(img.src, img.getAttribute('data-titulo'));
+      });
+    });
   } catch (e) {
     tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum patrocinador cadastrado.</td></tr>';
   }
