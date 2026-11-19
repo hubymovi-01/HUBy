@@ -82,7 +82,7 @@ async function requisitarWakeLock() {
       wakeLockSentinela.addEventListener('release', () => {
         wakeLockSentinela = null;
       });
-    } catch (err) {}
+    } catch (err) { }
   }
 }
 
@@ -90,7 +90,7 @@ function libertarWakeLock() {
   if (wakeLockSentinela) {
     try {
       wakeLockSentinela.release();
-    } catch (e) {}
+    } catch (e) { }
     wakeLockSentinela = null;
   }
 }
@@ -134,6 +134,8 @@ function comprimirImagemArquivoParaBase64(file) {
 function solicitarSelfieVerificacaoOnline() {
   return new Promise((resolve) => {
     document.getElementById('modalSelfieVerificacaoHUBy')?.remove();
+
+    const dentroDoAppNativo = Boolean(window.ReactNativeWebView);
 
     const overlay = document.createElement('div');
     overlay.id = 'modalSelfieVerificacaoHUBy';
@@ -204,6 +206,7 @@ function solicitarSelfieVerificacaoOnline() {
     let timerFallback = null;
 
     const encerrarCameraEModal = (sucesso) => {
+      window.__receberSelfieNativaHUBy = null;
       if (timerFallback) {
         clearTimeout(timerFallback);
         timerFallback = null;
@@ -211,7 +214,7 @@ function solicitarSelfieVerificacaoOnline() {
       if (streamAtivo) {
         try {
           streamAtivo.getTracks().forEach((t) => t.stop());
-        } catch (e) {}
+        } catch (e) { }
         streamAtivo = null;
       }
       overlay.remove();
@@ -282,6 +285,11 @@ function solicitarSelfieVerificacaoOnline() {
       }
     };
 
+    window.__receberSelfieNativaHUBy = async (dataUrl) => {
+      if (!dataUrl) return;
+      await enviarSelfieParaServidor(dataUrl);
+    };
+
     btnCancelar.onclick = () => encerrarCameraEModal(false);
 
     inputNativo.addEventListener('change', async (e) => {
@@ -297,62 +305,67 @@ function solicitarSelfieVerificacaoOnline() {
       }
     });
 
-    // Se o streaming ao vivo não iniciar em 2.5s (comum no Android WebView / Expo Go), ativa captura nativa
-    timerFallback = setTimeout(() => {
-      if (!video || !video.videoWidth) {
-        ativarModoCameraNativa();
-      }
-    }, 2500);
+    if (dentroDoAppNativo) {
+      ativarModoCameraNativa();
+    } else {
+      timerFallback = setTimeout(() => {
+        if (!video || !video.videoWidth) {
+          ativarModoCameraNativa();
+        }
+      }, 2500);
 
-    const iniciarStreamAoVivo = async () => {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        ativarModoCameraNativa();
+      (async () => {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          ativarModoCameraNativa();
+          return;
+        }
+        try {
+          let stream;
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'user' },
+              audio: false
+            });
+          } catch (e) {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false
+            });
+          }
+
+          streamAtivo = stream;
+          video.srcObject = stream;
+
+          const confirmarVideoPronto = () => {
+            if (modoCameraNativa) return;
+            if (timerFallback) {
+              clearTimeout(timerFallback);
+              timerFallback = null;
+            }
+            video.play().catch(() => { });
+            if (statusTxt) {
+              statusTxt.textContent = 'Posicione o rosto dentro da moldura';
+              statusTxt.style.color = '#10B981';
+            }
+            btnCapturar.disabled = false;
+            btnCapturar.style.opacity = '1';
+            btnCapturar.textContent = '📸 Tirar Selfie';
+          };
+
+          video.onloadedmetadata = confirmarVideoPronto;
+          video.onplaying = confirmarVideoPronto;
+        } catch (err) {
+          ativarModoCameraNativa();
+        }
+      })();
+    }
+
+    btnCapturar.onclick = async () => {
+      if (dentroDoAppNativo && window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'ABRIR_CAMERA_SELFIE' }));
         return;
       }
 
-      try {
-        let stream;
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user' },
-            audio: false
-          });
-        } catch (e) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false
-          });
-        }
-
-        streamAtivo = stream;
-        video.srcObject = stream;
-
-        const confirmarVideoPronto = () => {
-          if (modoCameraNativa) return;
-          if (timerFallback) {
-            clearTimeout(timerFallback);
-            timerFallback = null;
-          }
-          video.play().catch(() => {});
-          if (statusTxt) {
-            statusTxt.textContent = 'Posicione o rosto dentro da moldura';
-            statusTxt.style.color = '#10B981';
-          }
-          btnCapturar.disabled = false;
-          btnCapturar.style.opacity = '1';
-          btnCapturar.textContent = '📸 Tirar Selfie';
-        };
-
-        video.onloadedmetadata = confirmarVideoPronto;
-        video.onplaying = confirmarVideoPronto;
-      } catch (err) {
-        ativarModoCameraNativa();
-      }
-    };
-
-    iniciarStreamAoVivo();
-
-    btnCapturar.onclick = async () => {
       if (modoCameraNativa || !video || !video.videoWidth) {
         inputNativo.click();
         return;
@@ -591,29 +604,29 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     const chamadasFiltradas = Array.isArray(pedidos)
       ? pedidos.filter((p) => {
-          if (estado.pedidosIgnorados?.has(String(p.id))) return false;
-          
-          if (typeof window.pedidoCompativelComRotaCasa === 'function') {
-            if (!window.pedidoCompativelComRotaCasa(p)) return false;
-          }
+        if (estado.pedidosIgnorados?.has(String(p.id))) return false;
 
-          if (!estado.temposPedidosTela[p.id]) {
-            estado.temposPedidosTela[p.id] = agora;
-          }
-          
-          const tempoQuePassou = agora - estado.temposPedidosTela[p.id];
-          if (tempoQuePassou >= TEMPO_EXPIRACAO_TELA_MS) {
-            if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
-            estado.pedidosIgnorados.add(String(p.id));
-            return false;
-          }
+        if (typeof window.pedidoCompativelComRotaCasa === 'function') {
+          if (!window.pedidoCompativelComRotaCasa(p)) return false;
+        }
 
-          return true;
-        })
+        if (!estado.temposPedidosTela[p.id]) {
+          estado.temposPedidosTela[p.id] = agora;
+        }
+
+        const tempoQuePassou = agora - estado.temposPedidosTela[p.id];
+        if (tempoQuePassou >= TEMPO_EXPIRACAO_TELA_MS) {
+          if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
+          estado.pedidosIgnorados.add(String(p.id));
+          return false;
+        }
+
+        return true;
+      })
       : [];
 
     const idsAtuaisStr = chamadasFiltradas.map(p => p.id).join(',');
-    
+
     if (!chamadasFiltradas.length) {
       pararAlertaSonoroChamada();
       renderizarRadar([]);
@@ -621,7 +634,7 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     }
 
     const listaMudou = estado.ultimoRenderIds !== idsAtuaisStr;
-    
+
     if (listaMudou || tocarSomForcado) {
       iniciarAlertaSonoroChamada();
       dispararNotificacaoNovaChamada(chamadasFiltradas.length);
@@ -660,16 +673,16 @@ function renderizarRadar(pedidos) {
   feedEl.innerHTML = pedidos.map((p) => {
     const catPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
     const distKm = parseFloat(p.distancia_km || p.distanciaKm || 1.0);
-    
+
     let valorBruto = Number(p.valor_total || 0);
     if (!valorBruto || valorBruto <= 0) {
       valorBruto = calcularPreco(catPedido, distKm).valorTotal;
     }
-    
+
     const repasseBruto = valorBruto * fatorMotorista;
     const repasseFormat = repasseBruto.toFixed(2).replace('.', ',');
     const valorDisplay = `R$ ${repasseFormat}`;
-    
+
     const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
     const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
     const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
@@ -680,15 +693,15 @@ function renderizarRadar(pedidos) {
     if (pgto.includes('cartao') || pgto.includes('maquininha')) pgtoIcon = '💳 Cartão (Máquina)';
     if (pgto.includes('pix')) pgtoIcon = '📱 Pix App';
 
-    const agendamento = p.agendado_para 
-      ? `<span style="display: block; color: #F59E0B; font-weight: 700; margin-top: 4px;">⏰ Agendada para: ${new Date(p.agendado_para).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>` 
+    const agendamento = p.agendado_para
+      ? `<span style="display: block; color: #F59E0B; font-weight: 700; margin-top: 4px;">⏰ Agendada para: ${new Date(p.agendado_para).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}</span>`
       : '';
 
     let obsText = '';
     if (p.paradas && Array.isArray(p.paradas) && p.paradas.length > 0) {
       let extraTrocoOuObs = p.paradas.find(item => item.nota);
       if (extraTrocoOuObs) {
-         obsText = `<span style="display: block; background: rgba(245, 158, 11, 0.1); border-left: 2px solid #F59E0B; padding: 6px; margin-top: 6px; font-size: 11px; color: #FCD34D;">📝 Obs: ${extraTrocoOuObs.nota}</span>`;
+        obsText = `<span style="display: block; background: rgba(245, 158, 11, 0.1); border-left: 2px solid #F59E0B; padding: 6px; margin-top: 6px; font-size: 11px; color: #FCD34D;">📝 Obs: ${extraTrocoOuObs.nota}</span>`;
       }
     }
 
