@@ -141,7 +141,7 @@
       gap: 6px;
       background: rgba(255, 255, 255, 0.04);
       border-radius: 10px;
-      padding: 6px 10px;
+      padding: 7px 10px;
       border: 1px solid transparent;
       transition: border-color 0.2s;
     }
@@ -306,9 +306,9 @@
     </div>
   </aside>
 
-  <!-- APENAS 1 BOTÃO FLUTUANTE DE GPS NO MAPA -->
+  <!-- BOTÃO FLUTUANTE DE GPS REPOSICIONADO ACIMA DO DOCK (SEM SOBREPOR CAMPOS) -->
   <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Minha Localização GPS"
-    style="bottom: 330px; right: 14px; background: rgba(11, 16, 27, 0.92); border: 1px solid rgba(255,255,255,0.16);">
+    style="bottom: 390px; right: 14px; background: rgba(11, 16, 27, 0.94); border: 1px solid rgba(16, 185, 129, 0.4); color: #10B981; box-shadow: 0 6px 20px rgba(0,0,0,0.6);">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
@@ -320,7 +320,7 @@
 
   <!-- BOTÃO FLUTUANTE DE CHAT (SÓ APARECE EM CORRIDA ATIVA) -->
   <button type="button" id="btnAbrirChat" class="btn-floating-gps"
-    style="display: none !important; bottom: 385px; right: 14px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
+    style="display: none !important; bottom: 445px; right: 14px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
     aria-label="Abrir Chat">
     💬
   </button>
@@ -332,12 +332,12 @@
     <!-- LISTA DE RESULTADOS DA BUSCA (APARECE LOGO ACIMA DOS CAMPOS) -->
     <ul id="listaResultadosPesquisa" class="clean-results-dropdown" style="display: none;"></ul>
 
-    <!-- CARTÃO ÚNICO DE PARTIDA E DESTINO -->
+    <!-- CARTÃO ÚNICO DE PARTIDA E DESTINO COM LINHA CONECTORA ALINHADA -->
     <div id="blocoResumo" class="clean-route-box">
-      <div class="route-timeline" style="padding: 10px 0;">
-        <div class="timeline-dot pickup"></div>
-        <div class="timeline-line"></div>
-        <div class="timeline-dot dropoff"></div>
+      <div style="width: 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 14px 0; flex-shrink: 0;">
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.8); flex-shrink: 0;"></span>
+        <span style="width: 2px; flex: 1; background: linear-gradient(180deg, #10B981 0%, #EF4444 100%); margin: 3px 0; border-radius: 2px;"></span>
+        <span style="width: 10px; height: 10px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 8px rgba(239,68,68,0.8); flex-shrink: 0;"></span>
       </div>
 
       <div class="clean-route-inputs">

@@ -1,12 +1,12 @@
 /**
  * ============================================================================
- * HUBy 2.5 - Serviço Central de Mapa 3D Rico em Informações (js/mapa.js)
- * Motor Vetorial MapLibre GL 3D (OpenFreeMap Liberty) + GPS Pulsante
+ * HUBy 2.6 - Serviço Central de Mapa 3D na Paleta Escura Oficial (js/mapa.js)
+ * Motor Vetorial MapLibre GL 3D (OpenFreeMap Liberty + Tema Dark HUBy)
  * ============================================================================
  */
 import { calcularPreco } from './config.js';
 
-const URL_ESTILO_3D_RICO = 'https://tiles.openfreemap.org/styles/liberty';
+const URL_ESTILO_3D_BASE = 'https://tiles.openfreemap.org/styles/liberty';
 
 const ESTILO_SATELITE_3D = {
   version: 8,
@@ -27,6 +27,53 @@ const ESTILO_SATELITE_3D = {
     }
   ]
 };
+
+function aplicarPaletaEscuraHUBy(map) {
+  if (!map) return;
+  const style = map.getStyle();
+  if (!style || !Array.isArray(style.layers)) return;
+
+  for (const layer of style.layers) {
+    const id = layer.id.toLowerCase();
+    const tipo = layer.type;
+
+    try {
+      if (tipo === 'background') {
+        map.setPaintProperty(layer.id, 'background-color', '#090D16');
+      } else if (tipo === 'fill') {
+        if (id.includes('water')) {
+          map.setPaintProperty(layer.id, 'fill-color', '#0B192C');
+        } else if (id.includes('park') || id.includes('green') || id.includes('wood') || id.includes('grass')) {
+          map.setPaintProperty(layer.id, 'fill-color', '#0C1F1D');
+        } else if (id.includes('building')) {
+          map.setPaintProperty(layer.id, 'fill-color', '#131C2E');
+          map.setPaintProperty(layer.id, 'fill-outline-color', '#1E293B');
+        } else {
+          map.setPaintProperty(layer.id, 'fill-color', '#0D1320');
+        }
+      } else if (tipo === 'fill-extrusion') {
+        map.setPaintProperty(layer.id, 'fill-extrusion-color', '#152036');
+        map.setPaintProperty(layer.id, 'fill-extrusion-opacity', 0.88);
+      } else if (tipo === 'line') {
+        if (id.includes('water')) {
+          map.setPaintProperty(layer.id, 'line-color', '#0B192C');
+        } else if (id.includes('motorway') || id.includes('trunk') || id.includes('primary')) {
+          map.setPaintProperty(layer.id, 'line-color', '#26354D');
+        } else if (id.includes('secondary') || id.includes('tertiary') || id.includes('road') || id.includes('street')) {
+          map.setPaintProperty(layer.id, 'line-color', '#1B263B');
+        } else if (id.includes('boundary') || id.includes('admin')) {
+          map.setPaintProperty(layer.id, 'line-color', '#334155');
+        } else {
+          map.setPaintProperty(layer.id, 'line-color', '#162033');
+        }
+      } else if (tipo === 'symbol') {
+        map.setPaintProperty(layer.id, 'text-color', '#CBD5E1');
+        map.setPaintProperty(layer.id, 'text-halo-color', '#090D16');
+        map.setPaintProperty(layer.id, 'text-halo-width', 1.4);
+      }
+    } catch (e) {}
+  }
+}
 
 function criarAdapterMarker(markerMapLibre, coordsIniciais) {
   if (!markerMapLibre) return null;
@@ -82,7 +129,7 @@ export class HubyMapa {
 
     this.map = new maplibregl.Map({
       container: this.containerId,
-      style: URL_ESTILO_3D_RICO,
+      style: URL_ESTILO_3D_BASE,
       center: [this.coordsOrigem[1], this.coordsOrigem[0]],
       zoom: 16.2,
       pitch: 45,
@@ -103,6 +150,7 @@ export class HubyMapa {
 
     this.map.on('load', () => {
       this.mapaPronto = true;
+      aplicarPaletaEscuraHUBy(this.map);
       this.definirOrigem(this.coordsOrigem[0], this.coordsOrigem[1]);
     });
 
@@ -134,9 +182,12 @@ export class HubyMapa {
     const geometriaSalva = this._ultimaGeometriaRota || null;
     const corSalva = this._ultimaCorRota || '#10B981';
 
-    this.map.setStyle(this.modoSatelite ? ESTILO_SATELITE_3D : URL_ESTILO_3D_RICO);
+    this.map.setStyle(this.modoSatelite ? ESTILO_SATELITE_3D : URL_ESTILO_3D_BASE);
 
     this.map.once('style.load', () => {
+      if (!this.modoSatelite) {
+        aplicarPaletaEscuraHUBy(this.map);
+      }
       if (geometriaSalva) {
         this.desenharRota(geometriaSalva, corSalva);
       }
@@ -160,7 +211,7 @@ export class HubyMapa {
       el.className = 'gps-pulse-container';
       el.style.cssText = 'width:44px;height:44px;display:flex;align-items:center;justify-content:center;pointer-events:none;';
       el.innerHTML = `
-        <div class="gps-pulse-marker" style="width:18px;height:18px;border-radius:50%;background:#10B981;border:3px solid #090D16;box-shadow:0 0 18px rgba(16,185,129,0.95);"></div>
+        <div class="gps-pulse-marker" style="width:18px;height:18px;border-radius:50%;background:#10B981;border:3px solid #FFF;box-shadow:0 0 18px rgba(16,185,129,0.95);"></div>
       `;
       const m = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([lng, lat])
@@ -187,7 +238,7 @@ export class HubyMapa {
       this.markerDestino.setLngLat([lng, lat]);
     } else {
       const el = document.createElement('div');
-      el.style.cssText = 'width:22px;height:22px;background:#EF4444;border:3px solid #FFF;border-radius:50%;box-shadow:0 2px 12px rgba(239,68,68,0.95);';
+      el.style.cssText = 'width:22px;height:22px;background:#EF4444;border:3px solid #FFF;border-radius:50%;box-shadow:0 2px 14px rgba(239,68,68,0.95);';
       const m = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([lng, lat])
         .addTo(this.map);
@@ -226,7 +277,7 @@ export class HubyMapa {
     paradas.forEach((p, idx) => {
       if (!p.coords) return;
       const el = document.createElement('div');
-      el.style.cssText = 'width:20px;height:20px;background:#0284C7;color:#FFF;font-size:11px;font-weight:900;border:2px solid #FFF;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+      el.style.cssText = 'width:20px;height:20px;background:#38BDF8;color:#02131D;font-size:11px;font-weight:900;border:2px solid #FFF;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.6);';
       el.textContent = String(idx + 1);
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([p.coords[1], p.coords[0]])
@@ -295,7 +346,7 @@ export class HubyMapa {
     this.obterGPSReal(callbackSucesso);
   }
 
-  desenharRota(geometria, cor = '#059669', coordsBounds = null) {
+  desenharRota(geometria, cor = '#10B981', coordsBounds = null) {
     if (!this.map || !geometria) return;
 
     const aplicarRota = () => {
@@ -322,9 +373,9 @@ export class HubyMapa {
         source: 'huby-rota-source',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#090D16',
-          'line-width': 9,
-          'line-opacity': 0.85
+          'line-color': '#10B981',
+          'line-width': 11,
+          'line-opacity': 0.28
         }
       });
 
@@ -334,7 +385,7 @@ export class HubyMapa {
         source: 'huby-rota-source',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': '#10B981',
+          'line-color': '#34D399',
           'line-width': 5,
           'line-opacity': 1
         }
@@ -349,7 +400,7 @@ export class HubyMapa {
           new maplibregl.LngLatBounds(pontos[0], pontos[0])
         );
         this.map.fitBounds(bounds, {
-          padding: { top: 90, bottom: 340, left: 45, right: 45 },
+          padding: { top: 90, bottom: 380, left: 45, right: 45 },
           pitch: 40,
           maxZoom: 16,
           duration: 900
