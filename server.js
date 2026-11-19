@@ -14,7 +14,6 @@ import adminRoutes, { lerTarifasDoBanco } from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
-import sociosRoutes from './routes/socios.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
 import iaRoutes from './routes/ia.routes.js';
 import pushRoutes from './routes/push.routes.js';
@@ -23,9 +22,6 @@ import suporteRouter from './routes/suporte.routes.js';
 
 dotenv.config();
 
-// ============================================================================
-// 0. MONITOR DE ERROS SENTRY (ATIVADO AUTOMATICAMENTE SE SENTRY_DSN EXISTIR)
-// ============================================================================
 if (process.env.SENTRY_DSN) {
   Sentry.init({
     dsn: process.env.SENTRY_DSN,
@@ -39,9 +35,6 @@ const app = express();
 const port = process.env.PORT || 3000;
 const server = createServer(app);
 
-// ============================================================================
-// 1. SEGURANÇA BÁSICA, CORS (HTTP + SOCKET.IO) E LIMITADOR DE TENTATIVAS
-// ============================================================================
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
 
 app.disable('x-powered-by');
@@ -100,13 +93,10 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  console.log(`Novo utilizador conectado ao radar (Socket.IO): ${socket.id}`);
-
   socket.on('posicao_motorista', (dados) => {
     socket.broadcast.emit('posicao_motorista_atualizada', dados);
   });
 
-  // Relays instantâneos entre Motorista 3D e Passageiro
   socket.on('motorista_aceitou', (dados) => {
     socket.broadcast.emit('corrida_aceita', dados);
   });
@@ -125,10 +115,6 @@ io.on('connection', (socket) => {
 
   socket.on('corrida_cancelada_motorista', (dados) => {
     socket.broadcast.emit('corrida_cancelada', { ...dados, canceladoPor: 'motorista' });
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`Utilizador desconectado do radar: ${socket.id}`);
   });
 });
 
@@ -180,14 +166,11 @@ const limitarCadastro = criarLimitador({
   mensagem: 'Muitos cadastros feitos deste dispositivo. Tente novamente mais tarde.'
 });
 
-// ============================================================================
-// 2. PARSERS DE DADOS (JSON E BANNERS DA GALERIA EM BASE64)
-// ============================================================================
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // ============================================================================
-// 3. SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
+// SINCRONIZAÇÃO DAS TABELAS NO NEON POSTGRESQL
 // ============================================================================
 async function inicializarBanco() {
   try {
@@ -201,6 +184,7 @@ async function inicializarBanco() {
         data_nascimento DATE,
         contato_emergencia_nome TEXT,
         contato_emergencia_tel TEXT,
+        foto_perfil_url TEXT,
         senha_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'cliente',
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -262,6 +246,10 @@ async function inicializarBanco() {
         valor_total NUMERIC(10,2),
         valor_adicionais NUMERIC(10,2) DEFAULT 0.00,
         metodo_pgto TEXT,
+        observacao TEXT,
+        cupom_codigo VARCHAR(40),
+        paradas JSONB DEFAULT '[]'::jsonb,
+        agendado_para TIMESTAMP WITH TIME ZONE,
         status TEXT DEFAULT 'pendente',
         motivo_cancelamento TEXT,
         cancelado_por TEXT,
@@ -382,7 +370,6 @@ async function inicializarBanco() {
       );
     `;
 
-    // TABELA DE PATROCINADORES E BANNERS PUBLICITÁRIOS (CONTROLO TOTAL DO ADMIN)
     await sql`
       CREATE TABLE IF NOT EXISTS patrocinadores_banners (
         id SERIAL PRIMARY KEY,
@@ -416,6 +403,9 @@ async function inicializarBanco() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_ativo BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS embarque_em TIMESTAMP;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS concluido_em TIMESTAMP;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS observacao TEXT;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40);`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS paradas JSONB DEFAULT '[]'::jsonb;`;
     await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
 
@@ -427,12 +417,12 @@ async function inicializarBanco() {
 inicializarBanco();
 
 // ============================================================================
-// 4. ROTAS BASE, TARIFAS E PUBLICIDADE DE PATROCINADORES
+// ROTAS BASE, TARIFAS E PUBLICIDADE DE PATROCINADORES
 // ============================================================================
 app.get('/', (req, res) => {
   res.json({
-    status: 'HUBy API Online (Modularizada)',
-    versao: '2.4.0',
+    status: 'HUBy API Online (Conta Corporativa)',
+    versao: '2.5.0',
     sentryAtivo: Boolean(process.env.SENTRY_DSN),
     banco: 'Neon PostgreSQL'
   });
@@ -452,7 +442,6 @@ app.get('/api/config/tarifas', async (req, res) => {
   });
 });
 
-// Middleware de validação Admin para rotas de patrocinadores
 function autenticarAdminLocal(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ erro: 'Token não fornecido.' });
@@ -470,7 +459,6 @@ function autenticarAdminLocal(req, res, next) {
   }
 }
 
-// 4.1. Rota pública para o passageiro carregar banners ativos (Pop-up e Vitrine)
 app.get('/api/patrocinadores/ativos', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
@@ -487,7 +475,6 @@ app.get('/api/patrocinadores/ativos', async (req, res) => {
   }
 });
 
-// 4.2. Registo de visualizações e cliques em tempo real
 app.post('/api/patrocinadores/:id/interacao', async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -503,7 +490,6 @@ app.post('/api/patrocinadores/:id/interacao', async (req, res) => {
   }
 });
 
-// 4.3. Rotas do Administrador Master (Listar tudo, Publicar da Galeria, Alternar Popup/Status e Excluir)
 app.get('/api/patrocinadores/admin', autenticarAdminLocal, async (req, res) => {
   try {
     const lista = await sql`
@@ -604,7 +590,7 @@ app.delete('/api/patrocinadores/admin/:id', autenticarAdminLocal, async (req, re
 });
 
 // ============================================================================
-// 5. REGISTO DE ROTAS MODULARES
+// REGISTO DE ROTAS MODULARES (SEM DIVISÃO DE SÓCIOS)
 // ============================================================================
 app.use(['/api/auth/login', '/api/auth/login-motorista', '/api/usuarios/login', '/api/usuarios/login-motorista'], limitarLogin);
 app.use(['/api/auth/cadastro', '/api/usuarios/registo'], limitarCadastro);
@@ -617,7 +603,6 @@ app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
-app.use('/api/socios', sociosRoutes);
 app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/ia', iaRoutes);
 app.use('/api/push', pushRoutes);
@@ -626,9 +611,6 @@ app.use('/api/suporte', suporteRouter);
 
 iniciarDespachanteAgendamentos(io);
 
-// ============================================================================
-// 6. CAPTURA GLOBAL DE ERROS (SENTRY + LOG NO BANCO NEON)
-// ============================================================================
 if (process.env.SENTRY_DSN) {
   Sentry.setupExpressErrorHandler(app);
 }
@@ -662,9 +644,6 @@ process.on('uncaughtException', (err) => {
   if (process.env.SENTRY_DSN) Sentry.captureException(err);
 });
 
-// ============================================================================
-// 7. INICIALIZAÇÃO DO SERVIDOR
-// ============================================================================
 server.listen(port, () => {
   console.log(`Servidor HUBy ativo na porta ${port}`);
 });

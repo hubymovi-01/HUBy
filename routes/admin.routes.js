@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas, Frota, Controle de Validade CNH/CRLV, Growth, Dinâmica e Gestão Master HUBy
+// routes/admin.routes.js - Métricas Corporativas, Frota, Validades CNH/CRLV, Growth e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -159,7 +159,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
   const per = String(periodo || 'total').toLowerCase().trim();
   let statsConcluidas;
 
-  // Substituído o fragmento dinâmico por consultas explícitas para evitar erro 500 no sql template literal
   if (per === 'hoje') {
     statsConcluidas = await sql`
       SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
@@ -192,19 +191,7 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
   let totalViagens = Number(statsConcluidas[0]?.total_concluidas || 0);
   let faturamentoBruto = Number(statsConcluidas[0]?.faturamento_corridas || 0);
 
-  if (faturamentoBruto === 0) {
-    const statsGeralConcluidas = await sql`
-      SELECT COUNT(id)::int AS total_concluidas, COALESCE(SUM(valor_total), 0) AS faturamento_corridas
-      FROM pedidos
-      WHERE LOWER(TRIM(COALESCE(status, ''))) IN ('concluido', 'concluida', 'concluído', 'concluída', 'pago', 'finalizado');
-    `;
-    if (Number(statsGeralConcluidas[0]?.faturamento_corridas || 0) > 0) {
-      totalViagens = Number(statsGeralConcluidas[0].total_concluidas || 0);
-      faturamentoBruto = Number(statsGeralConcluidas[0].faturamento_corridas || 0);
-    }
-  }
-
-  if (faturamentoBruto === 0) {
+  if (faturamentoBruto === 0 && per === 'total') {
     try {
       const trans = await sql`
         SELECT COUNT(id)::int AS qtd,
@@ -217,33 +204,6 @@ export async function calcularResumoFinanceiroReal(periodo = 'total') {
         totalViagens = Math.max(1, Number(trans[0].qtd || 1));
       }
     } catch (e) {}
-  }
-
-  if (faturamentoBruto === 0) {
-    try {
-      const cobsPagas = await sql`
-        SELECT COUNT(id)::int AS qtd, COALESCE(SUM(valor), 0) AS soma
-        FROM cobrancas_pix
-        WHERE LOWER(COALESCE(status, '')) = 'pago';
-      `;
-      if (Number(cobsPagas[0]?.soma || 0) > 0) {
-        faturamentoBruto = Number(Number(cobsPagas[0].soma).toFixed(2));
-        totalViagens = Math.max(1, Number(cobsPagas[0].qtd || 1));
-      }
-    } catch (e) {}
-  }
-
-  if (faturamentoBruto === 0) {
-    const statsPedidosAtivos = await sql`
-      SELECT COUNT(id)::int AS qtd, COALESCE(SUM(valor_total), 0) AS soma
-      FROM pedidos
-      WHERE LOWER(TRIM(COALESCE(status, ''))) NOT IN ('cancelado', 'recusado')
-        AND COALESCE(valor_total, 0) > 0;
-    `;
-    if (Number(statsPedidosAtivos[0]?.soma || 0) > 0) {
-      faturamentoBruto = Number(Number(statsPedidosAtivos[0].soma).toFixed(2));
-      totalViagens = Math.max(1, Number(statsPedidosAtivos[0].qtd || 1));
-    }
   }
 
   const repasseMotoristas = Number((faturamentoBruto * pctMotorista).toFixed(2));
@@ -317,7 +277,7 @@ export default function adminRoutes(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. MÉTRICAS DA PLATAFORMA & SPLIT DE FATURAMENTO
+  // 1. MÉTRICAS DA PLATAFORMA (CAIXA ÚNICO EMPRESA VS. FROTA)
   // =========================================================================
   router.get('/metricas', autenticarToken, verificarAdmin, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -427,55 +387,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 2. DRE / RELATÓRIO EXECUTIVO DA DIVISÃO DOS SÓCIOS
-  // =========================================================================
-  router.get('/financeiro/dre', autenticarToken, verificarAdmin, async (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    try {
-      const resumo = await calcularResumoFinanceiroReal('total');
-
-      const saquesPendentes = await sql`
-        SELECT COALESCE(SUM(valor), 0) AS total_a_pagar 
-        FROM saques_motoristas 
-        WHERE status = 'pendente';
-      `;
-
-      const saquesPagos = await sql`
-        SELECT COALESCE(SUM(valor), 0) AS total_ja_pago 
-        FROM saques_motoristas 
-        WHERE status = 'pago';
-      `;
-
-      const receitaPlataforma = resumo.lucroHuby;
-      const reservaOperacional = Number((receitaPlataforma * 0.20).toFixed(2));
-      const lucroLiquidoSocios = Number((receitaPlataforma - reservaOperacional).toFixed(2));
-      const cotaPorSocio = Number((lucroLiquidoSocios / 2).toFixed(2));
-
-      res.json({
-        metricasGerais: {
-          corridasConcluidas: resumo.viagensConcluidas,
-          faturamentoBruto: resumo.faturamentoBruto,
-          repasseMotoristas: resumo.repasseMotoristas,
-          receitaPlataforma
-        },
-        divisaoSocios: {
-          fundoReservaTecnica: reservaOperacional,
-          lucroDistribuivelTotal: lucroLiquidoSocios,
-          proLaborePorSocio: cotaPorSocio
-        },
-        fluxoCaixaSaques: {
-          saquesPendentesAprovacao: Number(saquesPendentes[0]?.total_a_pagar || 0),
-          saquesLiquidados: Number(saquesPagos[0]?.total_ja_pago || 0)
-        }
-      });
-    } catch (err) {
-      console.error('Erro ao gerar relatório contábil DRE:', err);
-      res.status(500).json({ erro: 'Falha ao consolidar dados contábeis.' });
-    }
-  });
-
-  // =========================================================================
-  // 3. GESTÃO DE MOTORISTAS & CONTROLE DE VALIDADE CNH / CRLV
+  // 2. GESTÃO DE MOTORISTAS & CONTROLE DE VALIDADE CNH / CRLV
   // =========================================================================
   router.get('/motoristas', autenticarToken, verificarAdmin, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -557,7 +469,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 4. SAQUE AUTOMÁTICO BLINDADO CONTRA DUPLO CLIQUE + DISPARO PIX API
+  // 3. SAQUE AUTOMÁTICO BLINDADO CONTRA DUPLO CLIQUE + DISPARO PIX API
   // =========================================================================
   router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
     const motoristaId = String(req.usuario?.id || '');
@@ -644,7 +556,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 5. MONITOR DE VIAGENS
+  // 4. MONITOR DE VIAGENS
   // =========================================================================
   router.get('/pedidos', autenticarToken, verificarAdmin, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -662,7 +574,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 6. CONSULTA E ATUALIZAÇÃO DE TARIFAS, INDICAÇÃO E DINÂMICA
+  // 5. CONSULTA E ATUALIZAÇÃO DE TARIFAS, INDICAÇÃO E DINÂMICA
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -723,7 +635,6 @@ export default function adminRoutes(io) {
     }
   });
 
-  // Configuração do Programa Indique e Ganhe
   router.get('/config/indicacao', autenticarToken, verificarAdmin, async (req, res) => {
     const cfg = await lerConfigIndicacaoDoBanco();
     res.json(cfg);
@@ -754,7 +665,6 @@ export default function adminRoutes(io) {
     }
   });
 
-  // Configuração da Tarifa Dinâmica (Surge Pricing)
   router.get('/config/dinamica', autenticarToken, verificarAdmin, async (req, res) => {
     const cfg = await lerConfigDinamicaDoBanco();
     res.json(cfg);
@@ -790,7 +700,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 7. GATEWAY MERCADO PAGO
+  // 6. GATEWAY MERCADO PAGO
   // =========================================================================
   router.get('/gateway/mercadopago', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -849,7 +759,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 8. GESTÃO DE CUPONS
+  // 7. GESTÃO DE CUPONS
   // =========================================================================
   router.get('/cupons', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -914,7 +824,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 9. SEGURANÇA E ZONAS DE RISCO
+  // 8. SEGURANÇA E ZONAS DE RISCO
   // =========================================================================
   router.get('/seguranca/incidentes', autenticarToken, verificarAdmin, async (req, res) => {
     try {
@@ -978,59 +888,38 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-// ROTA DE DISPARO DE PUSH (BROADCAST)
-// =========================================================================
-router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
-  try {
-    const { publico = 'todos', regiao = 'todas', titulo, mensagem } = req.body;
-
-    if (!String(titulo || '').trim() || !String(mensagem || '').trim()) {
-      return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
-    }
-
-    const payload = {
-      publico: String(publico).trim(),
-      regiao: String(regiao || 'todas').trim(),
-      titulo: String(titulo).trim(),
-      mensagem: String(mensagem).trim(),
-      criado_em: new Date().toISOString()
-    };
-
-    const io = req.app.get('io');
-    if (io) {
-      io.emit('nova_notificacao_push', payload);
-    }
-
-    res.json({ sucesso: true, payload });
-  } catch (err) {
-    console.error('Erro ao disparar broadcast push:', err);
-    res.status(500).json({ erro: 'Falha ao disparar notificação push.' });
-  }
-});
-
-  router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
+  // 9. DISPARO DE PUSH (BROADCAST)
+  // =========================================================================
+  router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
     try {
-      const registros = await sql`
-        SELECT id, criado_em, sub_tipo_label, distancia_km, valor_total,
-               ROUND(valor_total * 0.85, 2) AS repasse_motorista,
-               ROUND(valor_total * 0.15, 2) AS taxa_huby,
-               motorista_nome, status
-        FROM pedidos
-        ORDER BY criado_em DESC;
-      `;
-      let csv = 'ID;Data;Categoria;Distancia_KM;Valor_Bruto;Repasse_85;Taxa_15;Motorista;Status\n';
-      registros.forEach(r => {
-        csv += `"${r.id}";"${new Date(r.criado_em).toISOString()}";"${r.sub_tipo_label || ''}";"${r.distancia_km || 0}";"${r.valor_total || 0}";"${r.repasse_motorista || 0}";"${r.taxa_huby || 0}";"${r.motorista_nome || ''}";"${r.status || ''}"\n`;
-      });
-      res.header('Content-Type', 'text/csv; charset=utf-8');
-      res.attachment(`huby-relatorio-${Date.now()}.csv`);
-      res.send(csv);
+      const { publico = 'todos', regiao = 'todas', titulo, mensagem } = req.body;
+
+      if (!String(titulo || '').trim() || !String(mensagem || '').trim()) {
+        return res.status(400).json({ erro: 'Título e mensagem são obrigatórios.' });
+      }
+
+      const payload = {
+        publico: String(publico).trim(),
+        regiao: String(regiao || 'todas').trim(),
+        titulo: String(titulo).trim(),
+        mensagem: String(mensagem).trim(),
+        criado_em: new Date().toISOString()
+      };
+
+      const socket = req.app.get('io') || io;
+      if (socket) {
+        socket.emit('nova_notificacao_push', payload);
+      }
+
+      res.json({ sucesso: true, payload });
     } catch (err) {
-      res.status(500).json({ erro: 'Falha ao gerar CSV.' });
+      console.error('Erro ao disparar broadcast push:', err);
+      res.status(500).json({ erro: 'Falha ao disparar notificação push.' });
     }
   });
+
   // =========================================================================
-  // 10. RELATÓRIO FINANCEIRO (CSV) - Botão Exportar CSV
+  // 10. RELATÓRIO FINANCEIRO E CONTÁBIL (CSV UNIFICADO)
   // =========================================================================
   router.get('/relatorios/corridas.csv', autenticarCsv, verificarAdmin, async (req, res) => {
     try {
@@ -1065,8 +954,7 @@ router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (r
         ORDER BY m.nome ASC;
       `;
 
-      // O \ufeff é o BOM (Byte Order Mark), essencial para Excel/WPS reconhecer UTF-8 e ;
-      let csv = '\ufeffID_Motorista;Nome;CPF;Chave_PIX;Data_Cadastro;Total_Viagens;Faturamento_Bruto;Entradas_Digitais_Pix;Taxa_Plataforma_Retida;Saques_Pagos;Saldo_Atual_Carteira\n';
+      let csv = '\ufeffID_Motorista;Nome;CPF;Chave_PIX;Data_Cadastro;Total_Viagens;Faturamento_Bruto;Entradas_Digitais_Pix;Taxa_Empresa_HUBy;Saques_Pagos;Saldo_Atual_Carteira\n';
       
       const formatarMoedaBR = (num) => Number(num).toFixed(2).replace('.', ',');
       const formatarData = (data) => new Date(data).toLocaleDateString('pt-BR');
@@ -1086,5 +974,6 @@ router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (r
       res.status(500).json({ erro: 'Falha ao gerar relatório.' });
     }
   });
+
   return router;
 }

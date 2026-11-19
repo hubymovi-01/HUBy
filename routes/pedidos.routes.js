@@ -42,6 +42,8 @@ async function inicializarColunasPedidos() {
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_id VARCHAR(50);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS sub_tipo_label VARCHAR(100);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_adicionais NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS observacao TEXT;`;
+    await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS cupom_codigo VARCHAR(40);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS paradas JSONB DEFAULT '[]'::jsonb;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS agendado_para TIMESTAMP WITH TIME ZONE;`;
@@ -113,7 +115,10 @@ export function iniciarDespachanteAgendamentos(io) {
             distanciaKm: Number(p.distancia_km || 0),
             duracaoMin: Number(p.duracao_min || 0),
             valorTotal: valorNum,
-            agendadoPara: p.agendado_para
+            agendadoPara: p.agendado_para,
+            observacao: p.observacao || '',
+            cupomCodigo: p.cupom_codigo || null,
+            paradas: p.paradas || []
           });
         }
 
@@ -134,7 +139,7 @@ export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO (IMEDIATO OU AGENDADO + DESCONTO INDICAÇÃO + PUSH REAL)
+  // 1. CRIAR PEDIDO (IMEDIATO OU AGENDADO + OBS + CUPOM + PUSH REAL)
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
@@ -147,7 +152,7 @@ export default function pedidosRouter(io) {
         distanciaKm, distancia_km, duracaoMin, duracao_min,
         valorAdicionais, valor_adicionais,
         metodoPgto, metodo_pagamento, forma_pagamento,
-        cupomCodigo, agendadoPara
+        cupomCodigo, cupom_codigo, observacao, agendadoPara, agendado_para
       } = req.body;
 
       const clienteId = String(req.usuario.id);
@@ -159,17 +164,18 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Dados incompletos para registo da viagem.' });
       }
 
+      const dataAgendamentoRaw = agendado_para || agendadoPara;
       let dataAgendamento = null;
       let statusInicialPedido = 'pendente';
 
-      if (agendadoPara) {
-        const dt = new Date(agendadoPara);
+      if (dataAgendamentoRaw) {
+        const dt = new Date(dataAgendamentoRaw);
         if (Number.isNaN(dt.getTime())) {
           return res.status(400).json({ erro: 'Data e hora de agendamento inválidas.' });
         }
         const diffMinutos = (dt.getTime() - Date.now()) / 60000;
-        if (diffMinutos < 25) {
-          return res.status(400).json({ erro: 'O agendamento deve ser feito com pelo menos 30 minutos de antecedência.' });
+        if (diffMinutos < 20) {
+          return res.status(400).json({ erro: 'O agendamento deve ser feito com pelo menos 25 minutos de antecedência.' });
         }
         if (diffMinutos > 7 * 24 * 60) {
           return res.status(400).json({ erro: 'O agendamento máximo permitido é de 7 dias.' });
@@ -204,7 +210,9 @@ export default function pedidosRouter(io) {
       const catChave = String(sub_tipo_id || subTipoId || tipo || 'carro').toLowerCase();
       const cfgCat = tarifasBanco[catChave === 'flash' ? 'entrega' : catChave] || tarifasBanco.carro;
 
-      const qtdParadas = Array.isArray(paradas) ? paradas.length : 0;
+      const paradasValidas = Array.isArray(paradas) ? paradas : [];
+      const qtdParadas = paradasValidas.filter((p) => !p?.nota && !p?.cupom && !p?.agendado_para).length;
+
       const valorCalculadoServidor = Number((
         Number(cfgCat.base || 0) +
         (dKm * Number(cfgCat.km || 0)) +
@@ -228,12 +236,14 @@ export default function pedidosRouter(io) {
         }
       } catch (eInd) {}
 
-      if (cupomCodigo) {
-        const codigoFormatado = String(cupomCodigo).trim().toUpperCase();
+      const cupomInformado = String(cupom_codigo || cupomCodigo || '').trim().toUpperCase();
+      let cupomFinal = cupomInformado || null;
+
+      if (cupomInformado) {
         const cupons = await sql`
           SELECT id, tipo, valor, expira_em
           FROM cupons_desconto
-          WHERE codigo = ${codigoFormatado} AND ativo = TRUE
+          WHERE codigo = ${cupomInformado} AND ativo = TRUE
           LIMIT 1;
         `;
 
@@ -264,7 +274,8 @@ export default function pedidosRouter(io) {
         }
       }
 
-      const formaPagamentoFinal = forma_pagamento || metodo_pagamento || metodoPgto || 'dinheiro';
+      const obsFinal = String(observacao || '').trim().slice(0, 400) || null;
+      const formaPagamentoFinal = forma_pagamento || metodo_pagamento || metodoPgto || 'livre';
       const subTipoLabelFinal = sub_tipo_label || subTipoLabel || 'HUBy Carro';
       const subTipoIdFinal = sub_tipo_id || subTipoId || tipo || 'carro';
 
@@ -277,13 +288,15 @@ export default function pedidosRouter(io) {
           origem_endereco, destino_endereco,
           origem_lat, origem_lng, destino_lat, destino_lng,
           distancia_km, duracao_min, valor_total, valor_adicionais,
-          forma_pagamento, metodo_pgto, status, agendado_para
+          forma_pagamento, metodo_pgto, status, agendado_para,
+          observacao, cupom_codigo, paradas
         ) VALUES (
           ${idPedido}, ${idClienteFinal}, ${tipo || 'carro'}, ${subTipoIdFinal}, ${subTipoLabelFinal},
           ${String(endOrigem).slice(0, 300)}, ${String(endDestino).slice(0, 300)},
           ${origLat}, ${origLng}, ${destLat}, ${destLng},
           ${dKm}, ${dMin}, ${vTotal}, ${vAdic},
-          ${formaPagamentoFinal}, ${formaPagamentoFinal}, ${statusInicialPedido}, ${dataAgendamento}
+          ${formaPagamentoFinal}, ${formaPagamentoFinal}, ${statusInicialPedido}, ${dataAgendamento},
+          ${obsFinal}, ${cupomFinal}, ${JSON.stringify(paradasValidas)}::jsonb
         )
         ON CONFLICT (id) DO NOTHING
         RETURNING id;
@@ -296,24 +309,36 @@ export default function pedidosRouter(io) {
         return res.status(409).json({ erro: 'Já existe uma corrida com este código.' });
       }
 
-      if (statusInicialPedido === 'pendente') {
-        if (io) {
-          io.emit('nova_chamada', {
-            id: idPedido,
-            clienteId: idClienteFinal,
-            tipo: tipo || 'carro',
-            subTipoLabel: subTipoLabelFinal,
-            origem: endOrigem,
-            destino: endDestino,
-            distanciaKm: dKm,
-            duracaoMin: dMin,
-            valorTotal: vTotal,
-            paradas: paradas || []
-          });
-        }
+      if (io) {
+        io.emit('nova_chamada', {
+          id: idPedido,
+          clienteId: idClienteFinal,
+          tipo: tipo || 'carro',
+          subTipoLabel: subTipoLabelFinal,
+          origem: endOrigem,
+          destino: endDestino,
+          distanciaKm: dKm,
+          duracaoMin: dMin,
+          valorTotal: vTotal,
+          status: statusInicialPedido,
+          agendadoPara: dataAgendamento,
+          observacao: obsFinal,
+          cupomCodigo: cupomFinal,
+          paradas: paradasValidas
+        });
+      }
 
+      if (statusInicialPedido === 'pendente') {
         dispararPushParaMotoristas({
           titulo: `🚘 Nova Chamada (${subTipoLabelFinal}) • R$ ${vTotal.toFixed(2).replace('.', ',')}`,
+          corpo: `${endOrigem} ➔ ${endDestino}`,
+          categoria: subTipoIdFinal,
+          pedidoId: idPedido
+        });
+      } else if (statusInicialPedido === 'agendado') {
+        const horaFmt = new Date(dataAgendamento).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        dispararPushParaMotoristas({
+          titulo: `📅 Novo Agendamento (${horaFmt}) • R$ ${vTotal.toFixed(2).replace('.', ',')}`,
           corpo: `${endOrigem} ➔ ${endDestino}`,
           categoria: subTipoIdFinal,
           pedidoId: idPedido
@@ -345,7 +370,7 @@ export default function pedidosRouter(io) {
       const usuarioId = String(req.usuario.id);
       const lista = await sql`
         SELECT id, tipo, sub_tipo_label, origem_endereco, destino_endereco,
-               distancia_km, valor_total, status, agendado_para, criado_em
+               distancia_km, valor_total, status, agendado_para, observacao, cupom_codigo, criado_em
         FROM pedidos
         WHERE cliente_id::text = ${usuarioId}::text
           AND status = 'agendado'
@@ -385,7 +410,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES (COM CERCA VIRTUAL E FILTRO DE CATEGORIA)
+  // 3. CONSULTA DE CHAMADAS PENDENTES E AGENDADAS (COM CERCA VIRTUAL E FILTRO)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
@@ -441,9 +466,9 @@ export default function pedidosRouter(io) {
 
       const rawPedidos = await sql`
         SELECT * FROM pedidos
-        WHERE status IN ('pendente', 'aguardando', 'buscando', 'criado')
+        WHERE status IN ('pendente', 'aguardando', 'buscando', 'criado', 'agendado')
         ORDER BY criado_em DESC
-        LIMIT 50;
+        LIMIT 60;
       `;
 
       const listaEntrega = ['cargo_pickup', 'frete', 'entrega', 'flash', 'hubyflash', 'huby flash'];
@@ -479,7 +504,7 @@ export default function pedidosRouter(io) {
         }
 
         return true;
-      }).slice(0, 20);
+      }).slice(0, 30);
 
       return res.json(filtrados);
     } catch (error) {
@@ -581,7 +606,7 @@ export default function pedidosRouter(io) {
           p.id, p.status, p.cliente_id, p.valor_total, p.distancia_km, p.duracao_min,
           p.origem_endereco, p.destino_endereco,
           p.origem_lat, p.origem_lng, p.destino_lat, p.destino_lng,
-          p.chegou_origem_em, p.agendado_para, p.cancelado_por,
+          p.chegou_origem_em, p.agendado_para, p.observacao, p.cupom_codigo, p.cancelado_por,
           p.motorista_id, 
           COALESCE(m.nome, p.motorista_nome) AS motorista_nome,
           COALESCE(m.telefone, p.motorista_telefone) AS motorista_telefone,
@@ -711,7 +736,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 7. ACEITAR VIAGEM
+  // 7. ACEITAR VIAGEM (IMEDIATA OU AGENDADA)
   // =========================================================================
   router.put('/:id/aceitar', autenticarToken, async (req, res) => {
     try {
@@ -767,7 +792,7 @@ export default function pedidosRouter(io) {
             motorista_veiculo = ${mot.veiculo_modelo || 'Onix'}, 
             motorista_placa = ${mot.veiculo_placa || 'ABC1D23'}
         WHERE id::text = ${String(id)}::text 
-          AND status IN ('pendente', 'aguardando', 'buscando', 'criado')
+          AND status IN ('pendente', 'aguardando', 'buscando', 'criado', 'agendado')
         RETURNING *;
       `;
 
@@ -1072,7 +1097,7 @@ export default function pedidosRouter(io) {
       }
 
       const ehClienteDono = String(pedido.cliente_id) === usuarioId;
-      const aindaBuscando = ['pendente', 'aguardando', 'buscando', 'criado'].includes(statusAtual) && !pedido.motorista_id;
+      const aindaBuscando = ['pendente', 'aguardando', 'buscando', 'criado', 'agendado'].includes(statusAtual) && !pedido.motorista_id;
 
       if (!ehMotoristaToken(req.usuario) && !ehAdminToken(req.usuario)) {
         if (!ehClienteDono || !aindaBuscando) {
