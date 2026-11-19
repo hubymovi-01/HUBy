@@ -8,7 +8,6 @@
   <meta http-equiv="Expires" content="0">
   <title>Bem-vindo ao HUBy</title>
 
-  <!-- PWA & CORES DO SISTEMA -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0B0F19">
   <meta name="mobile-web-app-capable" content="yes">
@@ -16,7 +15,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
@@ -194,7 +192,7 @@
             <div class="card-choice-icon">🚘</div>
             <div class="card-choice-info">
               <h3>Quero ser Motorista Parceiro</h3>
-              <p>Conduza no seu ritmo e conquiste a sua independência.</p>
+              <p>Conduza no seu ritmo e comece com liberação automática.</p>
             </div>
           </div>
         </div>
@@ -258,30 +256,29 @@
     const step1 = document.getElementById('step1');
     const step2 = document.getElementById('step2');
     const step3 = document.getElementById('step3');
-    
+
     const btnAvancar = document.getElementById('btnAvancar');
     const btnVoltarStep1 = document.getElementById('btnVoltarStep1');
     const btnVoltarStep2 = document.getElementById('btnVoltarStep2');
-    
+
     const badgePerfil = document.getElementById('badgePerfilSelecionado');
     const opcaoLogin = document.getElementById('opcaoLogin');
     const opcaoCadastro = document.getElementById('opcaoCadastro');
 
-    let perfilEscolhido = localStorage.getItem('huby_tipo_acesso') || 'cliente';
-
-    // Verificação inteligente de sessão existente
     const token = localStorage.getItem('huby_token');
-    const role = (localStorage.getItem('huby_user_role') || '').toLowerCase();
-    
-    if (token) {
-      if (role === 'admin' || role === 'administrador') {
+    const roleGuardado = (localStorage.getItem('huby_user_role') || localStorage.getItem('huby_tipo_acesso') || '').toLowerCase();
+
+    if (token && roleGuardado) {
+      if (roleGuardado === 'admin' || roleGuardado === 'administrador') {
         window.location.replace('./admin.html');
-      } else if (role === 'motorista') {
+      } else if (roleGuardado === 'motorista') {
         window.location.replace('./motorista.html');
       } else {
         window.location.replace('./index.html');
       }
     }
+
+    let perfilEscolhido = roleGuardado === 'motorista' ? 'motorista' : 'cliente';
 
     btnAvancar.onclick = () => {
       step1.classList.remove('active');
@@ -298,8 +295,7 @@
       step2.classList.add('active');
     };
 
-    // Cliques nos perfis do Passo 2
-    document.querySelectorAll('.card-choice[data-role]').forEach(card => {
+    document.querySelectorAll('.card-choice[data-role]').forEach((card) => {
       card.addEventListener('click', () => {
         perfilEscolhido = card.getAttribute('data-role');
         localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
@@ -315,13 +311,14 @@
       });
     });
 
-    // Decisão final no Passo 3
     opcaoLogin.onclick = () => {
-      window.location.href = `./login.html?perfil=${perfilEscolhido}`;
+      localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
+      window.location.href = `./login.html?perfil=${encodeURIComponent(perfilEscolhido)}`;
     };
 
     opcaoCadastro.onclick = () => {
-      window.location.href = `./cadastro.html?perfil=${perfilEscolhido}`;
+      localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
+      window.location.href = `./cadastro.html?perfil=${encodeURIComponent(perfilEscolhido)}`;
     };
   </script>
 </body>

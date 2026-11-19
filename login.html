@@ -8,7 +8,6 @@
   <meta http-equiv="Expires" content="0">
   <title>Iniciar Sessão • HUBy</title>
 
-  <!-- PWA & CORES DO SISTEMA -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#0B0F19">
   <meta name="mobile-web-app-capable" content="yes">
@@ -16,7 +15,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
@@ -38,7 +36,7 @@
 
       <div id="alertaLoginBox" class="auth-alert" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 14px; font-size: 13px;"></div>
 
-      <!-- FORMULÁRIO 1: LOGIN DE PASSAGEIRO / ADMIN (ETAPA 1) -->
+      <!-- LOGIN DE PASSAGEIRO / ADMIN -->
       <form id="formLoginCliente" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail ou Telemóvel</label>
@@ -55,7 +53,7 @@
         </button>
       </form>
 
-      <!-- FORMULÁRIO DE 2FA: VERIFICAÇÃO EM DUAS ETAPAS (ADMIN) (ETAPA 2) -->
+      <!-- VERIFICAÇÃO EM DUAS ETAPAS (ADMIN) -->
       <form id="formVerificacao2FA" class="auth-form" style="display: none;" novalidate>
         <div style="text-align: center; margin-bottom: 16px;">
           <div style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-size: 32px; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 50%; margin: 0 auto 10px;">
@@ -68,8 +66,8 @@
         </div>
 
         <div class="input-group">
-          <input type="tel" id="codigo2FA" placeholder="000000" maxlength="6" 
-                 style="text-align: center; font-size: 24px; letter-spacing: 8px; font-weight: 900; background: #070B12; border: 1.5px solid #10b981;" required>
+          <input type="tel" id="codigo2FA" placeholder="000000" maxlength="6"
+            style="text-align: center; font-size: 24px; letter-spacing: 8px; font-weight: 900; background: #070B12; border: 1.5px solid #10b981;" required>
         </div>
 
         <button type="submit" id="btnSubmeter2FA" class="btn-primary-action" style="background: #10b981; color: #000; box-shadow: 0 4px 18px rgba(16, 185, 129, 0.4);">
@@ -81,7 +79,7 @@
         </div>
       </form>
 
-      <!-- FORMULÁRIO 3: LOGIN DE MOTORISTA -->
+      <!-- LOGIN DE MOTORISTA -->
       <form id="formLoginMotorista" class="auth-form" style="display: none;" novalidate>
         <div class="input-group">
           <label>E-mail de Registo</label>
@@ -115,6 +113,7 @@
 
     const urlParams = new URLSearchParams(window.location.search);
     const perfil = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
+    const veioDoCadastro = urlParams.get('cadastrado') === '1';
 
     const formCliente = document.getElementById('formLoginCliente');
     const form2FA = document.getElementById('formVerificacao2FA');
@@ -127,6 +126,24 @@
 
     let adminIdPendente2FA = null;
 
+    function exibirAlerta(msg, tipo) {
+      if (!alertaBox) return;
+      alertaBox.textContent = msg;
+      alertaBox.className = `auth-alert ${tipo}`;
+      alertaBox.style.display = 'block';
+      alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
+      alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
+      alertaBox.style.color = tipo === 'error' ? '#F87171' : '#10B981';
+    }
+
+    function esconderAlerta() {
+      if (alertaBox) alertaBox.style.display = 'none';
+    }
+
+    localStorage.setItem('huby_tipo_acesso', perfil);
+
+    const emailSalvo = localStorage.getItem('huby_ultimo_email_cadastro') || '';
+
     if (perfil === 'motorista') {
       formMotorista.style.display = 'block';
       txtSubtitulo.textContent = 'Acesso exclusivo para Motoristas Parceiros';
@@ -134,16 +151,28 @@
       badgeLogin.style.background = 'rgba(16, 185, 129, 0.15)';
       badgeLogin.style.color = '#10B981';
       linkCriarConta.href = './cadastro.html?perfil=motorista';
+      if (emailSalvo) {
+        document.getElementById('loginEmailMot').value = emailSalvo;
+      }
     } else {
       formCliente.style.display = 'block';
       txtSubtitulo.textContent = 'Entre na sua conta para continuar';
       badgeLogin.textContent = '👤 Utilizador';
       linkCriarConta.href = './cadastro.html?perfil=cliente';
+      if (emailSalvo) {
+        document.getElementById('loginIdentificador').value = emailSalvo;
+      }
     }
 
-    // =========================================================================
-    // ETAPA 1: Login de Passageiro ou Admin
-    // =========================================================================
+    if (veioDoCadastro) {
+      exibirAlerta(
+        perfil === 'motorista'
+          ? 'Cadastro concluído com aprovação automática! Faça o login do motorista abaixo.'
+          : 'Cadastro concluído com sucesso! Faça o seu login abaixo.',
+        'success'
+      );
+    }
+
     formCliente.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
@@ -168,7 +197,6 @@
           throw new Error(data.erro || 'Credenciais inválidas.');
         }
 
-        // Se o sistema solicitar 2FA (Admin Master)
         if (data.requer_2fa) {
           adminIdPendente2FA = data.usuario_id;
           formCliente.style.display = 'none';
@@ -176,18 +204,12 @@
           form2FA.style.display = 'block';
           badgeLogin.style.display = 'none';
           txtSubtitulo.style.display = 'none';
-          
-          if (data.codigoTeste) {
-            // Em dev, mostra o código para teste rápido no navegador
-            console.log(`CÓDIGO 2FA ADMIN: ${data.codigoTeste}`);
-          }
           exibirAlerta('Código de acesso enviado ao seu e-mail.', 'success');
           setTimeout(() => document.getElementById('codigo2FA').focus(), 100);
           return;
         }
 
-        // Se for passageiro, entra direto
-        guardarSessaoERedirecionar(data, './index.html');
+        guardarSessaoERedirecionar(data, 'cliente');
       } catch (err) {
         exibirAlerta(err.message, 'error');
       } finally {
@@ -196,13 +218,10 @@
       }
     });
 
-    // =========================================================================
-    // ETAPA 2: Validação 2FA (Acesso Exclusivo Master)
-    // =========================================================================
     form2FA.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
-      
+
       const codigo = document.getElementById('codigo2FA').value.trim();
       if (codigo.length !== 6) return exibirAlerta('Digite o código de 6 dígitos completo.', 'error');
 
@@ -219,7 +238,7 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.erro || 'Código inválido.');
 
-        guardarSessaoERedirecionar(data, './admin.html');
+        guardarSessaoERedirecionar(data, 'admin');
       } catch (err) {
         exibirAlerta(err.message, 'error');
         btnSub2FA.disabled = false;
@@ -238,18 +257,14 @@
       esconderAlerta();
     });
 
-    // Formata o input 2FA (apenas números)
     document.getElementById('codigo2FA').addEventListener('input', (e) => {
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
     });
 
-    // =========================================================================
-    // LOGIN MOTORISTA (MANTIDO INTACTO)
-    // =========================================================================
     formMotorista.addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
-      
+
       const email = document.getElementById('loginEmailMot').value.trim();
       const cnh = document.getElementById('loginCNH').value.trim();
       const placa = document.getElementById('loginPlaca').value.trim().toUpperCase();
@@ -268,11 +283,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, cnh, veiculo_placa: placa })
         });
-        
+
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.erro || 'Dados do veículo ou credenciais não encontrados.');
 
-        guardarSessaoERedirecionar(data, './motorista.html');
+        guardarSessaoERedirecionar(data, 'motorista');
       } catch (err) {
         exibirAlerta(err.message, 'error');
         btnSub.disabled = false;
@@ -284,51 +299,35 @@
       e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11);
     });
 
-    // Gestão de Sessão (Trata 'funcao' ou 'role')
-    function guardarSessaoERedirecionar(data, urlDestinoPadrao) {
+    function guardarSessaoERedirecionar(data, perfilForcado) {
       localStorage.setItem('huby_token', data.token);
 
-      const papelBruto = data.usuario?.funcao || data.usuario?.role || 'cliente';
+      const papelBruto = perfilForcado || data.usuario?.funcao || data.usuario?.role || 'cliente';
       const papelNormalizado = String(papelBruto).trim().toLowerCase();
 
       localStorage.setItem('huby_user_role', papelNormalizado);
+      localStorage.setItem('huby_tipo_acesso', papelNormalizado === 'motorista' ? 'motorista' : 'cliente');
       localStorage.setItem('huby_user_name', data.usuario?.nome || 'Utilizador');
       localStorage.setItem('huby_user_id', data.usuario?.id);
 
-      // NOVO: SALVA A CATEGORIA DO MOTORISTA NO NAVEGADOR
       if (papelNormalizado === 'motorista') {
         localStorage.setItem('huby_motorista_id', data.usuario?.motoristaId || data.usuario?.id);
-        
         const cat = data.usuario?.categoria || 'carro';
         localStorage.setItem('huby_motorista_categoria', cat);
+      } else {
+        localStorage.removeItem('huby_motorista_id');
       }
 
-      exibirAlerta('Sessão iniciada com sucesso! Conectando...', 'success');
-      
-      let urlRedirecionamento = urlDestinoPadrao;
+      exibirAlerta('Sessão iniciada com sucesso! A abrir o seu painel...', 'success');
+
+      let urlRedirecionamento = './index.html';
       if (papelNormalizado === 'admin' || papelNormalizado === 'administrador') {
         urlRedirecionamento = './admin.html';
       } else if (papelNormalizado === 'motorista') {
         urlRedirecionamento = './motorista.html';
-      } else {
-        urlRedirecionamento = './index.html';
       }
 
-      setTimeout(() => window.location.replace(urlRedirecionamento), 600);
-    }
-
-    function exibirAlerta(msg, tipo) {
-      if (!alertaBox) return;
-      alertaBox.textContent = msg;
-      alertaBox.className = `auth-alert ${tipo}`;
-      alertaBox.style.display = 'block';
-      alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
-      alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
-      alertaBox.style.color = tipo === 'error' ? '#F87171' : '#10B981';
-    }
-
-    function esconderAlerta() {
-      if (alertaBox) alertaBox.style.display = 'none';
+      setTimeout(() => window.location.replace(urlRedirecionamento), 500);
     }
   </script>
 </body>

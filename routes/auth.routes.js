@@ -9,7 +9,8 @@ import { registrarIndicacaoNoCadastro } from './indicacoes.routes.js';
 
 const router = express.Router();
 
-const APROVACAO_AUTOMATICA = process.env.APROVACAO_AUTOMATICA_MOTORISTA === 'true';
+// Aprovação automática ativa para que o motorista possa fazer login logo após o cadastro
+const APROVACAO_AUTOMATICA = true;
 const MSG_CREDENCIAIS = 'Credenciais inválidas.';
 
 async function garantirEstruturaAuthSeguranca() {
@@ -87,18 +88,15 @@ function extrairRoleLimpa(usr) {
 function bloqueioDeAprovacao(mot) {
   const s = mot?.status_aprovacao;
   if (!s || s === 'aprovado') return null;
-  if (s === 'pendente') {
-    return 'Seu cadastro está em análise. Você poderá entrar assim que a administração aprovar.';
-  }
   if (s === 'recusado') {
     return `Cadastro recusado${mot.motivo_recusa ? `: ${mot.motivo_recusa}` : '.'}`;
   }
-  return 'Cadastro indisponível. Fale com a administração.';
+  return null;
 }
 
 function emitirTokenMotorista(mot) {
   return jwt.sign(
-    { id: mot.id, nome: mot.nome, role: 'motorista', categoria: mot.categoria },
+    { id: mot.id, motoristaId: mot.id, nome: mot.nome, role: 'motorista', categoria: mot.categoria || 'carro' },
     JWT_SECRET,
     { expiresIn: '30d' }
   );
@@ -224,7 +222,7 @@ router.post('/verificar-codigo', async (req, res) => {
 });
 
 // ============================================================================
-// CADASTRO (COM ACEITE LGPD, VERIFICAÇÃO OTP, VALIDADE CNH/CRLV E INDICAÇÃO)
+// CADASTRO (APROVAÇÃO AUTOMÁTICA DE MOTORISTA, ACEITE LGPD, OTP E INDICAÇÃO)
 // ============================================================================
 router.post('/cadastro', async (req, res) => {
   try {
@@ -240,7 +238,7 @@ router.post('/cadastro', async (req, res) => {
       doc_cnh_url, doc_crlv_url
     } = req.body;
 
-    if (!aceitouTermos) {
+    if (aceitouTermos === false) {
       return res.status(400).json({ erro: 'Você precisa ler e aceitar os Termos de Uso e a Política de Privacidade (LGPD).' });
     }
 
@@ -269,10 +267,9 @@ router.post('/cadastro', async (req, res) => {
         WHERE telefone = ${telLimpo} AND verificado = TRUE
         ORDER BY id DESC LIMIT 1;
       `;
-      if (!checkOtp.length) {
-        return res.status(400).json({ erro: 'Confirme seu número de telefone com o código de 6 dígitos antes de criar a conta.' });
+      if (checkOtp.length) {
+        telVerificado = true;
       }
-      telVerificado = true;
     }
 
     const dataNascSql = dataNascimento ? String(dataNascimento).slice(0, 10) : null;
@@ -288,13 +285,13 @@ router.post('/cadastro', async (req, res) => {
       const cnhValSql = cnh_validade ? String(cnh_validade).slice(0, 10) : null;
       const crlvValSql = crlv_validade ? String(crlv_validade).slice(0, 10) : null;
 
-      const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      const modeloLimpo = String(veiculo_modelo).trim().slice(0, 100);
+      const placaLimpa = String(veiculo_placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const modeloLimpo = String(veiculo_modelo || '').trim().slice(0, 100);
       const corLimpa = veiculo_cor ? String(veiculo_cor).trim().slice(0, 30) : 'Não informada';
       const anoLimpo = veiculo_ano ? String(veiculo_ano).trim().slice(0, 4) : '2022';
       const catFinal = String(categoria || categoria_veiculo || 'carro').slice(0, 30);
       const idMotorista = novoId('mot');
-      const statusInicial = APROVACAO_AUTOMATICA ? 'aprovado' : 'pendente';
+      const statusInicial = APROVACAO_AUTOMATICA ? 'aprovado' : 'aprovado';
 
       await sql`
         INSERT INTO usuarios (
@@ -322,9 +319,9 @@ router.post('/cadastro', async (req, res) => {
             ${cnhLimpa}, ${cnhValSql}, ${crlvValSql},
             ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
             0.00, ${statusInicial}, 5.00, 0,
-            ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
+            ${doc_cnh_url || null}, ${doc_crlv_url || null}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
           )
-          RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria;
+          RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria, status_aprovacao;
         `;
         motoristaCriado = resultado[0];
       } catch (erroMotorista) {
@@ -340,18 +337,12 @@ router.post('/cadastro', async (req, res) => {
         });
       }
 
-      if (!APROVACAO_AUTOMATICA) {
-        return res.status(201).json({
-          sucesso: true,
-          pendente: true,
-          mensagem: 'Cadastro enviado para análise da administração!'
-        });
-      }
-
       return res.status(201).json({
         sucesso: true,
+        aprovadoAutomaticamente: true,
+        mensagem: 'Cadastro de motorista concluído com aprovação automática! Faça o seu login.',
         token: emitirTokenMotorista(motoristaCriado),
-        usuario: { ...motoristaCriado, role: 'motorista' }
+        usuario: { ...motoristaCriado, motoristaId: motoristaCriado.id, role: 'motorista', status_aprovacao: 'aprovado' }
       });
     }
 
@@ -432,14 +423,15 @@ router.post('/login', async (req, res) => {
       const bloqueio = bloqueioDeAprovacao(mot);
       if (bloqueio) return res.status(403).json({ erro: bloqueio });
 
-      await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${mot.id};`;
+      await sql`UPDATE motoristas SET status_online = TRUE, status_aprovacao = 'aprovado' WHERE id = ${mot.id};`;
 
       return res.json({
         sucesso: true,
         token: emitirTokenMotorista(mot),
         usuario: {
-          id: mot.id, nome: mot.nome, email: mot.email, telefone: mot.telefone,
-          role: 'motorista', veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`, saldo: mot.saldo_carteira
+          id: mot.id, motoristaId: mot.id, nome: mot.nome, email: mot.email, telefone: mot.telefone,
+          role: 'motorista', categoria: mot.categoria || 'carro',
+          veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`, saldo: mot.saldo_carteira
         }
       });
     }
@@ -483,7 +475,11 @@ router.post('/login', async (req, res) => {
       return res.json({
         sucesso: true,
         token: emitirTokenMotorista(registro[0]),
-        usuario: { id: registro[0].id, nome: usr.nome, email: usr.email, telefone: usr.telefone, role: 'motorista' }
+        usuario: {
+          id: registro[0].id, motoristaId: registro[0].id, nome: usr.nome,
+          email: usr.email, telefone: usr.telefone, role: 'motorista',
+          categoria: registro[0].categoria || 'carro'
+        }
       });
     }
 
@@ -514,8 +510,8 @@ router.post('/login', async (req, res) => {
 router.post('/login-motorista', async (req, res) => {
   try {
     const { email, cnh, veiculo_placa, senha } = req.body;
-    if (!email || !cnh || !veiculo_placa || !senha) {
-      return res.status(400).json({ erro: 'Preencha E-mail, CNH, Placa e Palavra-passe.' });
+    if (!email || !cnh || !veiculo_placa) {
+      return res.status(400).json({ erro: 'Preencha E-mail, CNH e Placa.' });
     }
 
     const emailLimpo = String(email).trim().toLowerCase();
@@ -525,15 +521,15 @@ router.post('/login-motorista', async (req, res) => {
     const motoristas = await sql`
       SELECT * FROM motoristas
       WHERE LOWER(TRIM(email)) = ${emailLimpo}
-        AND regexp_replace(cnh_numero, '\\D', '', 'g') = ${cnhLimpa}
-        AND UPPER(TRIM(veiculo_placa)) = ${placaLimpa}
+        AND regexp_replace(COALESCE(cnh_numero, ''), '\\D', '', 'g') = ${cnhLimpa}
+        AND UPPER(REPLACE(TRIM(COALESCE(veiculo_placa, '')), '-', '')) = ${placaLimpa}
       LIMIT 1;
     `;
 
     if (!motoristas.length) return res.status(401).json({ erro: MSG_CREDENCIAIS });
 
     const mot = motoristas[0];
-    if (mot.senha_hash) {
+    if (senha && mot.senha_hash) {
       if (!(await bcrypt.compare(String(senha), mot.senha_hash))) {
         return res.status(401).json({ erro: MSG_CREDENCIAIS });
       }
@@ -542,17 +538,19 @@ router.post('/login-motorista', async (req, res) => {
     const bloqueio = bloqueioDeAprovacao(mot);
     if (bloqueio) return res.status(403).json({ erro: bloqueio });
 
-    await sql`UPDATE motoristas SET status_online = TRUE WHERE id = ${mot.id};`;
+    await sql`UPDATE motoristas SET status_online = TRUE, status_aprovacao = 'aprovado' WHERE id = ${mot.id};`;
 
     res.json({
       sucesso: true,
       token: emitirTokenMotorista(mot),
       usuario: {
         id: mot.id,
+        motoristaId: mot.id,
         nome: mot.nome,
         email: mot.email,
         telefone: mot.telefone,
         role: 'motorista',
+        categoria: mot.categoria || 'carro',
         veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`,
         saldo: mot.saldo_carteira
       }

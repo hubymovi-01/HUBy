@@ -1,4 +1,4 @@
-// js/auth.js - Autenticação e Cadastro HUBy
+// js/auth.js - Cadastro HUBy (Encaminha para a tela de login após confirmar)
 import { API_URL } from './config.js';
 
 let roleAtual = 'cliente';
@@ -14,6 +14,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSubmit = document.getElementById('btnSubmeterCadastro');
   const alertaBox = document.getElementById('alertaBox');
   const linkLoginDireto = document.getElementById('linkLoginDireto');
+
+  function exibirAlerta(msg, tipo) {
+    if (!alertaBox) return;
+    alertaBox.textContent = msg;
+    alertaBox.className = `auth-alert ${tipo}`;
+    alertaBox.style.display = 'block';
+  }
+
+  function esconderAlerta() {
+    if (!alertaBox) return;
+    alertaBox.style.display = 'none';
+  }
 
   function ativarCliente() {
     roleAtual = 'cliente';
@@ -39,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (secaoSegurancaPassageiro) secaoSegurancaPassageiro.style.display = 'none';
     if (secaoMotorista) secaoMotorista.style.display = 'block';
 
-    if (txtSubtitulo) txtSubtitulo.textContent = 'Cadastre seu veículo, defina seus horários e dirija com liberdade';
+    if (txtSubtitulo) txtSubtitulo.textContent = 'Cadastre seu veículo e comece a rodar com liberação automática';
     if (btnSubmit) btnSubmit.querySelector('span').textContent = 'Cadastrar Motorista Parceiro';
     if (linkLoginDireto) linkLoginDireto.href = './login.html?perfil=motorista';
     localStorage.setItem('huby_tipo_acesso', 'motorista');
@@ -49,7 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
   btnRoleCliente?.addEventListener('click', ativarCliente);
   btnRoleMotorista?.addEventListener('click', ativarMotorista);
 
-  // Leitura do perfil vindo da URL
   const urlParams = new URLSearchParams(window.location.search);
   const perfilEscolhido = urlParams.get('perfil') || localStorage.getItem('huby_tipo_acesso') || 'cliente';
 
@@ -63,7 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
     roleSelector.style.display = 'none';
   }
 
-  // Máscaras de CPF, Telefone e Emergência
   document.getElementById('cadCpf')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
     v = v.replace(/(\d{3})(\d)/, '$1.$2');
@@ -74,14 +84,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('cadTelefone')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
-    v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
+    v = v.replace(/^(\d{2})(\d)/, '($1) $2');
     v = v.replace(/(\d)(\d{4})$/, '$1-$2');
     e.target.value = v;
   });
 
   document.getElementById('cadEmergenciaTelefone')?.addEventListener('input', (e) => {
     let v = e.target.value.replace(/\D/g, '');
-    v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
+    v = v.replace(/^(\d{2})(\d)/, '($1) $2');
     v = v.replace(/(\d)(\d{4})$/, '$1-$2');
     e.target.value = v;
   });
@@ -127,13 +137,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // CAPTURA RESILIENTE DE DATA
     const inDataCliente = document.getElementById('cadDataNascCliente')?.value;
     const inDataMotorista = document.getElementById('cadDataNascMotorista')?.value;
     const inDataPadrao = document.getElementById('cadDataNascimento')?.value;
 
     let dataNascimentoVal = inDataCliente || inDataMotorista || inDataPadrao || '';
-
     if (dataNascimentoVal) {
       const partes = dataNascimentoVal.split('-');
       if (partes[0] && partes[0].length > 4) {
@@ -154,7 +162,9 @@ document.addEventListener('DOMContentLoaded', () => {
       email,
       senha,
       dataNascimento: dataNascimentoVal,
-      role: roleAtual
+      role: roleAtual,
+      aprovacaoAutomatica: true,
+      status_aprovacao: 'aprovado'
     };
 
     if (roleAtual === 'cliente') {
@@ -198,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
       payload.veiculo_ano = ano;
       payload.categoria = categoria;
       payload.categoria_veiculo = categoria;
+      payload.status_aprovacao = 'aprovado';
       if (chavePix) payload.chave_pix_padrao = chavePix;
 
       if (fileInput?.files && fileInput.files[0]) {
@@ -211,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       btnSubmit.disabled = true;
-      btnSubmit.querySelector('span').textContent = 'Validando dados e registrando...';
+      btnSubmit.querySelector('span').textContent = 'Concluindo cadastro...';
 
       const resp = await fetch(`${API_URL}/api/usuarios/cadastro`, {
         method: 'POST',
@@ -221,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const contentType = resp.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
-        throw new Error('Servidor a inicializar no Render. Aguarde 20 segundos e tente novamente.');
+        throw new Error('Servidor a inicializar. Aguarde alguns segundos e tente novamente.');
       }
 
       const data = await resp.json();
@@ -229,31 +240,25 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(data.erro || 'Falha ao concluir registo.');
       }
 
-      localStorage.setItem('huby_token', data.token);
-      localStorage.setItem('huby_user_id', data.usuario.id);
-      localStorage.setItem('huby_user_name', data.usuario.nome);
-      localStorage.setItem('huby_user_role', data.usuario.role);
-      if (data.usuario.telefone) {
-        localStorage.setItem('huby_user_phone', data.usuario.telefone);
-      }
-      if (payload.contatoEmergenciaNome) {
-        localStorage.setItem('huby_emergencia_nome', payload.contatoEmergenciaNome);
-        localStorage.setItem('huby_emergencia_tel', payload.contatoEmergenciaTelefone);
+      const perfilFinal = data.usuario?.role || roleAtual;
+      localStorage.setItem('huby_tipo_acesso', perfilFinal);
+      if (email) {
+        localStorage.setItem('huby_ultimo_email_cadastro', email.toLowerCase());
       }
       if (payload.chave_pix_padrao) {
         localStorage.setItem('huby_motorista_pix', payload.chave_pix_padrao);
       }
 
-      exibirAlerta('Conta criada com sucesso! Redirecionando...', 'success');
+      exibirAlerta(
+        perfilFinal === 'motorista'
+          ? 'Cadastro de motorista aprovado automaticamente! A encaminhar para o login do motorista...'
+          : 'Conta criada com sucesso! A encaminhar para o login...',
+        'success'
+      );
 
       setTimeout(() => {
-        if (data.usuario.role === 'motorista') {
-          window.location.replace('./motorista.html');
-        } else {
-          window.location.replace('./index.html');
-        }
-      }, 1000);
-
+        window.location.replace(`./login.html?perfil=${encodeURIComponent(perfilFinal)}&cadastrado=1`);
+      }, 900);
     } catch (err) {
       exibirAlerta(err.message, 'error');
     } finally {
@@ -263,16 +268,4 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'Cadastrar Motorista Parceiro';
     }
   });
-
-  function exibirAlerta(msg, tipo) {
-    if (!alertaBox) return;
-    alertaBox.textContent = msg;
-    alertaBox.className = `auth-alert ${tipo}`;
-    alertaBox.style.display = 'block';
-  }
-
-  function esconderAlerta() {
-    if (!alertaBox) return;
-    alertaBox.style.display = 'none';
-  }
 });
