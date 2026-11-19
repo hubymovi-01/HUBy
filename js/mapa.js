@@ -261,8 +261,8 @@ export class HubyMapa {
     this._ultimaGeometriaRota = null;
     if (!this.map) return;
     try {
-      if (this.map.getLayer('huby-rota-borda')) this.map.removeLayer('huby-rota-borda');
       if (this.map.getLayer('huby-rota-linha')) this.map.removeLayer('huby-rota-linha');
+      if (this.map.getLayer('huby-rota-borda')) this.map.removeLayer('huby-rota-borda');
       if (this.map.getSource('huby-rota-source')) this.map.removeSource('huby-rota-source');
     } catch (e) {}
   }
@@ -350,7 +350,6 @@ export class HubyMapa {
     if (!this.map || !geometria) return;
 
     const aplicarRota = () => {
-      this.limparRota();
       this._ultimaGeometriaRota = geometria;
       this._ultimaCorRota = cor;
 
@@ -362,34 +361,39 @@ export class HubyMapa {
         }]
       };
 
-      this.map.addSource('huby-rota-source', {
-        type: 'geojson',
-        data: featureCollection
-      });
+      const sourceExistente = this.map.getSource('huby-rota-source');
+      if (sourceExistente) {
+        sourceExistente.setData(featureCollection);
+      } else {
+        this.map.addSource('huby-rota-source', {
+          type: 'geojson',
+          data: featureCollection
+        });
 
-      this.map.addLayer({
-        id: 'huby-rota-borda',
-        type: 'line',
-        source: 'huby-rota-source',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': '#10B981',
-          'line-width': 11,
-          'line-opacity': 0.28
-        }
-      });
+        this.map.addLayer({
+          id: 'huby-rota-borda',
+          type: 'line',
+          source: 'huby-rota-source',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': '#10B981',
+            'line-width': 11,
+            'line-opacity': 0.28
+          }
+        });
 
-      this.map.addLayer({
-        id: 'huby-rota-linha',
-        type: 'line',
-        source: 'huby-rota-source',
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: {
-          'line-color': '#34D399',
-          'line-width': 5,
-          'line-opacity': 1
-        }
-      });
+        this.map.addLayer({
+          id: 'huby-rota-linha',
+          type: 'line',
+          source: 'huby-rota-source',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: {
+            'line-color': '#34D399',
+            'line-width': 5,
+            'line-opacity': 1
+          }
+        });
+      }
 
       this.rotaLayer = { id: 'huby-rota-linha' };
 
