@@ -25,6 +25,21 @@
   <link rel="stylesheet" href="./css/ia.css?v=1.1.0">
   <link rel="stylesheet" href="./css/alertas.css?v=1.1.0">
 
+  <!-- Guarda estrita de sessão do Motorista -->
+  <script>
+    (function () {
+      const token = localStorage.getItem('huby_token');
+      const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
+      if (!token) {
+        window.location.replace('./welcome.html');
+        return;
+      }
+      if (role && role !== 'motorista' && role !== 'admin' && role !== 'administrador') {
+        window.location.replace('./index.html');
+      }
+    })();
+  </script>
+
   <style>
     :root {
       --bg-dark: #090D16;
@@ -251,7 +266,7 @@
   <!-- DRAWER LATERAL (MENU DO MOTORISTA) -->
   <div class="drawer-overlay" id="drawerOverlay"></div>
   <aside class="driver-drawer" id="driverDrawer">
-    
+
     <div class="drawer-header" style="border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
       <button type="button" class="btn-close-drawer" id="btnFecharDrawerPerfil">✕</button>
       <div class="drawer-profile-info">
@@ -393,17 +408,17 @@
         <div id="drawerListaExtrato" style="max-height: 120px; overflow-y: auto; font-size: 12px; margin-bottom: 14px;">
           <div style="text-align: center; color: var(--text-sec); padding: 10px 0;">Consultando histórico...</div>
         </div>
-        
+
         <label style="font-size: 10px; color: var(--text-sec);">Chave Pix para Saques</label>
         <div style="display: flex; gap: 6px; margin-top: 4px; margin-bottom: 14px;">
           <input type="text" id="drawerInputChavePix" class="drawer-input" placeholder="Sua Chave Pix">
           <button type="button" id="btnSalvarChavePix" class="btn-drawer-solid" style="width: auto; background: var(--blue); padding: 0 14px;">Salvar</button>
         </div>
-        
+
         <button type="button" id="btnAbrirModalSaque" class="btn-drawer-solid" style="background: var(--emerald); color: #02261C; margin-bottom: 8px;">
           💸 Sacar Pix para Conta
         </button>
-        
+
         <button type="button" id="btnExportarFechamentoDia" class="btn-drawer-outline">📄 Exportar Fechamento (CSV)</button>
       </div>
 
@@ -411,7 +426,7 @@
         <button type="button" id="btnAbrirChatSuporte" class="btn-drawer-danger-outline" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: #F87171; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
           🛡️ Central de Ajuda & Suporte
         </button>
-        <a href="./index.html" id="btnLogoutMotorista" class="btn-drawer-danger-solid" style="background: #EF4444; color: #FFF; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 13px; text-decoration: none; text-align: center; display: block; box-sizing: border-box;">
+        <a href="./welcome.html" id="btnLogoutMotorista" onclick="localStorage.clear();" class="btn-drawer-danger-solid" style="background: #EF4444; color: #FFF; padding: 12px; border-radius: 10px; font-weight: 800; font-size: 13px; text-decoration: none; text-align: center; display: block; box-sizing: border-box;">
           🚪 Encerrar Sessão / Sair
         </a>
       </div>

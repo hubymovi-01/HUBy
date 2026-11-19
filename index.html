@@ -36,12 +36,16 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-  <script>
+ <script>
     (function () {
       const token = localStorage.getItem('huby_token');
-      const perfilEscolhido = localStorage.getItem('huby_tipo_acesso');
-      if (!token && !perfilEscolhido) {
+      const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
+      if (!token) {
         window.location.replace('./welcome.html');
+        return;
+      }
+      if (role === 'motorista') {
+        window.location.replace('./motorista.html');
       }
     })();
   </script>

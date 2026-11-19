@@ -1,24 +1,23 @@
-// routes/usuarios.routes.js - Autenticação e Gestão de Contas HUBy (Com Verificação em 2 Etapas para Admin)
+// routes/usuarios.routes.js - Autenticação Unificada HUBy (Passageiro, Motorista com Aprovação Automática e Admin 2FA)
 import express from 'express';
 import jwt from 'jsonwebtoken';
-import { sql, JWT_SECRET } from '../db.js';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer'; // Necessário instalar: npm install nodemailer
+import nodemailer from 'nodemailer';
+import { sql, JWT_SECRET } from '../db.js';
 
 export const usuariosRouter = express.Router();
 
-// Configuração do disparador de emails da HUBy (Ajuste com suas credenciais reais SMTP depois)
 const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com', // Ex: smtp.hostinger.com ou smtp.gmail.com
+  host: 'smtp.gmail.com',
   port: 465,
   secure: true,
   auth: {
     user: process.env.EMAIL_USER || 'hubymobilidade@gmail.com',
-    pass: process.env.EMAIL_PASS || 'sua_senha_de_app_aqui'
+    pass: process.env.EMAIL_PASS || ''
   }
 });
 
-// Middleware local de autenticação
 function autenticar(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader ? (authHeader.split(' ')[1] || authHeader) : req.query.token;
@@ -28,8 +27,7 @@ function autenticar(req, res, next) {
   }
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.usuario = payload;
+    req.usuario = jwt.verify(token, JWT_SECRET);
     next();
   } catch (err) {
     return res.status(401).json({ erro: 'Sessão expirada ou token inválido.' });
@@ -48,98 +46,222 @@ async function garantirTabela2FA() {
         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
-  } catch (e) {
-    console.warn('Aviso tabela 2FA:', e.message);
-  }
+  } catch (e) {}
 }
 garantirTabela2FA();
 
 // ============================================================================
-// 1. LOGIN DE PASSAGEIRO E ADMIN (COM INTERCEPTAÇÃO 2FA)
+// 1. CADASTRO UNIFICADO (/cadastro e /registo) - MOTORISTA APROVADO NA HORA
+// ============================================================================
+async function handleCadastroUnificado(req, res) {
+  try {
+    const {
+      nome, email, telefone, cpf, senha, role,
+      dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
+      cnh, cnh_numero, categoria, categoria_veiculo,
+      veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+      chave_pix_padrao, fotoVeiculo
+    } = req.body;
+
+    if (!nome || !senha || (!email && !telefone)) {
+      return res.status(400).json({ erro: 'Preencha Nome, E-mail/Telefone e Senha.' });
+    }
+
+    const tipoConta = String(role || '').toLowerCase() === 'motorista' ? 'motorista' : 'cliente';
+    const nomeLimpo = String(nome).trim();
+    const emailLimpo = email ? String(email).trim().toLowerCase() : null;
+    const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
+    const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : null;
+    const dataNascSql = dataNascimento ? String(dataNascimento).slice(0, 10) : null;
+
+    const salt = await bcrypt.genSalt(10);
+    const senhaHash = await bcrypt.hash(String(senha), salt);
+
+    if (tipoConta === 'motorista') {
+      const cnhLimpa = String(cnh || cnh_numero || '').replace(/\D/g, '');
+      const placaLimpa = String(veiculo_placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const modeloLimpo = String(veiculo_modelo || '').trim();
+
+      if (cnhLimpa.length !== 11) {
+        return res.status(400).json({ erro: 'Informe os 11 dígitos da CNH.' });
+      }
+      if (!modeloLimpo || !placaLimpa) {
+        return res.status(400).json({ erro: 'Informe o modelo e a placa do veículo.' });
+      }
+
+      const idMotorista = 'mot_' + crypto.randomBytes(8).toString('hex');
+      const catFinal = String(categoria || categoria_veiculo || 'carro').toLowerCase();
+
+      await sql`
+        INSERT INTO usuarios (id, nome, email, telefone, cpf, data_nascimento, senha_hash, role)
+        VALUES (${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash}, 'motorista');
+      `;
+
+      try {
+        await sql`
+          INSERT INTO motoristas (
+            id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
+            cnh_numero, categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+            chave_pix_padrao, foto_perfil_url, saldo_carteira, status_aprovacao, status_online, avaliacao_media, total_corridas
+          ) VALUES (
+            ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash},
+            ${cnhLimpa}, ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${veiculo_cor || 'Prata'}, ${veiculo_ano || '2023'},
+            ${chave_pix_padrao || null}, ${fotoVeiculo || null}, 0.00, 'aprovado', TRUE, 5.00, 0
+          );
+        `;
+      } catch (errMot) {
+        await sql`DELETE FROM usuarios WHERE id = ${idMotorista};`;
+        throw errMot;
+      }
+
+      const token = jwt.sign(
+        { id: idMotorista, motoristaId: idMotorista, nome: nomeLimpo, email: emailLimpo, role: 'motorista', categoria: catFinal },
+        JWT_SECRET,
+        { expiresIn: '30d' }
+      );
+
+      return res.status(201).json({
+        sucesso: true,
+        aprovadoAutomaticamente: true,
+        mensagem: 'Cadastro de motorista aprovado automaticamente! Faça o seu login.',
+        token,
+        usuario: {
+          id: idMotorista,
+          motoristaId: idMotorista,
+          nome: nomeLimpo,
+          email: emailLimpo,
+          telefone: telLimpo,
+          role: 'motorista',
+          categoria: catFinal,
+          status_aprovacao: 'aprovado'
+        }
+      });
+    }
+
+    const idUsuario = 'usr_' + crypto.randomBytes(8).toString('hex');
+    await sql`
+      INSERT INTO usuarios (
+        id, nome, email, telefone, cpf, data_nascimento,
+        contato_emergencia_nome, contato_emergencia_tel, senha_hash, role
+      ) VALUES (
+        ${idUsuario}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql},
+        ${contatoEmergenciaNome || null}, ${contatoEmergenciaTelefone || null}, ${senhaHash}, 'cliente'
+      );
+    `;
+
+    const token = jwt.sign(
+      { id: idUsuario, nome: nomeLimpo, email: emailLimpo, role: 'cliente' },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    return res.status(201).json({
+      sucesso: true,
+      token,
+      usuario: {
+        id: idUsuario,
+        nome: nomeLimpo,
+        email: emailLimpo,
+        telefone: telLimpo,
+        role: 'cliente'
+      }
+    });
+  } catch (err) {
+    console.error('Erro no cadastro:', err);
+    if (err?.code === '23505' || /unique|duplicate/i.test(err?.message || '')) {
+      return res.status(409).json({ erro: 'Este e-mail, telefone ou CPF já está cadastrado.' });
+    }
+    return res.status(500).json({ erro: 'Falha ao concluir cadastro.' });
+  }
+}
+
+usuariosRouter.post('/cadastro', handleCadastroUnificado);
+usuariosRouter.post('/registo', handleCadastroUnificado);
+
+// ============================================================================
+// 2. LOGIN DE PASSAGEIRO E ADMIN (COM 2FA PARA ADMIN)
 // ============================================================================
 usuariosRouter.post('/login', async (req, res) => {
   try {
-    const { identificador, senha } = req.body;
+    const identificador = req.body.identificador || req.body.email;
+    const senha = req.body.senha;
 
     if (!identificador || !senha) {
-      return res.status(400).json({ erro: 'Preencha o identificador e a palavra-passe.' });
+      return res.status(400).json({ erro: 'Preencha o e-mail/telefone e a palavra-passe.' });
     }
 
     const idLimpo = String(identificador).trim().toLowerCase();
+    const idNumeros = String(identificador).replace(/\D/g, '');
 
     const users = await sql`
-      SELECT id, nome, email, telefone, role, senha
+      SELECT id, nome, email, telefone, role, senha_hash
       FROM usuarios
-      WHERE LOWER(email) = ${idLimpo} OR telefone = ${idLimpo}
+      WHERE LOWER(TRIM(email)) = ${idLimpo}
+         OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+      ORDER BY CASE WHEN LOWER(COALESCE(role, '')) IN ('admin', 'administrador') THEN 1 ELSE 2 END ASC
       LIMIT 1;
     `;
 
     if (users.length === 0) {
-      return res.status(401).json({ erro: 'Utilizador não encontrado.' });
+      return res.status(401).json({ erro: 'Conta não encontrada. Verifique os dados ou crie uma conta.' });
     }
 
     const user = users[0];
-
-    // Validação de senha simples ou hash
-    if (user.senha && user.senha !== senha) {
-      return res.status(401).json({ erro: 'Credenciais inválidas.' });
+    if (user.senha_hash) {
+      const senhaOk = await bcrypt.compare(String(senha), user.senha_hash);
+      if (!senhaOk) {
+        return res.status(401).json({ erro: 'Palavra-passe incorreta.' });
+      }
     }
 
-    const role = String(user.role || 'cliente').toLowerCase();
+    const role = String(user.role || 'cliente').trim().toLowerCase();
 
-    // INTERCEPTAÇÃO PARA ADMINISTRAÇÃO (2FA)
     if (role === 'admin' || role === 'administrador') {
       const codigo6Digitos = String(crypto.randomInt(100000, 999999));
-      const expira = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+      const expira = new Date(Date.now() + 10 * 60 * 1000);
 
       await sql`
         INSERT INTO admin_2fa_codes (usuario_id, codigo, expira_em)
         VALUES (${user.id}, ${codigo6Digitos}, ${expira});
       `;
 
-      // Envia o e-mail de segurança
-      const htmlEmail = `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
-          <h2 style="color: #10b981;">HUBy Master - Código de Acesso</h2>
-          <p>Olá, <strong>${user.nome}</strong>,</p>
-          <p>Uma tentativa de login no Painel de Administração Master foi iniciada.</p>
-          <p>Para concluir a verificação em duas etapas, utilize o código abaixo:</p>
-          <div style="background: #f1f5f9; padding: 15px; text-align: center; border-radius: 8px; font-size: 28px; font-weight: 900; letter-spacing: 4px; color: #0f172a; margin: 20px 0;">
-            ${codigo6Digitos}
-          </div>
-          <p style="font-size: 12px; color: #64748b;">Se você não solicitou este acesso, ignore este e-mail. Este código expira em 10 minutos.</p>
-        </div>
-      `;
-
-      try {
-        await transporter.sendMail({
-          from: '"HUBy Segurança" <hubymobilidade@gmail.com>',
-          to: user.email,
-          subject: '🔐 Código de Segurança do Painel Master',
-          html: htmlEmail
-        });
-      } catch (eMail) {
-        console.warn('Erro ao disparar email 2FA (verifique as credenciais):', eMail.message);
-        // Em ambiente de teste sem servidor de e-mail configurado, devolver o código na resposta:
-        // return res.json({ requer_2fa: true, email: user.email, usuario_id: user.id, codigoTeste: codigo6Digitos });
+      let emailEnviado = false;
+      if (process.env.EMAIL_PASS) {
+        try {
+          await transporter.sendMail({
+            from: `"HUBy Segurança" <${process.env.EMAIL_USER || 'hubymobilidade@gmail.com'}>`,
+            to: user.email,
+            subject: '🔐 Código de Segurança do Painel Master',
+            html: `<div style="font-family:Arial,sans-serif;padding:20px;"><h2>HUBy Master</h2><p>Seu código de acesso: <strong style="font-size:24px;">${codigo6Digitos}</strong></p></div>`
+          });
+          emailEnviado = true;
+        } catch (eMail) {
+          console.warn('Aviso SMTP 2FA:', eMail.message);
+        }
       }
 
       return res.json({
         requer_2fa: true,
         email: user.email,
         usuario_id: user.id,
+        codigoTeste: emailEnviado ? undefined : codigo6Digitos,
         mensagem: `Um código de 6 dígitos foi enviado para ${user.email}.`
       });
     }
 
-    // Login normal de passageiro (Sem 2FA)
+    if (role === 'motorista') {
+      return res.status(403).json({
+        erro: 'Esta conta é de Motorista Parceiro. Use o acesso de Motorista com E-mail, CNH e Placa.'
+      });
+    }
+
     const token = jwt.sign(
-      { id: user.id, nome: user.nome, email: user.email, role: user.role || 'cliente' },
+      { id: user.id, nome: user.nome, email: user.email, role: 'cliente' },
       JWT_SECRET,
       { expiresIn: '30d' }
     );
 
-    res.json({
+    return res.json({
       sucesso: true,
       token,
       usuario: {
@@ -147,22 +269,18 @@ usuariosRouter.post('/login', async (req, res) => {
         nome: user.nome,
         email: user.email,
         telefone: user.telefone,
-        role: user.role || 'cliente'
+        role: 'cliente'
       }
     });
   } catch (err) {
-    console.error('Erro no login de passageiro:', err);
-    res.status(500).json({ erro: 'Falha interna ao autenticar passageiro.' });
+    console.error('Erro no login:', err);
+    return res.status(500).json({ erro: 'Falha interna ao autenticar.' });
   }
 });
 
-// ============================================================================
-// 1.5 VALIDAÇÃO DO CÓDIGO 2FA DO ADMIN
-// ============================================================================
 usuariosRouter.post('/validar-2fa', async (req, res) => {
   try {
     const { usuario_id, codigo } = req.body;
-
     if (!usuario_id || !codigo || String(codigo).length !== 6) {
       return res.status(400).json({ erro: 'Código de 6 dígitos inválido.' });
     }
@@ -177,42 +295,33 @@ usuariosRouter.post('/validar-2fa', async (req, res) => {
     `;
 
     if (checks.length === 0) {
-      return res.status(401).json({ erro: 'Código incorreto ou expirado. Faça o login novamente.' });
+      return res.status(401).json({ erro: 'Código incorreto ou expirado.' });
     }
 
-    // Invalida o código para não ser usado de novo
     await sql`UPDATE admin_2fa_codes SET usado = TRUE WHERE id = ${checks[0].id};`;
 
-    // Resgata o Admin para emitir o Token Master
-    const users = await sql`SELECT id, nome, email, telefone, role FROM usuarios WHERE id = ${usuario_id} LIMIT 1;`;
-    if (users.length === 0) return res.status(404).json({ erro: 'Usuário administrador não localizado.' });
+    const users = await sql`SELECT id, nome, email, role FROM usuarios WHERE id = ${usuario_id} LIMIT 1;`;
+    if (users.length === 0) return res.status(404).json({ erro: 'Administrador não localizado.' });
 
     const admin = users[0];
     const token = jwt.sign(
-      { id: admin.id, nome: admin.nome, email: admin.email, role: admin.role },
+      { id: admin.id, nome: admin.nome, email: admin.email, role: 'admin' },
       JWT_SECRET,
-      { expiresIn: '30d' } // Pode reduzir para 12h se quiser mais segurança
+      { expiresIn: '30d' }
     );
 
-    res.json({
+    return res.json({
       sucesso: true,
       token,
-      usuario: {
-        id: admin.id,
-        nome: admin.nome,
-        email: admin.email,
-        role: admin.role
-      }
+      usuario: { id: admin.id, nome: admin.nome, email: admin.email, role: 'admin' }
     });
-
   } catch (err) {
-    console.error('Erro validação 2FA:', err);
-    res.status(500).json({ erro: 'Falha ao validar verificação de duas etapas.' });
+    return res.status(500).json({ erro: 'Falha ao validar código 2FA.' });
   }
 });
 
 // ============================================================================
-// 2. LOGIN DE MOTORISTA PARCEIRO (Sem Senha: E-mail + CNH + Placa)
+// 3. LOGIN DE MOTORISTA PARCEIRO (E-MAIL + CNH + PLACA, SEM BLOQUEIO DE ADMIN)
 // ============================================================================
 usuariosRouter.post('/login-motorista', async (req, res) => {
   try {
@@ -222,36 +331,32 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
       return res.status(400).json({ erro: 'Informe E-mail, CNH e Placa do veículo.' });
     }
 
-    const cnhLimpa = String(cnh).replace(/\D/g, '');
-    const placaLimpa = String(veiculo_placa).trim().toUpperCase();
     const emailLimpo = String(email).trim().toLowerCase();
+    const cnhLimpa = String(cnh).replace(/\D/g, '');
+    const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
-    let condutores = await sql`
-      SELECT m.*, u.id AS usuario_conta_id, u.role
-      FROM motoristas m
-      LEFT JOIN usuarios u ON (m.usuario_id = u.id OR LOWER(m.email) = LOWER(u.email))
-      WHERE LOWER(m.email) = ${emailLimpo}
-        AND REPLACE(REPLACE(m.cnh, '.', ''), '-', '') = ${cnhLimpa}
-        AND UPPER(REPLACE(m.veiculo_placa, '-', '')) = ${placaLimpa}
+    const condutores = await sql`
+      SELECT *
+      FROM motoristas
+      WHERE LOWER(TRIM(email)) = ${emailLimpo}
+        AND regexp_replace(COALESCE(cnh_numero, ''), '\\D', '', 'g') = ${cnhLimpa}
+        AND UPPER(REPLACE(TRIM(COALESCE(veiculo_placa, '')), '-', '')) = ${placaLimpa}
       LIMIT 1;
     `;
 
     if (condutores.length === 0) {
-      condutores = await sql`
-        SELECT * FROM motoristas 
-        WHERE LOWER(email) = ${emailLimpo}
-        LIMIT 1;
-      `;
-    }
-
-    if (condutores.length === 0) {
-      return res.status(401).json({ erro: 'Dados de motorista ou veículo não encontrados.' });
+      return res.status(401).json({ erro: 'E-mail, CNH ou Placa não conferem. Verifique os dados cadastrados.' });
     }
 
     const mot = condutores[0];
-    const usuarioId = mot.usuario_conta_id || mot.usuario_id || mot.id;
-    // Puxa a categoria do banco. Se estiver nulo, vira "carro" por padrão.
-    const catFinal = String(mot.categoria || mot.categoria_veiculo || 'carro').toLowerCase().trim();
+    if (mot.status_aprovacao === 'recusado') {
+      return res.status(403).json({ erro: `Cadastro recusado${mot.motivo_recusa ? `: ${mot.motivo_recusa}` : '.'}` });
+    }
+
+    await sql`UPDATE motoristas SET status_online = TRUE, status_aprovacao = 'aprovado' WHERE id = ${mot.id};`;
+
+    const usuarioId = mot.usuario_id || mot.id;
+    const catFinal = String(mot.categoria || 'carro').toLowerCase().trim();
 
     const token = jwt.sign(
       {
@@ -266,7 +371,7 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.json({
+    return res.json({
       sucesso: true,
       token,
       usuario: {
@@ -276,96 +381,28 @@ usuariosRouter.post('/login-motorista', async (req, res) => {
         email: mot.email,
         role: 'motorista',
         categoria: catFinal,
-        veiculo_modelo: mot.veiculo_modelo || 'Onix',
-        veiculo_placa: mot.veiculo_placa || 'ABC1D23'
+        veiculo_modelo: mot.veiculo_modelo || 'Veículo',
+        veiculo_placa: mot.veiculo_placa || placaLimpa
       }
     });
   } catch (err) {
     console.error('Erro no login do motorista:', err);
-    res.status(500).json({ erro: 'Falha interna ao validar motorista parceiro.' });
+    return res.status(500).json({ erro: 'Falha interna ao validar motorista parceiro.' });
   }
 });
 
-// ============================================================================
-// 3. REGISTO DE UTILIZADORES (Passageiro ou Motorista)
-// ============================================================================
-usuariosRouter.post('/registo', async (req, res) => {
-  try {
-    const { nome, email, telefone, senha, role, cnh, veiculo_modelo, veiculo_placa, veiculo_cor } = req.body;
-
-    if (!nome || !email) {
-      return res.status(400).json({ erro: 'Nome e E-mail são obrigatórios.' });
-    }
-
-    const idUsuario = 'usr_' + Date.now().toString(36);
-    const tipoConta = role === 'motorista' ? 'motorista' : 'cliente';
-
-    await sql`
-      INSERT INTO usuarios (id, nome, email, telefone, senha, role)
-      VALUES (${idUsuario}, ${nome}, ${email.toLowerCase()}, ${telefone || ''}, ${senha || '123456'}, ${tipoConta})
-      ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome;
-    `;
-
-    let idMotorista = null;
-
-    if (tipoConta === 'motorista') {
-      idMotorista = 'mot_' + Date.now().toString(36);
-      await sql`
-        INSERT INTO motoristas (
-          id, usuario_id, nome, email, telefone, cnh, 
-          veiculo_modelo, veiculo_placa, veiculo_cor, saldo_carteira, status
-        ) VALUES (
-          ${idMotorista}, ${idUsuario}, ${nome}, ${email.toLowerCase()}, ${telefone || ''}, 
-          ${cnh || '00000000000'}, ${veiculo_modelo || 'Onix'}, 
-          ${(veiculo_placa || 'ABC1D23').toUpperCase()}, ${veiculo_cor || 'Prata'}, 
-          0.00, 'ativo'
-        );
-      `;
-    }
-
-    const token = jwt.sign(
-      { id: idUsuario, motoristaId: idMotorista, nome, email, role: tipoConta },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
-
-    res.status(201).json({
-      sucesso: true,
-      token,
-      usuario: {
-        id: idUsuario,
-        motoristaId: idMotorista,
-        nome,
-        email,
-        role: tipoConta
-      }
-    });
-  } catch (err) {
-    console.error('Erro ao registar utilizador:', err);
-    res.status(500).json({ erro: 'Falha ao concluir registo na base de dados.' });
-  }
-});
-
-// ============================================================================
-// 4. PERFIL DO UTILIZADOR AUTENTICADO
-// ============================================================================
 usuariosRouter.get('/perfil', autenticar, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
     const users = await sql`
       SELECT id, nome, email, telefone, role, criado_em
       FROM usuarios
-      WHERE id::text = ${usuarioId}::text
+      WHERE id::text = ${String(req.usuario.id)}::text
       LIMIT 1;
     `;
-
-    if (users.length === 0) {
-      return res.status(404).json({ erro: 'Utilizador não encontrado.' });
-    }
-
-    res.json(users[0]);
+    if (users.length === 0) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
+    return res.json(users[0]);
   } catch (err) {
-    res.status(500).json({ erro: 'Falha ao consultar perfil.' });
+    return res.status(500).json({ erro: 'Falha ao consultar perfil.' });
   }
 });
 
