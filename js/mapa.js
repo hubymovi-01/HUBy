@@ -1,23 +1,16 @@
 /**
  * ============================================================================
  * HUBy 2.5 - Serviço Central de Mapa 3D e Rotas (js/mapa.js)
- * Motor Vetorial MapLibre GL 3D + GPS Pulsante + Compatibilidade Total
+ * Motor Vetorial MapLibre GL 3D (OpenFreeMap Gratuito) + GPS Pulsante
  * ============================================================================
  */
 import { calcularPreco } from './config.js';
 
-const ESTILO_DARK_3D = {
+const URL_ESTILO_3D_GRATUITO = 'https://tiles.openfreemap.org/styles/dark';
+
+const ESTILO_SATELITE_3D = {
   version: 8,
   sources: {
-    cartoDark: {
-      type: 'raster',
-      tiles: [
-        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
-        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png'
-      ],
-      tileSize: 256
-    },
     esriSatelite: {
       type: 'raster',
       tiles: [
@@ -28,16 +21,9 @@ const ESTILO_DARK_3D = {
   },
   layers: [
     {
-      id: 'camada-dark-base',
-      type: 'raster',
-      source: 'cartoDark',
-      layout: { visibility: 'visible' }
-    },
-    {
       id: 'camada-satelite-base',
       type: 'raster',
-      source: 'esriSatelite',
-      layout: { visibility: 'none' }
+      source: 'esriSatelite'
     }
   ]
 };
@@ -70,6 +56,8 @@ export class HubyMapa {
     this.gpsFixo = false;
     this.modoSatelite = false;
     this.mapaPronto = false;
+    this._ultimaGeometriaRota = null;
+    this._ultimaCorRota = '#F59E0B';
   }
 
   inicializar(onClickDestino = null) {
@@ -94,10 +82,10 @@ export class HubyMapa {
 
     this.map = new maplibregl.Map({
       container: this.containerId,
-      style: ESTILO_DARK_3D,
+      style: URL_ESTILO_3D_GRATUITO,
       center: [this.coordsOrigem[1], this.coordsOrigem[0]], // [lng, lat]
       zoom: 16,
-      pitch: 42,
+      pitch: 45,
       bearing: 0,
       antialias: true,
       attributionControl: false
@@ -144,14 +132,16 @@ export class HubyMapa {
     if (!this.map) return false;
     this.modoSatelite = typeof forcarEstado === 'boolean' ? forcarEstado : !this.modoSatelite;
 
-    const aplicar = () => {
-      if (!this.map.getLayer('camada-dark-base')) return;
-      this.map.setLayoutProperty('camada-dark-base', 'visibility', this.modoSatelite ? 'none' : 'visible');
-      this.map.setLayoutProperty('camada-satelite-base', 'visibility', this.modoSatelite ? 'visible' : 'none');
-    };
+    const geometriaSalva = this._ultimaGeometriaRota || null;
+    const corSalva = this._ultimaCorRota || '#F59E0B';
 
-    if (this.mapaPronto) aplicar();
-    else this.map.once('load', aplicar);
+    this.map.setStyle(this.modoSatelite ? ESTILO_SATELITE_3D : URL_ESTILO_3D_GRATUITO);
+
+    this.map.once('style.load', () => {
+      if (geometriaSalva) {
+        this.desenharRota(geometriaSalva, corSalva);
+      }
+    });
 
     return this.modoSatelite;
   }
@@ -184,7 +174,7 @@ export class HubyMapa {
       this.map.flyTo({
         center: [lng, lat],
         zoom: 16,
-        pitch: 42,
+        pitch: 45,
         duration: 900
       });
     }
@@ -218,6 +208,7 @@ export class HubyMapa {
 
   limparRota() {
     this.rotaLayer = null;
+    this._ultimaGeometriaRota = null;
     if (!this.map) return;
     try {
       if (this.map.getLayer('huby-rota-glow')) this.map.removeLayer('huby-rota-glow');
@@ -256,7 +247,6 @@ export class HubyMapa {
       this.coordsGPSReal = [lat, lng];
       this.posicaoAtual = { lat, lng };
 
-      // Só sobrescreve a origem se o usuário não escolheu outro local de partida (ex: pedir para outra pessoa)
       if (!this.origemPersonalizada) {
         this.coordsOrigem = [lat, lng];
         this.definirOrigem(lat, lng, precisao, false);
@@ -311,6 +301,8 @@ export class HubyMapa {
 
     const aplicarRota = () => {
       this.limparRota();
+      this._ultimaGeometriaRota = geometria;
+      this._ultimaCorRota = cor;
 
       const featureCollection = {
         type: 'FeatureCollection',
@@ -359,7 +351,7 @@ export class HubyMapa {
         );
         this.map.fitBounds(bounds, {
           padding: { top: 130, bottom: 320, left: 45, right: 45 },
-          pitch: 38,
+          pitch: 40,
           maxZoom: 16,
           duration: 900
         });
