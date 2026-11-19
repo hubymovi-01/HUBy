@@ -1,12 +1,12 @@
 // sw.js - Service Worker HUBy (Blindagem Anti-Cache + Push Notifications)
-const CACHE_NAME = 'huby-v8-network-first-live';
+const CACHE_NAME = 'huby-v9-network-first-live';
 
 // 1. INSTALAÇÃO: Força o novo Service Worker a assumir o controlo de imediato
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-// 2. ATIVAÇÃO: Elimina qualquer cache antigo/residual do telemóvel e toma o controlo dos clientes
+// 2. ATIVAÇÃO: Elimina qualquer cache antigo/residual e toma o controlo dos clientes
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -38,7 +38,6 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request, { cache: 'no-store' }).catch((err) => {
       console.warn('⚠️ [SW HUBy] Falha de rede ao buscar:', event.request.url);
 
-      // Se for navegação de página HTML e estiver sem internet
       if (event.request.mode === 'navigate') {
         return new Response(
           `<!DOCTYPE html>
@@ -77,16 +76,18 @@ self.addEventListener('fetch', (event) => {
 // 4. NOTIFICAÇÕES EM SEGUNDO PLANO E PUSH
 // ============================================================================
 
-// Foca a janela do motorista ou abre o app ao tocar na notificação
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const urlDestino = event.notification.data?.url || './motorista.html';
+  const alvoArquivo = urlDestino.includes('index.html')
+    ? 'index.html'
+    : (urlDestino.includes('admin.html') ? 'admin.html' : 'motorista.html');
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (let client of windowClients) {
-        if (client.url.includes('motorista.html') && 'focus' in client) {
+      for (const client of windowClients) {
+        if (client.url.includes(alvoArquivo) && 'focus' in client) {
           return client.focus();
         }
       }
@@ -97,29 +98,34 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Recebimento de alertas e novas chamadas via Push Notification
 self.addEventListener('push', (event) => {
-  let dados = { 
-    titulo: '🚘 HUBy: Nova corrida disponível!', 
-    corpo: 'Há uma nova chamada aguardando você. Toque para visualizar.' 
+  let dados = {
+    titulo: '🚘 HUBy: Nova corrida disponível!',
+    corpo: 'Há uma nova chamada aguardando você. Toque para visualizar.',
+    url: './motorista.html'
   };
 
   if (event.data) {
     try {
-      dados = event.data.json();
+      const payload = event.data.json();
+      dados = {
+        titulo: payload.titulo || payload.title || dados.titulo,
+        corpo: payload.corpo || payload.body || dados.corpo,
+        url: payload.url || dados.url
+      };
     } catch (e) {
-      dados.corpo = event.data.text();
+      dados.corpo = event.data.text() || dados.corpo;
     }
   }
 
   const opcoes = {
     body: dados.corpo,
-    icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=192&q=80',
-    badge: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=192&q=80',
+    icon: './img/icon-192.png',
+    badge: './img/icon-192.png',
     vibrate: [300, 150, 300, 150, 300],
-    tag: 'huby-nova-chamada',
+    tag: 'huby-notificacao',
     renotify: true,
-    data: { url: './motorista.html' }
+    data: { url: dados.url }
   };
 
   event.waitUntil(self.registration.showNotification(dados.titulo, opcoes));
