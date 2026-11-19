@@ -659,25 +659,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     estadoCliente.coordsOrigem = coordsOrigemNova;
     estadoCliente.enderecoOrigem = nomeOrigem;
 
-    const txtOrigem = document.getElementById('txtOrigemSelecionada');
-    const lblTabOrigem = document.getElementById('lblTabOrigem');
+    const inputOrigem = document.getElementById('inputOrigemLocal');
     const btnResetGPS = document.getElementById('btnUsarMeuGPSOrigem');
 
-    if (txtOrigem) {
-      txtOrigem.textContent = nomeOrigem;
-      txtOrigem.style.color = '#10B981';
-      txtOrigem.style.fontWeight = '800';
-    }
-    if (lblTabOrigem) {
-      lblTabOrigem.textContent = `Partida: ${nomeOrigem.length > 18 ? nomeOrigem.slice(0, 18) + '…' : nomeOrigem}`;
-    }
+    if (inputOrigem) inputOrigem.value = nomeOrigem;
     if (btnResetGPS) btnResetGPS.style.display = 'inline-block';
 
     if (estadoCliente.coordsDestino && estadoCliente.hubyMapa) {
-      const rota = await estadoCliente.hubyMapa.calcularRota(coordsOrigemNova, estadoCliente.coordsDestino, '#F59E0B', true);
+      const rota = await estadoCliente.hubyMapa.calcularRota(coordsOrigemNova, estadoCliente.coordsDestino, '#10B981', true);
       estadoCliente.rotaAtual = rota;
       sincronizarPrecosDaRotaAtual();
     }
+  };
+
+  const restaurarOrigemMeuGPS = () => {
+    estadoCliente.enderecoOrigem = null;
+    const inputOrigem = document.getElementById('inputOrigemLocal');
+    const btnResetGPS = document.getElementById('btnUsarMeuGPSOrigem');
+
+    if (inputOrigem) inputOrigem.value = '';
+    if (btnResetGPS) btnResetGPS.style.display = 'none';
+
+    estadoCliente.hubyMapa?.obterGPS(async (pos) => {
+      if (pos?.lat && pos?.lng) {
+        estadoCliente.coordsOrigem = [pos.lat, pos.lng];
+        if (estadoCliente.coordsDestino) {
+          const rota = await estadoCliente.hubyMapa.calcularRota([pos.lat, pos.lng], estadoCliente.coordsDestino, '#10B981', true);
+          estadoCliente.rotaAtual = rota;
+          sincronizarPrecosDaRotaAtual();
+        }
+      }
+    });
   };
 
   const restaurarOrigemMeuGPS = () => {

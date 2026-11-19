@@ -11,7 +11,6 @@
 
   <title>HUBy</title>
 
-  <!-- PWA & CORES DO SISTEMA -->
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#090D16">
   <meta name="mobile-web-app-capable" content="yes">
@@ -19,11 +18,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
-  <!-- ÍCONES -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
-  <!-- ESTILOS (Motor 3D MapLibre GL + Layout Cliente) -->
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/cliente.css?v=3.5.0">
@@ -32,7 +29,6 @@
   <link rel="stylesheet" href="./css/ia.css?v=1.0.0">
   <link rel="stylesheet" href="./css/alertas.css?v=1.0.0">
 
-  <!-- BIBLIOTECAS CDN -->
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
@@ -89,7 +85,6 @@
       align-items: center;
       justify-content: center;
       backdrop-filter: blur(8px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.6);
     }
     .sponsor-tag-badge {
       position: absolute;
@@ -101,10 +96,8 @@
       font-size: 10px;
       font-weight: 900;
       text-transform: uppercase;
-      letter-spacing: 0.6px;
       padding: 4px 10px;
       border-radius: 20px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     }
     .partner-filter-pill {
       background: rgba(255, 255, 255, 0.06);
@@ -123,58 +116,84 @@
       color: #10B981;
     }
 
-    /* ESTILOS DE BUSCA DE ONDE -> PARA ONDE (ESTILO UBER) */
-    .search-mode-tabs {
+    /* CARTÃO LIMPO DE ORIGEM E DESTINO (ESTILO UBER) */
+    .clean-route-box {
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 10px 12px;
       display: flex;
-      gap: 6px;
-      margin-bottom: 6px;
+      gap: 10px;
+      align-items: stretch;
+      margin-bottom: 10px;
+      position: relative;
     }
-    .search-tab-pill {
+    .clean-route-inputs {
       flex: 1;
-      background: rgba(14, 20, 32, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      color: #94A3B8;
-      font-size: 11px;
-      font-weight: 800;
-      padding: 6px 10px;
-      border-radius: 999px;
-      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .clean-input-row {
       display: flex;
       align-items: center;
-      justify-content: center;
-      gap: 5px;
-      backdrop-filter: blur(12px);
-      transition: all 0.2s ease;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 10px;
+      padding: 6px 10px;
+      border: 1px solid transparent;
+      transition: border-color 0.2s;
     }
-    .search-tab-pill.active-origem {
-      background: rgba(16, 185, 129, 0.2);
-      border-color: #10B981;
-      color: #10B981;
+    .clean-input-row:focus-within {
+      border-color: rgba(16, 185, 129, 0.55);
+      background: rgba(255, 255, 255, 0.07);
     }
-    .search-tab-pill.active-destino {
-      background: rgba(56, 189, 248, 0.2);
-      border-color: #38BDF8;
-      color: #38BDF8;
+    .clean-input-row input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #F8FAFC;
+      font-size: 13.5px;
+      font-weight: 600;
+      outline: none;
+      min-width: 0;
     }
-    .route-row-origin {
-      cursor: pointer;
-      border-radius: 8px;
-      padding: 2px 4px;
-      transition: background 0.2s;
+    .clean-input-row input::placeholder {
+      color: #94A3B8;
+      font-weight: 500;
     }
-    .route-row-origin:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-    .btn-reset-gps-inline {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.4);
-      color: #10B981;
-      font-size: 10px;
+    .clean-mini-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: #CBD5E1;
+      font-size: 11px;
       font-weight: 800;
-      padding: 2px 7px;
-      border-radius: 999px;
+      padding: 4px 8px;
+      border-radius: 8px;
       cursor: pointer;
-      margin-left: 6px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .clean-results-dropdown {
+      list-style: none;
+      margin: 0 0 8px 0;
+      padding: 6px;
+      background: rgba(11, 16, 27, 0.98);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 14px;
+      max-height: 195px;
+      overflow-y: auto;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75);
+    }
+    .clean-extra-drawer {
+      display: none;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .clean-extra-drawer.open {
+      display: grid;
     }
   </style>
 </head>
@@ -195,68 +214,16 @@
   <!-- MAPA PRINCIPAL 3D -->
   <div id="mapaCliente"></div>
 
-  <!-- NAVEGAÇÃO SUPERIOR FIXA -->
-  <header class="top-nav-bar">
-    <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu">
+  <!-- TOPO MINIMALISTA (APENAS MENU + LOGO) -->
+  <header class="top-nav-bar" style="justify-content: space-between; pointer-events: none;">
+    <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu" style="pointer-events: auto;">
       <span></span><span></span><span></span>
     </button>
-    <div class="brand-pill">
+    <div class="brand-pill" style="pointer-events: auto;">
       <span class="hub-txt">HUB</span><span class="y-txt">y</span>
     </div>
-    <div style="display: flex; align-items: center; gap: 6px;">
-      <button type="button" id="btnNavParceiros" class="btn-action-pill"
-        style="background: rgba(16, 185, 129, 0.16); border-color: rgba(16, 185, 129, 0.45); color: #10B981;">
-        <span>✨</span>
-        <span>Parceiros</span>
-      </button>
-      <button type="button" id="btnNavViagens" class="btn-action-pill">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
-          stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <polyline points="12 6 12 12 16 14"></polyline>
-        </svg>
-        <span>Viagens</span>
-      </button>
-    </div>
+    <div style="width: 42px;"></div>
   </header>
-
-  <!-- BARRA DE PESQUISA FLUTUANTE MODERNA (DE ONDE -> PARA ONDE + PROXIMIDADE) -->
-  <div class="search-floating-wrapper">
-    <div class="search-mode-tabs">
-      <button type="button" id="tabBuscarOrigem" class="search-tab-pill" title="Definir ponto de partida (pedir para outra pessoa ou outro endereço)">
-        <span>🟢</span> <span id="lblTabOrigem">Partida: Meu GPS</span>
-      </button>
-      <button type="button" id="tabBuscarDestino" class="search-tab-pill active-destino" title="Definir destino da viagem">
-        <span>🏁</span> <span>Destino</span>
-      </button>
-    </div>
-
-    <div class="search-glass-box modern-search">
-      <div class="search-dot-accent" id="searchDotIndicator"></div>
-      <input type="text" id="inputPesquisaLocal" placeholder="Para onde você quer ir?" autocomplete="off" />
-
-      <button type="button" id="btnBuscaIA" class="search-icon" aria-label="Busca Inteligente"
-        style="color: #38BDF8; margin-right: 2px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-          stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-          <line x1="12" y1="19" x2="12" y2="23"></line>
-          <line x1="8" y1="23" x2="16" y2="23"></line>
-        </svg>
-      </button>
-
-      <button type="button" id="btnAcionarPesquisa" class="search-icon" aria-label="Pesquisar">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-          stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8"></circle>
-          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-        </svg>
-      </button>
-      <button type="button" id="btnLimparPesquisa" class="clear-btn" aria-label="Limpar">✕</button>
-    </div>
-    <ul id="listaResultadosPesquisa" class="search-results-glass" style="display: none;"></ul>
-  </div>
 
   <!-- DRAWER LATERAL DO PASSAGEIRO -->
   <div id="menuBackdrop" class="drawer-backdrop"></div>
@@ -276,7 +243,7 @@
             <small id="txtMenuCasaDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa" aria-label="Editar Casa">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarCasa" title="Editar Casa">✏️</button>
       </div>
 
       <div class="drawer-fav-card">
@@ -287,7 +254,7 @@
             <small id="txtMenuTrabalhoDesc">Toque no lápis para definir</small>
           </div>
         </div>
-        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho" aria-label="Editar Trabalho">✏️</button>
+        <button type="button" class="btn-fav-edit" id="btnEditarTrabalho" title="Editar Trabalho">✏️</button>
       </div>
 
       <div style="height: 1px; background: rgba(255,255,255,0.06); margin: 8px 10px;"></div>
@@ -335,21 +302,13 @@
 
     <div class="drawer-footer">
       <button type="button" id="btnAcaoConta" class="btn-drawer-auth">Sair ou Mudar de Conta</button>
-      <span class="version-tag">HUBy v2.5 • 3D 2026</span>
+      <span class="version-tag">HUBy v2.6 • 3D Clean</span>
     </div>
   </aside>
 
-  <!-- BOTÃO FLUTUANTE DE CAMADA (SATÉLITE / 3D DARK) -->
-  <button type="button" id="btnAlternarCamadaMapa" class="btn-floating-gps btn-floating-layer" aria-label="Alternar Satélite">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
-      <polyline points="12 17 12 22 22 17"></polyline>
-      <polyline points="12 12 12 17 22 12"></polyline>
-    </svg>
-  </button>
-
-  <!-- BOTÃO FLUTUANTE DE GPS -->
-  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Recentralizar GPS">
+  <!-- APENAS 1 BOTÃO FLUTUANTE DE GPS NO MAPA -->
+  <button type="button" id="btnLocalizarGPS" class="btn-floating-gps" aria-label="Minha Localização GPS"
+    style="bottom: 330px; right: 14px; background: rgba(11, 16, 27, 0.92); border: 1px solid rgba(255,255,255,0.16);">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <circle cx="12" cy="12" r="7"></circle>
       <line x1="12" y1="1" x2="12" y2="5"></line>
@@ -359,42 +318,48 @@
     </svg>
   </button>
 
-  <!-- BOTÃO FLUTUANTE DE CHAT -->
+  <!-- BOTÃO FLUTUANTE DE CHAT (SÓ APARECE EM CORRIDA ATIVA) -->
   <button type="button" id="btnAbrirChat" class="btn-floating-gps"
-    style="display: none !important; bottom: 380px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
+    style="display: none !important; bottom: 385px; right: 14px; border-color: #38BDF8; color: #38BDF8; font-size: 20px;"
     aria-label="Abrir Chat">
     💬
   </button>
 
-  <!-- DOCK INFERIOR COMPACTO -->
+  <!-- DOCK INFERIOR ÚNICO E LIMPO -->
   <section class="client-dock-sheet pro-dock">
     <div class="sheet-drag-handle"></div>
 
-    <div id="blocoResumo" class="trip-summary-card-pro">
-      <div class="route-timeline">
+    <!-- LISTA DE RESULTADOS DA BUSCA (APARECE LOGO ACIMA DOS CAMPOS) -->
+    <ul id="listaResultadosPesquisa" class="clean-results-dropdown" style="display: none;"></ul>
+
+    <!-- CARTÃO ÚNICO DE PARTIDA E DESTINO -->
+    <div id="blocoResumo" class="clean-route-box">
+      <div class="route-timeline" style="padding: 10px 0;">
         <div class="timeline-dot pickup"></div>
         <div class="timeline-line"></div>
         <div class="timeline-dot dropoff"></div>
       </div>
-      <div class="route-details-column">
-        <div class="route-row-origin" id="rowEditarOrigem" title="Toque para alterar o local de embarque">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <span class="route-label">De onde (Embarque) ✏️</span>
-            <button type="button" id="btnUsarMeuGPSOrigem" class="btn-reset-gps-inline" style="display: none;">📍 Usar meu GPS</button>
-          </div>
-          <span id="txtOrigemSelecionada" class="route-text origin">Local de embarque atual (GPS)</span>
+
+      <div class="clean-route-inputs">
+        <!-- CAMPO DE PARTIDA (DE ONDE) -->
+        <div class="clean-input-row">
+          <input type="text" id="inputOrigemLocal" placeholder="📍 Minha localização atual (GPS)" autocomplete="off" />
+          <button type="button" id="btnUsarMeuGPSOrigem" class="clean-mini-btn" style="color: #10B981; display: none;" title="Voltar ao meu GPS">GPS</button>
         </div>
-        <div class="route-row-dest">
-          <div class="dest-title-group">
-            <span class="route-label">Para onde (Destino)</span>
-            <button type="button" id="btnAddParada" class="btn-add-stop-pill">+ Parada</button>
-          </div>
-          <span id="txtDestinoSelecionado" class="route-text dest">Selecione no mapa ou pesquise</span>
-          <div id="containerParadasIntermediarias"></div>
+
+        <!-- CAMPO DE DESTINO (PARA ONDE) -->
+        <div class="clean-input-row">
+          <input type="text" id="inputPesquisaLocal" placeholder="Para onde você vai?" autocomplete="off" />
+          <button type="button" id="btnLimparPesquisa" class="clean-mini-btn" style="display: none;">✕</button>
+          <button type="button" id="btnAddParada" class="clean-mini-btn" style="color: #38BDF8;">+ Parada</button>
         </div>
+
+        <span id="txtDestinoSelecionado" style="display: none;">Selecione no mapa ou pesquise</span>
+        <div id="containerParadasIntermediarias"></div>
       </div>
     </div>
 
+    <!-- CATEGORIAS -->
     <div class="categories-container" id="sliderCategorias">
       <div class="category-card-pro active" data-id="carro">
         <div class="cat-left"><span class="cat-emoji">🚗</span></div>
@@ -427,27 +392,36 @@
       </select>
     </div>
 
-    <div class="dock-quick-actions-row pro-actions">
+    <!-- LINHA COMPACTA: PAGAMENTO + MAIS OPÇÕES -->
+    <div class="dock-quick-actions-row pro-actions" style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px;">
       <button type="button" id="btnTriggerPagamento" class="btn-dock-quick-pill modern-pill" title="Forma de Pagamento">
         <span class="pill-icon" id="iconFormaPagamento">💵</span>
         <span class="pill-text" id="txtFormaPagamentoSelecionada">Dinheiro</span>
       </button>
 
-      <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill" title="Adicionar Cupom">
+      <button type="button" id="btnToggleMaisOpcoes" class="btn-dock-quick-pill modern-pill" title="Cupom, Observação e Agendamento">
+        <span class="pill-icon">⚙️</span>
+        <span class="pill-text">Opções</span>
+      </button>
+    </div>
+
+    <!-- GAVETA OCULTA DE CUPOM / OBS / AGENDAR -->
+    <div id="gavetaMaisOpcoes" class="clean-extra-drawer">
+      <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill">
         <span class="pill-icon">🏷️</span>
         <span class="pill-text">Cupom</span>
       </button>
 
-      <div style="position: relative; flex: 1;">
-        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Adicionar nota">
+      <div style="position: relative;">
+        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" style="width: 100%;">
           <span class="pill-icon">📝</span>
           <span class="pill-text">Obs</span>
         </button>
         <button type="button" id="btnLimparNotaMotorista" class="btn-clear-badge" style="display: none;">✕</button>
       </div>
-      
-      <div style="position: relative; flex: 1;">
-        <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Agendar Viagem">
+
+      <div style="position: relative;">
+        <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" style="width: 100%;">
           <span class="pill-icon">⏰</span>
           <span class="pill-text">Agendar</span>
         </button>
@@ -643,6 +617,10 @@
       window.location.replace('./login.html');
     });
 
+    document.getElementById('btnToggleMaisOpcoes')?.addEventListener('click', () => {
+      document.getElementById('gavetaMaisOpcoes')?.classList.toggle('open');
+    });
+
     function atualizarMenuLateral() {
       const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
       const fotoLocal = localStorage.getItem('huby_user_foto');
@@ -696,9 +674,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=11.0.0"></script>
-  <!-- INTELIGÊNCIA ARTIFICIAL E COMANDOS DE VOZ DO PASSAGEIRO -->
-  <script type="module" src="./js/ia/cliente-ia.js?v=2.0.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=12.0.0"></script>
   <!-- RECIBO E PUSH -->
   <script type="module" src="./js/recibo-cliente.js?v=1.0.0"></script>
   <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>

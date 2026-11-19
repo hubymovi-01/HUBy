@@ -1,6 +1,6 @@
 /**
  * ============================================================================
- * HUBy 2.5 - Motor de Pesquisa Inteligente por Proximidade + De Onde / Para Onde
+ * HUBy 2.6 - Motor de Pesquisa Direta (Partida e Destino) por Proximidade
  * ============================================================================
  */
 
@@ -26,7 +26,6 @@ async function buscarLocaisProximos(termo, refLat, refLng) {
   const resultados = [];
   const chavesVistas = new Set();
 
-  // 1. Photon (Komoot/OSM) - Excelente para viés por proximidade (lat/lon)
   try {
     const urlPhoton = `https://photon.komoot.io/api/?q=${encodeURIComponent(termo)}&lat=${refLat}&lon=${refLng}&limit=8&lang=default`;
     const resp = await fetch(urlPhoton);
@@ -71,7 +70,6 @@ async function buscarLocaisProximos(termo, refLat, refLng) {
     }
   } catch (e) {}
 
-  // 2. Nominatim com viewbox local (~55 km ao redor do usuário) como reforço
   if (resultados.length < 4) {
     try {
       const delta = 0.5;
@@ -107,73 +105,32 @@ async function buscarLocaisProximos(termo, refLat, refLng) {
     } catch (e) {}
   }
 
-  // Ordena priorizando os mais próximos do usuário
   resultados.sort((a, b) => a.distanciaKm - b.distanciaKm);
   return resultados.slice(0, 7);
 }
 
 export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal, aoSelecionarOrigem = null) {
-  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  const inputOrigem = document.getElementById('inputOrigemLocal');
+  const inputDestino = document.getElementById('inputPesquisaLocal');
   const btnLimpar = document.getElementById('btnLimparPesquisa');
   const listaResultados = document.getElementById('listaResultadosPesquisa');
-  const btnPesquisar = document.getElementById('btnAcionarPesquisa');
-  const tabOrigem = document.getElementById('tabBuscarOrigem');
-  const tabDestino = document.getElementById('tabBuscarDestino');
-  const searchDot = document.getElementById('searchDotIndicator');
 
   let timeoutPesquisa = null;
-  let modoBuscaAtual = 'destino'; // 'origem' | 'destino'
+  let campoAtivo = 'destino'; // 'origem' | 'destino'
 
-  if (!inputPesquisa || !listaResultados) return;
+  if (!inputDestino || !listaResultados) return;
 
-  const definirModoBusca = (novoModo, focarInput = false) => {
-    modoBuscaAtual = novoModo === 'origem' ? 'origem' : 'destino';
-
-    if (tabOrigem && tabDestino) {
-      if (modoBuscaAtual === 'origem') {
-        tabOrigem.classList.add('active-origem');
-        tabDestino.classList.remove('active-destino');
-        inputPesquisa.placeholder = 'De onde vai sair? (Ex: Rua, Bairro, Cidade...)';
-        if (searchDot) searchDot.style.background = '#10B981';
-      } else {
-        tabDestino.classList.add('active-destino');
-        tabOrigem.classList.remove('active-origem');
-        inputPesquisa.placeholder = 'Para onde você quer ir?';
-        if (searchDot) searchDot.style.background = '#38BDF8';
-      }
-    }
-
-    if (focarInput) {
-      document.querySelector('.modern-search')?.classList.add('active');
-      inputPesquisa.value = '';
-      if (btnLimpar) btnLimpar.style.display = 'none';
+  const executarBusca = async (termo, alvo) => {
+    if (termo.length < 2) {
       listaResultados.style.display = 'none';
-      inputPesquisa.focus();
+      return;
     }
-  };
-
-  window.definirModoBuscaHUBy = definirModoBusca;
-
-  tabOrigem?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    definirModoBusca('origem', true);
-  });
-
-  tabDestino?.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    definirModoBusca('destino', true);
-  });
-
-  const executarBusca = async (termo) => {
-    if (termo.length < 2) return;
 
     listaResultados.innerHTML = `
       <li class="search-result-item">
         <div class="result-text">
-          <strong style="color: #38BDF8;">Buscando locais próximos...</strong>
-          <small>Priorizando endereços perto de você</small>
+          <strong style="color: #38BDF8;">Buscando endereços...</strong>
+          <small>Priorizando locais próximos</small>
         </div>
       </li>
     `;
@@ -190,7 +147,7 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal, aoSeleciona
           <li class="search-result-item">
             <div class="result-text">
               <strong style="color: #F59E0B;">Nenhum local encontrado</strong>
-              <small>Tente informar o nome da rua ou cidade (ex: Teresina, São João do Piauí)</small>
+              <small>Digite o nome da rua ou cidade (ex: Teresina, São João do Piauí)</small>
             </div>
           </li>
         `;
@@ -202,7 +159,7 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal, aoSeleciona
         li.className = 'search-result-item';
 
         const distBadge = formatarDistanciaCurta(local.distanciaKm);
-        const icone = modoBuscaAtual === 'origem' ? '🟢' : '📍';
+        const icone = alvo === 'origem' ? '🟢' : '📍';
 
         li.innerHTML = `
           <div class="result-icon">${icone}</div>
@@ -217,38 +174,38 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal, aoSeleciona
           </div>
         `;
 
-        const selecionarLocal = async (e) => {
+        li.addEventListener('click', async (e) => {
           e.preventDefault();
           e.stopPropagation();
 
           listaResultados.style.display = 'none';
 
-          if (modoBuscaAtual === 'origem') {
+          if (alvo === 'origem') {
+            if (inputOrigem) inputOrigem.value = local.nomeCurto;
             if (hubyMapa) {
               hubyMapa.definirOrigem(local.lat, local.lng, null, true);
             }
             if (typeof aoSelecionarOrigem === 'function') {
               await aoSelecionarOrigem([local.lat, local.lng], local.nomeCurto);
             }
-            // Depois de escolher "De onde", muda automaticamente para "Para onde"
-            definirModoBusca('destino', true);
+            // Move o foco para o destino sem apagar o que foi escolhido na origem
+            campoAtivo = 'destino';
+            inputDestino.focus();
             return;
           }
 
-          inputPesquisa.value = local.nomeCurto;
-          if (btnLimpar) btnLimpar.style.display = 'flex';
+          inputDestino.value = local.nomeCurto;
+          if (btnLimpar) btnLimpar.style.display = 'inline-block';
 
           if (hubyMapa && hubyMapa.coordsOrigem) {
-            const rota = await hubyMapa.calcularRota(hubyMapa.coordsOrigem, [local.lat, local.lng], '#F59E0B', true);
+            const rota = await hubyMapa.calcularRota(hubyMapa.coordsOrigem, [local.lat, local.lng], '#10B981', true);
             aoSelecionarLocal(rota, [local.lat, local.lng], local.nomeCurto);
           }
-        };
+        });
 
-        li.addEventListener('click', selecionarLocal);
         listaResultados.appendChild(li);
       });
     } catch (err) {
-      console.error('Erro na pesquisa:', err);
       listaResultados.innerHTML = `
         <li class="search-result-item">
           <div class="result-text">
@@ -260,60 +217,42 @@ export function configurarPesquisaLocal(hubyMapa, aoSelecionarLocal, aoSeleciona
     }
   };
 
-  inputPesquisa.addEventListener('input', (e) => {
-    const termo = e.target.value.trim();
-    if (termo.length > 0) {
-      if (btnLimpar) btnLimpar.style.display = 'flex';
-    } else {
-      if (btnLimpar) btnLimpar.style.display = 'none';
-      listaResultados.style.display = 'none';
-      return;
-    }
-    clearTimeout(timeoutPesquisa);
-    timeoutPesquisa = setTimeout(() => executarBusca(termo), 450);
-  });
-
-  const forcarPesquisa = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const termo = inputPesquisa.value.trim();
-    if (termo.length >= 2) {
+  if (inputOrigem) {
+    inputOrigem.addEventListener('focus', () => {
+      campoAtivo = 'origem';
+    });
+    inputOrigem.addEventListener('input', (e) => {
+      campoAtivo = 'origem';
+      const termo = e.target.value.trim();
       clearTimeout(timeoutPesquisa);
-      executarBusca(termo);
-    }
-  };
-
-  if (btnPesquisar) {
-    btnPesquisar.addEventListener('click', forcarPesquisa);
+      timeoutPesquisa = setTimeout(() => executarBusca(termo, 'origem'), 450);
+    });
   }
 
-  inputPesquisa.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const termo = inputPesquisa.value.trim();
-      if (termo.length >= 2) {
-        clearTimeout(timeoutPesquisa);
-        executarBusca(termo);
-      }
-    }
+  inputDestino.addEventListener('focus', () => {
+    campoAtivo = 'destino';
   });
 
-  const limparCaixa = (e) => {
+  inputDestino.addEventListener('input', (e) => {
+    campoAtivo = 'destino';
+    const termo = e.target.value.trim();
+    if (btnLimpar) btnLimpar.style.display = termo.length > 0 ? 'inline-block' : 'none';
+    clearTimeout(timeoutPesquisa);
+    timeoutPesquisa = setTimeout(() => executarBusca(termo, 'destino'), 450);
+  });
+
+  btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    inputPesquisa.value = '';
-    if (btnLimpar) btnLimpar.style.display = 'none';
+    inputDestino.value = '';
+    btnLimpar.style.display = 'none';
     listaResultados.style.display = 'none';
-    inputPesquisa.focus();
-  };
-
-  if (btnLimpar) {
-    btnLimpar.addEventListener('click', limparCaixa);
-  }
+    inputDestino.focus();
+  });
 
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-floating-wrapper')) {
-      if (listaResultados) listaResultados.style.display = 'none';
+    if (!e.target.closest('.client-dock-sheet')) {
+      listaResultados.style.display = 'none';
     }
   });
 }

@@ -1,12 +1,12 @@
 /**
  * ============================================================================
- * HUBy 2.5 - Serviço Central de Mapa 3D e Rotas (js/mapa.js)
- * Motor Vetorial MapLibre GL 3D (OpenFreeMap Gratuito) + GPS Pulsante
+ * HUBy 2.5 - Serviço Central de Mapa 3D Rico em Informações (js/mapa.js)
+ * Motor Vetorial MapLibre GL 3D (OpenFreeMap Liberty) + GPS Pulsante
  * ============================================================================
  */
 import { calcularPreco } from './config.js';
 
-const URL_ESTILO_3D_GRATUITO = 'https://tiles.openfreemap.org/styles/dark';
+const URL_ESTILO_3D_RICO = 'https://tiles.openfreemap.org/styles/liberty';
 
 const ESTILO_SATELITE_3D = {
   version: 8,
@@ -46,7 +46,7 @@ export class HubyMapa {
     this.markerDestino = null;
     this.markersParadas = [];
     this.rotaLayer = null;
-    this.coordsOrigem = [-8.3580, -42.2460]; // São João do Piauí padrão
+    this.coordsOrigem = [-8.3580, -42.2460];
     this.coordsGPSReal = [-8.3580, -42.2460];
     this.origemPersonalizada = false;
     this.coordsDestino = null;
@@ -57,7 +57,7 @@ export class HubyMapa {
     this.modoSatelite = false;
     this.mapaPronto = false;
     this._ultimaGeometriaRota = null;
-    this._ultimaCorRota = '#F59E0B';
+    this._ultimaCorRota = '#10B981';
   }
 
   inicializar(onClickDestino = null) {
@@ -82,16 +82,15 @@ export class HubyMapa {
 
     this.map = new maplibregl.Map({
       container: this.containerId,
-      style: URL_ESTILO_3D_GRATUITO,
-      center: [this.coordsOrigem[1], this.coordsOrigem[0]], // [lng, lat]
-      zoom: 16,
+      style: URL_ESTILO_3D_RICO,
+      center: [this.coordsOrigem[1], this.coordsOrigem[0]],
+      zoom: 16.2,
       pitch: 45,
       bearing: 0,
       antialias: true,
       attributionControl: false
     });
 
-    // Métodos de compatibilidade caso algum módulo legado chame estilo Leaflet
     this.map.invalidateSize = () => {
       try {
         this.map?.resize();
@@ -112,7 +111,7 @@ export class HubyMapa {
         const lat = e.lngLat.lat;
         const lng = e.lngLat.lng;
         this.definirDestino(lat, lng);
-        const rota = await this.calcularRota(this.coordsOrigem, [lat, lng], '#F59E0B', true);
+        const rota = await this.calcularRota(this.coordsOrigem, [lat, lng], '#10B981', true);
         onClickDestino(rota, { lat, lng });
       });
     }
@@ -133,9 +132,9 @@ export class HubyMapa {
     this.modoSatelite = typeof forcarEstado === 'boolean' ? forcarEstado : !this.modoSatelite;
 
     const geometriaSalva = this._ultimaGeometriaRota || null;
-    const corSalva = this._ultimaCorRota || '#F59E0B';
+    const corSalva = this._ultimaCorRota || '#10B981';
 
-    this.map.setStyle(this.modoSatelite ? ESTILO_SATELITE_3D : URL_ESTILO_3D_GRATUITO);
+    this.map.setStyle(this.modoSatelite ? ESTILO_SATELITE_3D : URL_ESTILO_3D_RICO);
 
     this.map.once('style.load', () => {
       if (geometriaSalva) {
@@ -161,7 +160,7 @@ export class HubyMapa {
       el.className = 'gps-pulse-container';
       el.style.cssText = 'width:44px;height:44px;display:flex;align-items:center;justify-content:center;pointer-events:none;';
       el.innerHTML = `
-        <div class="gps-pulse-marker" style="width:18px;height:18px;border-radius:50%;background:#10B981;border:3px solid #FFF;box-shadow:0 0 18px rgba(16,185,129,0.95);"></div>
+        <div class="gps-pulse-marker" style="width:18px;height:18px;border-radius:50%;background:#10B981;border:3px solid #090D16;box-shadow:0 0 18px rgba(16,185,129,0.95);"></div>
       `;
       const m = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([lng, lat])
@@ -188,7 +187,7 @@ export class HubyMapa {
       this.markerDestino.setLngLat([lng, lat]);
     } else {
       const el = document.createElement('div');
-      el.style.cssText = 'width:22px;height:22px;background:#FF6B00;border:3px solid #FFF;border-radius:7px;box-shadow:0 0 14px rgba(255,107,0,0.95);';
+      el.style.cssText = 'width:22px;height:22px;background:#EF4444;border:3px solid #FFF;border-radius:50%;box-shadow:0 2px 12px rgba(239,68,68,0.95);';
       const m = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([lng, lat])
         .addTo(this.map);
@@ -211,7 +210,7 @@ export class HubyMapa {
     this._ultimaGeometriaRota = null;
     if (!this.map) return;
     try {
-      if (this.map.getLayer('huby-rota-glow')) this.map.removeLayer('huby-rota-glow');
+      if (this.map.getLayer('huby-rota-borda')) this.map.removeLayer('huby-rota-borda');
       if (this.map.getLayer('huby-rota-linha')) this.map.removeLayer('huby-rota-linha');
       if (this.map.getSource('huby-rota-source')) this.map.removeSource('huby-rota-source');
     } catch (e) {}
@@ -227,7 +226,7 @@ export class HubyMapa {
     paradas.forEach((p, idx) => {
       if (!p.coords) return;
       const el = document.createElement('div');
-      el.style.cssText = 'width:20px;height:20px;background:#38BDF8;color:#02131D;font-size:11px;font-weight:900;border:2px solid #FFF;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px rgba(56,189,248,0.9);';
+      el.style.cssText = 'width:20px;height:20px;background:#0284C7;color:#FFF;font-size:11px;font-weight:900;border:2px solid #FFF;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
       el.textContent = String(idx + 1);
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([p.coords[1], p.coords[0]])
@@ -296,7 +295,7 @@ export class HubyMapa {
     this.obterGPSReal(callbackSucesso);
   }
 
-  desenharRota(geometria, cor = '#38BDF8', coordsBounds = null) {
+  desenharRota(geometria, cor = '#059669', coordsBounds = null) {
     if (!this.map || !geometria) return;
 
     const aplicarRota = () => {
@@ -318,14 +317,14 @@ export class HubyMapa {
       });
 
       this.map.addLayer({
-        id: 'huby-rota-glow',
+        id: 'huby-rota-borda',
         type: 'line',
         source: 'huby-rota-source',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': cor,
-          'line-width': 11,
-          'line-opacity': 0.25
+          'line-color': '#090D16',
+          'line-width': 9,
+          'line-opacity': 0.85
         }
       });
 
@@ -335,9 +334,9 @@ export class HubyMapa {
         source: 'huby-rota-source',
         layout: { 'line-join': 'round', 'line-cap': 'round' },
         paint: {
-          'line-color': cor,
+          'line-color': '#10B981',
           'line-width': 5,
-          'line-opacity': 0.95
+          'line-opacity': 1
         }
       });
 
@@ -350,7 +349,7 @@ export class HubyMapa {
           new maplibregl.LngLatBounds(pontos[0], pontos[0])
         );
         this.map.fitBounds(bounds, {
-          padding: { top: 130, bottom: 320, left: 45, right: 45 },
+          padding: { top: 90, bottom: 340, left: 45, right: 45 },
           pitch: 40,
           maxZoom: 16,
           duration: 900
@@ -411,7 +410,6 @@ export class HubyMapa {
       };
     }
 
-    // Fallback em linha reta caso roteador externo falhe
     const lat1 = origem[0], lon1 = origem[1];
     const lat2 = destino[0], lon2 = destino[1];
     const rad = Math.PI / 180;
