@@ -1,4 +1,4 @@
-// js/motorista/motorista-corrida.js - Gestão de Corridas, Pagamentos Seguros e Navegação 3D
+// js/motorista/motorista-corrida.js - Gestão de Corridas, Fila Offline/Reconexão Automática e Navegação 3D
 import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
@@ -11,8 +11,136 @@ import { notificar, confirmarAcao } from '../util/alertas-huby.js';
 
 let processandoPagamento = false;
 let intervalPollingPixMotorista = null;
+let sincronizandoFilaOffline = false;
 
-// Função master para ajustar o mapa 3D sem tirar a câmara do veículo durante a corrida
+const CHAVE_FILA_OFFLINE = 'huby_offline_queue_mot_v1';
+
+// ============================================================================
+// MOTOR DE FILA OFFLINE / RECONEXÃO AUTOMÁTICA (PARA REDE 4G INSTÁVEL)
+// ============================================================================
+function lerFilaOffline() {
+  try {
+    const raw = localStorage.getItem(CHAVE_FILA_OFFLINE);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function salvarFilaOffline(lista) {
+  localStorage.setItem(CHAVE_FILA_OFFLINE, JSON.stringify(lista));
+  atualizarBannerReconexao();
+}
+
+function atualizarBannerReconexao() {
+  const fila = lerFilaOffline();
+  const offlineAgora = typeof navigator !== 'undefined' && navigator.onLine === false;
+  let banner = document.getElementById('bannerStatusRedeOfflineHUBy');
+
+  if (!offlineAgora && fila.length === 0) {
+    if (banner) banner.remove();
+    return;
+  }
+
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'bannerStatusRedeOfflineHUBy';
+    banner.style.cssText = [
+      'position: fixed',
+      'top: 0',
+      'left: 0',
+      'right: 0',
+      'z-index: 100090',
+      'background: linear-gradient(90deg, #B45309, #D97706)',
+      'color: #FFF',
+      'font-size: 11.5px',
+      'font-weight: 800',
+      'padding: calc(env(safe-area-inset-top, 0px) + 5px) 12px 5px',
+      'text-align: center',
+      'box-shadow: 0 2px 10px rgba(0,0,0,0.5)'
+    ].join(';');
+    document.body.appendChild(banner);
+  }
+
+  banner.textContent = offlineAgora
+    ? `📡 Sem sinal 4G • Ações salvas localmente (${fila.length} na fila)`
+    : `🔄 Reconectando e sincronizando ${fila.length} atualização(ões) pendente(s)...`;
+}
+
+function enfileirarRequisicaoOffline(url, method, bodyObj = null, descricao = 'Atualização de corrida') {
+  const fila = lerFilaOffline();
+  fila.push({
+    id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    url,
+    method,
+    body: bodyObj,
+    descricao,
+    criadoEm: new Date().toISOString()
+  });
+  salvarFilaOffline(fila);
+}
+
+export async function processarFilaOfflineMotorista() {
+  if (sincronizandoFilaOffline) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    atualizarBannerReconexao();
+    return;
+  }
+
+  const fila = lerFilaOffline();
+  if (fila.length === 0) {
+    atualizarBannerReconexao();
+    return;
+  }
+
+  sincronizandoFilaOffline = true;
+  atualizarBannerReconexao();
+
+  const restantes = [];
+  let sincronizados = 0;
+
+  for (const item of fila) {
+    try {
+      const resp = await fetch(item.url, {
+        method: item.method,
+        headers: obterHeaders(),
+        ...(item.body ? { body: JSON.stringify(item.body) } : {})
+      });
+      if (resp.ok || resp.status === 400 || resp.status === 404 || resp.status === 409) {
+        sincronizados++;
+      } else {
+        restantes.push(item);
+      }
+    } catch (e) {
+      restantes.push(item);
+      break;
+    }
+  }
+
+  salvarFilaOffline(restantes);
+  sincronizandoFilaOffline = false;
+
+  if (sincronizados > 0 && restantes.length === 0) {
+    notificar(`✅ Conexão restabelecida! ${sincronizados} atualização(ões) sincronizada(s).`, 'sucesso');
+    try {
+      await carregarPerfil();
+      await carregarGanhosHoje();
+      await carregarExtratoFinanceiro();
+    } catch (e) {}
+  }
+}
+
+window.addEventListener('online', () => {
+  atualizarBannerReconexao();
+  processarFilaOfflineMotorista();
+});
+window.addEventListener('offline', atualizarBannerReconexao);
+setInterval(processarFilaOfflineMotorista, 6000);
+
+// ============================================================================
+// REAJUSTE DE CÂMERA 3D
+// ============================================================================
 export function reajustarMapa() {
   if (!estado.mapa) return;
 
@@ -30,12 +158,10 @@ export function reajustarMapa() {
   setTimeout(() => {
     if (!estado.mapa) return;
 
-    // Se estiver apenas em pré-visualização (antes de aceitar), mostra a rota toda (Origem A + Destino B)
     if (!corridaEmAndamento && estado.markerOrigem && estado.markerDestino && window.L) {
       const grupoMarkers = window.L.featureGroup([estado.markerOrigem, estado.markerDestino]);
       estado.mapa.fitBounds(grupoMarkers.getBounds(), { padding: [50, 50], animate: true });
     } else if (estado.coords) {
-      // Se estiver em corrida ou livre, mantém a câmara 3D focada no veículo do motorista
       estado.mapa.panTo(estado.coords, { animate: true, forcar: true });
     }
   }, 300);
@@ -124,7 +250,7 @@ export async function preVisualizarRotaPedido(dados) {
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
   pararMonitoramentoDesvios();
-  limparRotasMapa(); 
+  limparRotasMapa();
 
   const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
   const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
@@ -210,7 +336,7 @@ export async function aceitarCorrida(dados) {
       headers: obterHeaders(),
       body: JSON.stringify({
         motoristaId: estado.motoristaId || localStorage.getItem('huby_motorista_id'),
-        motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Carol'
+        motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Motorista'
       })
     });
 
@@ -218,11 +344,11 @@ export async function aceitarCorrida(dados) {
 
     if (res.ok || resJson.sucesso) {
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
-      
+
       if (estado.socket) {
-        estado.socket.emit('motorista_aceitou', { 
-          pedidoId: dados.id, 
-          motoristaId: estado.motoristaId 
+        estado.socket.emit('motorista_aceitou', {
+          pedidoId: dados.id,
+          motoristaId: estado.motoristaId
         });
       }
 
@@ -236,7 +362,15 @@ export async function aceitarCorrida(dados) {
       reajustarMapa();
     }
   } catch (err) {
-    notificar('Falha de conexão ao aceitar a corrida. Tentando novamente...', 'erro');
+    enfileirarRequisicaoOffline(
+      `${API_URL}/api/pedidos/${dados.id}/aceitar`,
+      'PUT',
+      {
+        motoristaId: estado.motoristaId || localStorage.getItem('huby_motorista_id'),
+        motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Motorista'
+      },
+      'Aceitar corrida'
+    );
     iniciarFaseBuscarPassageiro(dados);
   }
 }
@@ -321,22 +455,27 @@ async function iniciarFaseBuscarPassageiro(dados) {
   document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.innerHTML = '⏳ Avisando...';
+    const url = `${API_URL}/api/pedidos/${dados.id}/status`;
+    const bodyObj = { status: 'chegou_local' };
+
     try {
-      await fetch(`${API_URL}/api/pedidos/${dados.id}/status`, {
+      const resp = await fetch(url, {
         method: 'PUT',
         headers: obterHeaders(),
-        body: JSON.stringify({ status: 'chegou_local' })
+        body: JSON.stringify(bodyObj)
       });
+      if (!resp.ok) throw new Error();
       if (estado.socket) estado.socket.emit('motorista_chegou', { pedidoId: dados.id });
       notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
-      btn.innerHTML = '✅ Passageiro Avisado';
-      btn.style.background = 'rgba(16, 185, 129, 0.2)';
-      btn.style.borderColor = '#10B981';
-      btn.style.color = '#10B981';
     } catch (err) {
-      notificar('Erro de conexão ao avisar passageiro.', 'erro');
-      btn.innerHTML = '📍 Cheguei Aqui';
+      enfileirarRequisicaoOffline(url, 'PUT', bodyObj, 'Chegada ao embarque');
+      notificar('📡 Sinal fraco: chegada salva e será enviada assim que reconectar.', 'aviso');
     }
+
+    btn.innerHTML = '✅ Passageiro Avisado';
+    btn.style.background = 'rgba(16, 185, 129, 0.2)';
+    btn.style.borderColor = '#10B981';
+    btn.style.color = '#10B981';
   });
 
   document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
@@ -344,14 +483,17 @@ async function iniciarFaseBuscarPassageiro(dados) {
 }
 
 export async function confirmarEmbarqueEIrAoDestino(dados) {
+  const urlEmbarque = `${API_URL}/api/pedidos/${dados.id}/embarque`;
   try {
-    await fetch(`${API_URL}/api/pedidos/${dados.id}/embarque`, {
+    const resp = await fetch(urlEmbarque, {
       method: 'PUT',
       headers: obterHeaders()
     });
+    if (!resp.ok) throw new Error();
     if (estado.socket) estado.socket.emit('corrida_iniciada', { pedidoId: dados.id });
   } catch (e) {
-    console.warn('Iniciando viagem em modo offline temporário');
+    enfileirarRequisicaoOffline(urlEmbarque, 'PUT', null, 'Embarque do passageiro');
+    notificar('📡 Modo offline: embarque registrado na fila de sincronização.', 'aviso');
   }
 
   estado.etapaCorridaAtual = 'em_viagem';
@@ -465,8 +607,10 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
   const botoes = modal ? modal.querySelectorAll('.btn-metodo-pagto') : [];
   botoes.forEach(b => b.style.opacity = '0.5');
 
+  const urlLiquidar = `${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`;
+
   try {
-    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`, {
+    const res = await fetch(urlLiquidar, {
       method: 'POST',
       headers: obterHeaders(),
       body: JSON.stringify({ forma_pagamento: formaPagamento })
@@ -490,9 +634,9 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
       exibirQrCodePixMotorista(data.pix);
     } else {
       if (estado.socket) {
-        estado.socket.emit('corrida_finalizada_motorista', { 
-          pedidoId: pedidoId, 
-          formaPagamento: formaPagamento 
+        estado.socket.emit('corrida_finalizada_motorista', {
+          pedidoId: pedidoId,
+          formaPagamento: formaPagamento
         });
       }
 
@@ -502,7 +646,15 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
       await concluirLimpezaPosCorrida();
     }
   } catch (err) {
-    notificar(err.message || 'Erro ao finalizar corrida. Tente novamente.', 'erro');
+    // Se caiu a internet na finalização presencial (Dinheiro ou Maquininha), salva na fila offline e libera o motorista sem travar!
+    if (formaPagamento === 'dinheiro' || formaPagamento === 'cartao_maquininha') {
+      enfileirarRequisicaoOffline(urlLiquidar, 'POST', { forma_pagamento: formaPagamento }, 'Finalização de corrida');
+      if (modal) modal.style.display = 'none';
+      notificar('📡 Sem internet: conclusão salva localmente e será sincronizada ao voltar o sinal!', 'aviso', 5000);
+      await concluirLimpezaPosCorrida();
+    } else {
+      notificar(err.message || 'Sem sinal para gerar QR Code Pix agora. Tente novamente ou receba presencialmente.', 'erro');
+    }
   } finally {
     botoes.forEach(b => b.style.opacity = '1');
     processandoPagamento = false;
@@ -547,9 +699,9 @@ export function exibirQrCodePixMotorista(pix) {
     }
 
     if (estado.socket) {
-      estado.socket.emit('corrida_finalizada_motorista', { 
-        pedidoId: pedidoId, 
-        formaPagamento: 'pix_mp' 
+      estado.socket.emit('corrida_finalizada_motorista', {
+        pedidoId: pedidoId,
+        formaPagamento: 'pix_mp'
       });
     }
 
@@ -625,9 +777,11 @@ export async function concluirLimpezaPosCorrida() {
   estado.etapaCorridaAtual = 'a_caminho';
   localStorage.removeItem('huby_corrida_ativa_mot_id');
 
-  await carregarPerfil();
-  await carregarGanhosHoje();
-  await carregarExtratoFinanceiro();
+  try {
+    await carregarPerfil();
+    await carregarGanhosHoje();
+    await carregarExtratoFinanceiro();
+  } catch (e) {}
   iniciarRadarChamadas();
   reajustarMapa();
 }

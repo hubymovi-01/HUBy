@@ -69,7 +69,8 @@
 
   <!-- ABAS DE NAVEGAÇÃO -->
   <nav class="tabs-nav">
-    <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho</button>
+    <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho & Caixa</button>
+    <button type="button" class="tab-btn" data-tab="tabAgendamentos">📅 Agendamentos</button>
     <button type="button" class="tab-btn" data-tab="tabPatrocinadores">🌟 Patrocinadores & Banners</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
     <button type="button" class="tab-btn" data-tab="tabGrowth">🎁 Indicação & Dinâmica</button>
@@ -85,7 +86,7 @@
     <button type="button" class="tab-btn" data-tab="tabSuporte">🎧 Suporte & Ajuda</button>
   </nav>
 
-  <!-- ABA 1: MÉTRICAS E GRÁFICOS -->
+  <!-- ABA 1: MÉTRICAS, GRÁFICOS E CAIXA LÍQUIDO REAL DA EMPRESA -->
   <section id="tabMetricas" class="tab-pane active">
     <div class="charts-container">
       <div class="chart-box">
@@ -97,9 +98,101 @@
         <canvas id="chartCategorias"></canvas>
       </div>
     </div>
+
+    <!-- DRE CORPORATIVO & SAÍDAS DA EMPRESA -->
+    <div style="margin-top: 18px;">
+      <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 14px;">
+        <div class="metric-card">
+          <div class="metric-title">Receita Plataforma (15%)</div>
+          <div id="dreReceitaBrutaEmpresa" class="metric-value text-blue">R$ 0,00</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Despesas Corporativas</div>
+          <div id="dreTotalDespesas" class="metric-value text-rose">R$ 0,00</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-title">Saldo Líquido Real em Caixa</div>
+          <div id="dreSaldoLiquidoCaixa" class="metric-value text-primary">R$ 0,00</div>
+        </div>
+      </div>
+
+      <div class="split-grid">
+        <div class="card-panel">
+          <h3 class="panel-danger-title">💸 Lançar Saída / Despesa Corporativa</h3>
+          <p class="panel-subtitle">Registre impostos (DAS), servidor, APIs, marketing e pró-labore dos sócios.</p>
+          <form id="formNovaDespesaAdmin">
+            <div class="form-group">
+              <label>Descrição da Saída</label>
+              <input type="text" id="despDescricao" placeholder="Ex: DAS Simples Nacional / Render / Pró-labore" required>
+            </div>
+            <div class="flex-row-gap">
+              <div class="form-group flex-1">
+                <label>Categoria</label>
+                <select id="despCategoria">
+                  <option value="impostos">🏛️ Impostos / DAS / Contabilidade</option>
+                  <option value="infraestrutura">☁️ Servidor / APIs / Domínio</option>
+                  <option value="prolabore">🤝 Pró-labore / Remuneração</option>
+                  <option value="marketing">📣 Marketing / Panfletos / Ads</option>
+                  <option value="operacional">⚙️ Operacional / Outros</option>
+                </select>
+              </div>
+              <div class="form-group flex-1">
+                <label>Valor (R$)</label>
+                <input type="number" step="0.01" min="0.01" id="despValor" placeholder="150.00" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Data de Referência</label>
+              <input type="date" id="despData">
+            </div>
+            <button type="submit" class="btn-action btn-danger-full">💾 Registrar Saída no Caixa</button>
+          </form>
+        </div>
+
+        <div class="table-responsive">
+          <div class="table-header-title">📑 Extrato de Despesas & Pró-labore da Empresa</div>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
+                <th>Valor</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="tabelaDespesasBody">
+              <tr><td colspan="5" class="table-empty-row">Nenhuma despesa registrada.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <!-- ABA 2: GESTÃO DE PATROCINADORES E BANNERS PUBLICITÁRIOS -->
+  <!-- ABA AGENDAMENTOS: CENTRAL DE CORRIDAS AGENDADAS -->
+  <section id="tabAgendamentos" class="tab-pane">
+    <div class="table-responsive">
+      <div class="table-header-title">📅 Central de Corridas Agendadas & Intervenção Manual</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Horário Marcado</th>
+            <th>Passageiro</th>
+            <th>Trajeto (A → B)</th>
+            <th>Valor</th>
+            <th>Condutor / Estado</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaAgendamentosAdminBody">
+          <tr><td colspan="6" class="table-empty-row">Carregando agendamentos...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ABA PATROCINADORES -->
   <section id="tabPatrocinadores" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -207,7 +300,7 @@
     </div>
   </section>
 
-  <!-- ABA 3: RADAR EM TEMPO REAL -->
+  <!-- ABA RADAR -->
   <section id="tabRadar" class="tab-pane">
     <div class="radar-header-bar">
       <span class="radar-subtext">Rastreamento de viaturas em tempo real via telemetria GPS.</span>
@@ -216,7 +309,7 @@
     <div id="mapaRadarContainer"></div>
   </section>
 
-  <!-- ABA 4: INDICAÇÃO & TARIFA DINÂMICA -->
+  <!-- ABA GROWTH & DINÂMICA -->
   <section id="tabGrowth" class="tab-pane">
     <div class="config-grid-layout">
       <div class="card-panel">
@@ -302,7 +395,7 @@
     </div>
   </section>
 
-  <!-- ABA 5: ZONAS DE RISCO -->
+  <!-- ABA ZONAS DE RISCO -->
   <section id="tabZonas" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -374,7 +467,7 @@
     </div>
   </section>
 
-  <!-- ABA 6: CUPONS & MARKETING -->
+  <!-- ABA CUPONS -->
   <section id="tabCupons" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -427,7 +520,7 @@
     </div>
   </section>
 
-  <!-- ABA 7: SEGURANÇA E SOS -->
+  <!-- ABA SEGURANÇA -->
   <section id="tabSeguranca" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -450,7 +543,7 @@
     </div>
   </section>
 
-  <!-- ABA 8: BROADCAST PUSH -->
+  <!-- ABA BROADCAST -->
   <section id="tabBroadcast" class="tab-pane">
     <div class="card-panel max-w-600" style="margin: 0 auto;">
       <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
@@ -486,12 +579,12 @@
           <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Título do Alerta</label>
           <input type="text" id="broadTitulo" class="drawer-input" style="margin-top: 4px;" placeholder="Ex: ⚡ Bônus de Alta Demanda Ativo!" required>
         </div>
-        
+
         <div class="form-group" style="margin-bottom: 20px;">
           <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Mensagem da Notificação</label>
           <textarea id="broadMensagem" class="drawer-input" rows="4" style="margin-top: 4px; resize: none;" placeholder="Escreva a mensagem detalhada aqui..." required></textarea>
         </div>
-        
+
         <button type="submit" class="btn-action btn-blue-full" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px; font-size: 14px; border-radius: 12px; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);">
           🚀 Disparar Notificação Push
         </button>
@@ -499,7 +592,7 @@
     </div>
   </section>
 
-  <!-- ABA 9: GESTÃO E EXTRATO DE SAQUES DOS MOTORISTAS -->
+  <!-- ABA SAQUES -->
   <section id="tabSaques" class="tab-pane">
     <div class="callout-pix-automatico"
       style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
@@ -536,7 +629,7 @@
     </div>
   </section>
 
-  <!-- ABA 10: GESTÃO DE CONDUTORES -->
+  <!-- ABA FROTA -->
   <section id="tabFrota" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -560,7 +653,7 @@
     </div>
   </section>
 
-  <!-- ABA 11: MONITOR DE VIAGENS -->
+  <!-- ABA VIAGENS -->
   <section id="tabViagens" class="tab-pane">
     <div class="table-responsive">
       <table>
@@ -584,7 +677,7 @@
     </div>
   </section>
 
-  <!-- ABA 12: TARIFAS & GATEWAY MERCADO PAGO -->
+  <!-- ABA TARIFAS & GATEWAY -->
   <section id="tabConfig" class="tab-pane">
     <div class="config-grid-layout">
       <div class="card-panel">
@@ -646,7 +739,7 @@
     </div>
   </section>
 
-  <!-- ABA 13: LOJA / MARKETPLACE PARCEIRO -->
+  <!-- ABA LOJA MOTORISTA -->
   <section id="tabMarketplace" class="tab-pane">
     <div class="split-grid">
       <div class="card-panel">
@@ -698,7 +791,7 @@
     </div>
   </section>
 
-  <!-- ABA 14: SUPORTE & AJUDA -->
+  <!-- ABA SUPORTE -->
   <section id="tabSuporte" class="tab-pane">
     <div class="table-responsive">
       <div class="table-header-title">
@@ -739,7 +832,7 @@
     </div>
   </div>
 
-  <!-- MODAL CORPORATIVO PARA EDIÇÃO DE VALIDADES, RESPOSTAS DE SUPORTE E MOTIVO DE RECUSA -->
+  <!-- MODAL CORPORATIVO -->
   <div id="modalAcaoAdmin" class="modal-preview" style="z-index: 10050;">
     <div class="modal-preview-box" style="max-width: 400px; text-align: left;">
       <div class="modal-header-row" style="margin-bottom: 8px;">
@@ -776,7 +869,7 @@
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <!-- MÓDULO PRINCIPAL DO ADMIN -->
-  <script type="module" src="./js/admin.js?v=8.0.0"></script>
+  <script type="module" src="./js/admin.js?v=9.0.0"></script>
 </body>
 
 </html>

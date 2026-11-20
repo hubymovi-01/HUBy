@@ -1,16 +1,16 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Sincronizada em Tempo Real + Controle de Cancelamento + Suporte IA Avançado
+ * Versão Sincronizada em Tempo Real + Histórico Detalhado + Fila Offline + Suporte IA
  */
 
 import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { estado } from './motorista/motorista-estado.js';
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
 import { alternarStatusOnline, iniciarRadarChamadas } from './motorista/motorista-radar.js';
-import { 
-  carregarPerfil, 
-  configurarSalvarPreferenciasPagto, 
-  configurarEdicaoPerfil 
+import {
+  carregarPerfil,
+  configurarSalvarPreferenciasPagto,
+  configurarEdicaoPerfil
 } from './motorista/motorista-perfil.js';
 import { configurarChatMotorista } from './motorista/motorista-chat.js';
 import { configurarEventosSaque } from './motorista/motorista-carteira.js';
@@ -18,6 +18,7 @@ import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
 import { inicializarZonasRiscoMapa } from './motorista/motorista-zonas-risco.js';
+import { processarFilaOfflineMotorista } from './motorista/motorista-corrida.js';
 import {
   inicializarCopilotoVoz,
   definirCodigoAtivacaoMotorista,
@@ -320,6 +321,129 @@ function configurarBotaoCancelarNaTelaMotorista() {
 }
 
 // ============================================================================
+// HISTÓRICO DETALHADO DE CORRIDAS E REPASSES DO MOTORISTA
+// ============================================================================
+function configurarHistoricoCorridasMotorista() {
+  const drawerContent = document.querySelector('#driverDrawer .drawer-content');
+  if (!drawerContent || document.getElementById('btnAbrirHistoricoMotorista')) return;
+
+  const btnHistorico = document.createElement('button');
+  btnHistorico.type = 'button';
+  btnHistorico.id = 'btnAbrirHistoricoMotorista';
+  btnHistorico.style.cssText = [
+    'width: 100%',
+    'margin-bottom: 12px',
+    'padding: 13px 14px',
+    'border-radius: 12px',
+    'background: rgba(56, 189, 248, 0.14)',
+    'border: 1.5px solid rgba(56, 189, 248, 0.4)',
+    'color: #38BDF8',
+    'font-weight: 900',
+    'font-size: 13px',
+    'cursor: pointer',
+    'display: flex',
+    'align-items: center',
+    'justify-content: space-between'
+  ].join(';');
+  btnHistorico.innerHTML = `
+    <span>📋 Minhas Corridas & Ganhos</span>
+    <span style="font-size: 11px; background: rgba(56,189,248,0.2); padding: 2px 8px; border-radius: 999px;">Ver extrato</span>
+  `;
+
+  drawerContent.insertAdjacentElement('afterbegin', btnHistorico);
+
+  btnHistorico.addEventListener('click', async () => {
+    document.getElementById('driverDrawer')?.classList.remove('active');
+    document.getElementById('drawerOverlay')?.classList.remove('active');
+    abrirModalHistoricoDetalhadoMotorista();
+  });
+}
+
+async function abrirModalHistoricoDetalhadoMotorista() {
+  document.getElementById('modalHistoricoDetalhadoMotorista')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'modalHistoricoDetalhadoMotorista';
+  overlay.className = 'modal-backdrop-custom active';
+  overlay.style.cssText = 'display:flex; z-index:10030;';
+  overlay.innerHTML = `
+    <div class="modal-box-edit" style="max-width: 440px; max-height: 86dvh; display: flex; flex-direction: column; padding: 18px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div>
+          <h3 style="margin: 0; font-size: 17px; font-weight: 900; color: #FFF;">📋 Minhas Corridas & Ganhos</h3>
+          <small style="color: #94A3B8; font-size: 11px;">Detalhamento transparente de repasse líquido, taxa e avaliação</small>
+        </div>
+        <button type="button" id="btnFecharHistMot" style="background: rgba(255,255,255,0.08); border: none; color: #FFF; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;">✕</button>
+      </div>
+      <div id="listaCorridasDetalhadasMot" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+        <div style="text-align: center; color: #94A3B8; padding: 24px 0;">Carregando histórico de viagens...</div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  overlay.querySelector('#btnFecharHistMot').onclick = () => overlay.remove();
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const listaEl = overlay.querySelector('#listaCorridasDetalhadasMot');
+  const token = localStorage.getItem('huby_token') || '';
+  const taxaPct = Number(TAXA_PLATAFORMA_ATUAL ?? 15);
+  const fatorMot = Math.max(0.1, (100 - taxaPct) / 100);
+
+  try {
+    const resp = await fetch(`${API_URL}/api/pedidos/historico?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const corridas = await resp.json();
+
+    if (!Array.isArray(corridas) || corridas.length === 0) {
+      listaEl.innerHTML = `<div style="text-align:center; color:#94A3B8; padding:30px 10px;">Nenhuma corrida registrada no seu histórico ainda.</div>`;
+      return;
+    }
+
+    listaEl.innerHTML = corridas.map((c) => {
+      const bruto = Number(c.valor_total || 0);
+      const liquido = Number((bruto * fatorMot).toFixed(2));
+      const taxa = Number((bruto - liquido).toFixed(2));
+      const dataFmt = c.criado_em ? new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '--';
+      const nota = c.avaliacao_nota ? `⭐ ${Number(c.avaliacao_nota).toFixed(1)}` : 'Sem avaliação';
+      const st = String(c.status || '').toLowerCase();
+      const corSt = st === 'concluido' ? '#10B981' : (st === 'cancelado' ? '#EF4444' : '#38BDF8');
+
+      return `
+        <div style="background: #090D16; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 11px; color: #94A3B8; font-weight: 700;">#${String(c.id).slice(-4)} • ${dataFmt}</span>
+            <span style="font-size: 10px; font-weight: 900; color: ${corSt}; text-transform: uppercase; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 6px;">${c.status}</span>
+          </div>
+          <div style="font-size: 12.5px; color: #E2E8F0; margin-bottom: 8px; line-height: 1.35;">
+            <div><strong style="color:#10B981;">A</strong> ${c.origem_endereco || 'Origem'}</div>
+            <div><strong style="color:#EF4444;">B</strong> ${c.destino_endereco || 'Destino'}</div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 10px; font-size: 11px;">
+            <div>
+              <small style="color:#94A3B8; display:block;">Seu Ganho</small>
+              <strong style="color:#10B981; font-size:13px;">R$ ${liquido.toFixed(2).replace('.', ',')}</strong>
+            </div>
+            <div>
+              <small style="color:#94A3B8; display:block;">Taxa (${taxaPct}%)</small>
+              <strong style="color:#F59E0B;">R$ ${taxa.toFixed(2).replace('.', ',')}</strong>
+            </div>
+            <div style="text-align:right;">
+              <small style="color:#94A3B8; display:block;">Avaliação</small>
+              <strong style="color:#FBBF24;">${nota}</strong>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    listaEl.innerHTML = `<div style="text-align:center; color:#EF4444; padding:24px 0;">Falha ao carregar histórico de corridas.</div>`;
+  }
+}
+
+// ============================================================================
 // CHAT DE SUPORTE CORPORATIVO & IA COM RESPOSTAS DINÂMICAS E FORMAIS
 // ============================================================================
 function inicializarChatSuporteIA() {
@@ -333,16 +457,16 @@ function inicializarChatSuporteIA() {
   if (!btnAbrir || !modal) return;
 
   const CHAT_STORAGE_KEY = 'huby_suporte_chat_history';
-  const TEMPO_EXPIRACAO_MS = 24 * 60 * 60 * 1000; // Expira em 24h
+  const TEMPO_EXPIRACAO_MS = 24 * 60 * 60 * 1000;
 
   function carregarHistorico() {
     try {
       const dataString = localStorage.getItem(CHAT_STORAGE_KEY);
       if (!dataString) return [];
-      
+
       const data = JSON.parse(dataString);
       const agora = new Date().getTime();
-      
+
       if (data.ultimaAtualizacao && (agora - data.ultimaAtualizacao > TEMPO_EXPIRACAO_MS)) {
         localStorage.removeItem(CHAT_STORAGE_KEY);
         return [];
@@ -364,8 +488,7 @@ function inicializarChatSuporteIA() {
     const isUser = msg.autor === 'user';
     const isAdmin = msg.autor === 'admin';
     const alignSelf = isUser ? 'flex-end' : 'flex-start';
-    
-    // Cores profissionais: Azul para o motorista, Verde elegante para IA, Azul-claro com borda para o Admin
+
     const bgColor = isUser ? '#38BDF8' : (isAdmin ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.1)');
     const color = isUser ? '#02131D' : '#FFF';
     const border = isUser ? 'none' : (isAdmin ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)');
@@ -377,12 +500,11 @@ function inicializarChatSuporteIA() {
 
     const divMsg = document.createElement('div');
     divMsg.style.cssText = `background: ${bgColor}; border: ${border}; color: ${color}; padding: 12px; border-radius: ${borderRadius}; font-size: 13px; line-height: 1.5;`;
-    
-    // Adiciona o selo corporativo se for resposta da administração
+
     if (isAdmin) {
       divMsg.innerHTML = `<strong style="color: #38BDF8; display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;">🛡️ Equipe HUBy</strong> ${msg.texto}`;
     } else {
-      divMsg.innerHTML = msg.texto; 
+      divMsg.innerHTML = msg.texto;
     }
 
     const smallTime = document.createElement('small');
@@ -399,7 +521,7 @@ function inicializarChatSuporteIA() {
   function renderizarChatInteiro() {
     areaMensagens.innerHTML = '';
     const mensagens = carregarHistorico();
-    
+
     if (mensagens.length === 0) {
       const msgInicial = {
         autor: 'ia',
@@ -409,7 +531,7 @@ function inicializarChatSuporteIA() {
       mensagens.push(msgInicial);
       salvarHistorico(mensagens);
     }
-    
+
     mensagens.forEach(renderizarMensagem);
   }
 
@@ -428,9 +550,7 @@ function inicializarChatSuporteIA() {
           mensagem: mensagemTexto
         })
       });
-    } catch (e) {
-      console.warn('Falha silenciosa ao registrar ticket:', e);
-    }
+    } catch (e) {}
   }
 
   async function enviarMensagem() {
@@ -438,7 +558,7 @@ function inicializarChatSuporteIA() {
     if (!texto) return;
 
     inputMsg.value = '';
-    
+
     const novaMensagem = { autor: 'user', texto: texto, data: new Date().getTime() };
     const mensagens = carregarHistorico();
     mensagens.push(novaMensagem);
@@ -449,7 +569,6 @@ function inicializarChatSuporteIA() {
     btnEnviar.innerHTML = '⏳';
     btnEnviar.disabled = true;
 
-    // Respostas Formais Baseadas em Contexto (Sem menção a humanos)
     setTimeout(async () => {
       let respostaTexto = '';
       let categoriaTicket = 'Suporte Geral';
@@ -457,7 +576,7 @@ function inicializarChatSuporteIA() {
 
       if (txt.includes('pagamento') || txt.includes('saque') || txt.includes('dinheiro') || txt.includes('pix') || txt.includes('receber')) {
         respostaTexto = 'Compreendido. Para questões financeiras e de repasse, solicitamos que verifique a aba "Ganhos" e confirme a exatidão da sua chave Pix. O seu relato foi encaminhado para o departamento financeiro para análise de pendências.';
-        categoriaCategoria = 'Auditoria Financeira';
+        categoriaTicket = 'Auditoria Financeira';
       } else if (txt.includes('passageiro') || txt.includes('cliente') || txt.includes('corrida') || txt.includes('viagem') || txt.includes('bagagem')) {
         respostaTexto = 'A segurança e a excelência no atendimento são fundamentais na HUBy. O seu relato sobre a viagem foi devidamente registrado e direcionado para a nossa equipe de qualidade.';
         categoriaTicket = 'Auditoria de Viagem';
@@ -468,7 +587,6 @@ function inicializarChatSuporteIA() {
         respostaTexto = 'Agradecemos o seu contato. A solicitação foi registrada com sucesso no sistema da HUBy. O caso será analisado e, se necessária uma intervenção, retornaremos através deste canal de atendimento.';
       }
 
-      // Envia o ticket para o backend com a categoria apropriada
       await escalarParaCentral(texto, categoriaTicket);
 
       const respostaIA = { autor: 'ia', texto: respostaTexto, data: new Date().getTime() };
@@ -476,7 +594,7 @@ function inicializarChatSuporteIA() {
       mensagensAtuais.push(respostaIA);
       salvarHistorico(mensagensAtuais);
       renderizarMensagem(respostaIA);
-      
+
       btnEnviar.innerHTML = btnTexto;
       btnEnviar.disabled = false;
       inputMsg.focus();
@@ -499,25 +617,24 @@ function inicializarChatSuporteIA() {
     if (e.key === 'Enter') enviarMensagem();
   });
 
-  // Integração com WebSocket para receber respostas diretamente da Administração
   const token = localStorage.getItem('huby_token') || '';
   const socket = window.io ? window.io(API_URL, { auth: { token } }) : null;
   if (socket) {
     socket.on('resposta_suporte_admin', (dados) => {
       if (dados && dados.resposta) {
-        const respostaAdmin = { 
-          autor: 'admin', 
-          texto: dados.resposta, 
-          data: dados.data || new Date().getTime() 
+        const respostaAdmin = {
+          autor: 'admin',
+          texto: dados.resposta,
+          data: dados.data || new Date().getTime()
         };
         const mensagensAtuais = carregarHistorico();
         mensagensAtuais.push(respostaAdmin);
         salvarHistorico(mensagensAtuais);
-        
+
         if (modal.style.display === 'flex') {
-           renderizarMensagem(respostaAdmin);
+          renderizarMensagem(respostaAdmin);
         } else {
-           notificar('Recebeu um novo retorno da Administração HUBy no suporte.', 'aviso');
+          notificar('Recebeu um novo retorno da Administração HUBy no suporte.', 'aviso');
         }
       }
     });
@@ -556,7 +673,8 @@ function registrarEventosUI() {
   if (typeof configurarEdicaoPerfil === 'function') configurarEdicaoPerfil();
   if (typeof configurarMarketplace === 'function') configurarMarketplace();
   if (typeof configurarModosInteligentes === 'function') configurarModosInteligentes();
-  
+
+  configurarHistoricoCorridasMotorista();
   configurarMetaDiaria();
   configurarCodigoVozDireto();
   configurarBotaoCancelarNaTelaMotorista();
@@ -577,10 +695,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   atualizarBarraMetaDiaria();
   iniciarRadarChamadas();
   inicializarPushNotifications();
+  processarFilaOfflineMotorista();
 
   inicializarCopilotoVoz();
   restaurarPreferenciaCopiloto();
-  
-  // Inicialização do Chat de Suporte Virtual
+
   inicializarChatSuporteIA();
 });

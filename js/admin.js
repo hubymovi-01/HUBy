@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Caixa Único Corporativo + Sem Divisão de Sócios)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Caixa Líquido Real + Agendamentos + Sem Sócios)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -177,6 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   configurarNavegacaoAbas();
   configurarFiltroPeriodo(token);
+  configurarFormDespesasAdmin(token);
   configurarFormPatrocinadores(token);
   configurarFormGrowthEDinamica(token);
   configurarFormZonasRisco(token);
@@ -184,7 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
   configurarFormBroadcast(token);
   configurarFormTarifas(token);
   configurarFormMercadoPago(token);
-  configurarModalDocumentos(token);
+  configurarModalDocumentos();
   configurarFormMarketplace(token);
   configurarBotaoSaqueLote(token);
 
@@ -221,8 +222,10 @@ async function sincronizarTudo(token) {
   await carregarTabelaFrota(token, true);
   await carregarTabelaViagens(token);
   await carregarMetricasECards(token, periodoAtual);
+  await carregarDespesasCorporativas(token);
 
   Promise.allSettled([
+    carregarTabelaAgendamentosAdmin(token),
     carregarTabelaPatrocinadores(token),
     carregarConfigGrowthEDinamica(token),
     carregarTabelaZonasRisco(token),
@@ -239,13 +242,194 @@ function configurarFiltroPeriodo(token) {
   const select = document.getElementById('selectFiltroPeriodo');
   if (!select) return;
 
-  select.addEventListener('change', () => {
-    carregarMetricasECards(token, select.value);
+  select.addEventListener('change', async () => {
+    await carregarMetricasECards(token, select.value);
+    await carregarDespesasCorporativas(token);
   });
 }
 
 // ============================================================================
-// GROWTH & TARIFA DINÂMICA (CONTROLE TOTAL DO ADMIN)
+// CAIXA LÍQUIDO REAL & DESPESAS CORPORATIVAS (ADMIN)
+// ============================================================================
+async function carregarDespesasCorporativas(token) {
+  const tbody = document.getElementById('tabelaDespesasBody');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/financeiro/despesas?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const lista = res.ok ? await res.json() : [];
+    const totalDespesas = Array.isArray(lista)
+      ? lista.reduce((acc, d) => acc + Number(d.valor || 0), 0)
+      : 0;
+
+    const receitaEmpresa = Number(window._ultimosDadosGraficos?.lucroLiquido || 0);
+    const saldoCaixaReal = receitaEmpresa - totalDespesas;
+
+    const fmt = (v) => `R$ ${Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (document.getElementById('dreReceitaBrutaEmpresa')) document.getElementById('dreReceitaBrutaEmpresa').textContent = fmt(receitaEmpresa);
+    if (document.getElementById('dreTotalDespesas')) document.getElementById('dreTotalDespesas').textContent = fmt(totalDespesas);
+    const elSaldo = document.getElementById('dreSaldoLiquidoCaixa');
+    if (elSaldo) {
+      elSaldo.textContent = fmt(saldoCaixaReal);
+      elSaldo.style.color = saldoCaixaReal >= 0 ? '#10B981' : '#EF4444';
+    }
+
+    if (!tbody) return;
+    if (!Array.isArray(lista) || lista.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="table-empty-row">Nenhuma saída corporativa registrada.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = lista.map(d => `
+      <tr>
+        <td>${escaparHTML(d.data_referencia || '--')}</td>
+        <td><strong>${escaparHTML(d.descricao)}</strong></td>
+        <td><span class="badge badge-pendente">${escaparHTML(String(d.categoria || 'operacional').toUpperCase())}</span></td>
+        <td style="color: var(--rose); font-weight: 800;">- R$ ${Number(d.valor || 0).toFixed(2).replace('.', ',')}</td>
+        <td><button type="button" class="btn-tbl rej" onclick="excluirDespesaCorporativa(${Number(d.id)})">Excluir</button></td>
+      </tr>
+    `).join('');
+  } catch (e) {}
+}
+
+function configurarFormDespesasAdmin(token) {
+  const inputData = document.getElementById('despData');
+  if (inputData && !inputData.value) {
+    inputData.value = new Date().toISOString().slice(0, 10);
+  }
+
+  document.getElementById('formNovaDespesaAdmin')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const payload = {
+      descricao: document.getElementById('despDescricao').value.trim(),
+      categoria: document.getElementById('despCategoria').value,
+      valor: parseFloat(document.getElementById('despValor').value) || 0,
+      data_referencia: document.getElementById('despData').value
+    };
+
+    try {
+      const res = await fetch(`${API_URL}/api/admin/financeiro/despesas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) throw new Error('Falha ao lançar despesa.');
+      notificarAdmin('💸 Saída corporativa registrada no caixa!', 'sucesso');
+      e.target.reset();
+      if (inputData) inputData.value = new Date().toISOString().slice(0, 10);
+      await carregarDespesasCorporativas(token);
+    } catch (err) {
+      notificarAdmin(err.message, 'erro');
+    }
+  });
+}
+
+window.excluirDespesaCorporativa = async (id) => {
+  if (!confirm('Remover este lançamento de despesa?')) return;
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/financeiro/despesas/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      notificarAdmin('Despesa removida.', 'aviso');
+      await carregarDespesasCorporativas(token);
+    }
+  } catch (e) {}
+};
+
+// ============================================================================
+// CENTRAL DE AGENDAMENTOS NO ADMIN
+// ============================================================================
+async function carregarTabelaAgendamentosAdmin(token) {
+  const tbody = document.getElementById('tabelaAgendamentosAdminBody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/agendamentos?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const lista = res.ok ? await res.json() : [];
+
+    const tabBtn = document.querySelector('[data-tab="tabAgendamentos"]');
+    if (tabBtn) {
+      tabBtn.innerHTML = lista.length > 0
+        ? `📅 Agendamentos <span style="background:#F59E0B;color:#000;font-weight:900;padding:1px 6px;border-radius:10px;font-size:10px;margin-left:4px;">${lista.length}</span>`
+        : '📅 Agendamentos';
+    }
+
+    if (!Array.isArray(lista) || lista.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhuma corrida agendada futura no momento.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = lista.map(a => {
+      const dataFmt = a.agendado_para ? new Date(a.agendado_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '--';
+      const temMotorista = Boolean(a.motorista_nome);
+      return `
+        <tr>
+          <td><strong style="color:#FBBF24;">⏰ ${dataFmt}</strong></td>
+          <td><strong>${escaparHTML(a.cliente_nome || 'Passageiro')}</strong><br><small style="color:var(--muted);">${escaparHTML(a.cliente_telefone || '')}</small></td>
+          <td>
+            <small style="display:block;"><strong style="color:#10B981;">A</strong> ${escaparHTML(a.origem_endereco || '')}</small>
+            <small style="display:block;"><strong style="color:#EF4444;">B</strong> ${escaparHTML(a.destino_endereco || '')}</small>
+            ${a.observacao ? `<small style="color:#38BDF8;display:block;">📝 ${escaparHTML(a.observacao)}</small>` : ''}
+          </td>
+          <td style="font-weight:800; color:#10B981;">R$ ${Number(a.valor_total || 0).toFixed(2).replace('.', ',')}</td>
+          <td>
+            ${temMotorista
+              ? `<span class="badge badge-aprovado">🚘 ${escaparHTML(a.motorista_nome)}</span>`
+              : `<span class="badge badge-pendente">⏳ Sem Condutor</span>`}
+          </td>
+          <td>
+            <div style="display:flex; gap:6px;">
+              ${!temMotorista ? `<button type="button" class="btn-tbl app" onclick="liberarAgendamentoAgora('${escaparHTML(a.id)}')">🚀 Disparar Radar</button>` : ''}
+              <button type="button" class="btn-tbl rej" onclick="cancelarAgendamentoAdmin('${escaparHTML(a.id)}')">Cancelar</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Erro ao carregar agendamentos.</td></tr>';
+  }
+}
+
+window.liberarAgendamentoAgora = async (pedidoId) => {
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/admin/agendamentos/${pedidoId}/liberar-agora`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (res.ok) {
+      notificarAdmin('🚀 Agendamento liberado imediatamente no radar dos motoristas!', 'sucesso');
+      await carregarTabelaAgendamentosAdmin(token);
+    }
+  } catch (e) {}
+};
+
+window.cancelarAgendamentoAdmin = async (pedidoId) => {
+  if (!confirm('Cancelar este agendamento?')) return;
+  const token = localStorage.getItem('huby_token');
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ motivo: 'Agendamento cancelado pela administração' })
+    });
+    if (res.ok) {
+      notificarAdmin('Agendamento cancelado.', 'aviso');
+      await carregarTabelaAgendamentosAdmin(token);
+    }
+  } catch (e) {}
+};
+
+// ============================================================================
+// GROWTH & TARIFA DINÂMICA
 // ============================================================================
 async function carregarConfigGrowthEDinamica(token) {
   try {
@@ -1257,7 +1441,7 @@ function configurarFormMercadoPago(token) {
 function configurarFormBroadcast(token) {
   document.getElementById('formBroadcast')?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const btnSubmit = e.target.querySelector('button[type="submit"]');
     const txtOriginal = btnSubmit.innerHTML;
     btnSubmit.innerHTML = '⏳ Enviando Notificação...';
@@ -1274,9 +1458,9 @@ function configurarFormBroadcast(token) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ publico, regiao, titulo, mensagem })
       });
-      
+
       const data = await res.json();
-      
+
       if (res.ok) {
         notificarAdmin(`🚀 Push transmitido com sucesso para: ${regiao.toUpperCase()}`, 'sucesso');
         e.target.reset();
@@ -1361,8 +1545,10 @@ function configurarNavegacaoAbas() {
           if (g) {
             setTimeout(() => renderizarGraficos(g.faturamentoBruto, g.lucroLiquido, g.repasseMotoristas, g.distCategorias), 100);
           }
+          carregarDespesasCorporativas(token);
         }
 
+        if (tabAlvoId === 'tabAgendamentos') carregarTabelaAgendamentosAdmin(token);
         if (tabAlvoId === 'tabPatrocinadores') carregarTabelaPatrocinadores(token);
         if (tabAlvoId === 'tabGrowth') carregarConfigGrowthEDinamica(token);
         if (tabAlvoId === 'tabSaques') carregarTabelaSaques(token);
@@ -1392,12 +1578,20 @@ function conectarSocketAdmin() {
     atualizarPosicaoCondutorNoMapa(dados);
   });
 
+  socket.on('nova_chamada', async (dados) => {
+    if (dados?.agendadoPara) {
+      const token = localStorage.getItem('huby_token');
+      await carregarTabelaAgendamentosAdmin(token);
+    }
+  });
+
   socket.on('corrida_finalizada', async () => {
     const token = localStorage.getItem('huby_token');
     const periodo = document.getElementById('selectFiltroPeriodo')?.value || 'total';
     await carregarTabelaViagens(token);
     await carregarTabelaFrota(token, false);
     await carregarMetricasECards(token, periodo);
+    await carregarDespesasCorporativas(token);
   });
 
   socket.on('novo_saque_solicitado', async (dados) => {

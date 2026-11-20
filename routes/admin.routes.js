@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas Corporativas, Frota, Validades CNH/CRLV, Growth e Gestão Master HUBy
+// routes/admin.routes.js - Métricas Corporativas, Despesas, Agendamentos, Frota, Validades CNH/CRLV e Gestão Master HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -243,6 +243,17 @@ async function inicializarTabelasAdmin() {
   try {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS despesas_corporativas (
+        id SERIAL PRIMARY KEY,
+        descricao TEXT NOT NULL,
+        categoria VARCHAR(40) DEFAULT 'operacional',
+        valor NUMERIC(10,2) NOT NULL,
+        data_referencia DATE DEFAULT CURRENT_DATE,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
 
     await sql`
       CREATE TABLE IF NOT EXISTS zonas_risco (
@@ -955,14 +966,14 @@ export default function adminRoutes(io) {
       `;
 
       let csv = '\ufeffID_Motorista;Nome;CPF;Chave_PIX;Data_Cadastro;Total_Viagens;Faturamento_Bruto;Entradas_Digitais_Pix;Taxa_Empresa_HUBy;Saques_Pagos;Saldo_Atual_Carteira\n';
-      
+
       const formatarMoedaBR = (num) => Number(num).toFixed(2).replace('.', ',');
       const formatarData = (data) => new Date(data).toLocaleDateString('pt-BR');
 
       registros.forEach(r => {
         const fatBruto = Number(r.faturamento_bruto || 0);
         const taxaPlataforma = fatBruto * taxaPct;
-        
+
         csv += `"${r.id}";"${r.nome || ''}";"${r.cpf || ''}";"${r.chave_pix_padrao || ''}";"${formatarData(r.criado_em)}";"${r.total_viagens}";"${formatarMoedaBR(fatBruto)}";"${formatarMoedaBR(r.entradas_app)}";"${formatarMoedaBR(taxaPlataforma)}";"${formatarMoedaBR(r.saques_realizados)}";"${formatarMoedaBR(r.saldo_carteira)}"\n`;
       });
 
@@ -972,6 +983,118 @@ export default function adminRoutes(io) {
     } catch (err) {
       console.error('Erro ao gerar CSV financeiro:', err);
       res.status(500).json({ erro: 'Falha ao gerar relatório.' });
+    }
+  });
+
+  // =========================================================================
+  // 11. PAINEL DE DESPESAS CORPORATIVAS (CAIXA LÍQUIDO REAL DA EMPRESA)
+  // =========================================================================
+  router.get('/financeiro/despesas', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS despesas_corporativas (
+          id SERIAL PRIMARY KEY,
+          descricao TEXT NOT NULL,
+          categoria VARCHAR(40) DEFAULT 'operacional',
+          valor NUMERIC(10,2) NOT NULL,
+          data_referencia DATE DEFAULT CURRENT_DATE,
+          criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `;
+      const lista = await sql`
+        SELECT id, descricao, categoria, valor, to_char(data_referencia, 'YYYY-MM-DD') AS data_referencia, criado_em
+        FROM despesas_corporativas
+        ORDER BY data_referencia DESC, id DESC
+        LIMIT 100;
+      `;
+      res.json(lista);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
+  router.post('/financeiro/despesas', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const { descricao, categoria = 'operacional', valor, data_referencia } = req.body || {};
+      const valorNum = Math.round((Number(String(valor ?? '').replace(',', '.')) || 0) * 100) / 100;
+      if (!descricao || !String(descricao).trim() || valorNum <= 0) {
+        return res.status(400).json({ erro: 'Informe descrição e valor válido.' });
+      }
+      const dataRef = data_referencia ? String(data_referencia).slice(0, 10) : new Date().toISOString().slice(0, 10);
+      const [nova] = await sql`
+        INSERT INTO despesas_corporativas (descricao, categoria, valor, data_referencia)
+        VALUES (${String(descricao).trim().slice(0, 200)}, ${String(categoria).trim()}, ${valorNum}, ${dataRef})
+        RETURNING *;
+      `;
+      res.status(201).json({ sucesso: true, despesa: nova });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao registrar despesa corporativa.' });
+    }
+  });
+
+  router.delete('/financeiro/despesas/:id', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      await sql`DELETE FROM despesas_corporativas WHERE id = ${Number(req.params.id)};`;
+      res.json({ sucesso: true });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao excluir despesa.' });
+    }
+  });
+
+  // =========================================================================
+  // 12. CENTRAL DE AGENDAMENTOS DO ADMIN (MONITORAMENTO E LIBERAÇÃO MANUAL)
+  // =========================================================================
+  router.get('/agendamentos', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const lista = await sql`
+        SELECT p.id, p.cliente_id, u.nome AS cliente_nome, u.telefone AS cliente_telefone,
+               p.motorista_id, p.motorista_nome, p.sub_tipo_label,
+               p.origem_endereco, p.destino_endereco, p.valor_total,
+               p.observacao, p.cupom_codigo, p.status, p.agendado_para, p.criado_em
+        FROM pedidos p
+        LEFT JOIN usuarios u ON p.cliente_id::text = u.id::text
+        WHERE p.agendado_para IS NOT NULL
+          AND LOWER(COALESCE(p.status, '')) IN ('agendado', 'pendente', 'a_caminho', 'em_viagem')
+        ORDER BY p.agendado_para ASC
+        LIMIT 80;
+      `;
+      res.json(lista);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
+  router.put('/agendamentos/:id/liberar-agora', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [pedido] = await sql`
+        UPDATE pedidos
+        SET status = 'pendente'
+        WHERE id::text = ${String(id)}::text
+        RETURNING *;
+      `;
+      if (!pedido) return res.status(404).json({ erro: 'Agendamento não localizado.' });
+
+      const socket = req.io || io;
+      if (socket) {
+        socket.emit('nova_chamada', {
+          id: pedido.id,
+          clienteId: pedido.cliente_id,
+          tipo: pedido.tipo || 'carro',
+          subTipoLabel: `${pedido.sub_tipo_label || 'HUBy'} (Prioridade Admin)`,
+          origem: pedido.origem_endereco,
+          destino: pedido.destino_endereco,
+          distanciaKm: Number(pedido.distancia_km || 0),
+          duracaoMin: Number(pedido.duracao_min || 0),
+          valorTotal: Number(pedido.valor_total || 0),
+          agendadoPara: pedido.agendado_para,
+          observacao: pedido.observacao || ''
+        });
+      }
+
+      res.json({ sucesso: true, pedido });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao liberar agendamento no radar.' });
     }
   });
 
