@@ -1,4 +1,4 @@
-// routes/auth.routes.js - Cadastro com Verificação OTP, Aceite LGPD, Validade CNH/CRLV, Indicação e Perfil HUBy
+// routes/auth.routes.js - Cadastro com Auditoria Automática de Documentos/Datas, OTP, LGPD e Perfil HUBy
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -9,8 +9,6 @@ import { registrarIndicacaoNoCadastro } from './indicacoes.routes.js';
 
 const router = express.Router();
 
-// Aprovação automática ativa para que o motorista possa fazer login logo após o cadastro
-const APROVACAO_AUTOMATICA = true;
 const MSG_CREDENCIAIS = 'Credenciais inválidas.';
 
 async function garantirEstruturaAuthSeguranca() {
@@ -26,6 +24,7 @@ async function garantirEstruturaAuthSeguranca() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS indicado_por_codigo VARCHAR(20);`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS docs_validados_auto BOOLEAN DEFAULT FALSE;`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS codigos_verificacao (
@@ -60,15 +59,101 @@ function validarNumeroCPF(cpf) {
 }
 
 function validarNumeroCNH(cnh) {
-  return String(cnh).replace(/\D/g, '').length === 11;
+  const digits = String(cnh).replace(/\D/g, '');
+  return digits.length === 11 && !/^(\d)\1+$/.test(digits);
 }
 
-function validarFoto(url, maxCaracteres) {
+function validarPlacaVeiculo(placa) {
+  const limpa = String(placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(limpa);
+}
+
+function validarDataFuturaDocumento(dataStr, nomeDoc) {
+  if (!dataStr || !/^\d{4}-\d{2}-\d{2}$/.test(String(dataStr).slice(0, 10))) {
+    return { valida: false, erro: `Informe a data de validade do(a) ${nomeDoc}.` };
+  }
+  const [ano, mes, dia] = String(dataStr).slice(0, 10).split('-').map(Number);
+  const dt = new Date(ano, mes - 1, dia, 23, 59, 59);
+  if (Number.isNaN(dt.getTime())) {
+    return { valida: false, erro: `Data de validade inválida para ${nomeDoc}.` };
+  }
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  if (dt.getTime() < hoje.getTime()) {
+    return { valida: false, erro: `${nomeDoc} está vencido(a). Renove o documento antes de cadastrar.` };
+  }
+  if (ano > hoje.getFullYear() + 15) {
+    return { valida: false, erro: `Ano de validade inválido para ${nomeDoc}.` };
+  }
+  return { valida: true, dataSql: `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}` };
+}
+
+function validarFoto(url, maxCaracteres = 1_500_000) {
   if (typeof url !== 'string') return false;
-  const m = url.match(/^data:image\/(jpeg|png|webp);base64,/);
+  const m = url.match(/^data:image\/(jpeg|jpg|png|webp);base64,/i);
   if (!m) return false;
   const corpo = url.slice(m[0].length);
-  return corpo.length >= 500 && corpo.length <= maxCaracteres && /^[A-Za-z0-9+/=]+$/.test(corpo);
+  return corpo.length >= 500 && corpo.length <= maxCaracteres;
+}
+
+function auditarDocumentacaoMotorista({
+  cnh,
+  cnh_validade,
+  crlv_validade,
+  veiculo_modelo,
+  veiculo_placa,
+  veiculo_ano,
+  doc_cnh_url,
+  doc_crlv_url
+}) {
+  const cnhLimpa = String(cnh || '').replace(/\D/g, '');
+  if (!validarNumeroCNH(cnhLimpa)) {
+    return { aprovado: false, erro: 'Número da CNH inválido. Informe os 11 dígitos corretamente.' };
+  }
+
+  const valCnh = validarDataFuturaDocumento(cnh_validade, 'CNH');
+  if (!valCnh.valida) {
+    return { aprovado: false, erro: valCnh.erro };
+  }
+
+  const valCrlv = validarDataFuturaDocumento(crlv_validade, 'CRLV (Licenciamento)');
+  if (!valCrlv.valida) {
+    return { aprovado: false, erro: valCrlv.erro };
+  }
+
+  const modeloLimpo = String(veiculo_modelo || '').trim();
+  if (modeloLimpo.length < 2) {
+    return { aprovado: false, erro: 'Informe o modelo completo do veículo.' };
+  }
+
+  const placaLimpa = String(veiculo_placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (!validarPlacaVeiculo(placaLimpa)) {
+    return { aprovado: false, erro: 'Placa do veículo inválida. Utilize o padrão Mercosul (ABC1D23) ou antigo (ABC1234).' };
+  }
+
+  const anoNum = parseInt(String(veiculo_ano || ''), 10);
+  const anoAtual = new Date().getFullYear();
+  if (veiculo_ano && (!Number.isFinite(anoNum) || anoNum < 1995 || anoNum > anoAtual + 1)) {
+    return { aprovado: false, erro: `Ano do veículo inválido (deve ser entre 1995 e ${anoAtual + 1}).` };
+  }
+
+  if (!validarFoto(doc_cnh_url)) {
+    return { aprovado: false, erro: 'Fotografia da CNH ausente ou ilegível. Envie uma foto nítida da CNH.' };
+  }
+
+  if (!validarFoto(doc_crlv_url)) {
+    return { aprovado: false, erro: 'Fotografia do CRLV ausente ou ilegível. Envie uma foto nítida do documento do veículo.' };
+  }
+
+  return {
+    aprovado: true,
+    cnhLimpa,
+    cnhValSql: valCnh.dataSql,
+    crlvValSql: valCrlv.dataSql,
+    modeloLimpo: modeloLimpo.slice(0, 100),
+    placaLimpa,
+    anoLimpo: Number.isFinite(anoNum) ? String(anoNum) : String(anoAtual)
+  };
 }
 
 function novoId(prefixo) {
@@ -169,7 +254,7 @@ router.post('/enviar-codigo', async (req, res) => {
       codigoTeste: envio.enviadoReal ? undefined : codigo,
       mensagem: envio.enviadoReal
         ? 'Código de 6 dígitos enviado para o seu WhatsApp!'
-        : `Código de verificação gerado: ${codigo} (Configure WHATSAPP_API_URL no Render para envio automático).`
+        : `Código de verificação gerado: ${codigo}`
     });
   } catch (err) {
     console.error('Erro ao gerar OTP:', err);
@@ -222,7 +307,7 @@ router.post('/verificar-codigo', async (req, res) => {
 });
 
 // ============================================================================
-// CADASTRO (APROVAÇÃO AUTOMÁTICA DE MOTORISTA, ACEITE LGPD, OTP E INDICAÇÃO)
+// CADASTRO COM AUDITORIA AUTOMÁTICA DE DOCUMENTOS E APROVAÇÃO IMEDIATA
 // ============================================================================
 router.post('/cadastro', async (req, res) => {
   try {
@@ -232,7 +317,7 @@ router.post('/cadastro', async (req, res) => {
       nome, email, telefone, cpf, senha, role,
       aceitouTermos, versaoTermos, codigoIndicacao,
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
-      cnh, cnh_validade, crlv_validade,
+      cnh, cnh_numero, cnh_validade, crlv_validade,
       categoria, categoria_veiculo,
       veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
       doc_cnh_url, doc_crlv_url
@@ -277,21 +362,24 @@ router.post('/cadastro', async (req, res) => {
     const senhaHash = await bcrypt.hash(senhaTexto, salt);
 
     if (papelDesejado === 'motorista') {
-      const cnhLimpa = String(cnh || '').replace(/\D/g, '');
-      if (!validarNumeroCNH(cnhLimpa)) {
-        return res.status(400).json({ erro: 'Informe um número de CNH válido com 11 dígitos.' });
+      const auditoria = auditarDocumentacaoMotorista({
+        cnh: cnh || cnh_numero,
+        cnh_validade,
+        crlv_validade,
+        veiculo_modelo,
+        veiculo_placa,
+        veiculo_ano,
+        doc_cnh_url,
+        doc_crlv_url
+      });
+
+      if (!auditoria.aprovado) {
+        return res.status(400).json({ erro: auditoria.erro });
       }
 
-      const cnhValSql = cnh_validade ? String(cnh_validade).slice(0, 10) : null;
-      const crlvValSql = crlv_validade ? String(crlv_validade).slice(0, 10) : null;
-
-      const placaLimpa = String(veiculo_placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-      const modeloLimpo = String(veiculo_modelo || '').trim().slice(0, 100);
       const corLimpa = veiculo_cor ? String(veiculo_cor).trim().slice(0, 30) : 'Não informada';
-      const anoLimpo = veiculo_ano ? String(veiculo_ano).trim().slice(0, 4) : '2022';
       const catFinal = String(categoria || categoria_veiculo || 'carro').slice(0, 30);
       const idMotorista = novoId('mot');
-      const statusInicial = APROVACAO_AUTOMATICA ? 'aprovado' : 'aprovado';
 
       await sql`
         INSERT INTO usuarios (
@@ -311,15 +399,15 @@ router.post('/cadastro', async (req, res) => {
             id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
             cnh_numero, cnh_validade, crlv_validade,
             categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-            saldo_carteira, status_aprovacao, avaliacao_media, total_corridas,
+            saldo_carteira, status_aprovacao, docs_validados_auto, avaliacao_media, total_corridas,
             doc_cnh_url, doc_crlv_url, termos_aceitos_em, versao_termos, telefone_verificado, indicado_por_codigo
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
             ${dataNascSql}, ${senhaHash},
-            ${cnhLimpa}, ${cnhValSql}, ${crlvValSql},
-            ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${corLimpa}, ${anoLimpo},
-            0.00, ${statusInicial}, 5.00, 0,
-            ${doc_cnh_url || null}, ${doc_crlv_url || null}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
+            ${auditoria.cnhLimpa}, ${auditoria.cnhValSql}, ${auditoria.crlvValSql},
+            ${catFinal}, ${auditoria.modeloLimpo}, ${auditoria.placaLimpa}, ${corLimpa}, ${auditoria.anoLimpo},
+            0.00, 'aprovado', TRUE, 5.00, 0,
+            ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
           )
           RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria, status_aprovacao;
         `;
@@ -340,7 +428,7 @@ router.post('/cadastro', async (req, res) => {
       return res.status(201).json({
         sucesso: true,
         aprovadoAutomaticamente: true,
-        mensagem: 'Cadastro de motorista concluído com aprovação automática! Faça o seu login.',
+        mensagem: 'Documentos validados e cadastro aprovado automaticamente! Bem-vindo à HUBy.',
         token: emitirTokenMotorista(motoristaCriado),
         usuario: { ...motoristaCriado, motoristaId: motoristaCriado.id, role: 'motorista', status_aprovacao: 'aprovado' }
       });

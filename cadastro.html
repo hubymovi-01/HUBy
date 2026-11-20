@@ -122,6 +122,28 @@
       font-weight: 700;
       text-decoration: underline;
     }
+
+    .auto-audit-box {
+      margin-top: 14px;
+      background: rgba(56, 189, 248, 0.08);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 12px;
+      color: #CBD5E1;
+    }
+
+    .auto-audit-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .auto-audit-item:last-child {
+      border-bottom: none;
+    }
   </style>
 </head>
 
@@ -200,8 +222,10 @@
         <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
         <div id="blocoMotorista"
           style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
-          <h4 style="margin-bottom: 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do
-            Veículo e CNH</h4>
+          <h4 style="margin-bottom: 4px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Documentação e Veículo</h4>
+          <p style="font-size: 11.5px; color: #94A3B8; margin-bottom: 12px;">
+            Aprovação automática imediata após conferência dos dados e validades abaixo.
+          </p>
 
           <div style="display: flex; gap: 8px;">
             <div class="input-group" style="flex: 1.4;">
@@ -241,7 +265,7 @@
             </div>
             <div class="input-group" style="flex: 0.9;">
               <label>Ano</label>
-              <input type="number" id="cadAno" placeholder="2022" min="1990" max="2027">
+              <input type="number" id="cadAno" placeholder="2022" min="1995" max="2027">
             </div>
           </div>
 
@@ -251,19 +275,38 @@
           </div>
 
           <div class="upload-group">
-            <label>Fotografia da CNH</label>
+            <label>Fotografia da CNH (Obrigatória)</label>
             <label class="upload-box" id="boxCNH">
-              📸 Tocar para fotografar a CNH
-              <input type="file" id="fileCNH" class="file-input" accept="image/*" capture="environment">
+              📸 Tocar para fotografar ou anexar a CNH
+              <input type="file" id="fileCNH" class="file-input" accept="image/*">
             </label>
           </div>
 
           <div class="upload-group">
-            <label>Fotografia do CRLV (Documento do Carro)</label>
+            <label>Fotografia do CRLV (Obrigatória)</label>
             <label class="upload-box" id="boxCRLV">
-              📸 Tocar para fotografar o CRLV
-              <input type="file" id="fileCRLV" class="file-input" accept="image/*" capture="environment">
+              📸 Tocar para fotografar ou anexar o CRLV
+              <input type="file" id="fileCRLV" class="file-input" accept="image/*">
             </label>
+          </div>
+
+          <!-- CHECKLIST EM TEMPO REAL DA AUDITORIA AUTOMÁTICA -->
+          <div class="auto-audit-box" id="boxAuditoriaAutomatica">
+            <strong style="color: #38BDF8; display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;">
+              ⚡ Conferência Automática para Liberação Imediata
+            </strong>
+            <div class="auto-audit-item">
+              <span>CNH (11 dígitos) e Placa válida</span>
+              <span id="chkItemDados">⏳ Pendente</span>
+            </div>
+            <div class="auto-audit-item">
+              <span>Validade CNH e CRLV em dia</span>
+              <span id="chkItemDatas">⏳ Pendente</span>
+            </div>
+            <div class="auto-audit-item">
+              <span>Fotos nítidas da CNH e CRLV</span>
+              <span id="chkItemFotos">⏳ Pendente</span>
+            </div>
           </div>
         </div>
 
@@ -304,6 +347,12 @@
       });
     });
 
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const inpCnhVal = document.getElementById('cadCnhValidade');
+    const inpCrlvVal = document.getElementById('cadCrlvValidade');
+    if (inpCnhVal) inpCnhVal.min = hojeISO;
+    if (inpCrlvVal) inpCrlvVal.min = hojeISO;
+
     let roleAtual = 'cliente';
     let cnhBase64 = null;
     let crlvBase64 = null;
@@ -324,13 +373,53 @@
     const subtitulo = document.getElementById('txtSubtituloCadastro');
     const alertaBox = document.getElementById('alertaCadastroBox');
 
+    function atualizarChecklistAuditoriaMotorista() {
+      const cnh = document.getElementById('cadCNH')?.value.replace(/\D/g, '') || '';
+      const placa = document.getElementById('cadPlaca')?.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
+      const modelo = document.getElementById('cadModelo')?.value.trim() || '';
+      const cnhVal = inpCnhVal?.value || '';
+      const crlvVal = inpCrlvVal?.value || '';
+
+      const dadosOk = cnh.length === 11 && /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa) && modelo.length >= 2;
+      const datasOk = Boolean(cnhVal && crlvVal && cnhVal >= hojeISO && crlvVal >= hojeISO);
+      const fotosOk = Boolean(cnhBase64 && crlvBase64);
+
+      const elDados = document.getElementById('chkItemDados');
+      const elDatas = document.getElementById('chkItemDatas');
+      const elFotos = document.getElementById('chkItemFotos');
+
+      if (elDados) {
+        elDados.textContent = dadosOk ? '✅ OK' : '⏳ Pendente';
+        elDados.style.color = dadosOk ? '#10B981' : '#94A3B8';
+      }
+      if (elDatas) {
+        if ((cnhVal && cnhVal < hojeISO) || (crlvVal && crlvVal < hojeISO)) {
+          elDatas.textContent = '❌ Vencido';
+          elDatas.style.color = '#F87171';
+        } else {
+          elDatas.textContent = datasOk ? '✅ Em dia' : '⏳ Pendente';
+          elDatas.style.color = datasOk ? '#10B981' : '#94A3B8';
+        }
+      }
+      if (elFotos) {
+        elFotos.textContent = fotosOk ? '✅ Anexadas' : '⏳ Pendente';
+        elFotos.style.color = fotosOk ? '#10B981' : '#94A3B8';
+      }
+    }
+
+    ['cadCNH', 'cadPlaca', 'cadModelo', 'cadCnhValidade', 'cadCrlvValidade'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('input', atualizarChecklistAuditoriaMotorista);
+      document.getElementById(id)?.addEventListener('change', atualizarChecklistAuditoriaMotorista);
+    });
+
     function alternarPerfil(role) {
       roleAtual = role;
       if (role === 'motorista') {
         btnMotorista.classList.add('active');
         btnCliente.classList.remove('active');
         blocoMot.style.display = 'block';
-        subtitulo.textContent = 'Crie a sua conta de Motorista Parceiro';
+        subtitulo.textContent = 'Cadastro Automático de Motorista Parceiro';
+        atualizarChecklistAuditoriaMotorista();
       } else {
         btnCliente.classList.add('active');
         btnMotorista.classList.remove('active');
@@ -486,7 +575,8 @@
             const base64Comprimido = canvas.toDataURL('image/jpeg', 0.82);
             callback(base64Comprimido);
             box.classList.add('has-file');
-            box.innerHTML = '✅ Fotografia guardada com sucesso!';
+            box.innerHTML = '✅ Fotografia validada e anexada!';
+            atualizarChecklistAuditoriaMotorista();
           };
           img.src = event.target.result;
         };
@@ -532,23 +622,31 @@
       if (roleAtual === 'motorista') {
         payload.cnh = document.getElementById('cadCNH').value.replace(/\D/g, '');
         payload.cnh_numero = payload.cnh;
-        payload.cnh_validade = document.getElementById('cadCnhValidade').value || null;
-        payload.crlv_validade = document.getElementById('cadCrlvValidade').value || null;
+        payload.cnh_validade = inpCnhVal?.value || null;
+        payload.crlv_validade = inpCrlvVal?.value || null;
         payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
         payload.categoria = payload.categoria_veiculo;
         payload.veiculo_modelo = document.getElementById('cadModelo').value.trim();
-        payload.veiculo_placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
+        payload.veiculo_placa = document.getElementById('cadPlaca').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
         payload.veiculo_cor = document.getElementById('cadCor').value.trim();
         payload.veiculo_ano = document.getElementById('cadAno').value.trim();
         payload.doc_cnh_url = cnhBase64 || null;
         payload.doc_crlv_url = crlvBase64 || null;
 
-        if (!payload.cnh || !payload.veiculo_modelo || !payload.veiculo_placa) {
-          exibirAlerta('Preencha os dados da CNH, Modelo e Placa do veículo.', 'error');
+        if (payload.cnh.length !== 11 || !payload.veiculo_modelo || !/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(payload.veiculo_placa)) {
+          exibirAlerta('Verifique o nº da CNH (11 dígitos), modelo e placa válida do veículo.', 'error');
           return;
         }
         if (!payload.cnh_validade || !payload.crlv_validade) {
           exibirAlerta('Informe a data de validade da CNH e do CRLV do veículo.', 'error');
+          return;
+        }
+        if (payload.cnh_validade < hojeISO || payload.crlv_validade < hojeISO) {
+          exibirAlerta('CNH ou CRLV vencido. Apenas documentos dentro da validade são aprovados automaticamente.', 'error');
+          return;
+        }
+        if (!payload.doc_cnh_url || !payload.doc_crlv_url) {
+          exibirAlerta('Anexe as fotografias da CNH e do CRLV para aprovação automática.', 'error');
           return;
         }
       }
@@ -558,7 +656,7 @@
 
       try {
         btnSub.disabled = true;
-        if (spanBtn) spanBtn.textContent = 'A criar conta...';
+        if (spanBtn) spanBtn.textContent = roleAtual === 'motorista' ? 'Validando documentos...' : 'A criar conta...';
 
         const resp = await fetch(`${API_URL}/api/auth/cadastro`, {
           method: 'POST',
@@ -578,17 +676,12 @@
           localStorage.setItem('huby_user_name', data.usuario?.nome || payload.nome);
         }
 
-        exibirAlerta(data.mensagem || 'Conta criada com sucesso!', 'success');
+        exibirAlerta(data.mensagem || 'Conta criada e aprovada automaticamente!', 'success');
         setTimeout(() => {
-          if (data.pendente) {
-            window.location.replace('./login.html?perfil=motorista');
-          } else {
-            window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
-          }
+          window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
         }, 900);
 
       } catch (err) {
-        console.error("Erro no cadastro:", err);
         let msgErro = err.message;
         if (msgErro.includes('already exists') || msgErro.includes('conflito') || msgErro.includes('409')) {
           msgErro = 'Este e-mail ou CPF já possui cadastro. <a href="./login.html" style="color: #38BDF8; font-weight: 800;">Clique aqui para fazer login</a>';

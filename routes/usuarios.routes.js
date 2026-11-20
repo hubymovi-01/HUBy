@@ -1,4 +1,4 @@
-// routes/usuarios.routes.js - Autenticação Unificada HUBy (Passageiro, Motorista Aprovado Automaticamente e Admin Direto)
+// routes/usuarios.routes.js - Autenticação Unificada HUBy (Auditoria Automática de Documentos + Aprovação Imediata)
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
@@ -28,6 +28,11 @@ async function garantirEstruturaContas() {
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS senha_hash TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS senha_hash TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_numero TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_cnh_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS doc_crlv_url TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS docs_validados_auto BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_aprovacao TEXT DEFAULT 'aprovado';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS status_online BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS motivo_recusa TEXT;`;
@@ -49,8 +54,22 @@ async function conferirSenha(senhaInformada, hashOuSenha) {
   return valor === String(senhaInformada);
 }
 
+function validarDataDocumento(dataStr, nomeDoc) {
+  if (!dataStr || !/^\d{4}-\d{2}-\d{2}$/.test(String(dataStr).slice(0, 10))) {
+    return { ok: false, erro: `Informe a data de validade do(a) ${nomeDoc}.` };
+  }
+  const [ano, mes, dia] = String(dataStr).slice(0, 10).split('-').map(Number);
+  const dt = new Date(ano, mes - 1, dia, 23, 59, 59);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  if (Number.isNaN(dt.getTime()) || dt.getTime() < hoje.getTime()) {
+    return { ok: false, erro: `${nomeDoc} está vencido(a) ou com data inválida.` };
+  }
+  return { ok: true, dataSql: String(dataStr).slice(0, 10) };
+}
+
 // ============================================================================
-// 1. CADASTRO UNIFICADO (/cadastro e /registo) - MOTORISTA APROVADO NA HORA
+// 1. CADASTRO UNIFICADO (/cadastro e /registo) - AUDITORIA AUTOMÁTICA + APROVAÇÃO
 // ============================================================================
 async function handleCadastroUnificado(req, res) {
   try {
@@ -59,9 +78,10 @@ async function handleCadastroUnificado(req, res) {
     const {
       nome, email, telefone, cpf, senha, role,
       dataNascimento, contatoEmergenciaNome, contatoEmergenciaTelefone,
-      cnh, cnh_numero, categoria, categoria_veiculo,
+      cnh, cnh_numero, cnh_validade, crlv_validade,
+      categoria, categoria_veiculo,
       veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-      chave_pix_padrao, fotoVeiculo
+      chave_pix_padrao, doc_cnh_url, doc_crlv_url, fotoVeiculo
     } = req.body;
 
     if (!nome || !senha || (!email && !telefone)) {
@@ -83,11 +103,24 @@ async function handleCadastroUnificado(req, res) {
       const placaLimpa = String(veiculo_placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
       const modeloLimpo = String(veiculo_modelo || '').trim();
 
-      if (cnhLimpa.length !== 11) {
-        return res.status(400).json({ erro: 'Informe os 11 dígitos da CNH.' });
+      if (cnhLimpa.length !== 11 || /^(\d)\1+$/.test(cnhLimpa)) {
+        return res.status(400).json({ erro: 'Informe os 11 dígitos válidos da CNH.' });
       }
-      if (!modeloLimpo || !placaLimpa) {
-        return res.status(400).json({ erro: 'Informe o modelo e a placa do veículo.' });
+      if (!modeloLimpo || !/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placaLimpa)) {
+        return res.status(400).json({ erro: 'Informe o modelo e uma placa válida (ex: ABC1D23).' });
+      }
+
+      const valCnh = validarDataDocumento(cnh_validade, 'CNH');
+      if (!valCnh.ok) return res.status(400).json({ erro: valCnh.erro });
+
+      const valCrlv = validarDataDocumento(crlv_validade, 'CRLV');
+      if (!valCrlv.ok) return res.status(400).json({ erro: valCrlv.erro });
+
+      if (!doc_cnh_url || String(doc_cnh_url).length < 500) {
+        return res.status(400).json({ erro: 'Envie a fotografia da CNH para validação automática.' });
+      }
+      if (!doc_crlv_url || String(doc_crlv_url).length < 500) {
+        return res.status(400).json({ erro: 'Envie a fotografia do CRLV para validação automática.' });
       }
 
       const idMotorista = 'mot_' + crypto.randomBytes(8).toString('hex');
@@ -102,12 +135,14 @@ async function handleCadastroUnificado(req, res) {
         await sql`
           INSERT INTO motoristas (
             id, usuario_id, nome, email, telefone, cpf, data_nascimento, senha_hash,
-            cnh_numero, categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-            chave_pix_padrao, foto_perfil_url, saldo_carteira, status_aprovacao, status_online, avaliacao_media, total_corridas
+            cnh_numero, cnh_validade, crlv_validade, doc_cnh_url, doc_crlv_url,
+            categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
+            chave_pix_padrao, foto_perfil_url, saldo_carteira, status_aprovacao, docs_validados_auto, status_online, avaliacao_media, total_corridas
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo}, ${dataNascSql}, ${senhaHash},
-            ${cnhLimpa}, ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${veiculo_cor || 'Prata'}, ${veiculo_ano || '2023'},
-            ${chave_pix_padrao || null}, ${fotoVeiculo || null}, 0.00, 'aprovado', FALSE, 5.00, 0
+            ${cnhLimpa}, ${valCnh.dataSql}, ${valCrlv.dataSql}, ${doc_cnh_url}, ${doc_crlv_url},
+            ${catFinal}, ${modeloLimpo}, ${placaLimpa}, ${veiculo_cor || 'Prata'}, ${veiculo_ano || '2023'},
+            ${chave_pix_padrao || null}, ${fotoVeiculo || null}, 0.00, 'aprovado', TRUE, FALSE, 5.00, 0
           );
         `;
       } catch (errMot) {
@@ -124,7 +159,7 @@ async function handleCadastroUnificado(req, res) {
       return res.status(201).json({
         sucesso: true,
         aprovadoAutomaticamente: true,
-        mensagem: 'Cadastro de motorista aprovado automaticamente! Faça o seu login.',
+        mensagem: 'Documentos validados e cadastro aprovado automaticamente! Bem-vindo à HUBy.',
         token,
         usuario: {
           id: idMotorista,
@@ -180,7 +215,7 @@ usuariosRouter.post('/cadastro', handleCadastroUnificado);
 usuariosRouter.post('/registo', handleCadastroUnificado);
 
 // ============================================================================
-// 2. LOGIN DE PASSAGEIRO E ADMIN (DIRETO, SEM 2FA)
+// 2. LOGIN DE PASSAGEIRO E ADMIN
 // ============================================================================
 usuariosRouter.post('/login', async (req, res) => {
   try {
@@ -269,7 +304,7 @@ usuariosRouter.post('/login', async (req, res) => {
 });
 
 // ============================================================================
-// 3. LOGIN DE MOTORISTA PARCEIRO (E-MAIL + CNH + PLACA, SEM BLOQUEIO DE ADMIN)
+// 3. LOGIN DE MOTORISTA PARCEIRO
 // ============================================================================
 usuariosRouter.post('/login-motorista', async (req, res) => {
   try {
