@@ -407,6 +407,7 @@ export default function adminRoutes(io) {
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_url TEXT;`;
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_em TIMESTAMP WITH TIME ZONE;`;
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS docs_validados_auto BOOLEAN DEFAULT FALSE;`;
 
       const motoristas = await sql`
         SELECT id, nome, email, telefone, cnh_numero AS cnh,
@@ -415,6 +416,7 @@ export default function adminRoutes(io) {
                categoria AS categoria_veiculo, veiculo_modelo, veiculo_placa,
                veiculo_cor, veiculo_ano, doc_cnh_url, doc_crlv_url, foto_perfil_url,
                ultima_selfie_url, ultima_selfie_em,
+               COALESCE(docs_validados_auto, FALSE) AS docs_validados_auto,
                saldo_carteira, status_aprovacao, status_online,
                avaliacao_media, total_corridas, criado_em
         FROM motoristas
