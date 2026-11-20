@@ -1,4 +1,4 @@
-// routes/push.routes.js - Motor Oficial de Notificações Push em Segundo Plano (Web Push VAPID)
+// routes/push.routes.js - Motor Oficial de Notificações Push em Segundo Plano (Web Push VAPID com Filtro por Cidade/Região)
 import express from 'express';
 import { createRequire } from 'module';
 import { sql } from '../db.js';
@@ -27,11 +27,14 @@ export async function garantirEstruturaWebPush() {
         usuario_id TEXT NOT NULL,
         role VARCHAR(30) NOT NULL DEFAULT 'cliente',
         categoria VARCHAR(30) DEFAULT 'carro',
+        cidade VARCHAR(120),
         endpoint TEXT UNIQUE NOT NULL,
         keys_json JSONB NOT NULL,
         atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
+
+    await sql`ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS cidade VARCHAR(120);`;
 
     if (!vapidConfigurado) {
       let pubKey = process.env.VAPID_PUBLIC_KEY || '';
@@ -82,7 +85,6 @@ export async function garantirEstruturaWebPush() {
 
 garantirEstruturaWebPush();
 
-// Dispara notificação push real para os motoristas online compatíveis com a corrida
 export async function dispararPushParaMotoristas({ titulo, corpo, categoria, url = './motorista.html', pedidoId = null }) {
   try {
     await garantirEstruturaWebPush();
@@ -126,19 +128,34 @@ export async function dispararPushParaMotoristas({ titulo, corpo, categoria, url
   }
 }
 
-// Dispara push global (Broadcast do Admin)
-export async function dispararPushBroadcast({ publico = 'todos', titulo, corpo }) {
+// Dispara push global ou filtrado por público + região/cidade onde há motoristas/usuários
+export async function dispararPushBroadcast({ publico = 'todos', regiao = 'todas', titulo, corpo }) {
   try {
     await garantirEstruturaWebPush();
-    if (!vapidConfigurado) return;
+    if (!vapidConfigurado) return { enviados: 0 };
 
-    let subs;
+    const regiaoLimpa = String(regiao || 'todas').trim().toLowerCase();
+    const filtrarRegiao = regiaoLimpa && regiaoLimpa !== 'todas';
+
+    let subs = await sql`
+      SELECT ps.id, ps.endpoint, ps.keys_json, ps.role, ps.cidade,
+             COALESCE(m.cidade, u.cidade, ps.cidade, '') AS cidade_usuario
+      FROM push_subscriptions ps
+      LEFT JOIN motoristas m ON ps.usuario_id::text = m.id::text OR ps.usuario_id::text = m.usuario_id::text
+      LEFT JOIN usuarios u ON ps.usuario_id::text = u.id::text;
+    `;
+
     if (publico === 'motoristas') {
-      subs = await sql`SELECT id, endpoint, keys_json FROM push_subscriptions WHERE role = 'motorista';`;
+      subs = subs.filter((s) => String(s.role).toLowerCase() === 'motorista');
     } else if (publico === 'passageiros') {
-      subs = await sql`SELECT id, endpoint, keys_json FROM push_subscriptions WHERE role = 'cliente';`;
-    } else {
-      subs = await sql`SELECT id, endpoint, keys_json FROM push_subscriptions;`;
+      subs = subs.filter((s) => String(s.role).toLowerCase() !== 'motorista');
+    }
+
+    if (filtrarRegiao) {
+      subs = subs.filter((s) => {
+        const cid = String(s.cidade_usuario || s.cidade || '').toLowerCase();
+        return cid.includes(regiaoLimpa);
+      });
     }
 
     const payload = JSON.stringify({
@@ -147,6 +164,7 @@ export async function dispararPushBroadcast({ publico = 'todos', titulo, corpo }
       url: publico === 'motoristas' ? './motorista.html' : './index.html'
     });
 
+    let enviados = 0;
     for (const s of subs) {
       try {
         let keys = s.keys_json;
@@ -155,18 +173,21 @@ export async function dispararPushBroadcast({ publico = 'todos', titulo, corpo }
         }
         if (!keys?.p256dh || !keys?.auth) continue;
         await webpush.sendNotification({ endpoint: s.endpoint, keys }, payload);
+        enviados++;
       } catch (errEnvio) {
         if (errEnvio.statusCode === 404 || errEnvio.statusCode === 410) {
           await sql`DELETE FROM push_subscriptions WHERE id = ${s.id};`.catch(() => {});
         }
       }
     }
+
+    return { enviados };
   } catch (err) {
     console.warn('Erro no broadcast push:', err.message);
+    return { enviados: 0 };
   }
 }
 
-// 1. Retorna a Public Key VAPID para o navegador registrar o aparelho
 router.get('/vapid-public-key', async (req, res) => {
   await garantirEstruturaWebPush();
   if (!vapidPublicKeyCache) {
@@ -175,13 +196,13 @@ router.get('/vapid-public-key', async (req, res) => {
   res.json({ publicKey: vapidPublicKeyCache });
 });
 
-// 2. Salva/Atualiza a inscrição Push do aparelho do usuário logado
 router.post('/subscribe', autenticarToken, async (req, res) => {
   try {
     await garantirEstruturaWebPush();
     const usuarioId = String(req.usuario.id);
     const role = String(req.usuario.role || 'cliente').toLowerCase();
     const categoria = String(req.usuario.categoria || 'carro').toLowerCase();
+    const cidade = req.body?.cidade ? String(req.body.cidade).trim().slice(0, 100) : null;
     const { subscription } = req.body;
 
     if (!subscription?.endpoint || !subscription?.keys?.p256dh || !subscription?.keys?.auth) {
@@ -191,12 +212,13 @@ router.post('/subscribe', autenticarToken, async (req, res) => {
     const keysTxt = JSON.stringify(subscription.keys);
 
     await sql`
-      INSERT INTO push_subscriptions (usuario_id, role, categoria, endpoint, keys_json, atualizado_em)
-      VALUES (${usuarioId}, ${role}, ${categoria}, ${subscription.endpoint}, (${keysTxt}::text)::jsonb, CURRENT_TIMESTAMP)
+      INSERT INTO push_subscriptions (usuario_id, role, categoria, cidade, endpoint, keys_json, atualizado_em)
+      VALUES (${usuarioId}, ${role}, ${categoria}, ${cidade}, ${subscription.endpoint}, (${keysTxt}::text)::jsonb, CURRENT_TIMESTAMP)
       ON CONFLICT (endpoint) DO UPDATE
       SET usuario_id = ${usuarioId},
           role = ${role},
           categoria = ${categoria},
+          cidade = COALESCE(${cidade}, push_subscriptions.cidade),
           keys_json = (${keysTxt}::text)::jsonb,
           atualizado_em = CURRENT_TIMESTAMP;
     `;

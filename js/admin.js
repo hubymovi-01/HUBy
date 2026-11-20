@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Caixa Líquido Real + Agendamentos + Selo Docs Validados)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Regiões Dinâmicas Push + Caixa Líquido Real + Agendamentos + Selo Docs Validados)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -225,6 +225,7 @@ async function sincronizarTudo(token) {
   await carregarDespesasCorporativas(token);
 
   Promise.allSettled([
+    carregarRegioesAtivasPush(token),
     carregarTabelaAgendamentosAdmin(token),
     carregarTabelaPatrocinadores(token),
     carregarConfigGrowthEDinamica(token),
@@ -1443,8 +1444,44 @@ function configurarFormMercadoPago(token) {
 }
 
 // ============================================================================
-// DISPARO DE NOTIFICAÇÕES PUSH
+// REGIÕES DINÂMICAS REAIS & DISPARO DE NOTIFICAÇÕES PUSH
 // ============================================================================
+async function carregarRegioesAtivasPush(token) {
+  const select = document.getElementById('broadRegiao');
+  const inputCustom = document.getElementById('broadRegiaoCustom');
+  if (!select) return;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/regioes-ativas?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const regioes = res.ok ? await res.json() : [];
+
+    let opcoesHTML = `<option value="todas">🌐 Todas as Regiões (Global)</option>`;
+    if (Array.isArray(regioes) && regioes.length > 0) {
+      opcoesHTML += regioes.map((r) => {
+        const detalhes = [];
+        if (r.motoristas > 0) detalhes.push(`${r.motoristas} mot.`);
+        if (r.usuarios > 0) detalhes.push(`${r.usuarios} usr.`);
+        if (r.corridas > 0) detalhes.push(`${r.corridas} corridas`);
+        const info = detalhes.length ? ` (${detalhes.join(' • ')})` : '';
+        return `<option value="${escaparHTML(r.nome)}">📍 ${escaparHTML(r.nome)}${escaparHTML(info)}</option>`;
+      }).join('');
+    }
+    opcoesHTML += `<option value="__outra__">✏️ Digitar outra cidade / região...</option>`;
+
+    select.innerHTML = opcoesHTML;
+
+    select.onchange = () => {
+      if (inputCustom) {
+        inputCustom.style.display = select.value === '__outra__' ? 'block' : 'none';
+        if (select.value === '__outra__') inputCustom.focus();
+      }
+    };
+  } catch (e) {}
+}
+
 function configurarFormBroadcast(token) {
   document.getElementById('formBroadcast')?.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1455,7 +1492,9 @@ function configurarFormBroadcast(token) {
     btnSubmit.disabled = true;
 
     const publico = document.getElementById('broadPublico').value;
-    const regiao = document.getElementById('broadRegiao').value;
+    const selectRegiao = document.getElementById('broadRegiao').value;
+    const customRegiao = document.getElementById('broadRegiaoCustom')?.value.trim() || '';
+    const regiao = selectRegiao === '__outra__' ? (customRegiao || 'todas') : selectRegiao;
     const titulo = document.getElementById('broadTitulo').value.trim();
     const mensagem = document.getElementById('broadMensagem').value.trim();
 
@@ -1469,8 +1508,10 @@ function configurarFormBroadcast(token) {
       const data = await res.json();
 
       if (res.ok) {
-        notificarAdmin(`🚀 Push transmitido com sucesso para: ${regiao.toUpperCase()}`, 'sucesso');
+        notificarAdmin(`🚀 Push transmitido para: ${regiao === 'todas' ? 'TODAS AS REGIÕES' : regiao.toUpperCase()}`, 'sucesso');
         e.target.reset();
+        const inpC = document.getElementById('broadRegiaoCustom');
+        if (inpC) inpC.style.display = 'none';
       } else {
         notificarAdmin(data.erro || 'Erro ao enviar broadcast.', 'erro');
       }
@@ -1555,6 +1596,7 @@ function configurarNavegacaoAbas() {
           carregarDespesasCorporativas(token);
         }
 
+        if (tabAlvoId === 'tabBroadcast') carregarRegioesAtivasPush(token);
         if (tabAlvoId === 'tabAgendamentos') carregarTabelaAgendamentosAdmin(token);
         if (tabAlvoId === 'tabPatrocinadores') carregarTabelaPatrocinadores(token);
         if (tabAlvoId === 'tabGrowth') carregarConfigGrowthEDinamica(token);

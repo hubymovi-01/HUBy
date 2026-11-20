@@ -326,7 +326,10 @@
       </a>
       <a href="#" id="menuItemIndique" class="drawer-item">
         <span class="d-icon">🎁</span>
-        <div class="d-info"><strong>Indique e Ganhe</strong><small>Ganhe R$ 5,00 por amigo indicado</small></div>
+        <div class="d-info">
+          <strong>Indique e Ganhe</strong>
+          <small id="txtSubtituloIndiqueMenu">Ganhe desconto e bônus por amigo indicado</small>
+        </div>
       </a>
 
       <a href="./motorista.html" class="drawer-item highlight-driver">
@@ -663,15 +666,15 @@
     </div>
   </div>
 
-  <!-- MODAL INDIQUE E GANHE -->
+  <!-- MODAL INDIQUE E GANHE (SINCRONIZADO COM O ADMIN) -->
   <div id="modalIndiqueGanhe" class="modal-backdrop" style="display: none; z-index: 10020;">
     <div class="modal-card">
       <div class="modal-header-row">
         <h3>🎁 Indique e Ganhe</h3>
         <button type="button" id="btnFecharIndique" class="btn-icon-close">✕</button>
       </div>
-      <p style="font-size: 13px; color: #94A3B8; margin: 8px 0 14px;">
-        Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ 5,00 de desconto</strong> na 1ª viagem.
+      <p id="txtDescricaoModalIndique" style="font-size: 13px; color: #94A3B8; margin: 8px 0 14px;">
+        Compartilhe seu código! Seu amigo ganha desconto na 1ª viagem e você recebe bônus.
       </p>
       <div style="background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px;">
         <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px;">HUBY-VIP</div>
@@ -683,7 +686,7 @@
     </div>
   </div>
 
-  <!-- CONTROLES ESSENCIAIS DO MENU LATERAL -->
+  <!-- CONTROLES ESSENCIAIS DO MENU LATERAL & SINCRONIZAÇÃO INDIQUE E GANHE -->
   <script type="module">
     import { API_URL } from './js/config.js';
     
@@ -734,18 +737,61 @@
       }
     }
 
+    async function sincronizarRegrasIndicacaoUI() {
+      try {
+        const res = await fetch(`${API_URL}/api/indicacoes/regras?t=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const bonusFmt = Number(data.bonusPorIndicacao ?? 5).toFixed(2).replace('.', ',');
+        const descFmt = Number(data.descontoAmigo ?? 5).toFixed(2).replace('.', ',');
+
+        const subMenu = document.getElementById('txtSubtituloIndiqueMenu');
+        if (subMenu) {
+          subMenu.textContent = `Ganhe R$ ${bonusFmt} por amigo indicado`;
+        }
+
+        const descModal = document.getElementById('txtDescricaoModalIndique');
+        if (descModal) {
+          descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
+        }
+      } catch (e) {}
+    }
+
     document.getElementById('menuItemIndique')?.addEventListener('click', async (e) => {
       e.preventDefault();
       document.getElementById('menuBackdrop')?.click();
       document.getElementById('modalIndiqueGanhe').style.display = 'flex';
+      await sincronizarRegrasIndicacaoUI();
       const token = localStorage.getItem('huby_token');
       if (token) {
         try {
-          const res = await fetch(`${API_URL}/api/indicacoes/meu-codigo`, { headers: { Authorization: `Bearer ${token}` } });
+          const res = await fetch(`${API_URL}/api/indicacoes/meu-codigo?t=${Date.now()}`, {
+            cache: 'no-store',
+            headers: { Authorization: `Bearer ${token}` }
+          });
           const data = await res.json();
-          document.getElementById('lblMeuCodigoIndicacao').textContent = data.codigo || 'HUBY-VIP';
+          if (data.codigo) document.getElementById('lblMeuCodigoIndicacao').textContent = data.codigo;
+          const bonusFmt = Number(data.bonusPorIndicacao ?? 5).toFixed(2).replace('.', ',');
+          const descFmt = Number(data.descontoAmigo ?? 5).toFixed(2).replace('.', ',');
+          const descModal = document.getElementById('txtDescricaoModalIndique');
+          if (descModal) {
+            descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
+          }
         } catch (e) {}
       }
+    });
+
+    document.getElementById('btnCopiarCodigoInd')?.addEventListener('click', () => {
+      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || 'HUBY-VIP';
+      navigator.clipboard?.writeText(cod);
+      alert(`Código ${cod} copiado!`);
+    });
+
+    document.getElementById('btnCompartilharCodigoZap')?.addEventListener('click', () => {
+      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || 'HUBY-VIP';
+      const txtDesc = document.getElementById('txtDescricaoModalIndique')?.textContent || 'Use meu código no HUBy para ganhar desconto na 1ª viagem!';
+      const msg = encodeURIComponent(`🚘 Baixe o HUBy e use meu código *${cod}*! ${txtDesc}`);
+      window.open(`https://wa.me/?text=${msg}`, '_blank', 'noopener');
     });
 
     document.getElementById('btnFecharIndique')?.addEventListener('click', () => {
@@ -755,11 +801,13 @@
     document.addEventListener('DOMContentLoaded', () => {
       checarAdminInstantaneo();
       atualizarMenuLateral();
+      sincronizarRegrasIndicacaoUI();
     });
     
     document.getElementById('btnAbrirMenu')?.addEventListener('click', () => {
       checarAdminInstantaneo();
       atualizarMenuLateral();
+      sincronizarRegrasIndicacaoUI();
     });
   </script>
 

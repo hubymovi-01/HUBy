@@ -1,4 +1,4 @@
-// routes/indicacoes.routes.js - Programa Indique e Ganhe HUBy (Controlado pelo Painel Master)
+// routes/indicacoes.routes.js - Programa Indique e Ganhe HUBy (100% Sincronizado com o Painel Master)
 import express from 'express';
 import crypto from 'crypto';
 import { sql } from '../db.js';
@@ -159,7 +159,22 @@ export async function liquidarBonusIndicacaoPrimeiraCorrida(clienteId) {
   }
 }
 
+// Rota pública para o menu lateral do app sincronizar os valores em tempo real
+router.get('/regras', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const cfg = await lerConfigIndicacaoDoBanco();
+  res.json({
+    sucesso: true,
+    ativo: cfg.ativo,
+    bonusPorIndicacao: Number(cfg.bonus_indicador),
+    descontoAmigo: Number(cfg.desconto_indicado),
+    bonusIndicacaoMotorista: Number(cfg.bonus_motorista),
+    metaCorridasMotorista: Number(cfg.meta_corridas_motorista)
+  });
+});
+
 router.get('/meu-codigo', autenticarToken, async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   try {
     const cfg = await lerConfigIndicacaoDoBanco();
     const usuarioId = String(req.usuario.id);

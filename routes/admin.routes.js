@@ -3,6 +3,7 @@ import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 import { executarTransferenciaPixMercadoPago } from './carteira.routes.js';
+import { dispararPushBroadcast } from './push.routes.js';
 
 function verificarAdmin(req, res, next) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase().trim();
@@ -901,8 +902,75 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 9. DISPARO DE PUSH (BROADCAST)
+  // 9. REGIÕES ATIVAS AUTOMÁTICAS & DISPARO DE PUSH (BROADCAST)
   // =========================================================================
+  router.get('/regioes-ativas', autenticarToken, verificarAdmin, async (req, res) => {
+    try {
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cidade VARCHAR(120);`;
+      await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cidade VARCHAR(120);`;
+
+      const mapaRegioes = new Map();
+
+      const adicionarRegiao = (nomeBruto, tipo = 'atividade') => {
+        const limpo = String(nomeBruto || '').trim();
+        if (!limpo || limpo.length < 3) return;
+        const chave = limpo.toLowerCase();
+        if (!mapaRegioes.has(chave)) {
+          mapaRegioes.set(chave, { nome: limpo, motoristas: 0, usuarios: 0, corridas: 0 });
+        }
+        const reg = mapaRegioes.get(chave);
+        if (tipo === 'motorista') reg.motoristas++;
+        else if (tipo === 'usuario') reg.usuarios++;
+        else reg.corridas++;
+      };
+
+      // 1. Cidades cadastradas nos motoristas e usuários
+      const mots = await sql`SELECT cidade FROM motoristas WHERE cidade IS NOT NULL AND TRIM(cidade) <> '';`;
+      mots.forEach((m) => adicionarRegiao(m.cidade, 'motorista'));
+
+      const usrs = await sql`SELECT cidade FROM usuarios WHERE cidade IS NOT NULL AND TRIM(cidade) <> '';`;
+      usrs.forEach((u) => adicionarRegiao(u.cidade, 'usuario'));
+
+      // 2. Cidades extraídas automaticamente dos endereços das corridas (ex: "... - São Raimundo Nonato, PI")
+      const pedidos = await sql`
+        SELECT origem_endereco, destino_endereco
+        FROM pedidos
+        WHERE origem_endereco IS NOT NULL OR destino_endereco IS NOT NULL
+        ORDER BY criado_em DESC
+        LIMIT 300;
+      `;
+
+      const extrairCidadeEndereco = (end) => {
+        const txt = String(end || '');
+        if (!txt || txt.startsWith('Partida (') || txt.startsWith('Destino (') || txt.startsWith('Local atual (')) return null;
+        const partes = txt.split(/[-–,]/).map((s) => s.trim()).filter(Boolean);
+        for (let i = partes.length - 1; i >= 0; i--) {
+          const p = partes[i];
+          if (/^(PI|SP|BA|MA|CE|MG|GO|DF|RJ|PE|TO|PA|BR|Brasil|\d{5}-?\d{3})$/i.test(p)) continue;
+          if (p.length >= 4 && p.length <= 45 && !/\d{3,}/.test(p)) {
+            return p;
+          }
+        }
+        return null;
+      };
+
+      pedidos.forEach((p) => {
+        const c1 = extrairCidadeEndereco(p.origem_endereco);
+        const c2 = extrairCidadeEndereco(p.destino_endereco);
+        if (c1) adicionarRegiao(c1, 'corrida');
+        if (c2) adicionarRegiao(c2, 'corrida');
+      });
+
+      const lista = Array.from(mapaRegioes.values()).sort(
+        (a, b) => (b.motoristas + b.usuarios + b.corridas) - (a.motoristas + a.usuarios + a.corridas)
+      );
+
+      res.json(lista);
+    } catch (err) {
+      res.json([]);
+    }
+  });
+
   router.post('/notificacoes/broadcast', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const { publico = 'todos', regiao = 'todas', titulo, mensagem } = req.body;
@@ -922,9 +990,17 @@ export default function adminRoutes(io) {
       const socket = req.app.get('io') || io;
       if (socket) {
         socket.emit('nova_notificacao_push', payload);
+        socket.emit('alerta_broadcast_geral', payload);
       }
 
-      res.json({ sucesso: true, payload });
+      const resultadoPush = await dispararPushBroadcast({
+        publico: payload.publico,
+        regiao: payload.regiao,
+        titulo: payload.titulo,
+        corpo: payload.mensagem
+      });
+
+      res.json({ sucesso: true, enviadosPush: resultadoPush?.enviados || 0, payload });
     } catch (err) {
       console.error('Erro ao disparar broadcast push:', err);
       res.status(500).json({ erro: 'Falha ao disparar notificação push.' });
