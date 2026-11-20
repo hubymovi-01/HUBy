@@ -513,6 +513,15 @@ export async function cancelarBusca() {
   resetarPainelCliente();
 
   if (pedidoId) {
+    // Emite aviso imediato via Socket para remover o card no motorista na hora
+    if (window.io && API_URL) {
+      try {
+        const sTemp = window.io(API_URL, { transports: ['websocket', 'polling'] });
+        sTemp.emit('cliente_cancelou_busca', { pedidoId, canceladoPor: 'cliente' });
+        setTimeout(() => sTemp.disconnect(), 1000);
+      } catch (e) {}
+    }
+
     const token = localStorage.getItem('huby_token');
     try {
       await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {

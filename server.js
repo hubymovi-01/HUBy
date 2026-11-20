@@ -116,6 +116,9 @@ io.on('connection', (socket) => {
   socket.on('corrida_cancelada_motorista', (dados) => {
     socket.broadcast.emit('corrida_cancelada', { ...dados, canceladoPor: 'motorista' });
   });
+  socket.on('cliente_cancelou_busca', (dados) => {
+    socket.broadcast.emit('corrida_cancelada', { ...dados, canceladoPor: 'cliente' });
+  });
 });
 
 app.use((req, res, next) => {

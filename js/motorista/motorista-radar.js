@@ -1,4 +1,4 @@
-// js/motorista/motorista-radar.js - Radar Sincronizado + Aba de Agendamentos + Selfie Nativa Expo
+// js/motorista/motorista-radar.js - Radar Sincronizado + Cancelamento Instantâneo + Aba de Agendamentos
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -15,6 +15,16 @@ const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000;
 const TEMPO_EXPIRACAO_TELA_MS = 30 * 1000;
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
+
+function limparPreVisualizacaoPresaNoMapa() {
+  estado.pedidoEmAnalise = null;
+  document.getElementById('bannerNavegacao3D')?.remove();
+  document.getElementById('painelPreVisualizacaoCorrida')?.remove();
+  try {
+    estado.hubyMapa?.limparRota?.();
+    estado.hubyMapa?.limparDestino?.();
+  } catch (e) {}
+}
 
 function extrairMetadadosSincronizados(p) {
   let obs = String(p.observacao || '').trim();
@@ -427,6 +437,9 @@ export async function alternarStatusOnline(forcarEstado = null) {
   } else {
     libertarWakeLock();
     pararRadarChamadas();
+    if (!estado.pedidoAceitoAtual) {
+      limparPreVisualizacaoPresaNoMapa();
+    }
     renderizarRadarOffline();
     notificar('⚪ Você ficou offline para corridas.', 'info');
   }
@@ -467,6 +480,44 @@ function verificarAlertasAgendamentosAceitos() {
   }
 }
 
+// ============================================================================
+// REMOVER CHAMADA INSTANTANEAMENTE QUANDO PASSAGEIRO CANCELA
+// ============================================================================
+function removerChamadaCanceladaInstantaneamente(pedidoId) {
+  if (!pedidoId) return;
+  const idStr = String(pedidoId);
+
+  if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
+  estado.pedidosIgnorados.add(idStr);
+
+  if (estado.temposPedidosTela) {
+    delete estado.temposPedidosTela[idStr];
+  }
+
+  const antesAgora = ultimosPedidosAgora.length;
+  const antesAgendados = ultimosPedidosAgendados.length;
+
+  ultimosPedidosAgora = ultimosPedidosAgora.filter(p => String(p.id) !== idStr);
+  ultimosPedidosAgendados = ultimosPedidosAgendados.filter(p => String(p.id) !== idStr);
+
+  // Se o motorista estava com a pré-visualização aberta exatamente desta corrida cancelada, limpa o mapa na hora
+  if (estado.pedidoEmAnalise && String(estado.pedidoEmAnalise.id) === idStr) {
+    limparPreVisualizacaoPresaNoMapa();
+    notificar('O passageiro cancelou a solicitação.', 'alerta');
+  } else if (antesAgora !== ultimosPedidosAgora.length || antesAgendados !== ultimosPedidosAgendados.length) {
+    notificar('Chamada cancelada pelo passageiro.', 'info');
+  }
+
+  if (ultimosPedidosAgora.length === 0) {
+    pararAlertaSonoroChamada();
+  }
+
+  estado.ultimoRenderIds = null;
+  if (estado.isOnline && !estado.pedidoAceitoAtual) {
+    renderizarRadar();
+  }
+}
+
 export function iniciarRadarChamadas() {
   solicitarPermissaoNotificacoes();
 
@@ -495,6 +546,22 @@ export function iniciarRadarChamadas() {
         }
       });
 
+      // ESCUTA IMEDIATA DO CANCELAMENTO PELO PASSAGEIRO
+      estado.socketRadar.on('corrida_cancelada', (dados) => {
+        const idCancelado = dados?.pedidoId || dados?.id;
+        if (idCancelado) {
+          removerChamadaCanceladaInstantaneamente(idCancelado);
+        }
+      });
+
+      // SE OUTRO MOTORISTA ACEITAR ANTES, TAMBÉM REMOVE DA TELA NA HORA
+      estado.socketRadar.on('corrida_aceita', (dados) => {
+        const idAceito = dados?.pedidoId || dados?.id;
+        if (idAceito && (!estado.pedidoAceitoAtual || String(estado.pedidoAceitoAtual.id) !== String(idAceito))) {
+          removerChamadaCanceladaInstantaneamente(idAceito);
+        }
+      });
+
       estado.socketRadar.on('tarifas_atualizadas', (novasTarifas) => {
         aplicarObjetoTarifas(novasTarifas);
         if (estado.isOnline && !estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
@@ -520,7 +587,7 @@ export function iniciarRadarChamadas() {
     if (!estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
       buscarChamadasPendentes(false);
     }
-  }, 4000);
+  }, 3000);
 }
 
 export function pararRadarChamadas() {
@@ -702,7 +769,7 @@ function renderizarCardPedidoMotorista(p, ehAgendado = false) {
       </button>`;
 
   return `
-    <div class="order-card" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid ${ehAgendado ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255,255,255,0.08)'};">
+    <div class="order-card" data-pedido-card-id="${p.id}" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid ${ehAgendado ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255,255,255,0.08)'};">
       <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Recusar"
         style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.06); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; cursor: pointer; z-index: 10;">
         ✕
@@ -808,10 +875,28 @@ function renderizarRadar(listaForcada = null) {
   });
 
   feedEl.querySelectorAll('.btn-accept-order').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       pararAlertaSonoroChamada();
-      sonsHUBy.tocarSucessoAceite();
       const dadosExtraidos = extrairDadosDoBotao(btn);
+
+      // Validação instantânea no servidor antes de abrir pré-visualização, evitando abrir corrida recém-cancelada
+      try {
+        const token = localStorage.getItem('huby_token') || '';
+        const chk = await fetch(`${API_URL}/api/pedidos/${dadosExtraidos.id}/status`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+        });
+        if (chk.ok) {
+          const st = await chk.json();
+          const s = String(st.status || '').toLowerCase();
+          if (['cancelado', 'concluido', 'a_caminho', 'em_viagem', 'em_andamento'].includes(s)) {
+            removerChamadaCanceladaInstantaneamente(dadosExtraidos.id);
+            notificar('Esta chamada já foi cancelada ou atendida.', 'alerta');
+            return;
+          }
+        }
+      } catch (e) {}
+
+      sonsHUBy.tocarSucessoAceite();
       preVisualizarRotaPedido(dadosExtraidos);
     });
   });
@@ -829,7 +914,6 @@ function renderizarRadar(listaForcada = null) {
         return;
       }
 
-      // Guarda na agenda do motorista e remove da lista pendente até a hora marcada
       const agenda = JSON.parse(localStorage.getItem('huby_motorista_agenda') || '[]');
       if (!agenda.some(a => String(a.id) === String(dadosExtraidos.id))) {
         agenda.push({
