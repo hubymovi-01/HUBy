@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Caixa Líquido Real + Agendamentos + Sem Sócios)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Caixa Líquido Real + Agendamentos + Selo Docs Validados)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -779,7 +779,7 @@ window.excluirItemMarketplace = async (id) => {
 };
 
 // ============================================================================
-// GESTÃO DE FROTA, DOCUMENTOS E ALERTA DE VALIDADE (CNH / CRLV)
+// GESTÃO DE FROTA, DOCUMENTOS, SELO DOCS VALIDADOS E ALERTA DE VALIDADE
 // ============================================================================
 async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
   const tbody = document.getElementById('tabelaFrotaBody');
@@ -824,6 +824,10 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
       if (valCnh.status === 'vencido' || valCrlv.status === 'vencido') qtdVencidos++;
       else if (valCnh.status === 'alerta' || valCrlv.status === 'alerta') qtdVencendoEmBreve++;
 
+      const seloDocsAutoHTML = m.docs_validados_auto
+        ? `<div style="margin-top:4px;"><span title="CNH, CRLV, Placa e datas validados automaticamente no cadastro" style="display:inline-block; font-size:10px; font-weight:800; color:#38BDF8; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.35); padding:2px 7px; border-radius:999px;">⚡ Docs Validados</span></div>`
+        : '';
+
       return `
         <tr>
           <td>
@@ -836,7 +840,10 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
           </td>
           <td><span class="badge badge-aceito">${escaparHTML((m.categoria || m.categoria_veiculo || 'carro').toUpperCase())}</span></td>
           <td style="color:var(--primary); font-weight:800;">R$ ${Number(m.saldo_carteira || 0).toFixed(2).replace('.', ',')}</td>
-          <td><span class="badge ${badgeStatus}">${escaparHTML(statusLimpo.toUpperCase())}</span></td>
+          <td>
+            <span class="badge ${badgeStatus}">${escaparHTML(statusLimpo.toUpperCase())}</span>
+            ${seloDocsAutoHTML}
+          </td>
           <td>
             <div style="display:flex; flex-direction:column; gap:4px;">
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
