@@ -503,32 +503,28 @@ export async function cancelarBusca() {
   const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
   const modal = document.getElementById('modalRegrasCancelamentoCliente');
   
-  if (modal && pedidoId) {
+  // Verifica se o painel do motorista (corrida aceite) está visível
+  const painelMotorista = document.getElementById('painelMotoristaAceitou');
+  const motoristaAceitou = painelMotorista && painelMotorista.style.display === 'block';
+
+  // SÓ MOSTRA O MODAL SE O MOTORISTA JÁ TIVER ACEITADO A CORRIDA
+  if (modal && pedidoId && motoristaAceitou) {
       const btnManter = document.getElementById('btnDesistirCancelamento');
       const btnConfirmar = document.getElementById('btnConfirmarCancelamento');
       const avisoDecorrido = document.getElementById('avisoTempoDecorrido');
       
       let taxaCobrada = false;
+      const horaAceiteStr = localStorage.getItem('huby_hora_aceite_motorista');
+      const horaAceite = estadoCliente.horaAceiteMotorista || Number(horaAceiteStr) || Date.now();
       
-      // Verifica se o painel do motorista (corrida aceite) está visível
-      const painelMotorista = document.getElementById('painelMotoristaAceitou');
-      const motoristaAceitou = painelMotorista && painelMotorista.style.display === 'block';
+      const tempoDecorridoMs = Date.now() - horaAceite;
+      const tempoLimiteMs = 2 * 60 * 1000; // 2 minutos em milissegundos
 
-      if (motoristaAceitou) {
-           // Recupera a hora em que o motorista aceitou (definida no app-cliente.js)
-           const horaAceiteStr = localStorage.getItem('huby_hora_aceite_motorista');
-           const horaAceite = estadoCliente.horaAceiteMotorista || Number(horaAceiteStr) || Date.now();
-           
-           const tempoDecorridoMs = Date.now() - horaAceite;
-           const tempoLimiteMs = 2 * 60 * 1000; // 2 minutos em milissegundos
-
-           // Se passaram mais de 2 minutos após o motorista aceitar, ativa o aviso de cobrança
-           if (tempoDecorridoMs > tempoLimiteMs) {
-               taxaCobrada = true;
-           }
+      // Se passaram mais de 2 minutos após o motorista aceitar, ativa o aviso de cobrança
+      if (tempoDecorridoMs > tempoLimiteMs) {
+          taxaCobrada = true;
       }
 
-      // Mostra o aviso da taxa apenas se o motorista tiver aceite há mais de 2 min
       if (avisoDecorrido) {
           avisoDecorrido.style.display = taxaCobrada ? 'block' : 'none';
       }
@@ -558,17 +554,17 @@ export async function cancelarBusca() {
           if (btnConfirmar) btnConfirmar.addEventListener('click', handleConfirmar);
       });
 
-      // Se clicou em "Manter Corrida", cancelamos a operação
+      // Se clicou em "Manter Corrida", cancelamos a operação e ele continua na corrida
       if (!usuarioConfirmou) {
           return; 
       }
   }
 
-  // Se o utilizador confirmou (ou o modal não existe), processa o cancelamento
+  // Se o utilizador confirmou OU se estava apenas "Buscando" (sem motorista), processa o cancelamento
   estadoCliente.pedidoAtivoId = null;
+  estadoCliente.horaAceiteMotorista = null;
   localStorage.removeItem('huby_pedido_ativo_id');
   localStorage.removeItem('huby_hora_aceite_motorista');
-  if (estadoCliente) estadoCliente.horaAceiteMotorista = null;
 
   if (estadoCliente.intervalPolling) {
     clearInterval(estadoCliente.intervalPolling);
@@ -599,6 +595,74 @@ export async function cancelarBusca() {
       });
     } catch (err) {}
   }
+}
+
+export function resetarPainelCliente() {
+  estadoCliente.pedidoAtivoId = null;
+  estadoCliente.rotaAtual = null;
+  estadoCliente.coordsDestino = null;
+  estadoCliente.motoristaAceitouTocado = false;
+  estadoCliente.horaAceiteMotorista = null; 
+  
+  // Limpa os caches de viagem para não dar conflito na próxima chamada
+  localStorage.removeItem('huby_pedido_ativo_id');
+  localStorage.removeItem('huby_hora_aceite_motorista');
+
+  if (estadoCliente.cronometroChegada) {
+    clearInterval(estadoCliente.cronometroChegada);
+    estadoCliente.cronometroChegada = null;
+  }
+  const divTempo = document.getElementById('boxCronometroChegada');
+  if (divTempo) divTempo.remove();
+
+  estadoCliente.hubyMapa?.limparRota?.();
+  estadoCliente.hubyMapa?.limparDestino?.();
+
+  const cardStatus = document.getElementById('cardStatusViagem');
+  const blocoResumo = document.getElementById('blocoResumo');
+  const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
+  const btn = document.getElementById('btnPedirHuby');
+  const inputPesquisa = document.getElementById('inputPesquisaLocal');
+  const btnLimpar = document.getElementById('btnLimparPesquisa');
+
+  if (inputPesquisa) inputPesquisa.value = '';
+  if (btnLimpar) btnLimpar.style.display = 'none';
+
+  const painelMotorista = document.getElementById('painelMotoristaAceitou');
+  if (painelMotorista) {
+    painelMotorista.style.display = 'none';
+    painelMotorista.innerHTML = '';
+  }
+
+  const btnChatFlutuante = document.getElementById('btnAbrirChat');
+  if (btnChatFlutuante) btnChatFlutuante.style.setProperty('display', 'none', 'important');
+
+  const sliderCategorias = document.getElementById('sliderCategorias');
+  if (sliderCategorias) sliderCategorias.style.display = 'flex';
+
+  if (cardStatus) cardStatus.style.display = 'none';
+  if (blocoResumo) blocoResumo.style.display = 'flex';
+
+  if (blocoEntrega) {
+    blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
+  }
+
+  const txtDestino = document.getElementById('txtDestinoSelecionado');
+  const txtDist = document.getElementById('txtDistanciaEstimada');
+  const txtPreco = document.getElementById('txtPrecoEstimado');
+
+  if (txtDestino) txtDestino.textContent = 'Selecione no mapa ou pesquise';
+  if (txtDist) txtDist.textContent = '-- km';
+  if (txtPreco) txtPreco.textContent = '--';
+
+  if (btn) {
+    btn.disabled = false;
+    btn.style.setProperty('display', 'flex', 'important');
+    btn.style.background = '';
+    atualizarBotaoChamar();
+  }
+
+  encerrarMonitoramentoChatCliente();
 }
 
 export function resetarPainelCliente() {
