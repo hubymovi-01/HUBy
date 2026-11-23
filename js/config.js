@@ -108,6 +108,7 @@ export function aplicarObjetoTarifas(raw) {
   try {
     localStorage.setItem('huby_tarifas_cache', JSON.stringify({
       taxa_plataforma: TAXA_PLATAFORMA_ATUAL,
+      multiplicador_pico: MULTIPLICADOR_PICO,
       carro: { base: CATEGORIAS.carro.base, km: CATEGORIAS.carro.km, min: CATEGORIAS.carro.min },
       moto: { base: CATEGORIAS.moto.base, km: CATEGORIAS.moto.km, min: CATEGORIAS.moto.min },
       entrega: { base: CATEGORIAS.entrega.base, km: CATEGORIAS.entrega.km, min: CATEGORIAS.entrega.min }
@@ -115,7 +116,6 @@ export function aplicarObjetoTarifas(raw) {
   } catch (e) {}
 }
 
-// Carrega imediatamente do cache local enquanto busca a versão mais recente do servidor
 try {
   const salvo = localStorage.getItem('huby_tarifas_cache');
   if (salvo) aplicarObjetoTarifas(JSON.parse(salvo));
@@ -138,7 +138,6 @@ export async function sincronizarTarifasServidor() {
   } catch (err) {}
 }
 
-// Cálculo oficial sincronizado com Base + (DistânciaKm * PreçoKm) + (MinutosEstimados * PreçoMin)
 export function calcularPreco(catId, distanciaKm) {
   let chave = String(catId || 'carro').toLowerCase();
   if (chave === 'flash') chave = 'entrega';

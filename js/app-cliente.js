@@ -82,6 +82,20 @@ function sincronizarPrecosDaRotaAtual() {
   const catSelecionada = estadoCliente.categoriaSelecionada || 'carro';
   const calcSelecionada = calcularPreco(catSelecionada, distKm);
 
+  // ALERTA DE ALTA DEMANDA
+  const alerta = document.getElementById('alertaAltaDemanda');
+  const txtMultiplicador = document.getElementById('txtMultiplicadorDemanda');
+  const multiplicador = calcSelecionada.multiplicador || 1.0;
+
+  if (alerta && txtMultiplicador) {
+    if (multiplicador > 1.0) {
+      alerta.style.display = 'flex';
+      txtMultiplicador.textContent = `Horário de pico ou chuva. Os preços estão multiplicados por x${Number(multiplicador).toFixed(1).replace('.', ',')}.`;
+    } else {
+      alerta.style.display = 'none';
+    }
+  }
+
   if (estadoCliente.rotaAtual) {
     estadoCliente.rotaAtual.distanciaKm = distKm;
     estadoCliente.rotaAtual.distancia = distKm;
@@ -102,7 +116,8 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     document.getElementById('cardStatusViagem'),
     document.getElementById('containerParadasIntermediarias'),
     document.getElementById('btnAddParada'),
-    document.querySelector('.dock-quick-actions-row')
+    document.querySelector('.dock-quick-actions-row'),
+    document.getElementById('alertaAltaDemanda')
   ];
 
   elementosParaEsconder.forEach(el => {
@@ -110,6 +125,11 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
       el.style.display = emViagem ? 'none' : '';
     }
   });
+
+  // Garante que a tarifa dinâmica volte a aparecer caso ele cancele a corrida
+  if (!emViagem) {
+    sincronizarPrecosDaRotaAtual();
+  }
 
   const btnPedir = document.getElementById('btnPedirHuby');
   if (btnPedir) {
@@ -246,6 +266,7 @@ function configurarLimpezaDestino() {
   const listaResultados = document.getElementById('listaResultadosPesquisa');
   const txtDestino = document.getElementById('txtDestinoSelecionado');
   const containerParadas = document.getElementById('containerParadasIntermediarias');
+  const alerta = document.getElementById('alertaAltaDemanda');
 
   btnLimpar?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -260,6 +281,7 @@ function configurarLimpezaDestino() {
       listaResultados.innerHTML = '';
       listaResultados.style.display = 'none';
     }
+    if (alerta) alerta.style.display = 'none';
 
     estadoCliente.coordsDestino = null;
     estadoCliente.rotaAtual = null;
