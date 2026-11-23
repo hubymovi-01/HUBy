@@ -955,6 +955,11 @@ function conectarSocketEPollingCliente() {
           sonsHUBy.tocarSucessoAceite();
         }
         alertaProximidadeEmitido = false;
+        
+        // NOVO: Guarda a hora exata do aceite para a regra de cancelamento
+        estadoCliente.horaAceiteMotorista = Date.now();
+        localStorage.setItem('huby_hora_aceite_motorista', estadoCliente.horaAceiteMotorista.toString());
+
         alternarModoVisualViagemAtiva(true);
         renderizarMotoristaChegando({ id: data.pedidoId || pedidoAtivo, ...data.motorista });
       }

@@ -501,9 +501,74 @@ export function atualizarInterfaceMotoristaAceitou(pedido) {
 
 export async function cancelarBusca() {
   const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  const modal = document.getElementById('modalRegrasCancelamentoCliente');
+  
+  if (modal && pedidoId) {
+      const btnManter = document.getElementById('btnDesistirCancelamento');
+      const btnConfirmar = document.getElementById('btnConfirmarCancelamento');
+      const avisoDecorrido = document.getElementById('avisoTempoDecorrido');
+      
+      let taxaCobrada = false;
+      
+      // Verifica se o painel do motorista (corrida aceite) está visível
+      const painelMotorista = document.getElementById('painelMotoristaAceitou');
+      const motoristaAceitou = painelMotorista && painelMotorista.style.display === 'block';
 
+      if (motoristaAceitou) {
+           // Recupera a hora em que o motorista aceitou (definida no app-cliente.js)
+           const horaAceiteStr = localStorage.getItem('huby_hora_aceite_motorista');
+           const horaAceite = estadoCliente.horaAceiteMotorista || Number(horaAceiteStr) || Date.now();
+           
+           const tempoDecorridoMs = Date.now() - horaAceite;
+           const tempoLimiteMs = 2 * 60 * 1000; // 2 minutos em milissegundos
+
+           // Se passaram mais de 2 minutos após o motorista aceitar, ativa o aviso de cobrança
+           if (tempoDecorridoMs > tempoLimiteMs) {
+               taxaCobrada = true;
+           }
+      }
+
+      // Mostra o aviso da taxa apenas se o motorista tiver aceite há mais de 2 min
+      if (avisoDecorrido) {
+          avisoDecorrido.style.display = taxaCobrada ? 'block' : 'none';
+      }
+
+      // Mostra o modal de confirmação
+      modal.style.display = 'flex';
+
+      // Aguarda que o utilizador clique num dos botões do modal
+      const usuarioConfirmou = await new Promise((resolve) => {
+          const handleManter = () => {
+              modal.style.display = 'none';
+              limparListeners();
+              resolve(false);
+          };
+          const handleConfirmar = () => {
+              modal.style.display = 'none';
+              limparListeners();
+              resolve(true);
+          };
+          
+          const limparListeners = () => {
+               if(btnManter) btnManter.removeEventListener('click', handleManter);
+               if(btnConfirmar) btnConfirmar.removeEventListener('click', handleConfirmar);
+          }
+
+          if (btnManter) btnManter.addEventListener('click', handleManter);
+          if (btnConfirmar) btnConfirmar.addEventListener('click', handleConfirmar);
+      });
+
+      // Se clicou em "Manter Corrida", cancelamos a operação
+      if (!usuarioConfirmou) {
+          return; 
+      }
+  }
+
+  // Se o utilizador confirmou (ou o modal não existe), processa o cancelamento
   estadoCliente.pedidoAtivoId = null;
   localStorage.removeItem('huby_pedido_ativo_id');
+  localStorage.removeItem('huby_hora_aceite_motorista');
+  if (estadoCliente) estadoCliente.horaAceiteMotorista = null;
 
   if (estadoCliente.intervalPolling) {
     clearInterval(estadoCliente.intervalPolling);
