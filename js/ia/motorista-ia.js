@@ -360,6 +360,21 @@ export function inicializarCopilotoVoz() {
 
   if (recognition) return true;
 
+  // NOVO: Força o pedido de permissão do microfone para não silenciar a escuta
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
+          iniciarReconhecimentoDeFato(SpeechRecognition);
+      }).catch((err) => {
+          notificar('O microfone foi bloqueado. Vá nas configurações do navegador ou app para ativar.', 'erro');
+      });
+  } else {
+      iniciarReconhecimentoDeFato(SpeechRecognition);
+  }
+
+  return true;
+}
+
+function iniciarReconhecimentoDeFato(SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.lang = 'pt-BR';
   recognition.continuous = true;
@@ -388,7 +403,7 @@ export function inicializarCopilotoVoz() {
       reconhecimentoRodando = false;
       localStorage.setItem('huby_copiloto_menu_ativo', 'false');
       atualizarIndicadorUIVoz(false);
-      notificar('Permissão de microfone bloqueada no navegador.', 'alerta');
+      notificar('Permissão de microfone bloqueada pelo sistema.', 'alerta');
     }
   };
 
@@ -404,7 +419,9 @@ export function inicializarCopilotoVoz() {
   };
 
   atualizarIndicadorUIVoz(escutaDesejada);
-  return true;
+  if (escutaDesejada && !falandoAgora) {
+      try { recognition.start(); } catch (e) {}
+  }
 }
 
 export function ativarEscutaCopiloto(origemMenu = false) {
