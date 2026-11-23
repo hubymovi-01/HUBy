@@ -4,6 +4,29 @@ import { notificar } from '../util/alertas-huby.js';
 
 let recognition = null;
 let escutaEmAndamento = false;
+const sintetizadorCliente = typeof window !== 'undefined' && 'speechSynthesis' in window
+  ? window.speechSynthesis
+  : null;
+
+function falarRespostaPassageiro(texto) {
+  if (!sintetizadorCliente || !texto) return;
+  try {
+    if (sintetizadorCliente.paused) sintetizadorCliente.resume();
+    sintetizadorCliente.cancel();
+    const utter = new SpeechSynthesisUtterance(String(texto));
+    const vozes = sintetizadorCliente.getVoices() || [];
+    const vozPt = vozes.find((v) => /pt[-_]BR/i.test(v.lang)) || vozes.find((v) => /^pt/i.test(v.lang)) || null;
+    if (vozPt) utter.voice = vozPt;
+    utter.lang = vozPt?.lang || 'pt-BR';
+    utter.rate = 1.05;
+    utter.volume = 1.0;
+    setTimeout(() => {
+      try {
+        sintetizadorCliente.speak(utter);
+      } catch (e) {}
+    }, 60);
+  } catch (e) {}
+}
 
 function obterCoordenadasUsuario() {
   const latSalva = localStorage.getItem('huby_user_lat') || localStorage.getItem('huby_origem_lat');
@@ -43,7 +66,6 @@ export function inicializarVozPassageiro() {
     btnBuscaIA.style.transform = 'scale(1.2)';
     btnBuscaIA.style.transition = 'transform 0.2s ease, color 0.2s ease';
 
-    // Garante que o teclado mobile não abra ao falar
     if (inputPesquisa) {
       inputPesquisa.blur();
     }
@@ -70,7 +92,7 @@ export function inicializarVozPassageiro() {
 
     if (inputPesquisa) {
       inputPesquisa.value = transcricao;
-      inputPesquisa.blur(); // Mantém o teclado fechado
+      inputPesquisa.blur();
     }
 
     await consultarDestinoIA(transcricao);
@@ -78,7 +100,17 @@ export function inicializarVozPassageiro() {
 
   btnBuscaIA.addEventListener('click', (e) => {
     e.preventDefault();
-    e.stopPropagation(); // Impede o clique de abrir o foco do teclado no input
+    e.stopPropagation();
+
+    if (sintetizadorCliente) {
+      try {
+        if (sintetizadorCliente.paused) sintetizadorCliente.resume();
+        const ping = new SpeechSynthesisUtterance(' ');
+        ping.volume = 0;
+        ping.lang = 'pt-BR';
+        sintetizadorCliente.speak(ping);
+      } catch (errPing) {}
+    }
 
     if (inputPesquisa) {
       inputPesquisa.blur();
@@ -159,6 +191,7 @@ async function fallbackGeocodificacaoDireta(termo) {
   }
 
   notificar('Local não identificado. Digite o endereço ou toque no mapa.', 'alerta');
+  falarRespostaPassageiro('Não identifiquei o local. Digite o endereço ou toque no mapa.');
 }
 
 function aplicarDestinoNoMapa(resultado) {
@@ -172,6 +205,8 @@ function aplicarDestinoNoMapa(resultado) {
     inputPesquisa.value = nome_curto;
     inputPesquisa.blur();
   }
+
+  falarRespostaPassageiro(`Destino definido para ${nome_curto}.`);
 
   const payload = {
     detail: {

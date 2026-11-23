@@ -20,7 +20,9 @@ import { limparRotasMapa } from '../motorista/motorista-mapa.js';
 import { pararMonitoramentoDesvios } from '../motorista/motorista-rotas.js';
 import { notificar } from '../util/alertas-huby.js';
 
-const sintetizador = typeof window !== 'undefined' ? window.speechSynthesis : null;
+const sintetizador = typeof window !== 'undefined' && 'speechSynthesis' in window
+  ? window.speechSynthesis
+  : null;
 
 let recognition = null;
 // A IA só fica ativa se o motorista ligou explicitamente o switch no menu do copiloto
@@ -29,17 +31,44 @@ let reconhecimentoRodando = false;
 let falandoAgora = false;
 let processandoRequisicao = false;
 let timeoutReinicio = null;
+let timeoutFala = null;
 let wakeLockSentinel = null;
+let ttsDesbloqueado = false;
 
 let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
 const historicoConversa = [];
 
 // ============================================================================
-// PREFERÊNCIAS DE VOZ DO COPILOTO
+// DESBLOQUEIO E PREFERÊNCIAS DE VOZ DO COPILOTO
 // ============================================================================
+function desbloquearSintetizadorVoz() {
+  if (!sintetizador) return;
+  try {
+    if (sintetizador.paused) {
+      sintetizador.resume();
+    }
+    if (!ttsDesbloqueado) {
+      const aquecimento = new SpeechSynthesisUtterance(' ');
+      aquecimento.volume = 0;
+      aquecimento.rate = 1;
+      aquecimento.lang = 'pt-BR';
+      sintetizador.speak(aquecimento);
+      ttsDesbloqueado = true;
+    }
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined') {
+  const aoInteragir = () => desbloquearSintetizadorVoz();
+  window.addEventListener('pointerdown', aoInteragir, { passive: true });
+  window.addEventListener('touchstart', aoInteragir, { passive: true });
+  window.addEventListener('click', aoInteragir, { passive: true });
+}
+
 function vozesDisponiveis() {
-  const todas = sintetizador ? sintetizador.getVoices() : [];
+  if (!sintetizador) return [];
+  const todas = sintetizador.getVoices() || [];
   const pt = todas.filter((v) => /^pt([-_]|$)/i.test(v.lang));
   return pt.length ? pt : todas;
 }
@@ -47,10 +76,11 @@ function vozesDisponiveis() {
 function obterVozEscolhida() {
   const uri = localStorage.getItem('huby_ia_voz');
   const lista = vozesDisponiveis();
-  return lista.find((v) => v.voiceURI === uri)
+  if (!lista.length) return null;
+  return lista.find((v) => uri && v.voiceURI === uri)
     || lista.find((v) => /pt[-_]BR/i.test(v.lang))
-    || lista[0]
-    || null;
+    || lista.find((v) => /^pt/i.test(v.lang))
+    || lista[0];
 }
 
 function obterTomVoz() {
@@ -146,16 +176,19 @@ function registrarMemoriaConversa(falaMotorista, respostaIA) {
 }
 
 // ============================================================================
-// SINTETIZADOR DE VOZ FLUIDO
+// SINTETIZADOR DE VOZ FLUIDO (COM FALLBACK PARA WEBVIEW / ANDROID)
 // ============================================================================
 export function falarTexto(texto, falaOriginalMotorista = null) {
   if (!texto) return;
+  const textoLimpo = String(texto).trim();
+  if (!textoLimpo) return;
+
   if (falaOriginalMotorista) {
-    registrarMemoriaConversa(falaOriginalMotorista, texto);
+    registrarMemoriaConversa(falaOriginalMotorista, textoLimpo);
   }
 
   if (!sintetizador) {
-    notificar(texto, 'info');
+    notificar(`🎙️ ${textoLimpo}`, 'info', 3000);
     return;
   }
 
@@ -164,6 +197,10 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
       clearTimeout(timeoutReinicio);
       timeoutReinicio = null;
     }
+    if (timeoutFala) {
+      clearTimeout(timeoutFala);
+      timeoutFala = null;
+    }
 
     falandoAgora = true;
 
@@ -171,28 +208,67 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
       try { recognition.stop(); } catch (e) {}
     }
 
+    if (sintetizador.paused) {
+      sintetizador.resume();
+    }
     sintetizador.cancel();
-    const utter = new SpeechSynthesisUtterance(String(texto));
-    const voz = obterVozEscolhida();
-    if (voz) utter.voice = voz;
-    utter.lang = voz?.lang || 'pt-BR';
-    utter.rate = obterVelocidadeVoz();
-    utter.pitch = obterTomVoz();
 
-    const finalizarFala = () => {
-      falandoAgora = false;
-      if (escutaDesejada) {
-        renovarJanelaConversa(35);
-        agendarReinicioMicrofone(550);
+    const dispararUtterance = () => {
+      try {
+        const utter = new SpeechSynthesisUtterance(textoLimpo);
+        const voz = obterVozEscolhida();
+        if (voz) {
+          utter.voice = voz;
+        }
+        utter.lang = voz?.lang || 'pt-BR';
+        utter.rate = obterVelocidadeVoz();
+        utter.pitch = obterTomVoz();
+        utter.volume = 1.0;
+
+        let concluido = false;
+        const finalizarFala = () => {
+          if (concluido) return;
+          concluido = true;
+          if (timeoutFala) {
+            clearTimeout(timeoutFala);
+            timeoutFala = null;
+          }
+          falandoAgora = false;
+          if (escutaDesejada) {
+            renovarJanelaConversa(35);
+            agendarReinicioMicrofone(550);
+          }
+        };
+
+        utter.onend = finalizarFala;
+        utter.onerror = (ev) => {
+          const erroTipo = ev?.error || '';
+          if (erroTipo !== 'interrupted' && erroTipo !== 'canceled') {
+            notificar(`🎙️ ${textoLimpo}`, 'info', 2800);
+          }
+          finalizarFala();
+        };
+
+        // Segurança caso o navegador/WebView não dispare onend em alguma frase
+        const estimativaMs = Math.max(2500, Math.min(12000, textoLimpo.length * 85));
+        timeoutFala = setTimeout(finalizarFala, estimativaMs);
+
+        sintetizador.speak(utter);
+        if (sintetizador.paused) {
+          sintetizador.resume();
+        }
+      } catch (errSpeak) {
+        falandoAgora = false;
+        notificar(`🎙️ ${textoLimpo}`, 'info', 2800);
+        if (escutaDesejada) agendarReinicioMicrofone(550);
       }
     };
 
-    utter.onend = finalizarFala;
-    utter.onerror = finalizarFala;
-
-    sintetizador.speak(utter);
+    // Pequeno atraso após cancel() evita que o motor TTS do Android engula a fala
+    setTimeout(dispararUtterance, 80);
   } catch (err) {
     falandoAgora = false;
+    notificar(`🎙️ ${textoLimpo}`, 'info', 2800);
     if (escutaDesejada) agendarReinicioMicrofone(550);
   }
 }
@@ -285,6 +361,7 @@ export function inicializarCopilotoVoz() {
     if (!ultimo || !ultimo[0]) return;
     const transcricao = ultimo[0].transcript;
     if (transcricao && transcricao.trim()) {
+      desbloquearSintetizadorVoz();
       processarEntradaVoz(transcricao.trim());
     }
   };
@@ -293,12 +370,9 @@ export function inicializarCopilotoVoz() {
   return true;
 }
 
-/**
- * IMPORTANTE: Se `origemMenu` não for `true`, significa que foi chamado automaticamente
- * pelo `motorista-radar.js` quando o motorista clicou em "Ficar Online".
- * Nesse caso, NÃO ligamos a IA a menos que o motorista já tenha deixado o botão do Copiloto ligado no menu!
- */
 export function ativarEscutaCopiloto(origemMenu = false) {
+  desbloquearSintetizadorVoz();
+
   if (!origemMenu && localStorage.getItem('huby_copiloto_menu_ativo') !== 'true') {
     atualizarIndicadorUIVoz(false);
     return;
@@ -322,7 +396,6 @@ export function ativarEscutaCopiloto(origemMenu = false) {
 }
 
 export function desativarEscutaCopiloto(origemMenu = false) {
-  // Se foi chamado pelo botão "Ficar Offline" da corrida, mas o motorista quer o copiloto ligado no menu, não desliga!
   if (!origemMenu && localStorage.getItem('huby_copiloto_menu_ativo') === 'true') {
     return;
   }
@@ -599,14 +672,12 @@ async function processarEntradaVoz(fraseBruta) {
   renovarJanelaConversa(35);
 
   try {
-    // 1. Executa imediatamente qualquer comando da interface do motorista (0ms de atraso)
     const resolveuInstantaneo = await resolverIntencaoSemanticaLocal(intencaoLimpa, ctx);
     if (resolveuInstantaneo) {
       processandoRequisicao = false;
       return;
     }
 
-    // 2. Conversas abertas e perguntas livres vão para o Gemini no servidor
     const resp = await fetch(`${API_URL}/api/ia/motorista-suporte`, {
       method: 'POST',
       headers: obterHeaders(),
@@ -642,7 +713,6 @@ async function processarEntradaVoz(fraseBruta) {
 async function resolverIntencaoSemanticaLocal(fala, ctx) {
   const nome = ctx.nomeCondutor;
 
-  // 1. CONFIRMAÇÕES CURTAS
   if (/^(certo|ok|okay|beleza|blz|valeu|obrigado|entendi|show|perfeito|ta bom|tudo bem|positivo|fechou)$/.test(fala)) {
     const respostas = [
       `Combinado, ${nome}!`,
@@ -654,7 +724,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 2. FICAR OFFLINE / DESCONECTAR CARRO
   if (
     fala.includes('ficar offline') || fala.includes('fica offline') ||
     fala.includes('sair do online') || fala.includes('desconectar') ||
@@ -665,7 +734,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 3. FICAR ONLINE / CONECTAR CARRO
   if (
     fala.includes('ficar online') || fala.includes('fica online') ||
     fala.includes('entrar online') || fala.includes('conectar') ||
@@ -676,7 +744,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 4. MODO PAUSA (Ativar ou Desativar)
   if (fala.includes('pausa') || fala.includes('descansar') || fala.includes('cafe') || fala.includes('abastecer')) {
     const querDesativar = fala.includes('desativa') || fala.includes('sair da pausa') || fala.includes('tirar pausa') || fala.includes('encerrar pausa');
     const querAtivar = fala.includes('ativa') || fala.includes('ligar') || fala.includes('entrar');
@@ -694,7 +761,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 5. HUBY LOJA / CLUBE DE VANTAGENS (Cobre "huby loja", "ubi loja", "abrir loja", "clube", "descontos")
   if (
     fala.includes('loja') || fala.includes('ubi loja') || fala.includes('huby loja') ||
     fala.includes('clube') || fala.includes('vantagens') || fala.includes('desconto') ||
@@ -705,7 +771,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 6. IR PARA CASA / MODO DESTINO ("ir para casa", "modo casa", "rota para casa")
   if (
     fala.includes('ir para casa') || fala.includes('ir pra casa') ||
     fala.includes('modo casa') || fala.includes('modo destino') ||
@@ -720,7 +785,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 7. EDITAR DADOS E FOTO ("editar dados", "editar foto", "mudar foto", "editar perfil")
   if (
     fala.includes('editar dados') || fala.includes('editar foto') ||
     fala.includes('dados e foto') || fala.includes('mudar foto') ||
@@ -731,7 +795,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 8. ABRIR PERFIL / MENU LATERAL ("abrir perfil", "abrir menu", "meu perfil")
   if (
     fala.includes('abrir perfil') || fala.includes('abre o perfil') ||
     fala.includes('abrir menu') || fala.includes('abre o menu') ||
@@ -742,7 +805,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 9. FECHAR PERFIL / FECHAR MENU / FECHAR JANELA
   if (
     fala.includes('fechar perfil') || fala.includes('fecha o perfil') ||
     fala.includes('fechar menu') || fala.includes('fecha o menu') ||
@@ -754,7 +816,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 10. DEFINIR META DIÁRIA ("definir meta", "editar meta", "mudar meta", "meta para 300")
   if (
     fala.includes('definir meta') || fala.includes('editar meta') ||
     fala.includes('mudar meta') || fala.includes('alterar meta') ||
@@ -787,7 +848,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 11. SOLICITAR SAQUE PIX / ABRIR SAQUE ("solicitar saque", "saque pix", "sacar")
   if (
     fala.includes('solicitar saque') || fala.includes('saque pix') ||
     fala.includes('abrir saque') || fala.includes('quero sacar') ||
@@ -799,21 +859,18 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 12. DESCARREGAR FECHAMENTO DO DIA
   if (fala.includes('fechamento') || fala.includes('relatorio do dia') || fala.includes('exportar resumo') || fala.includes('descarregar fechamento')) {
     await executarAcaoNoApp('EXPORTAR_FECHAMENTO', ctx);
     falarTexto(`Baixando o relatório de fechamento do dia no seu aparelho, ${nome}.`, fala);
     return true;
   }
 
-  // 13. REPORTAR PROBLEMA OU OBJETO ESQUECIDO
   if (fala.includes('reportar problema') || fala.includes('objeto esquecido') || fala.includes('abrir incidente')) {
     document.getElementById('btnAbrirModalIncidente')?.click();
     falarTexto(`Abri a tela para reportar problema ou objeto esquecido, ${nome}.`, fala);
     return true;
   }
 
-  // 14. ATIVAR / DESATIVAR MAPA DE CALOR
   if (fala.includes('calor') || fala.includes('demanda') || fala.includes('zona quente')) {
     const estavaAtivo = ctx.heatmapAtivo;
     await executarAcaoNoApp('ALTERNAR_CALOR', ctx);
@@ -825,7 +882,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 15. TIRAR PEDIDO DA TELA / DISPENSAR / CANCELAR ROTA
   if (
     fala.includes('tirar pedido') || fala.includes('tirar o pedido') || fala.includes('tirar esse pedido') ||
     fala.includes('tira esse pedido') || fala.includes('tira o pedido') || fala.includes('tirar da tela') ||
@@ -869,7 +925,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 16. CHECAR PEDIDO / VISUALIZAR ROTA
   if (
     fala.includes('visualizar') || fala.includes('visualiza') ||
     fala.includes('ver rota') || fala.includes('ver a rota') ||
@@ -898,7 +953,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 17. HORÁRIO ATUAL E MELHOR HORÁRIO
   if (
     (fala.includes('qual o horario') || fala.includes('qual e o horario') || fala.includes('que horas') || fala.includes('hora agora') || fala.includes('horario agora')) &&
     !fala.includes('melhor')
@@ -914,7 +968,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 18. ACEITAR CORRIDA
   if (
     fala.includes('aceitar') || fala.includes('aceita') ||
     fala.includes('confirmar corrida') || fala.includes('pegar corrida') ||
@@ -929,7 +982,6 @@ async function resolverIntencaoSemanticaLocal(fala, ctx) {
     return true;
   }
 
-  // 19. PAGAMENTO, CHEGADA, INÍCIO E FIM DE CORRIDA
   if (ctx.telasAbertas.modalLiquidacaoPagamento) {
     if (fala.includes('dinheiro') || fala.includes('especie')) {
       await executarAcaoNoApp('PAGAR_DINHEIRO', ctx);
