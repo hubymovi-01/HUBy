@@ -1,4 +1,4 @@
-// js/ia/cliente-ia.js - Assistente Vocal e Busca Inteligente por IA HUBy
+// js/ia/cliente-ia.js - Assistente Vocal e Busca Inteligente por IA HUBy (Ponte Nativa APK + Web)
 import { API_URL } from '../config.js';
 import { notificar } from '../util/alertas-huby.js';
 
@@ -9,11 +9,27 @@ const sintetizadorCliente = typeof window !== 'undefined' && 'speechSynthesis' i
   : null;
 
 function falarRespostaPassageiro(texto) {
-  if (!sintetizadorCliente || !texto) return;
+  if (!texto) return;
+  const textoLimpo = String(texto).trim();
+  if (!textoLimpo) return;
+
+  if (typeof window !== 'undefined' && window.ReactNativeWebView) {
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        tipo: 'FALAR_VOZ_IA',
+        texto: textoLimpo,
+        tom: 1.0,
+        velocidade: 1.05
+      }));
+      return;
+    } catch (e) {}
+  }
+
+  if (!sintetizadorCliente) return;
   try {
     if (sintetizadorCliente.paused) sintetizadorCliente.resume();
     sintetizadorCliente.cancel();
-    const utter = new SpeechSynthesisUtterance(String(texto));
+    const utter = new SpeechSynthesisUtterance(textoLimpo);
     const vozes = sintetizadorCliente.getVoices() || [];
     const vozPt = vozes.find((v) => /pt[-_]BR/i.test(v.lang)) || vozes.find((v) => /^pt/i.test(v.lang)) || null;
     if (vozPt) utter.voice = vozPt;
@@ -102,7 +118,7 @@ export function inicializarVozPassageiro() {
     e.preventDefault();
     e.stopPropagation();
 
-    if (sintetizadorCliente) {
+    if (sintetizadorCliente && !window.ReactNativeWebView) {
       try {
         if (sintetizadorCliente.paused) sintetizadorCliente.resume();
         const ping = new SpeechSynthesisUtterance(' ');

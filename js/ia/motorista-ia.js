@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto HUBy com Controle 100% pelo Botão do Menu e Todos os Comandos da Tela
+// js/ia/motorista-ia.js - Copiloto HUBy com Ponte Nativa (APK Android) e Fallback Web
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { 
@@ -25,7 +25,6 @@ const sintetizador = typeof window !== 'undefined' && 'speechSynthesis' in windo
   : null;
 
 let recognition = null;
-// A IA só fica ativa se o motorista ligou explicitamente o switch no menu do copiloto
 let escutaDesejada = localStorage.getItem('huby_copiloto_menu_ativo') === 'true';
 let reconhecimentoRodando = false;
 let falandoAgora = false;
@@ -39,11 +38,15 @@ let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
 const historicoConversa = [];
 
+function estaNoAppNativo() {
+  return typeof window !== 'undefined' && Boolean(window.ReactNativeWebView);
+}
+
 // ============================================================================
 // DESBLOQUEIO E PREFERÊNCIAS DE VOZ DO COPILOTO
 // ============================================================================
 function desbloquearSintetizadorVoz() {
-  if (!sintetizador) return;
+  if (!sintetizador || estaNoAppNativo()) return;
   try {
     if (sintetizador.paused) {
       sintetizador.resume();
@@ -64,6 +67,18 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pointerdown', aoInteragir, { passive: true });
   window.addEventListener('touchstart', aoInteragir, { passive: true });
   window.addEventListener('click', aoInteragir, { passive: true });
+
+  window.__onVozNativaFinalizadaHUBy = () => {
+    if (timeoutFala) {
+      clearTimeout(timeoutFala);
+      timeoutFala = null;
+    }
+    falandoAgora = false;
+    if (escutaDesejada) {
+      renovarJanelaConversa(35);
+      agendarReinicioMicrofone(450);
+    }
+  };
 }
 
 function vozesDisponiveis() {
@@ -176,7 +191,7 @@ function registrarMemoriaConversa(falaMotorista, respostaIA) {
 }
 
 // ============================================================================
-// SINTETIZADOR DE VOZ FLUIDO (COM FALLBACK PARA WEBVIEW / ANDROID)
+// SINTETIZADOR DE VOZ (PONTE NATIVA EXPO-SPEECH + FALLBACK WEB)
 // ============================================================================
 export function falarTexto(texto, falaOriginalMotorista = null) {
   if (!texto) return;
@@ -187,27 +202,51 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
     registrarMemoriaConversa(falaOriginalMotorista, textoLimpo);
   }
 
+  if (timeoutReinicio) {
+    clearTimeout(timeoutReinicio);
+    timeoutReinicio = null;
+  }
+  if (timeoutFala) {
+    clearTimeout(timeoutFala);
+    timeoutFala = null;
+  }
+
+  falandoAgora = true;
+
+  if (recognition && reconhecimentoRodando) {
+    try { recognition.stop(); } catch (e) {}
+  }
+
+  // 1. MODO NATIVO ANDROID (APK via expo-speech)
+  if (estaNoAppNativo()) {
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({
+        tipo: 'FALAR_VOZ_IA',
+        texto: textoLimpo,
+        tom: obterTomVoz(),
+        velocidade: obterVelocidadeVoz()
+      }));
+
+      const estimativaMs = Math.max(2500, Math.min(14000, textoLimpo.length * 90));
+      timeoutFala = setTimeout(() => {
+        if (typeof window.__onVozNativaFinalizadaHUBy === 'function') {
+          window.__onVozNativaFinalizadaHUBy();
+        }
+      }, estimativaMs);
+      return;
+    } catch (e) {
+      falandoAgora = false;
+    }
+  }
+
+  // 2. MODO NAVEGADOR WEB
   if (!sintetizador) {
+    falandoAgora = false;
     notificar(`🎙️ ${textoLimpo}`, 'info', 3000);
     return;
   }
 
   try {
-    if (timeoutReinicio) {
-      clearTimeout(timeoutReinicio);
-      timeoutReinicio = null;
-    }
-    if (timeoutFala) {
-      clearTimeout(timeoutFala);
-      timeoutFala = null;
-    }
-
-    falandoAgora = true;
-
-    if (recognition && reconhecimentoRodando) {
-      try { recognition.stop(); } catch (e) {}
-    }
-
     if (sintetizador.paused) {
       sintetizador.resume();
     }
@@ -249,7 +288,6 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
           finalizarFala();
         };
 
-        // Segurança caso o navegador/WebView não dispare onend em alguma frase
         const estimativaMs = Math.max(2500, Math.min(12000, textoLimpo.length * 85));
         timeoutFala = setTimeout(finalizarFala, estimativaMs);
 
@@ -264,7 +302,6 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
       }
     };
 
-    // Pequeno atraso após cancel() evita que o motor TTS do Android engula a fala
     setTimeout(dispararUtterance, 80);
   } catch (err) {
     falandoAgora = false;
@@ -404,6 +441,12 @@ export function desativarEscutaCopiloto(origemMenu = false) {
   localStorage.setItem('huby_copiloto_menu_ativo', 'false');
   janelaConversaAtiva = false;
 
+  if (estaNoAppNativo()) {
+    try {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'PARAR_VOZ_IA' }));
+    } catch (e) {}
+  }
+
   if (timeoutReinicio) {
     clearTimeout(timeoutReinicio);
     timeoutReinicio = null;
@@ -475,6 +518,10 @@ function configurarControlesCopilotoDrawer() {
   if (selVoz && !selVoz.dataset.configurado) {
     selVoz.dataset.configurado = 'true';
     const preencherVozes = () => {
+      if (estaNoAppNativo()) {
+        selVoz.innerHTML = '<option value="nativa_android">Voz Nativa Android (pt-BR)</option>';
+        return;
+      }
       const lista = vozesDisponiveis();
       const atual = obterVozEscolhida();
       selVoz.innerHTML = lista.length
