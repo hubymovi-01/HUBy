@@ -153,7 +153,6 @@ export async function submeterPedido() {
     nomeDestino += ` | 📦 Recebedor: ${recebedor} | 🏷️ ${tipoItem}`;
   }
 
-  // Envia metadados estruturados também em paradas para garantir leitura mesmo se alguma coluna variar no SQL
   const paradasSincronizadas = [...paradasReais];
   if (observacaoTexto || cupomCodigo || agendadoPara) {
     paradasSincronizadas.push({
@@ -227,7 +226,6 @@ export async function submeterPedido() {
       throw new Error(dadosResposta.erro || 'Falha ao registrar pedido.');
     }
 
-    // Se for corrida AGENDADA, não trava a tela do passageiro em radar imediato: salva e notifica quando o motorista aceitar e na hora marcada!
     if (agendadoPara) {
       const listaAgendadosCliente = JSON.parse(localStorage.getItem('huby_meus_agendamentos') || '[]');
       listaAgendadosCliente.push({
@@ -245,7 +243,6 @@ export async function submeterPedido() {
       const horaFmt = new Date(agendadoPara).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       notificar(`✅ Solicitação agendada para ${horaFmt}! Avisaremos assim que um motorista aceitar e na hora da viagem.`, 'sucesso', 6000);
 
-      // Limpa estado do agendamento atual após enviar
       estadoRecursos.dataAgendada = null;
       const badgeAg = document.getElementById('txtAgendamentoBadge');
       const btnLimparAg = document.getElementById('btnLimparAgendamento');
@@ -607,70 +604,6 @@ export function resetarPainelCliente() {
   // Limpa os caches de viagem para não dar conflito na próxima chamada
   localStorage.removeItem('huby_pedido_ativo_id');
   localStorage.removeItem('huby_hora_aceite_motorista');
-
-  if (estadoCliente.cronometroChegada) {
-    clearInterval(estadoCliente.cronometroChegada);
-    estadoCliente.cronometroChegada = null;
-  }
-  const divTempo = document.getElementById('boxCronometroChegada');
-  if (divTempo) divTempo.remove();
-
-  estadoCliente.hubyMapa?.limparRota?.();
-  estadoCliente.hubyMapa?.limparDestino?.();
-
-  const cardStatus = document.getElementById('cardStatusViagem');
-  const blocoResumo = document.getElementById('blocoResumo');
-  const blocoEntrega = document.getElementById('blocoDetalhesEntrega');
-  const btn = document.getElementById('btnPedirHuby');
-  const inputPesquisa = document.getElementById('inputPesquisaLocal');
-  const btnLimpar = document.getElementById('btnLimparPesquisa');
-
-  if (inputPesquisa) inputPesquisa.value = '';
-  if (btnLimpar) btnLimpar.style.display = 'none';
-
-  const painelMotorista = document.getElementById('painelMotoristaAceitou');
-  if (painelMotorista) {
-    painelMotorista.style.display = 'none';
-    painelMotorista.innerHTML = '';
-  }
-
-  const btnChatFlutuante = document.getElementById('btnAbrirChat');
-  if (btnChatFlutuante) btnChatFlutuante.style.setProperty('display', 'none', 'important');
-
-  const sliderCategorias = document.getElementById('sliderCategorias');
-  if (sliderCategorias) sliderCategorias.style.display = 'flex';
-
-  if (cardStatus) cardStatus.style.display = 'none';
-  if (blocoResumo) blocoResumo.style.display = 'flex';
-
-  if (blocoEntrega) {
-    blocoEntrega.style.display = (estadoCliente.categoriaSelecionada === 'entrega') ? 'block' : 'none';
-  }
-
-  const txtDestino = document.getElementById('txtDestinoSelecionado');
-  const txtDist = document.getElementById('txtDistanciaEstimada');
-  const txtPreco = document.getElementById('txtPrecoEstimado');
-
-  if (txtDestino) txtDestino.textContent = 'Selecione no mapa ou pesquise';
-  if (txtDist) txtDist.textContent = '-- km';
-  if (txtPreco) txtPreco.textContent = '--';
-
-  if (btn) {
-    btn.disabled = false;
-    btn.style.setProperty('display', 'flex', 'important');
-    btn.style.background = '';
-    atualizarBotaoChamar();
-  }
-
-  encerrarMonitoramentoChatCliente();
-}
-
-export function resetarPainelCliente() {
-  estadoCliente.pedidoAtivoId = null;
-  estadoCliente.rotaAtual = null;
-  estadoCliente.coordsDestino = null;
-  estadoCliente.motoristaAceitouTocado = false;
-  localStorage.removeItem('huby_pedido_ativo_id');
 
   if (estadoCliente.cronometroChegada) {
     clearInterval(estadoCliente.cronometroChegada);
