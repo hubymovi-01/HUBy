@@ -1,4 +1,4 @@
-// js/ia/motorista-ia.js - Copiloto HUBy com Ponte Nativa (APK Android) e Fallback Web
+// js/ia/motorista-ia.js - Copiloto HUBy com Ponte Nativa Completa (Fala + Escuta APK) e Fallback Web
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from '../motorista/motorista-estado.js';
 import { 
@@ -41,6 +41,66 @@ const historicoConversa = [];
 
 function estaNoAppNativo() {
   return typeof window !== 'undefined' && Boolean(window.ReactNativeWebView);
+}
+
+// ============================================================================
+// PONTE DE ESCUTA NATIVA ANDROID (@react-native-voice/voice via App.js)
+// ============================================================================
+function iniciarReconhecimentoNativo() {
+  if (!estaNoAppNativo() || falandoAgora || processandoRequisicao) return;
+  reconhecimentoRodando = true;
+  atualizarIndicadorUIVoz(true);
+  requisitarWakeLock();
+  try {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      tipo: 'INICIAR_ESCUTA_NATIVA'
+    }));
+  } catch (e) {
+    reconhecimentoRodando = false;
+  }
+}
+
+function pararReconhecimentoNativo() {
+  reconhecimentoRodando = false;
+  if (!estaNoAppNativo()) return;
+  try {
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+      tipo: 'PARAR_ESCUTA_NATIVA'
+    }));
+  } catch (e) {}
+}
+
+if (typeof window !== 'undefined' && !window.__hubyListenerVozNativaRegistrado) {
+  window.__hubyListenerVozNativaRegistrado = true;
+
+  window.addEventListener('huby_escuta_nativa', (ev) => {
+    reconhecimentoRodando = false;
+    if (falandoAgora || !escutaDesejada) return;
+
+    const transcricao = String(ev?.detail || '').trim();
+    if (transcricao) {
+      desbloquearSintetizadorVoz();
+      processarEntradaVoz(transcricao);
+    }
+
+    if (escutaDesejada && !falandoAgora && !processandoRequisicao) {
+      agendarReinicioMicrofone(450);
+    }
+  });
+
+  window.addEventListener('huby_escuta_erro', () => {
+    reconhecimentoRodando = false;
+    if (escutaDesejada && !falandoAgora && !processandoRequisicao) {
+      agendarReinicioMicrofone(600);
+    }
+  });
+
+  window.addEventListener('huby_escuta_fim', () => {
+    reconhecimentoRodando = false;
+    if (escutaDesejada && !falandoAgora && !processandoRequisicao) {
+      agendarReinicioMicrofone(450);
+    }
+  });
 }
 
 // ============================================================================
@@ -214,12 +274,8 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
 
   falandoAgora = true;
 
-  if (recognition && reconhecimentoRodando) {
-    try { recognition.stop(); } catch (e) {}
-  }
-
-  // 1. MODO NATIVO ANDROID (APK via expo-speech)
   if (estaNoAppNativo()) {
+    pararReconhecimentoNativo();
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({
         tipo: 'FALAR_VOZ_IA',
@@ -240,7 +296,11 @@ export function falarTexto(texto, falaOriginalMotorista = null) {
     }
   }
 
-  // 2. MODO NAVEGADOR WEB
+  if (recognition && reconhecimentoRodando) {
+    try { recognition.stop(); } catch (e) {}
+  }
+
+  // MODO NAVEGADOR WEB
   if (!sintetizador) {
     falandoAgora = false;
     notificar(`🎙️ ${textoLimpo}`, 'info', 3000);
@@ -330,18 +390,22 @@ function liberarWakeLock() {
 }
 
 // ============================================================================
-// CONTROLE DO MICROFONE (SÓ LIGA PELO BOTÃO DO MENU DO COPILOTO)
+// CONTROLE DO MICROFONE (PONTE NATIVA NO APK + FALLBACK WEB)
 // ============================================================================
-function agendarReinicioMicrofone(delayMs = 800) {
+function agendarReinicioMicrofone(delayMs = 600) {
   if (timeoutReinicio) {
     clearTimeout(timeoutReinicio);
     timeoutReinicio = null;
   }
 
-  if (!escutaDesejada || falandoAgora) return;
+  if (!escutaDesejada || falandoAgora || processandoRequisicao) return;
 
   timeoutReinicio = setTimeout(() => {
-    if (!escutaDesejada || falandoAgora || reconhecimentoRodando) return;
+    if (!escutaDesejada || falandoAgora || processandoRequisicao || reconhecimentoRodando) return;
+    if (estaNoAppNativo()) {
+      iniciarReconhecimentoNativo();
+      return;
+    }
     if (!recognition) inicializarCopilotoVoz();
     try {
       recognition.start();
@@ -356,25 +420,31 @@ export function inicializarCopilotoVoz() {
 
   configurarControlesCopilotoDrawer();
 
+  // No APK Android, usa o motor nativo (@react-native-voice/voice) em vez do WebView bloqueado
+  if (estaNoAppNativo()) {
+    atualizarIndicadorUIVoz(escutaDesejada);
+    if (escutaDesejada && !falandoAgora) {
+      iniciarReconhecimentoNativo();
+    }
+    return true;
+  }
+
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return false;
 
   if (recognition) return true;
 
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-          // CORREÇÃO: Desliga o teste de microfone imediatamente após o Android dar a permissão.
-          // Assim, o microfone fica livre para o Jarvis o utilizar!
-          stream.getTracks().forEach(track => track.stop());
-          
-          iniciarReconhecimentoDeFato(SpeechRecognition);
-      }).catch((err) => {
-          notificar('O microfone foi bloqueado. Vá nas configurações do navegador ou app para ativar.', 'erro');
-          escutaDesejada = false;
-          atualizarIndicadorUIVoz(false);
-      });
-  } else {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+      stream.getTracks().forEach((track) => track.stop());
       iniciarReconhecimentoDeFato(SpeechRecognition);
+    }).catch(() => {
+      notificar('O microfone foi bloqueado. Vá nas configurações do navegador ou app para ativar.', 'erro');
+      escutaDesejada = false;
+      atualizarIndicadorUIVoz(false);
+    });
+  } else {
+    iniciarReconhecimentoDeFato(SpeechRecognition);
   }
 
   return true;
@@ -384,7 +454,7 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.lang = 'pt-BR';
   recognition.continuous = true;
-  recognition.interimResults = true; 
+  recognition.interimResults = true;
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
@@ -404,13 +474,13 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   };
 
   recognition.onerror = (ev) => {
-    reconhecimentoRodando = false; // Garante que o estado diz que parou
+    reconhecimentoRodando = false;
 
     if (ev.error === 'no-speech' && escutaDesejada && !falandoAgora) {
-        agendarReinicioMicrofone(800);
-        return;
+      agendarReinicioMicrofone(800);
+      return;
     }
-    
+
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       escutaDesejada = false;
       localStorage.setItem('huby_copiloto_menu_ativo', 'false');
@@ -421,15 +491,15 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
 
   recognition.onresult = (ev) => {
     if (falandoAgora || !escutaDesejada) return;
-    
+
     let transcricaoFinal = '';
-    
+
     for (let i = ev.resultIndex; i < ev.results.length; ++i) {
       if (ev.results[i].isFinal) {
         transcricaoFinal += ev.results[i][0].transcript;
       }
     }
-    
+
     if (transcricaoFinal && transcricaoFinal.trim()) {
       desbloquearSintetizadorVoz();
       processarEntradaVoz(transcricaoFinal.trim());
@@ -438,7 +508,7 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
 
   atualizarIndicadorUIVoz(escutaDesejada);
   if (escutaDesejada && !falandoAgora) {
-      try { recognition.start(); } catch (e) {}
+    try { recognition.start(); } catch (e) {}
   }
 }
 
@@ -452,23 +522,29 @@ export function ativarEscutaCopiloto(origemMenu = false) {
 
   escutaDesejada = true;
   localStorage.setItem('huby_copiloto_menu_ativo', 'true');
-  
-  if (!recognition) {
-      inicializarCopilotoVoz();
+
+  if (estaNoAppNativo()) {
+    iniciarReconhecimentoNativo();
+  } else if (!recognition) {
+    inicializarCopilotoVoz();
   } else {
-      atualizarIndicadorUIVoz(true);
-      if (!reconhecimentoRodando && !falandoAgora) {
-        try {
-          recognition.start();
-        } catch (e) {}
-      }
+    atualizarIndicadorUIVoz(true);
+    if (!reconhecimentoRodando && !falandoAgora) {
+      try {
+        recognition.start();
+      } catch (e) {}
+    }
   }
 
-  // CÃO DE GUARDA: Monitora de 3 em 3 segundos. Se o telemóvel desligar o microfone, força a acordar!
+  // Cão de guarda: garante que o microfone volte a ouvir caso o Android encerre o ciclo
   if (!watchdogMic) {
     watchdogMic = setInterval(() => {
-      if (escutaDesejada && !falandoAgora && !reconhecimentoRodando && recognition) {
-        try { recognition.start(); } catch (e) {}
+      if (escutaDesejada && !falandoAgora && !processandoRequisicao && !reconhecimentoRodando) {
+        if (estaNoAppNativo()) {
+          iniciarReconhecimentoNativo();
+        } else if (recognition) {
+          try { recognition.start(); } catch (e) {}
+        }
       }
     }, 3000);
   }
@@ -489,6 +565,7 @@ export function desativarEscutaCopiloto(origemMenu = false) {
   janelaConversaAtiva = false;
 
   if (estaNoAppNativo()) {
+    pararReconhecimentoNativo();
     try {
       window.ReactNativeWebView.postMessage(JSON.stringify({ tipo: 'PARAR_VOZ_IA' }));
     } catch (e) {}
@@ -502,7 +579,6 @@ export function desativarEscutaCopiloto(origemMenu = false) {
     clearTimeout(timerJanelaConversa);
     timerJanelaConversa = null;
   }
-  
   if (watchdogMic) {
     clearInterval(watchdogMic);
     watchdogMic = null;
@@ -808,6 +884,9 @@ async function processarEntradaVoz(fraseBruta) {
     falarTexto(`Combinado, ${ctx.nomeCondutor}.`, intencaoLimpa);
   } finally {
     processandoRequisicao = false;
+    if (escutaDesejada && !falandoAgora && !reconhecimentoRodando) {
+      agendarReinicioMicrofone(450);
+    }
   }
 }
 
