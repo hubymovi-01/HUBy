@@ -360,12 +360,14 @@ export function inicializarCopilotoVoz() {
 
   if (recognition) return true;
 
-  // NOVO: Força o pedido de permissão do microfone para não silenciar a escuta
+  // NOVO: Força o pedido de permissão do microfone de forma robusta e contínua
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
           iniciarReconhecimentoDeFato(SpeechRecognition);
       }).catch((err) => {
           notificar('O microfone foi bloqueado. Vá nas configurações do navegador ou app para ativar.', 'erro');
+          escutaDesejada = false;
+          atualizarIndicadorUIVoz(false);
       });
   } else {
       iniciarReconhecimentoDeFato(SpeechRecognition);
@@ -378,7 +380,7 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.lang = 'pt-BR';
   recognition.continuous = true;
-  recognition.interimResults = false;
+  recognition.interimResults = true; // MELHORIA: Ativar resultados intermediários para ser mais rápido
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
@@ -390,7 +392,8 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   recognition.onend = () => {
     reconhecimentoRodando = false;
     if (escutaDesejada && !falandoAgora) {
-      agendarReinicioMicrofone(650);
+      // Reinicia imediatamente se for esperado que esteja à escuta
+      agendarReinicioMicrofone(100); 
     } else if (!escutaDesejada) {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
@@ -398,6 +401,12 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   };
 
   recognition.onerror = (ev) => {
+    // Se não ouviu nada durante algum tempo, apenas reinicia silenciosamente
+    if (ev.error === 'no-speech' && escutaDesejada && !falandoAgora) {
+        agendarReinicioMicrofone(100);
+        return;
+    }
+    
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       escutaDesejada = false;
       reconhecimentoRodando = false;
@@ -407,14 +416,21 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
     }
   };
 
+  // MELHORIA NA LÓGICA DE PROCESSAMENTO DO RESULTADO
   recognition.onresult = (ev) => {
     if (falandoAgora || !escutaDesejada) return;
-    const ultimo = ev.results[ev.results.length - 1];
-    if (!ultimo || !ultimo[0]) return;
-    const transcricao = ultimo[0].transcript;
-    if (transcricao && transcricao.trim()) {
+    
+    let transcricaoFinal = '';
+    
+    for (let i = ev.resultIndex; i < ev.results.length; ++i) {
+      if (ev.results[i].isFinal) {
+        transcricaoFinal += ev.results[i][0].transcript;
+      }
+    }
+    
+    if (transcricaoFinal && transcricaoFinal.trim()) {
       desbloquearSintetizadorVoz();
-      processarEntradaVoz(transcricao.trim());
+      processarEntradaVoz(transcricaoFinal.trim());
     }
   };
 
@@ -434,13 +450,16 @@ export function ativarEscutaCopiloto(origemMenu = false) {
 
   escutaDesejada = true;
   localStorage.setItem('huby_copiloto_menu_ativo', 'true');
-  if (!recognition) inicializarCopilotoVoz();
-
-  atualizarIndicadorUIVoz(true);
-  if (!reconhecimentoRodando && !falandoAgora) {
-    try {
-      recognition.start();
-    } catch (e) {}
+  
+  if (!recognition) {
+      inicializarCopilotoVoz();
+  } else {
+      atualizarIndicadorUIVoz(true);
+      if (!reconhecimentoRodando && !falandoAgora) {
+        try {
+          recognition.start();
+        } catch (e) {}
+      }
   }
 
   if (origemMenu) {
@@ -690,7 +709,11 @@ async function processarEntradaVoz(fraseBruta) {
   const palavraChave = partesGatilho[partesGatilho.length - 1] || gatilhoCadastrado;
 
   const palavrasFaladas = fraseNormalizada.split(' ');
-  let chamouGatilho = fraseNormalizada.includes(gatilhoCadastrado);
+  
+  // MELHORIA NA DETEÇÃO DO GATILHO - Mais permissivo para apanhar variações e o início da frase
+  let chamouGatilho = fraseNormalizada.includes(gatilhoCadastrado) || 
+                      fraseNormalizada.startsWith('oi ' + gatilhoCadastrado) ||
+                      fraseNormalizada.startsWith('ola ' + gatilhoCadastrado);
 
   if (!chamouGatilho) {
     for (const p of palavrasFaladas) {
@@ -710,12 +733,16 @@ async function processarEntradaVoz(fraseBruta) {
     }
   }
 
-  if (!chamouGatilho && !janelaConversaAtiva) return;
+  // Se não foi chamado e não está numa conversa ativa, ignorar
+  if (!chamouGatilho && !janelaConversaAtiva) {
+    // notificar(`🎙️ Ouvi: ${fraseBruta}`, 'info', 1000); // Opcional para debug
+    return;
+  }
 
   let intencaoLimpa = fraseNormalizada
     .replace(gatilhoCadastrado, '')
     .replace(new RegExp(`\\b(${palavraChave}|jarvis|javis|chaves|huby|zank|zanix|zenix|zanki|xanix|xanax|xanx)\\b`, 'gi'), '')
-    .replace(/^(ok|okay|ei|oi|fala|e ai|entao|por favor)\s+/i, '')
+    .replace(/^(ok|okay|ei|oi|ola|fala|e ai|entao|por favor)\s+/i, '')
     .trim();
 
   const ctx = capturarContextoCompletoApp();
