@@ -33,6 +33,7 @@ let timeoutReinicio = null;
 let timeoutFala = null;
 let wakeLockSentinel = null;
 let ttsDesbloqueado = false;
+let watchdogMic = null; // Cão de guarda contra adormecimento do telemóvel
 
 let janelaConversaAtiva = false;
 let timerJanelaConversa = null;
@@ -331,7 +332,7 @@ function liberarWakeLock() {
 // ============================================================================
 // CONTROLE DO MICROFONE (SÓ LIGA PELO BOTÃO DO MENU DO COPILOTO)
 // ============================================================================
-function agendarReinicioMicrofone(delayMs = 600) {
+function agendarReinicioMicrofone(delayMs = 800) {
   if (timeoutReinicio) {
     clearTimeout(timeoutReinicio);
     timeoutReinicio = null;
@@ -360,9 +361,12 @@ export function inicializarCopilotoVoz() {
 
   if (recognition) return true;
 
-  // NOVO: Força o pedido de permissão do microfone de forma robusta e contínua
   if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
+      navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
+          // CORREÇÃO: Desliga o teste de microfone imediatamente após o Android dar a permissão.
+          // Assim, o microfone fica livre para o Jarvis o utilizar!
+          stream.getTracks().forEach(track => track.stop());
+          
           iniciarReconhecimentoDeFato(SpeechRecognition);
       }).catch((err) => {
           notificar('O microfone foi bloqueado. Vá nas configurações do navegador ou app para ativar.', 'erro');
@@ -380,7 +384,7 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   recognition = new SpeechRecognition();
   recognition.lang = 'pt-BR';
   recognition.continuous = true;
-  recognition.interimResults = true; // MELHORIA: Ativar resultados intermediários para ser mais rápido
+  recognition.interimResults = true; 
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
@@ -392,8 +396,7 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   recognition.onend = () => {
     reconhecimentoRodando = false;
     if (escutaDesejada && !falandoAgora) {
-      // Reinicia imediatamente se for esperado que esteja à escuta
-      agendarReinicioMicrofone(100); 
+      agendarReinicioMicrofone(800);
     } else if (!escutaDesejada) {
       atualizarIndicadorUIVoz(false);
       liberarWakeLock();
@@ -401,22 +404,21 @@ function iniciarReconhecimentoDeFato(SpeechRecognition) {
   };
 
   recognition.onerror = (ev) => {
-    // Se não ouviu nada durante algum tempo, apenas reinicia silenciosamente
+    reconhecimentoRodando = false; // Garante que o estado diz que parou
+
     if (ev.error === 'no-speech' && escutaDesejada && !falandoAgora) {
-        agendarReinicioMicrofone(100);
+        agendarReinicioMicrofone(800);
         return;
     }
     
     if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
       escutaDesejada = false;
-      reconhecimentoRodando = false;
       localStorage.setItem('huby_copiloto_menu_ativo', 'false');
       atualizarIndicadorUIVoz(false);
       notificar('Permissão de microfone bloqueada pelo sistema.', 'alerta');
     }
   };
 
-  // MELHORIA NA LÓGICA DE PROCESSAMENTO DO RESULTADO
   recognition.onresult = (ev) => {
     if (falandoAgora || !escutaDesejada) return;
     
@@ -462,6 +464,15 @@ export function ativarEscutaCopiloto(origemMenu = false) {
       }
   }
 
+  // CÃO DE GUARDA: Monitora de 3 em 3 segundos. Se o telemóvel desligar o microfone, força a acordar!
+  if (!watchdogMic) {
+    watchdogMic = setInterval(() => {
+      if (escutaDesejada && !falandoAgora && !reconhecimentoRodando && recognition) {
+        try { recognition.start(); } catch (e) {}
+      }
+    }, 3000);
+  }
+
   if (origemMenu) {
     const comandoAtual = obterCodigoAtivacaoMotorista();
     notificar(`🎙️ Copiloto ligado! Chame por "${comandoAtual}"`, 'sucesso', 2500);
@@ -490,6 +501,11 @@ export function desativarEscutaCopiloto(origemMenu = false) {
   if (timerJanelaConversa) {
     clearTimeout(timerJanelaConversa);
     timerJanelaConversa = null;
+  }
+  
+  if (watchdogMic) {
+    clearInterval(watchdogMic);
+    watchdogMic = null;
   }
 
   if (recognition && reconhecimentoRodando) {
@@ -710,7 +726,6 @@ async function processarEntradaVoz(fraseBruta) {
 
   const palavrasFaladas = fraseNormalizada.split(' ');
   
-  // MELHORIA NA DETEÇÃO DO GATILHO - Mais permissivo para apanhar variações e o início da frase
   let chamouGatilho = fraseNormalizada.includes(gatilhoCadastrado) || 
                       fraseNormalizada.startsWith('oi ' + gatilhoCadastrado) ||
                       fraseNormalizada.startsWith('ola ' + gatilhoCadastrado);
@@ -733,9 +748,7 @@ async function processarEntradaVoz(fraseBruta) {
     }
   }
 
-  // Se não foi chamado e não está numa conversa ativa, ignorar
   if (!chamouGatilho && !janelaConversaAtiva) {
-    // notificar(`🎙️ Ouvi: ${fraseBruta}`, 'info', 1000); // Opcional para debug
     return;
   }
 
