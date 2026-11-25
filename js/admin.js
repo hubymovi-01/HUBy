@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Clube Pro Bronze/Prata/Ouro + Taxas Extras + Demanda Não Atendida + Regiões Push + Caixa Real)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Clube Pro Bronze/Prata/Ouro + Regras de Medalhas + Demanda Não Atendida + Regiões Push + Caixa Real)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -807,7 +807,7 @@ async function carregarTabelaMarketplace(token) {
     const itens = await res.json();
 
     if (!Array.isArray(itens) || !itens.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhum benefício ou parceria cadastrada no momento.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="table-empty-row">Nenhuma parceria cadastrada no momento.</td></tr>';
       return;
     }
 
@@ -1433,7 +1433,7 @@ async function carregarTabelaViagens(token) {
 }
 
 // ============================================================================
-// PARÂMETROS, TARIFAS DINÂMICAS & NÍVEIS CLUBE HUBY PRO
+// PARÂMETROS, TARIFAS DINÂMICAS & REGRAS DAS MEDALHAS CLUBE HUBY PRO
 // ============================================================================
 async function carregarTarifasConfig(token) {
   const setVal = (id, val) => {
@@ -1452,14 +1452,23 @@ async function carregarTarifasConfig(token) {
       };
     }
 
-    const taxaBronze = cfg.niveis_motorista?.bronze?.taxa_huby ?? cfg.taxa_plataforma ?? 15;
-    const taxaPrata = cfg.niveis_motorista?.prata?.taxa_huby ?? 12;
-    const taxaOuro = cfg.niveis_motorista?.ouro?.taxa_huby ?? 10;
+    const b = niveisAtuaisCache.bronze;
+    const p = niveisAtuaisCache.prata;
+    const o = niveisAtuaisCache.ouro;
 
+    const taxaBronze = b.taxa_huby ?? cfg.taxa_plataforma ?? 15;
     setVal('cfgTaxaPlataforma', taxaBronze);
     setVal('cfgTaxaBronze', taxaBronze);
-    setVal('cfgTaxaPrata', taxaPrata);
-    setVal('cfgTaxaOuro', taxaOuro);
+    setVal('cfgCorridasBronze', b.corridas_min ?? 0);
+    setVal('cfgNotaBronze', Number(b.nota_min ?? 0).toFixed(1));
+
+    setVal('cfgTaxaPrata', p.taxa_huby ?? 12);
+    setVal('cfgCorridasPrata', p.corridas_min ?? 50);
+    setVal('cfgNotaPrata', Number(p.nota_min ?? 4.8).toFixed(1));
+
+    setVal('cfgTaxaOuro', o.taxa_huby ?? 10);
+    setVal('cfgCorridasOuro', o.corridas_min ?? 150);
+    setVal('cfgNotaOuro', Number(o.nota_min ?? 4.9).toFixed(1));
 
     if (cfg.taxa_parada !== undefined) setVal('inputTaxaParada', Number(cfg.taxa_parada).toFixed(2));
     if (cfg.taxa_espera !== undefined) setVal('inputTaxaEspera', Number(cfg.taxa_espera).toFixed(2));
@@ -1514,8 +1523,16 @@ function configurarFormTarifas(token) {
     };
 
     const taxaBronze = lerCampo('cfgTaxaBronze', lerCampo('cfgTaxaPlataforma', 15));
+    const corridasBronze = Math.round(lerCampo('cfgCorridasBronze', 0));
+    const notaBronze = Math.min(5, lerCampo('cfgNotaBronze', 0.0));
+
     const taxaPrata = lerCampo('cfgTaxaPrata', 12);
+    const corridasPrata = Math.round(lerCampo('cfgCorridasPrata', 50));
+    const notaPrata = Math.min(5, lerCampo('cfgNotaPrata', 4.8));
+
     const taxaOuro = lerCampo('cfgTaxaOuro', 10);
+    const corridasOuro = Math.round(lerCampo('cfgCorridasOuro', 150));
+    const notaOuro = Math.min(5, lerCampo('cfgNotaOuro', 4.9));
 
     const payload = {
       taxa_plataforma: taxaBronze,
@@ -1524,20 +1541,20 @@ function configurarFormTarifas(token) {
       niveis_motorista: {
         bronze: {
           nome: 'Bronze',
-          corridas_min: Number(niveisAtuaisCache.bronze?.corridas_min ?? 0),
-          nota_min: Number(niveisAtuaisCache.bronze?.nota_min ?? 0.0),
+          corridas_min: corridasBronze,
+          nota_min: notaBronze,
           taxa_huby: taxaBronze
         },
         prata: {
           nome: 'Prata',
-          corridas_min: Number(niveisAtuaisCache.prata?.corridas_min ?? 50),
-          nota_min: Number(niveisAtuaisCache.prata?.nota_min ?? 4.8),
+          corridas_min: corridasPrata,
+          nota_min: notaPrata,
           taxa_huby: taxaPrata
         },
         ouro: {
           nome: 'Ouro',
-          corridas_min: Number(niveisAtuaisCache.ouro?.corridas_min ?? 150),
-          nota_min: Number(niveisAtuaisCache.ouro?.nota_min ?? 4.9),
+          corridas_min: corridasOuro,
+          nota_min: notaOuro,
           taxa_huby: taxaOuro
         }
       },
@@ -1558,6 +1575,7 @@ function configurarFormTarifas(token) {
       }
     };
 
+    niveisAtuaisCache = payload.niveis_motorista;
     aplicarObjetoTarifas(payload);
 
     try {
@@ -1569,7 +1587,7 @@ function configurarFormTarifas(token) {
       if (res.ok) {
         const respData = await res.json().catch(() => null);
         if (respData?.tarifas) aplicarObjetoTarifas(respData.tarifas);
-        notificarAdmin('Tabela tarifária e níveis do Clube HUBy Pro salvos no banco!', 'sucesso');
+        notificarAdmin('Regras das medalhas Bronze, Prata e Ouro e tarifas salvas no banco!', 'sucesso');
       } else {
         notificarAdmin('Falha ao atualizar tabela tarifária no servidor.', 'erro');
       }
