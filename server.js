@@ -222,6 +222,7 @@ async function inicializarBanco() {
         avaliacao_media NUMERIC(3,2) DEFAULT 5.00,
         total_avaliacoes INT DEFAULT 0,
         total_corridas INT DEFAULT 0,
+        nivel TEXT DEFAULT 'bronze',
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -399,6 +400,7 @@ async function inicializarBanco() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS codigo_voz TEXT DEFAULT 'Zank';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS total_corridas INT DEFAULT 0;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'bronze';`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS em_pausa BOOLEAN DEFAULT FALSE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS pausa_ate TIMESTAMP;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;

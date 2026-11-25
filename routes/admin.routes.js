@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas Corporativas, Despesas, Agendamentos, Frota, Validades CNH/CRLV e Gestão Master HUBy
+// routes/admin.routes.js - Métricas Corporativas, Despesas, Agendamentos, Frota, Validades CNH/CRLV e Clube HUBy Pro
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -40,6 +40,13 @@ export function extrairObjetoJSONB(raw, fallback = {}) {
 
 export const TARIFAS_PADRAO_SISTEMA = {
   taxa_plataforma: 15,
+  taxa_parada: 2.50,
+  taxa_espera: 0.50,
+  niveis_motorista: {
+    bronze: { nome: 'Bronze', corridas_min: 0, nota_min: 0.0, taxa_huby: 15 },
+    prata: { nome: 'Prata', corridas_min: 50, nota_min: 4.8, taxa_huby: 12 },
+    ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
+  },
   carro: { base: 6.0, km: 2.2, min: 0.30 },
   moto: { base: 4.0, km: 1.4, min: 0.20 },
   entrega: { base: 5.0, km: 1.8, min: 0.25 }
@@ -70,8 +77,33 @@ export async function lerTarifasDoBanco() {
       return TARIFAS_PADRAO_SISTEMA;
     }
     const obj = extrairObjetoJSONB(config[0].valor_txt, TARIFAS_PADRAO_SISTEMA);
+    const niveisBruto = obj.niveis_motorista || {};
+    const taxaBronze = Number(niveisBruto.bronze?.taxa_huby ?? obj.taxa_plataforma ?? 15);
+
     return {
-      taxa_plataforma: Number(obj.taxa_plataforma ?? 15),
+      taxa_plataforma: taxaBronze,
+      taxa_parada: Number(obj.taxa_parada ?? 2.50),
+      taxa_espera: Number(obj.taxa_espera ?? 0.50),
+      niveis_motorista: {
+        bronze: {
+          nome: 'Bronze',
+          corridas_min: Number(niveisBruto.bronze?.corridas_min ?? 0),
+          nota_min: Number(niveisBruto.bronze?.nota_min ?? 0.0),
+          taxa_huby: taxaBronze
+        },
+        prata: {
+          nome: 'Prata',
+          corridas_min: Number(niveisBruto.prata?.corridas_min ?? 50),
+          nota_min: Number(niveisBruto.prata?.nota_min ?? 4.8),
+          taxa_huby: Number(niveisBruto.prata?.taxa_huby ?? 12)
+        },
+        ouro: {
+          nome: 'Ouro',
+          corridas_min: Number(niveisBruto.ouro?.corridas_min ?? 150),
+          nota_min: Number(niveisBruto.ouro?.nota_min ?? 4.9),
+          taxa_huby: Number(niveisBruto.ouro?.taxa_huby ?? 10)
+        }
+      },
       carro: {
         base: Number(obj.carro?.base ?? 6.0),
         km: Number(obj.carro?.km ?? 2.2),
@@ -244,6 +276,7 @@ async function inicializarTabelasAdmin() {
   try {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'bronze';`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS despesas_corporativas (
@@ -409,6 +442,7 @@ export default function adminRoutes(io) {
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_url TEXT;`;
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS ultima_selfie_em TIMESTAMP WITH TIME ZONE;`;
       await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS docs_validados_auto BOOLEAN DEFAULT FALSE;`;
+      await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'bronze';`;
 
       const motoristas = await sql`
         SELECT id, nome, email, telefone, cnh_numero AS cnh,
@@ -418,6 +452,7 @@ export default function adminRoutes(io) {
                veiculo_cor, veiculo_ano, doc_cnh_url, doc_crlv_url, foto_perfil_url,
                ultima_selfie_url, ultima_selfie_em,
                COALESCE(docs_validados_auto, FALSE) AS docs_validados_auto,
+               COALESCE(nivel, 'bronze') AS nivel,
                saldo_carteira, status_aprovacao, status_online,
                avaliacao_media, total_corridas, criado_em
         FROM motoristas
@@ -588,7 +623,7 @@ export default function adminRoutes(io) {
   });
 
   // =========================================================================
-  // 5. CONSULTA E ATUALIZAÇÃO DE TARIFAS, INDICAÇÃO E DINÂMICA
+  // 5. CONSULTA E ATUALIZAÇÃO DE TARIFAS, NÍVEIS CLUBE PRO, INDICAÇÃO E DINÂMICA
   // =========================================================================
   router.get('/tarifas', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -599,28 +634,65 @@ export default function adminRoutes(io) {
   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const body = req.body || {};
+      const atuais = await lerTarifasDoBanco();
 
       const lerNum = (val, padrao) => {
         const n = Number(String(val ?? '').replace(',', '.'));
         return Number.isFinite(n) && n >= 0 ? Number(n.toFixed(2)) : padrao;
       };
 
+      const niveisBody = body.niveis_motorista || {};
+      const taxaBronze = lerNum(
+        niveisBody.bronze?.taxa_huby ?? body.taxa_plataforma,
+        atuais.niveis_motorista.bronze.taxa_huby
+      );
+      const taxaPrata = lerNum(
+        niveisBody.prata?.taxa_huby,
+        atuais.niveis_motorista.prata.taxa_huby
+      );
+      const taxaOuro = lerNum(
+        niveisBody.ouro?.taxa_huby,
+        atuais.niveis_motorista.ouro.taxa_huby
+      );
+
       const novasTarifas = {
-        taxa_plataforma: lerNum(body.taxa_plataforma, 15),
+        taxa_plataforma: taxaBronze,
+        taxa_parada: lerNum(body.taxa_parada, atuais.taxa_parada),
+        taxa_espera: lerNum(body.taxa_espera, atuais.taxa_espera),
+        niveis_motorista: {
+          bronze: {
+            nome: 'Bronze',
+            corridas_min: lerNum(niveisBody.bronze?.corridas_min, atuais.niveis_motorista.bronze.corridas_min),
+            nota_min: lerNum(niveisBody.bronze?.nota_min, atuais.niveis_motorista.bronze.nota_min),
+            taxa_huby: taxaBronze
+          },
+          prata: {
+            nome: 'Prata',
+            corridas_min: lerNum(niveisBody.prata?.corridas_min, atuais.niveis_motorista.prata.corridas_min),
+            nota_min: lerNum(niveisBody.prata?.nota_min, atuais.niveis_motorista.prata.nota_min),
+            taxa_huby: taxaPrata
+          },
+          ouro: {
+            nome: 'Ouro',
+            corridas_min: lerNum(niveisBody.ouro?.corridas_min, atuais.niveis_motorista.ouro.corridas_min),
+            nota_min: lerNum(niveisBody.ouro?.nota_min, atuais.niveis_motorista.ouro.nota_min),
+            taxa_huby: taxaOuro
+          }
+        },
         carro: {
-          base: lerNum(body.carro?.base, 6.0),
-          km: lerNum(body.carro?.km, 2.2),
-          min: lerNum(body.carro?.min, 0.30)
+          base: lerNum(body.carro?.base, atuais.carro.base),
+          km: lerNum(body.carro?.km, atuais.carro.km),
+          min: lerNum(body.carro?.min, atuais.carro.min)
         },
         moto: {
-          base: lerNum(body.moto?.base, 4.0),
-          km: lerNum(body.moto?.km, 1.4),
-          min: lerNum(body.moto?.min, 0.20)
+          base: lerNum(body.moto?.base, atuais.moto.base),
+          km: lerNum(body.moto?.km, atuais.moto.km),
+          min: lerNum(body.moto?.min, atuais.moto.min)
         },
         entrega: {
-          base: lerNum(body.entrega?.base, 5.0),
-          km: lerNum(body.entrega?.km, 1.8),
-          min: lerNum(body.entrega?.min, 0.25)
+          base: lerNum(body.entrega?.base, atuais.entrega.base),
+          km: lerNum(body.entrega?.km, atuais.entrega.km),
+          min: lerNum(body.entrega?.min, atuais.entrega.min)
         }
       };
 
@@ -641,7 +713,7 @@ export default function adminRoutes(io) {
       res.json({
         sucesso: true,
         tarifas: novasTarifas,
-        mensagem: 'Tarifas atualizadas com sucesso no banco de dados!'
+        mensagem: 'Tarifas e níveis do Clube HUBy Pro atualizados com sucesso!'
       });
     } catch (err) {
       console.error('Erro ao atualizar tarifas:', err);
@@ -924,14 +996,12 @@ export default function adminRoutes(io) {
         else reg.corridas++;
       };
 
-      // 1. Cidades cadastradas nos motoristas e usuários
       const mots = await sql`SELECT cidade FROM motoristas WHERE cidade IS NOT NULL AND TRIM(cidade) <> '';`;
       mots.forEach((m) => adicionarRegiao(m.cidade, 'motorista'));
 
       const usrs = await sql`SELECT cidade FROM usuarios WHERE cidade IS NOT NULL AND TRIM(cidade) <> '';`;
       usrs.forEach((u) => adicionarRegiao(u.cidade, 'usuario'));
 
-      // 2. Cidades extraídas automaticamente dos endereços das corridas (ex: "... - São Raimundo Nonato, PI")
       const pedidos = await sql`
         SELECT origem_endereco, destino_endereco
         FROM pedidos

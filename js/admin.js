@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Regiões Dinâmicas Push + Caixa Líquido Real + Agendamentos + Selo Docs Validados + Taxas Extras)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Clube Pro Bronze/Prata/Ouro + Taxas Extras + Regiões Push + Caixa Real)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -6,6 +6,11 @@ let chartFinanceiroInstance = null;
 let chartCategoriasInstance = null;
 let motoristaFocadoModalId = null;
 let bannerBase64Temporario = null;
+let niveisAtuaisCache = {
+  bronze: { nome: 'Bronze', corridas_min: 0, nota_min: 0.0, taxa_huby: 15 },
+  prata: { nome: 'Prata', corridas_min: 50, nota_min: 4.8, taxa_huby: 12 },
+  ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
+};
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
 
@@ -163,6 +168,45 @@ function avaliarValidadeDocumento(dataStr, sigla) {
     dias: diasRestantes,
     html: `<span title="Válido até ${dataBR}" style="display:inline-block; font-size:10px; font-weight:700; color:#6EE7B7; background:rgba(16,185,129,0.12); padding:2px 6px; border-radius:6px;">✅ ${sigla}: ${dataBR}</span>`
   };
+}
+
+function renderizarSeloNivelAdmin(nivelRaw, totalCorridas = 0) {
+  const nivel = String(nivelRaw || 'bronze').toLowerCase();
+  const corridas = Number(totalCorridas || 0);
+
+  const estilos = {
+    ouro: {
+      icone: '🥇',
+      label: 'OURO',
+      cor: '#FDE047',
+      bg: 'rgba(245, 158, 11, 0.2)',
+      borda: 'rgba(250, 204, 21, 0.5)'
+    },
+    prata: {
+      icone: '🥈',
+      label: 'PRATA',
+      cor: '#E2E8F0',
+      bg: 'rgba(148, 163, 184, 0.2)',
+      borda: 'rgba(203, 213, 225, 0.45)'
+    },
+    bronze: {
+      icone: '🥉',
+      label: 'BRONZE',
+      cor: '#FBBF24',
+      bg: 'rgba(217, 119, 6, 0.16)',
+      borda: 'rgba(245, 158, 11, 0.35)'
+    }
+  };
+
+  const st = estilos[nivel] || estilos.bronze;
+  return `
+    <div style="margin-top:4px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;">
+      <span style="display:inline-block; font-size:10px; font-weight:900; color:${st.cor}; background:${st.bg}; border:1px solid ${st.borda}; padding:2px 7px; border-radius:999px;">
+        ${st.icone} ${st.label}
+      </span>
+      <small style="color:var(--muted); font-size:10.5px;">${corridas} corridas</small>
+    </div>
+  `;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -780,7 +824,7 @@ window.excluirItemMarketplace = async (id) => {
 };
 
 // ============================================================================
-// GESTÃO DE FROTA, DOCUMENTOS, SELO DOCS VALIDADOS E ALERTA DE VALIDADE
+// GESTÃO DE FROTA, DOCUMENTOS, SELO CLUBE PRO, DOCS VALIDADOS E VALIDADE
 // ============================================================================
 async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
   const tbody = document.getElementById('tabelaFrotaBody');
@@ -825,6 +869,8 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
       if (valCnh.status === 'vencido' || valCrlv.status === 'vencido') qtdVencidos++;
       else if (valCnh.status === 'alerta' || valCrlv.status === 'alerta') qtdVencendoEmBreve++;
 
+      const seloNivelHTML = renderizarSeloNivelAdmin(m.nivel, m.total_corridas);
+
       const seloDocsAutoHTML = m.docs_validados_auto
         ? `<div style="margin-top:4px;"><span title="CNH, CRLV, Placa e datas validados automaticamente no cadastro" style="display:inline-block; font-size:10px; font-weight:800; color:#38BDF8; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.35); padding:2px 7px; border-radius:999px;">⚡ Docs Validados</span></div>`
         : '';
@@ -834,6 +880,7 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
           <td>
             <strong>${nomeSeguro}</strong><br>
             <small style="color:var(--muted);">CNH: ${escaparHTML(m.cnh || m.cnh_numero || '---')}</small>
+            ${seloNivelHTML}
           </td>
           <td>
             ${escaparHTML(m.veiculo_modelo || 'Não inf.')}<br>
@@ -1302,34 +1349,51 @@ async function carregarTabelaViagens(token) {
 }
 
 // ============================================================================
-// PARÂMETROS E TARIFAS DINÂMICAS
+// PARÂMETROS, TARIFAS DINÂMICAS & NÍVEIS CLUBE HUBY PRO
 // ============================================================================
 async function carregarTarifasConfig(token) {
+  const setVal = (id, val) => {
+    const el = document.getElementById(id);
+    if (el && val !== undefined && val !== null) el.value = val;
+  };
+
   const preencherInputs = (cfg) => {
     if (!cfg || typeof cfg !== 'object') return;
-    if (cfg.taxa_plataforma !== undefined) {
-      document.getElementById('cfgTaxaPlataforma').value = cfg.taxa_plataforma;
+
+    if (cfg.niveis_motorista) {
+      niveisAtuaisCache = {
+        bronze: { ...niveisAtuaisCache.bronze, ...(cfg.niveis_motorista.bronze || {}) },
+        prata: { ...niveisAtuaisCache.prata, ...(cfg.niveis_motorista.prata || {}) },
+        ouro: { ...niveisAtuaisCache.ouro, ...(cfg.niveis_motorista.ouro || {}) }
+      };
     }
-    if (cfg.taxa_parada !== undefined) {
-      document.getElementById('inputTaxaParada').value = Number(cfg.taxa_parada).toFixed(2);
-    }
-    if (cfg.taxa_espera !== undefined) {
-      document.getElementById('inputTaxaEspera').value = Number(cfg.taxa_espera).toFixed(2);
-    }
+
+    const taxaBronze = cfg.niveis_motorista?.bronze?.taxa_huby ?? cfg.taxa_plataforma ?? 15;
+    const taxaPrata = cfg.niveis_motorista?.prata?.taxa_huby ?? 12;
+    const taxaOuro = cfg.niveis_motorista?.ouro?.taxa_huby ?? 10;
+
+    setVal('cfgTaxaPlataforma', taxaBronze);
+    setVal('cfgTaxaBronze', taxaBronze);
+    setVal('cfgTaxaPrata', taxaPrata);
+    setVal('cfgTaxaOuro', taxaOuro);
+
+    if (cfg.taxa_parada !== undefined) setVal('inputTaxaParada', Number(cfg.taxa_parada).toFixed(2));
+    if (cfg.taxa_espera !== undefined) setVal('inputTaxaEspera', Number(cfg.taxa_espera).toFixed(2));
+
     if (cfg.carro) {
-      if (cfg.carro.base !== undefined) document.getElementById('tarifaCarroBase').value = Number(cfg.carro.base).toFixed(2);
-      if (cfg.carro.km !== undefined) document.getElementById('tarifaCarroKm').value = Number(cfg.carro.km).toFixed(2);
-      if (cfg.carro.min !== undefined) document.getElementById('tarifaCarroMin').value = Number(cfg.carro.min).toFixed(2);
+      if (cfg.carro.base !== undefined) setVal('tarifaCarroBase', Number(cfg.carro.base).toFixed(2));
+      if (cfg.carro.km !== undefined) setVal('tarifaCarroKm', Number(cfg.carro.km).toFixed(2));
+      if (cfg.carro.min !== undefined) setVal('tarifaCarroMin', Number(cfg.carro.min).toFixed(2));
     }
     if (cfg.moto) {
-      if (cfg.moto.base !== undefined) document.getElementById('tarifaMotoBase').value = Number(cfg.moto.base).toFixed(2);
-      if (cfg.moto.km !== undefined) document.getElementById('tarifaMotoKm').value = Number(cfg.moto.km).toFixed(2);
-      if (cfg.moto.min !== undefined) document.getElementById('tarifaMotoMin').value = Number(cfg.moto.min).toFixed(2);
+      if (cfg.moto.base !== undefined) setVal('tarifaMotoBase', Number(cfg.moto.base).toFixed(2));
+      if (cfg.moto.km !== undefined) setVal('tarifaMotoKm', Number(cfg.moto.km).toFixed(2));
+      if (cfg.moto.min !== undefined) setVal('tarifaMotoMin', Number(cfg.moto.min).toFixed(2));
     }
     if (cfg.entrega) {
-      if (cfg.entrega.base !== undefined) document.getElementById('tarifaFlashBase').value = Number(cfg.entrega.base).toFixed(2);
-      if (cfg.entrega.km !== undefined) document.getElementById('tarifaFlashKm').value = Number(cfg.entrega.km).toFixed(2);
-      if (cfg.entrega.min !== undefined) document.getElementById('tarifaFlashMin').value = Number(cfg.entrega.min).toFixed(2);
+      if (cfg.entrega.base !== undefined) setVal('tarifaFlashBase', Number(cfg.entrega.base).toFixed(2));
+      if (cfg.entrega.km !== undefined) setVal('tarifaFlashKm', Number(cfg.entrega.km).toFixed(2));
+      if (cfg.entrega.min !== undefined) setVal('tarifaFlashMin', Number(cfg.entrega.min).toFixed(2));
     }
   };
 
@@ -1359,14 +1423,40 @@ function configurarFormTarifas(token) {
   document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const lerCampo = (id, padrao) => {
-      const val = parseFloat(String(document.getElementById(id)?.value ?? '').replace(',', '.'));
+      const el = document.getElementById(id);
+      if (!el) return padrao;
+      const val = parseFloat(String(el.value ?? '').replace(',', '.'));
       return Number.isFinite(val) && val >= 0 ? val : padrao;
     };
 
+    const taxaBronze = lerCampo('cfgTaxaBronze', lerCampo('cfgTaxaPlataforma', 15));
+    const taxaPrata = lerCampo('cfgTaxaPrata', 12);
+    const taxaOuro = lerCampo('cfgTaxaOuro', 10);
+
     const payload = {
-      taxa_plataforma: lerCampo('cfgTaxaPlataforma', 15),
+      taxa_plataforma: taxaBronze,
       taxa_parada: lerCampo('inputTaxaParada', 2.50),
       taxa_espera: lerCampo('inputTaxaEspera', 0.50),
+      niveis_motorista: {
+        bronze: {
+          nome: 'Bronze',
+          corridas_min: Number(niveisAtuaisCache.bronze?.corridas_min ?? 0),
+          nota_min: Number(niveisAtuaisCache.bronze?.nota_min ?? 0.0),
+          taxa_huby: taxaBronze
+        },
+        prata: {
+          nome: 'Prata',
+          corridas_min: Number(niveisAtuaisCache.prata?.corridas_min ?? 50),
+          nota_min: Number(niveisAtuaisCache.prata?.nota_min ?? 4.8),
+          taxa_huby: taxaPrata
+        },
+        ouro: {
+          nome: 'Ouro',
+          corridas_min: Number(niveisAtuaisCache.ouro?.corridas_min ?? 150),
+          nota_min: Number(niveisAtuaisCache.ouro?.nota_min ?? 4.9),
+          taxa_huby: taxaOuro
+        }
+      },
       carro: {
         base: lerCampo('tarifaCarroBase', 6.0),
         km: lerCampo('tarifaCarroKm', 2.2),
@@ -1395,7 +1485,7 @@ function configurarFormTarifas(token) {
       if (res.ok) {
         const respData = await res.json().catch(() => null);
         if (respData?.tarifas) aplicarObjetoTarifas(respData.tarifas);
-        notificarAdmin('Tabela tarifária dinâmica salva no banco e aplicada no mapa!', 'sucesso');
+        notificarAdmin('Tabela tarifária e níveis do Clube HUBy Pro salvos no banco!', 'sucesso');
       } else {
         notificarAdmin('Falha ao atualizar tabela tarifária no servidor.', 'erro');
       }

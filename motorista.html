@@ -220,7 +220,13 @@
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80"
           alt="Motorista" class="avatar-mini" id="topAvatarImg">
         <div style="display: flex; flex-direction: column;">
-          <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
+            <span id="badgeNivelTopMotorista"
+              style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(217, 119, 6, 0.16); border: 1px solid rgba(245, 158, 11, 0.45); color: #FBBF24;">
+              🥉 BRONZE
+            </span>
+          </div>
           <small style="color: var(--amber); font-weight: 700; font-size: 10px;" id="topNotaMotorista">⭐ 5.0</small>
         </div>
       </div>
@@ -273,6 +279,9 @@
     </div>
 
     <div class="drawer-content">
+      <!-- CARTÃO DE PROGRESSÃO CLUBE HUBY PRO (BRONZE / PRATA / OURO) -->
+      <div id="cardClubeHubyPro"></div>
+
       <div class="drawer-section-card">
         <h4 class="drawer-section-title">⚡ Modos e Ferramentas</h4>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
@@ -388,6 +397,7 @@
           </div>
           <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94A3B8; margin-top: 6px;">
             <span id="lblMetaDiariaTxt">Meta: R$ 200,00 (0%)</span>
+            <span id="lblRepassePctMotorista">85% repasse líquido</span>
           </div>
         </div>
 
@@ -500,15 +510,15 @@
       <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px; margin-bottom: 16px;">
         <small style="color: var(--text-sec); font-size: 10px; font-weight: 800; text-transform: uppercase;">Valor Total da Corrida</small>
         <div id="lblValorTotalPagamentoMotorista" style="color: var(--emerald); font-size: 24px; font-weight: 900;">R$ 0,00</div>
-        <small style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos pela plataforma</small>
+        <small id="lblTaxaModalPagamento" style="color: var(--text-sec); font-size: 10px; display: block; margin-top: 4px;">Taxa HUBy: 15% retidos pela plataforma</small>
       </div>
       <button type="button" id="btnPagarDinheiro" class="btn-metodo-pagto" style="background: rgba(16, 185, 129, 0.15); border-color: rgba(16, 185, 129, 0.4);">
         <span style="font-size: 20px;">💵</span>
-        <div><div style="color: var(--emerald);">Dinheiro (Espécie)</div><small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de 15% é descontada da carteira.</small></div>
+        <div><div style="color: var(--emerald);">Dinheiro (Espécie)</div><small id="lblTaxaDinheiroDesc" style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Você recebe 100% em mãos. A taxa de 15% é descontada da carteira.</small></div>
       </button>
       <button type="button" id="btnPagarMaquininha" class="btn-metodo-pagto" style="background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4);">
         <span style="font-size: 20px;">💳</span>
-        <div><div style="color: var(--blue);">Maquininha Própria</div><small style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15% é descontada da sua carteira.</small></div>
+        <div><div style="color: var(--blue);">Maquininha Própria</div><small id="lblTaxaMaquininhaDesc" style="color: var(--text-sec); font-size: 10px; font-weight: 500;">Passou no seu cartão. A taxa de 15% é descontada da sua carteira.</small></div>
       </button>
       <button type="button" id="btnPagarPixMP" class="btn-metodo-pagto" style="background: rgba(139, 92, 246, 0.18); border-color: rgba(139, 92, 246, 0.45);">
         <span style="font-size: 20px;">📱</span>
@@ -540,7 +550,7 @@
         <button type="button" id="btnFecharModalSaque" style="background: rgba(255,255,255,0.08); border: none; color: #94A3B8; width: 28px; height: 28px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
       </div>
       <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px;">
-        <small style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo Disponível (85% Líquido)</small>
+        <small id="lblSaldoDisponivelSaquePct" style="color: var(--text-sec); font-size: 10px; font-weight: 700; text-transform: uppercase;">Saldo Disponível (85% Líquido)</small>
         <div id="modalSaldoTexto" style="color: var(--emerald); font-size: 20px; font-weight: 900;">R$ 0,00</div>
       </div>
       <div class="form-group-driver">
@@ -607,37 +617,37 @@
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=13.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=14.0.0"></script>
   <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
 
-  <!-- Script forçado para garantir que a interface da meta seja atualizada na hora -->
+  <!-- Script para garantir atualização imediata da meta diária -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const btnSalvarLocal = document.getElementById('btnSalvarMetaDiariaLocal');
       const inputMeta = document.getElementById('inputValorMetaDiaria');
-      
-      if(btnSalvarLocal && inputMeta) {
+
+      if (btnSalvarLocal && inputMeta) {
         btnSalvarLocal.addEventListener('click', () => {
           let num = parseFloat(inputMeta.value.replace(',', '.'));
           if (isNaN(num) || num < 10) num = 10;
-          
+
           localStorage.setItem('huby_meta_diaria', num);
-          
+
           const ganhosTxt = document.getElementById('lblGanhosHojeValor')?.textContent || 'R$ 0,00';
           const ganhosNum = Number(ganhosTxt.replace(/[^\d,-]/g, '').replace(',', '.')) || 0;
           const pct = Math.min(100, Math.round((ganhosNum / num) * 100));
 
           const lblMetaTxt = document.getElementById('lblMetaDiariaTxt');
           if (lblMetaTxt) {
-              lblMetaTxt.textContent = `Meta: R$ ${num.toFixed(2).replace('.', ',')} (${pct}%)`;
+            lblMetaTxt.textContent = `Meta: R$ ${num.toFixed(2).replace('.', ',')} (${pct}%)`;
           }
-          
+
           const barra = document.getElementById('barraProgressoMeta');
-          if(barra) {
-              barra.style.width = `${pct}%`;
-              barra.style.background = pct >= 100 ? '#10B981' : '#38BDF8';
+          if (barra) {
+            barra.style.width = `${pct}%`;
+            barra.style.background = pct >= 100 ? '#10B981' : '#38BDF8';
           }
-          
+
           document.getElementById('modalMetaDiaria').style.display = 'none';
         });
       }

@@ -1,4 +1,4 @@
-// routes/pedidos.routes.js - Pedidos, Agendamento, Taxa de Espera, Web Push e Bônus de Indicação HUBy
+// routes/pedidos.routes.js - Pedidos, Agendamento, Clube HUBy Pro (Níveis), Prioridade no Radar, Web Push e Bônus de Indicação
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
@@ -11,6 +11,75 @@ import { liquidarBonusIndicacaoPrimeiraCorrida } from './indicacoes.routes.js';
 const TEMPO_TOLERANCIA_ESPERA_SEG = 180; // 3 minutos de tolerância após motorista chegar
 const VALOR_TAXA_CANCELAMENTO = 5.00;
 const RAIO_MAXIMO_KM = 15.0; // Distância máxima para um motorista ver uma corrida
+
+const NIVEIS_PADRAO = {
+  bronze: { nome: 'Bronze', corridas_min: 0, nota_min: 0.0, taxa_huby: 15 },
+  prata: { nome: 'Prata', corridas_min: 50, nota_min: 4.8, taxa_huby: 12 },
+  ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
+};
+
+function normalizarConfigNiveis(tarifasBanco) {
+  const bruto = tarifasBanco?.niveis_motorista || {};
+  const taxaBaseBronze = Number(tarifasBanco?.taxa_plataforma ?? 15);
+  return {
+    bronze: {
+      nome: 'Bronze',
+      corridas_min: Number(bruto.bronze?.corridas_min ?? NIVEIS_PADRAO.bronze.corridas_min),
+      nota_min: Number(bruto.bronze?.nota_min ?? NIVEIS_PADRAO.bronze.nota_min),
+      taxa_huby: Number(bruto.bronze?.taxa_huby ?? taxaBaseBronze)
+    },
+    prata: {
+      nome: 'Prata',
+      corridas_min: Number(bruto.prata?.corridas_min ?? NIVEIS_PADRAO.prata.corridas_min),
+      nota_min: Number(bruto.prata?.nota_min ?? NIVEIS_PADRAO.prata.nota_min),
+      taxa_huby: Number(bruto.prata?.taxa_huby ?? NIVEIS_PADRAO.prata.taxa_huby)
+    },
+    ouro: {
+      nome: 'Ouro',
+      corridas_min: Number(bruto.ouro?.corridas_min ?? NIVEIS_PADRAO.ouro.corridas_min),
+      nota_min: Number(bruto.ouro?.nota_min ?? NIVEIS_PADRAO.ouro.nota_min),
+      taxa_huby: Number(bruto.ouro?.taxa_huby ?? NIVEIS_PADRAO.ouro.taxa_huby)
+    }
+  };
+}
+
+function calcularNivelMotorista(totalCorridas, avaliacaoMedia, niveisConfig) {
+  const corridas = Number(totalCorridas || 0);
+  const nota = Number(avaliacaoMedia ?? 5.0);
+
+  if (corridas >= niveisConfig.ouro.corridas_min && nota >= niveisConfig.ouro.nota_min) {
+    return 'ouro';
+  }
+  if (corridas >= niveisConfig.prata.corridas_min && nota >= niveisConfig.prata.nota_min) {
+    return 'prata';
+  }
+  return 'bronze';
+}
+
+async function obterDadosNivelMotorista(motoristaId, tarifasBanco) {
+  const niveisConfig = normalizarConfigNiveis(tarifasBanco);
+  if (!motoristaId) {
+    return { motorista: null, nivel: 'bronze', taxaPorcentagem: niveisConfig.bronze.taxa_huby, niveisConfig };
+  }
+
+  const rows = await sql`
+    SELECT id, total_corridas, avaliacao_media, COALESCE(nivel, 'bronze') AS nivel
+    FROM motoristas
+    WHERE id::text = ${String(motoristaId)}::text
+       OR usuario_id::text = ${String(motoristaId)}::text
+    LIMIT 1;
+  `;
+
+  if (rows.length === 0) {
+    return { motorista: null, nivel: 'bronze', taxaPorcentagem: niveisConfig.bronze.taxa_huby, niveisConfig };
+  }
+
+  const mot = rows[0];
+  const nivelCalculado = calcularNivelMotorista(mot.total_corridas, mot.avaliacao_media, niveisConfig);
+  const taxaPorcentagem = Number(niveisConfig[nivelCalculado]?.taxa_huby ?? niveisConfig.bronze.taxa_huby);
+
+  return { motorista: mot, nivel: nivelCalculado, taxaPorcentagem, niveisConfig };
+}
 
 export function autenticarToken(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -36,6 +105,7 @@ async function inicializarColunasPedidos() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_dinheiro BOOLEAN DEFAULT TRUE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_cartao BOOLEAN DEFAULT TRUE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS aceita_pix BOOLEAN DEFAULT TRUE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'bronze';`;
 
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS forma_pagamento VARCHAR(50);`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS metodo_pgto VARCHAR(50);`;
@@ -139,7 +209,7 @@ export default function pedidosRouter(io) {
   const router = express.Router();
 
   // =========================================================================
-  // 1. CRIAR PEDIDO (IMEDIATO OU AGENDADO + OBS + CUPOM + PUSH REAL)
+  // 1. CRIAR PEDIDO (IMEDIATO OU AGENDADO + TAXA PARADA DINÂMICA + PUSH REAL)
   // =========================================================================
   router.post('/', autenticarToken, async (req, res) => {
     let cupomReservadoId = null;
@@ -209,6 +279,7 @@ export default function pedidosRouter(io) {
       const tarifasBanco = await lerTarifasDoBanco();
       const catChave = String(sub_tipo_id || subTipoId || tipo || 'carro').toLowerCase();
       const cfgCat = tarifasBanco[catChave === 'flash' ? 'entrega' : catChave] || tarifasBanco.carro;
+      const taxaParadaUnitaria = Number(tarifasBanco.taxa_parada ?? 2.50);
 
       const paradasValidas = Array.isArray(paradas) ? paradas : [];
       const qtdParadas = paradasValidas.filter((p) => !p?.nota && !p?.cupom && !p?.agendado_para).length;
@@ -216,7 +287,7 @@ export default function pedidosRouter(io) {
       const valorCalculadoServidor = Number((
         Number(cfgCat.base || 0) +
         (dKm * Number(cfgCat.km || 0)) +
-        (qtdParadas * 2.50) +
+        (qtdParadas * taxaParadaUnitaria) +
         vAdic
       ).toFixed(2));
 
@@ -410,7 +481,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 3. CONSULTA DE CHAMADAS PENDENTES E AGENDADAS (COM CERCA VIRTUAL E FILTRO)
+  // 3. CONSULTA DE CHAMADAS PENDENTES (COM PRIORIDADE OURO > PRATA > BRONZE)
   // =========================================================================
   router.get('/pendentes', autenticarToken, async (req, res) => {
     try {
@@ -430,11 +501,13 @@ export default function pedidosRouter(io) {
 
       let catMotorista = String(categoria || 'carro').toLowerCase().trim();
       let fazEntregaExtra = String(aceitaEntrega || '').toLowerCase() === 'true';
+      let nivelMotorista = 'bronze';
 
       if (ehMotoristaToken(req.usuario)) {
         try {
           const mot = await sql`
-            SELECT status_online, categoria, COALESCE(aceita_entrega, FALSE) AS aceita_entrega
+            SELECT status_online, categoria, COALESCE(aceita_entrega, FALSE) AS aceita_entrega,
+                   COALESCE(nivel, 'bronze') AS nivel, total_corridas, avaliacao_media
             FROM motoristas
             WHERE id::text = ${String(req.usuario.id)}::text
                OR usuario_id::text = ${String(req.usuario.id)}::text
@@ -450,6 +523,7 @@ export default function pedidosRouter(io) {
             if (aceitaEntrega === undefined || aceitaEntrega === '') {
               fazEntregaExtra = Boolean(mot[0].aceita_entrega);
             }
+            nivelMotorista = String(mot[0].nivel || 'bronze').toLowerCase();
           }
         } catch (eMot) {
           console.warn('Aviso ao ler status do motorista:', eMot.message);
@@ -464,8 +538,14 @@ export default function pedidosRouter(io) {
         catMotorista = 'carro';
       }
 
+      // Janela de exclusividade por nível: Ouro = 0s, Prata = 4s, Bronze = 8s
+      const atrasoPrioridadeSeg = ehAdminToken(req.usuario)
+        ? 0
+        : (nivelMotorista === 'ouro' ? 0 : (nivelMotorista === 'prata' ? 4 : 8));
+
       const rawPedidos = await sql`
-        SELECT * FROM pedidos
+        SELECT *, EXTRACT(EPOCH FROM (NOW() - criado_em)) AS segundos_espera
+        FROM pedidos
         WHERE status IN ('pendente', 'aguardando', 'buscando', 'criado', 'agendado')
         ORDER BY criado_em DESC
         LIMIT 60;
@@ -475,6 +555,12 @@ export default function pedidosRouter(io) {
       const listaMoto = ['moto', 'hubymoto', 'huby moto'];
 
       const filtrados = rawPedidos.filter((p) => {
+        // Respeita prioridade nas chamadas imediatas
+        if (p.status !== 'agendado' && atrasoPrioridadeSeg > 0) {
+          const segs = Number(p.segundos_espera || 0);
+          if (segs < atrasoPrioridadeSeg) return false;
+        }
+
         const tipoPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase().trim();
         const ehPedidoEntrega = listaEntrega.includes(tipoPedido);
         const ehPedidoMoto = listaMoto.includes(tipoPedido);
@@ -617,6 +703,7 @@ export default function pedidosRouter(io) {
           m.foto_perfil_url AS motorista_foto,
           m.avaliacao_media AS motorista_avaliacao,
           m.total_corridas AS motorista_corridas,
+          COALESCE(m.nivel, 'bronze') AS motorista_nivel,
           COALESCE(m.aceita_dinheiro, true) AS aceita_dinheiro,
           COALESCE(m.aceita_cartao, true) AS aceita_cartao,
           COALESCE(m.aceita_pix, true) AS aceita_pix
@@ -746,7 +833,7 @@ export default function pedidosRouter(io) {
 
       let motoristas = await sql`
         SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, 
-               avaliacao_media, total_corridas, saldo_carteira,
+               avaliacao_media, total_corridas, saldo_carteira, COALESCE(nivel, 'bronze') AS nivel,
                COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
                COALESCE(aceita_cartao, true) AS aceita_cartao,
                COALESCE(aceita_pix, true) AS aceita_pix
@@ -760,7 +847,7 @@ export default function pedidosRouter(io) {
       if (motoristas.length === 0) {
         motoristas = await sql`
           SELECT id, nome, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, foto_perfil_url, 
-                 avaliacao_media, total_corridas, saldo_carteira,
+                 avaliacao_media, total_corridas, saldo_carteira, COALESCE(nivel, 'bronze') AS nivel,
                  COALESCE(aceita_dinheiro, true) AS aceita_dinheiro,
                  COALESCE(aceita_cartao, true) AS aceita_cartao,
                  COALESCE(aceita_pix, true) AS aceita_pix
@@ -813,6 +900,7 @@ export default function pedidosRouter(io) {
         motorista_foto: mot.foto_perfil_url,
         motorista_avaliacao: mot.avaliacao_media,
         motorista_corridas: mot.total_corridas,
+        motorista_nivel: mot.nivel,
         veiculo_cor: mot.veiculo_cor,
         aceita_dinheiro: mot.aceita_dinheiro,
         aceita_cartao: mot.aceita_cartao,
@@ -832,6 +920,7 @@ export default function pedidosRouter(io) {
             cor: mot.veiculo_cor || 'Prata',
             foto: mot.foto_perfil_url,
             avaliacao: mot.avaliacao_media,
+            nivel: mot.nivel,
             aceita_dinheiro: mot.aceita_dinheiro,
             aceita_cartao: mot.aceita_cartao,
             aceita_pix: mot.aceita_pix
@@ -847,7 +936,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 8. CONCLUIR VIAGEM (COM TAXA DINÂMICA + LIBERAÇÃO DE BÔNUS INDICAÇÃO)
+  // 8. CONCLUIR VIAGEM (COM DESCONTO POR NÍVEL BRONZE/PRATA/OURO + PROGRESSÃO)
   // =========================================================================
   router.put('/:id/concluir', autenticarToken, async (req, res) => {
     try {
@@ -855,7 +944,8 @@ export default function pedidosRouter(io) {
       const usuarioId = req.usuario.id;
 
       const mot = await sql`
-        SELECT id FROM motoristas 
+        SELECT id, total_corridas, avaliacao_media, COALESCE(nivel, 'bronze') AS nivel
+        FROM motoristas 
         WHERE id::text = ${usuarioId}::text 
            OR usuario_id::text = ${usuarioId}::text
         ORDER BY saldo_carteira DESC LIMIT 1;
@@ -874,11 +964,15 @@ export default function pedidosRouter(io) {
       if (pedido.status === 'concluido') return res.status(400).json({ erro: 'Este pedido já foi finalizado.' });
 
       const tarifasBanco = await lerTarifasDoBanco();
-      const taxaPorcentagem = Number(tarifasBanco.taxa_plataforma ?? 15);
+      const alvoMotoristaId = pedido.motorista_id || motoristaIdReal;
+      const { motorista: motDados, nivel: nivelAnterior, taxaPorcentagem, niveisConfig } = await obterDadosNivelMotorista(alvoMotoristaId, tarifasBanco);
 
       const valorBruto = Number(pedido.valor_total) || 0;
       const taxaPlataforma = Number(((valorBruto * taxaPorcentagem) / 100).toFixed(2));
       const repasseMotorista = Number((valorBruto - taxaPlataforma).toFixed(2));
+
+      const novoTotalCorridas = Number(motDados?.total_corridas || 0) + 1;
+      const novoNivel = calcularNivelMotorista(novoTotalCorridas, motDados?.avaliacao_media ?? 5.0, niveisConfig);
 
       await sql`
         UPDATE pedidos 
@@ -889,10 +983,11 @@ export default function pedidosRouter(io) {
       const condutorAtualizado = await sql`
         UPDATE motoristas 
         SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
-            total_corridas = COALESCE(total_corridas, 0) + 1
-        WHERE id::text = ${String(motoristaIdReal)}::text 
-           OR id::text = ${String(pedido.motorista_id)}::text
-        RETURNING saldo_carteira, total_corridas;
+            total_corridas = ${novoTotalCorridas},
+            nivel = ${novoNivel}
+        WHERE id::text = ${String(alvoMotoristaId)}::text 
+           OR usuario_id::text = ${String(alvoMotoristaId)}::text
+        RETURNING saldo_carteira, total_corridas, nivel;
       `;
 
       if (pedido.cliente_id) {
@@ -912,6 +1007,10 @@ export default function pedidosRouter(io) {
         mensagem: 'Chamada concluída com sucesso!',
         repasseLiquido: repasseMotorista,
         taxaHuby: taxaPlataforma,
+        taxaPercentualAplicada: taxaPorcentagem,
+        nivelAnterior,
+        nivelAtual: novoNivel,
+        subiuNivel: nivelAnterior !== novoNivel,
         novoSaldoCarteira: condutorAtualizado[0]?.saldo_carteira || 0
       });
     } catch (err) {
@@ -941,9 +1040,9 @@ export default function pedidosRouter(io) {
       const valorTotal = Number(pedido.valor_total || 0);
 
       const tarifasBanco = await lerTarifasDoBanco();
-      const taxaPorcentagem = Number(tarifasBanco.taxa_plataforma ?? 15);
-      const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
       const motoristaIdAlvo = pedido.motorista_id || req.usuario?.id;
+      const { motorista: motDados, nivel: nivelAnterior, taxaPorcentagem, niveisConfig } = await obterDadosNivelMotorista(motoristaIdAlvo, tarifasBanco);
+      const taxaPlataforma = Number(((valorTotal * taxaPorcentagem) / 100).toFixed(2));
 
       if (forma_pagamento === 'dinheiro' || forma_pagamento === 'cartao_maquininha') {
         await sql`
@@ -955,11 +1054,16 @@ export default function pedidosRouter(io) {
           WHERE id::text = ${String(id)}::text;
         `;
 
+        let novoNivel = nivelAnterior;
         if (motoristaIdAlvo) {
+          const novoTotalCorridas = Number(motDados?.total_corridas || 0) + 1;
+          novoNivel = calcularNivelMotorista(novoTotalCorridas, motDados?.avaliacao_media ?? 5.0, niveisConfig);
+
           await sql`
             UPDATE motoristas
             SET saldo_carteira = COALESCE(saldo_carteira, 0) - ${taxaPlataforma},
-                total_corridas = COALESCE(total_corridas, 0) + 1
+                total_corridas = ${novoTotalCorridas},
+                nivel = ${novoNivel}
             WHERE id::text = ${String(motoristaIdAlvo)}::text 
                OR usuario_id::text = ${String(motoristaIdAlvo)}::text;
           `;
@@ -987,7 +1091,14 @@ export default function pedidosRouter(io) {
           io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
         }
 
-        return res.json({ sucesso: true, status: 'concluido', forma_pagamento });
+        return res.json({
+          sucesso: true,
+          status: 'concluido',
+          forma_pagamento,
+          taxaPercentualAplicada: taxaPorcentagem,
+          nivelAtual: novoNivel,
+          subiuNivel: nivelAnterior !== novoNivel
+        });
       }
 
       if (forma_pagamento === 'pix_mp') {
@@ -1262,7 +1373,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 12. CONSULTAR PERFIL DO CONDUTOR
+  // 12. CONSULTAR PERFIL DO CONDUTOR (INCLUI NÍVEL E TAXA ATUAL DO CLUBE PRO)
   // =========================================================================
   router.get('/motoristas/perfil', autenticarToken, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -1273,6 +1384,7 @@ export default function pedidosRouter(io) {
       let motoristas = await sql`
         SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
                foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+               COALESCE(nivel, 'bronze') AS nivel,
                COALESCE(categoria, 'carro') AS categoria,
                COALESCE(status_online, false) AS status_online,
                COALESCE(aceita_entrega, false) AS aceita_entrega,
@@ -1291,6 +1403,7 @@ export default function pedidosRouter(io) {
         motoristas = await sql`
           SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
                  foto_perfil_url, avaliacao_media, total_corridas, saldo_carteira, chave_pix_padrao,
+                 COALESCE(nivel, 'bronze') AS nivel,
                  COALESCE(categoria, 'carro') AS categoria,
                  COALESCE(status_online, false) AS status_online,
                  COALESCE(aceita_entrega, false) AS aceita_entrega,
@@ -1308,7 +1421,18 @@ export default function pedidosRouter(io) {
         return res.status(404).json({ erro: 'Motorista não localizado.' });
       }
 
-      return res.json(motoristas[0]);
+      const mot = motoristas[0];
+      const tarifasBanco = await lerTarifasDoBanco();
+      const niveisConfig = normalizarConfigNiveis(tarifasBanco);
+      const nivelAtual = calcularNivelMotorista(mot.total_corridas, mot.avaliacao_media, niveisConfig);
+      const taxaAtual = Number(niveisConfig[nivelAtual]?.taxa_huby ?? 15);
+
+      return res.json({
+        ...mot,
+        nivel: nivelAtual,
+        taxa_huby_atual: taxaAtual,
+        niveis_config: niveisConfig
+      });
     } catch (err) {
       return res.status(500).json({ erro: 'Falha ao carregar perfil.' });
     }
@@ -1401,7 +1525,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 14. AVALIAR CORRIDA CONCLUÍDA (ESTRELAS + ETIQUETAS + COMENTÁRIO)
+  // 14. AVALIAR CORRIDA CONCLUÍDA (RECALCULA MÉDIA E NÍVEL DO MOTORISTA)
   // =========================================================================
   router.post('/:id/avaliar', autenticarToken, async (req, res) => {
     try {
@@ -1432,7 +1556,7 @@ export default function pedidosRouter(io) {
       `;
 
       if (motoristaId) {
-        await sql`
+        const atualizado = await sql`
           UPDATE motoristas
           SET total_avaliacoes = COALESCE(total_avaliacoes, 0) + 1,
               avaliacao_media = ROUND(
@@ -1440,8 +1564,24 @@ export default function pedidosRouter(io) {
                 (COALESCE(total_avaliacoes, 0) + 1),
                 2
               )
-          WHERE id::text = ${String(motoristaId)}::text;
+          WHERE id::text = ${String(motoristaId)}::text
+          RETURNING total_corridas, avaliacao_media;
         `;
+
+        if (atualizado.length > 0) {
+          const tarifasBanco = await lerTarifasDoBanco();
+          const niveisConfig = normalizarConfigNiveis(tarifasBanco);
+          const novoNivel = calcularNivelMotorista(
+            atualizado[0].total_corridas,
+            atualizado[0].avaliacao_media,
+            niveisConfig
+          );
+          await sql`
+            UPDATE motoristas
+            SET nivel = ${novoNivel}
+            WHERE id::text = ${String(motoristaId)}::text;
+          `;
+        }
       }
 
       return res.status(201).json({

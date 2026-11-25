@@ -1,5 +1,4 @@
-// routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques Automáticos HUBy
-// VERSÃO BLINDADA: Consulta direta na API do Mercado Pago + Cash-Out Pix Automático e em Lote
+// routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques Automáticos HUBy + Clube Pro
 import express from 'express';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
@@ -9,6 +8,29 @@ import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
 
 const router = express.Router();
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
+
+function calcularNivelPorMetricas(totalCorridas, avaliacaoMedia, tarifas) {
+  const niveis = tarifas?.niveis_motorista || {};
+  const corridas = Number(totalCorridas || 0);
+  const nota = Number(avaliacaoMedia ?? 5.0);
+
+  const minOuroCorr = Number(niveis.ouro?.corridas_min ?? 150);
+  const minOuroNota = Number(niveis.ouro?.nota_min ?? 4.9);
+  const minPrataCorr = Number(niveis.prata?.corridas_min ?? 50);
+  const minPrataNota = Number(niveis.prata?.nota_min ?? 4.8);
+
+  if (corridas >= minOuroCorr && nota >= minOuroNota) return 'ouro';
+  if (corridas >= minPrataCorr && nota >= minPrataNota) return 'prata';
+  return 'bronze';
+}
+
+function obterTaxaDoNivel(nivel, tarifas) {
+  const niveis = tarifas?.niveis_motorista || {};
+  const n = String(nivel || 'bronze').toLowerCase();
+  if (n === 'ouro') return Number(niveis.ouro?.taxa_huby ?? 10);
+  if (n === 'prata') return Number(niveis.prata?.taxa_huby ?? 12);
+  return Number(niveis.bronze?.taxa_huby ?? tarifas?.taxa_plataforma ?? 15);
+}
 
 function ehAdmin(req) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase();
@@ -74,6 +96,7 @@ export async function garantirEstruturaCobrancasPix() {
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cpf VARCHAR(20);`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS saldo_carteira NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS chave_pix_padrao TEXT;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'bronze';`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS valor_gorjeta NUMERIC(10,2) DEFAULT 0.00;`;
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
 
@@ -247,7 +270,7 @@ export async function executarTransferenciaPixMercadoPago({ saqueId, valor, chav
 }
 
 // ============================================================================
-// FUNÇÃO CENTRAL E IDEMPOTENTE QUE LIQUIDA O PEDIDO E CREDITA OS 85% DO MOTORISTA
+// FUNÇÃO CENTRAL E IDEMPOTENTE QUE LIQUIDA O PEDIDO E APLICA TAXA DO NÍVEL PRO
 // ============================================================================
 export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid, io) {
   if (!pedidoId) return null;
@@ -279,7 +302,13 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
     if (jaConcluido.length && String(jaConcluido[0].status).toLowerCase() === 'concluido') {
       const vTotal = Number(jaConcluido[0].valor_total || valorPagoMP || 0);
       const tarifas = await lerTarifasDoBanco();
-      const taxaPct = Number(tarifas.taxa_plataforma ?? 15);
+      const motInfo = jaConcluido[0].motorista_id
+        ? await sql`SELECT total_corridas, avaliacao_media, COALESCE(nivel, 'bronze') AS nivel FROM motoristas WHERE id::text = ${String(jaConcluido[0].motorista_id)}::text LIMIT 1;`
+        : [];
+      const nivelMot = motInfo[0]
+        ? calcularNivelPorMetricas(motInfo[0].total_corridas, motInfo[0].avaliacao_media, tarifas)
+        : 'bronze';
+      const taxaPct = obterTaxaDoNivel(nivelMot, tarifas);
       const repasse = Number((vTotal * ((100 - taxaPct) / 100)).toFixed(2));
       if (io) {
         const payload = {
@@ -288,7 +317,9 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
           status: 'concluido',
           forma_pagamento: 'pix_mp',
           valorFinal: vTotal,
-          repasseLiquido: repasse
+          repasseLiquido: repasse,
+          nivelAtual: nivelMot,
+          taxaPercentualAplicada: taxaPct
         };
         io.emit(`corrida_finalizada_${idLimpo}`, payload);
         io.emit(`pix_confirmado_${idLimpo}`, payload);
@@ -309,20 +340,42 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
   }
 
   const tarifas = await lerTarifasDoBanco();
-  const taxaPct = Number(tarifas.taxa_plataforma ?? 15);
+  let nivelAnterior = 'bronze';
+  let motDados = null;
+
+  if (motoristaId) {
+    const mRows = await sql`
+      SELECT id, total_corridas, avaliacao_media, COALESCE(nivel, 'bronze') AS nivel
+      FROM motoristas
+      WHERE id::text = ${String(motoristaId)}::text
+         OR usuario_id::text = ${String(motoristaId)}::text
+      LIMIT 1;
+    `;
+    motDados = mRows[0] || null;
+    if (motDados) {
+      nivelAnterior = calcularNivelPorMetricas(motDados.total_corridas, motDados.avaliacao_media, tarifas);
+    }
+  }
+
+  const taxaPct = obterTaxaDoNivel(nivelAnterior, tarifas);
   const taxaPlataforma = Number(((valorBase * taxaPct) / 100).toFixed(2));
   const repasseMotorista = Number((valorBase - taxaPlataforma).toFixed(2));
 
   let novoSaldoMotorista = null;
+  let novoNivel = nivelAnterior;
 
   if (motoristaId) {
+    const novoTotalCorridas = Number(motDados?.total_corridas || 0) + 1;
+    novoNivel = calcularNivelPorMetricas(novoTotalCorridas, motDados?.avaliacao_media ?? 5.0, tarifas);
+
     const motAtualizado = await sql`
       UPDATE motoristas
       SET saldo_carteira = COALESCE(saldo_carteira, 0) + ${repasseMotorista},
-          total_corridas = COALESCE(total_corridas, 0) + 1
+          total_corridas = ${novoTotalCorridas},
+          nivel = ${novoNivel}
       WHERE id::text = ${String(motoristaId)}::text
          OR usuario_id::text = ${String(motoristaId)}::text
-      RETURNING id, saldo_carteira;
+      RETURNING id, saldo_carteira, nivel;
     `;
 
     novoSaldoMotorista = motAtualizado[0]?.saldo_carteira ?? null;
@@ -344,6 +397,10 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
     valorFinal: valorBase,
     repasseLiquido: repasseMotorista,
     taxaHuby: taxaPlataforma,
+    taxaPercentualAplicada: taxaPct,
+    nivelAnterior,
+    nivelAtual: novoNivel,
+    subiuNivel: nivelAnterior !== novoNivel,
     novoSaldoCarteira: novoSaldoMotorista,
     mensagem: `Pix de R$ ${paraReais(valorBase)} confirmado! +R$ ${paraReais(repasseMotorista)} na carteira.`
   };
@@ -714,7 +771,6 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
         VALUES (${mot.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${String(saqueId)});
       `;
 
-      // Tenta executar o Cash-Out Pix automático na hora pela API do Mercado Pago
       const resultadoAuto = await executarTransferenciaPixMercadoPago({
         saqueId,
         valor: valorNum,
@@ -775,7 +831,7 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// 4. PAINEL DO ADMINISTRADOR: LIQUIDAÇÃO INDIVIDUAL E EM LOTE (50+ MOTORISTAS)
+// 4. PAINEL DO ADMINISTRADOR: LIQUIDAÇÃO INDIVIDUAL E EM LOTE
 // ============================================================================
 router.get('/admin/saques', autenticarToken, verificarAdmin, async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -795,7 +851,6 @@ router.get('/admin/saques', autenticarToken, verificarAdmin, async (req, res) =>
   }
 });
 
-// ROTA DE PAGAMENTO EM LOTE: Dispara e liquida TODOS os saques pendentes com 1 único clique
 router.post('/admin/saques/pagar-lote', autenticarToken, verificarAdmin, async (req, res) => {
   try {
     const pendentes = await sql`
@@ -864,7 +919,6 @@ router.post('/admin/saques/pagar-lote', autenticarToken, verificarAdmin, async (
   }
 });
 
-// ROTA INDIVIDUAL: Tenta disparo via API do Mercado Pago e atualiza status
 router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res) => {
   const { id } = req.params;
   const { status, motivo_recusa } = req.body;

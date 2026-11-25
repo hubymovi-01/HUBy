@@ -1,6 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Sincronizada em Tempo Real + Histórico Detalhado + Fila Offline + Suporte IA
+ * Versão Sincronizada em Tempo Real + Clube HUBy Pro (Bronze/Prata/Ouro) + Histórico Detalhado + Suporte IA
  */
 
 import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
@@ -28,6 +28,12 @@ import {
 } from './ia/motorista-ia.js';
 import { notificar, confirmarAcao } from './util/alertas-huby.js';
 
+const NIVEIS_CLUBE_PADRAO = {
+  bronze: { nome: 'Bronze', corridas_min: 0, nota_min: 0.0, taxa_huby: 15 },
+  prata: { nome: 'Prata', corridas_min: 50, nota_min: 4.8, taxa_huby: 12 },
+  ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
+};
+
 function validarAutenticacaoMotorista() {
   const token = localStorage.getItem('huby_token');
   const role = localStorage.getItem('huby_user_role');
@@ -46,7 +52,11 @@ function validarAutenticacaoMotorista() {
 }
 
 export function atualizarTextosPercentualRepasse() {
-  const taxa = Number(TAXA_PLATAFORMA_ATUAL || 15);
+  const taxa = Number(
+    estado.taxaHubyMotorista !== undefined
+      ? estado.taxaHubyMotorista
+      : (TAXA_PLATAFORMA_ATUAL || 15)
+  );
   const pctLiquido = Math.max(1, 100 - taxa);
 
   const lblCarteira = document.querySelector('.wallet-meta small');
@@ -54,6 +64,205 @@ export function atualizarTextosPercentualRepasse() {
 
   const lblRepasseMeta = document.getElementById('lblRepassePctMotorista');
   if (lblRepasseMeta) lblRepasseMeta.textContent = `${pctLiquido}% repasse líquido`;
+
+  const lblSaquePct = document.getElementById('lblSaldoDisponivelSaquePct');
+  if (lblSaquePct) lblSaquePct.textContent = `Saldo Disponível (${pctLiquido}% Líquido)`;
+
+  const lblTaxaModal = document.getElementById('lblTaxaModalPagamento');
+  if (lblTaxaModal) lblTaxaModal.textContent = `Taxa HUBy: ${taxa}% retidos pela plataforma`;
+
+  const lblTaxaDin = document.getElementById('lblTaxaDinheiroDesc');
+  if (lblTaxaDin) lblTaxaDin.textContent = `Você recebe 100% em mãos. A taxa de ${taxa}% é descontada da carteira.`;
+
+  const lblTaxaMaq = document.getElementById('lblTaxaMaquininhaDesc');
+  if (lblTaxaMaq) lblTaxaMaq.textContent = `Passou no seu cartão. A taxa de ${taxa}% é descontada da sua carteira.`;
+}
+
+// ============================================================================
+// CLUBE HUBY PRO: SELO DE NÍVEL (BRONZE / PRATA / OURO) & BARRA DE PROGRESSO
+// ============================================================================
+export async function atualizarClubeProMotorista(notificarPromocao = false) {
+  const token = localStorage.getItem('huby_token') || '';
+  if (!token) return;
+
+  try {
+    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!resp.ok) return;
+
+    const perfil = await resp.json();
+    const nivelAnterior = estado.nivelMotorista || null;
+
+    const nivel = String(perfil.nivel || 'bronze').toLowerCase();
+    const totalCorridas = Number(perfil.total_corridas || 0);
+    const notaMedia = Number(perfil.avaliacao_media ?? 5.0);
+    const niveisCfg = perfil.niveis_config || NIVEIS_CLUBE_PADRAO;
+    const taxaAtual = Number(
+      perfil.taxa_huby_atual ??
+      niveisCfg[nivel]?.taxa_huby ??
+      TAXA_PLATAFORMA_ATUAL ??
+      15
+    );
+
+    estado.nivelMotorista = nivel;
+    estado.taxaHubyMotorista = taxaAtual;
+    estado.totalCorridasMotorista = totalCorridas;
+    estado.avaliacaoMotorista = notaMedia;
+    estado.niveisConfig = niveisCfg;
+
+    atualizarTextosPercentualRepasse();
+    renderizarSeloEProgressoClubePro({
+      nivel,
+      totalCorridas,
+      notaMedia,
+      taxaAtual,
+      niveisCfg
+    });
+
+    if (notificarPromocao && nivelAnterior && nivelAnterior !== nivel) {
+      const titulos = { prata: '🥈 Prata', ouro: '🥇 Ouro', bronze: '🥉 Bronze' };
+      notificar(
+        `🎉 Parabéns! Você agora é Nível ${titulos[nivel] || nivel.toUpperCase()} no Clube HUBy Pro (Taxa de ${taxaAtual}%)!`,
+        'sucesso',
+        7000
+      );
+    }
+  } catch (err) {
+    console.warn('Aviso ao carregar Clube HUBy Pro:', err);
+  }
+}
+
+function renderizarSeloEProgressoClubePro({ nivel, totalCorridas, notaMedia, taxaAtual, niveisCfg }) {
+  const pctRepasse = Math.max(1, 100 - taxaAtual);
+
+  const temas = {
+    bronze: {
+      icone: '🥉',
+      titulo: 'Nível Bronze',
+      cor: '#D97706',
+      corClaro: '#FBBF24',
+      bg: 'rgba(217, 119, 6, 0.14)',
+      borda: 'rgba(245, 158, 11, 0.45)',
+      prioridade: 'Fila padrão de chamadas'
+    },
+    prata: {
+      icone: '🥈',
+      titulo: 'Nível Prata',
+      cor: '#94A3B8',
+      corClaro: '#E2E8F0',
+      bg: 'rgba(148, 163, 184, 0.16)',
+      borda: 'rgba(203, 213, 225, 0.5)',
+      prioridade: '⚡ Prioridade Intermediária (+4s antes)'
+    },
+    ouro: {
+      icone: '🥇',
+      titulo: 'Nível Ouro',
+      cor: '#F59E0B',
+      corClaro: '#FDE047',
+      bg: 'rgba(245, 158, 11, 0.18)',
+      borda: 'rgba(250, 204, 21, 0.65)',
+      prioridade: '⚡ Prioridade Máxima Imediata nas Chamadas'
+    }
+  };
+
+  const visual = temas[nivel] || temas.bronze;
+
+  let proximoNivelNome = '';
+  let corridasMeta = 0;
+  let notaMeta = 0;
+  let taxaProxima = taxaAtual;
+  let progressoPct = 100;
+  let textoMetaHTML = '';
+
+  if (nivel === 'bronze') {
+    proximoNivelNome = '🥈 Prata';
+    corridasMeta = Number(niveisCfg.prata?.corridas_min ?? 50);
+    notaMeta = Number(niveisCfg.prata?.nota_min ?? 4.8);
+    taxaProxima = Number(niveisCfg.prata?.taxa_huby ?? 12);
+    progressoPct = corridasMeta > 0 ? Math.min(100, Math.round((totalCorridas / corridasMeta) * 100)) : 100;
+    const faltam = Math.max(0, corridasMeta - totalCorridas);
+    textoMetaHTML = faltam > 0
+      ? `Faltam <strong>${faltam} corrida(s)</strong> (e nota ≥ ${notaMeta.toFixed(1)}) para <strong>${proximoNivelNome}</strong> (taxa de ${taxaProxima}%)`
+      : `Mantenha nota ≥ <strong>${notaMeta.toFixed(1)}</strong> para ativar <strong>${proximoNivelNome}</strong>`;
+  } else if (nivel === 'prata') {
+    proximoNivelNome = '🥇 Ouro';
+    corridasMeta = Number(niveisCfg.ouro?.corridas_min ?? 150);
+    notaMeta = Number(niveisCfg.ouro?.nota_min ?? 4.9);
+    taxaProxima = Number(niveisCfg.ouro?.taxa_huby ?? 10);
+    const basePrata = Number(niveisCfg.prata?.corridas_min ?? 50);
+    const faixa = Math.max(1, corridasMeta - basePrata);
+    progressoPct = Math.min(100, Math.max(5, Math.round(((totalCorridas - basePrata) / faixa) * 100)));
+    const faltam = Math.max(0, corridasMeta - totalCorridas);
+    textoMetaHTML = faltam > 0
+      ? `Faltam <strong>${faltam} corrida(s)</strong> (e nota ≥ ${notaMeta.toFixed(1)}) para <strong>${proximoNivelNome}</strong> (taxa de ${taxaProxima}%)`
+      : `Mantenha nota ≥ <strong>${notaMeta.toFixed(1)}</strong> para ativar <strong>${proximoNivelNome}</strong>`;
+  } else {
+    progressoPct = 100;
+    textoMetaHTML = `🏆 Você atingiu o nível máximo! Aproveite a menor taxa (<strong>${taxaAtual}%</strong>) e prioridade total.`;
+  }
+
+  // 1. Selo compacto no topo da tela
+  const badgeTop = document.getElementById('badgeNivelTopMotorista');
+  if (badgeTop) {
+    badgeTop.style.background = visual.bg;
+    badgeTop.style.border = `1px solid ${visual.borda}`;
+    badgeTop.style.color = visual.corClaro;
+    badgeTop.textContent = `${visual.icone} ${nivel.toUpperCase()} • ${pctRepasse}%`;
+  }
+
+  // 2. Cartão completo de gamificação no topo do Menu Lateral
+  const drawerContent = document.querySelector('#driverDrawer .drawer-content');
+  if (!drawerContent) return;
+
+  let cardPro = document.getElementById('cardClubeHubyPro');
+  if (!cardPro) {
+    cardPro = document.createElement('div');
+    cardPro.id = 'cardClubeHubyPro';
+    drawerContent.insertAdjacentElement('afterbegin', cardPro);
+  }
+
+  cardPro.style.cssText = [
+    'background: linear-gradient(135deg, #0F172A 0%, #111827 100%)',
+    `border: 1.5px solid ${visual.borda}`,
+    'border-radius: 16px',
+    'padding: 14px',
+    'margin-bottom: 12px',
+    'box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35)'
+  ].join(';');
+
+  cardPro.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 24px; line-height: 1;">${visual.icone}</span>
+        <div>
+          <div style="font-size: 14px; font-weight: 900; color: ${visual.corClaro}; letter-spacing: 0.3px;">
+            ${visual.titulo}
+          </div>
+          <small style="font-size: 11px; color: #94A3B8; font-weight: 600;">
+            ${totalCorridas} corridas • ⭐ ${notaMedia.toFixed(2)}
+          </small>
+        </div>
+      </div>
+      <div style="text-align: right; background: ${visual.bg}; border: 1px solid ${visual.borda}; padding: 5px 10px; border-radius: 10px;">
+        <small style="display: block; font-size: 9.5px; color: #CBD5E1; text-transform: uppercase; font-weight: 800;">Taxa HUBy</small>
+        <strong style="font-size: 14px; color: ${visual.corClaro}; font-weight: 900;">${taxaAtual}%</strong>
+      </div>
+    </div>
+
+    <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-bottom: 8px; background: rgba(56, 189, 248, 0.08); padding: 5px 8px; border-radius: 8px;">
+      ${visual.prioridade}
+    </div>
+
+    <div style="width: 100%; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 999px; overflow: hidden; margin-bottom: 6px;">
+      <div style="width: ${progressoPct}%; height: 100%; background: linear-gradient(90deg, ${visual.cor}, ${visual.corClaro}); border-radius: 999px; transition: width 0.4s ease;"></div>
+    </div>
+
+    <div style="font-size: 11px; color: #CBD5E1; line-height: 1.35;">
+      ${textoMetaHTML}
+    </div>
+  `;
 }
 
 export function atualizarBarraMetaDiaria(novoValorMeta = null) {
@@ -87,7 +296,7 @@ function configurarMetaDiaria() {
   const modal = document.getElementById('modalMetaDiaria');
   const btnFechar = document.getElementById('btnFecharModalMeta');
   const btnCancelar = document.getElementById('btnCancelarModalMeta');
-  const btnSalvar = document.getElementById('btnSalvarMetaDiaria');
+  const btnSalvar = document.getElementById('btnSalvarMetaDiaria') || document.getElementById('btnSalvarMetaDiariaLocal');
   const inputValor = document.getElementById('inputValorMetaDiaria');
 
   const abrirModalMeta = () => {
@@ -163,7 +372,7 @@ function configurarCodigoVozDireto() {
       }
 
       await definirCodigoAtivacaoMotorista(valorDigitado);
-      notificar(`Comando de ativação salvo com sucesso!`, 'sucesso');
+      notificar('Comando de ativação salvo com sucesso!', 'sucesso');
     });
   }
 
@@ -182,10 +391,14 @@ function escutarAtualizacaoTarifasTempoReal() {
     const token = localStorage.getItem('huby_token') || '';
     const socket = estado.socket || (window.io ? window.io(API_URL, { auth: { token } }) : null);
     if (socket) {
-      socket.on('tarifas_atualizadas', (novasTarifas) => {
+      socket.on('tarifas_atualizadas', async (novasTarifas) => {
         aplicarObjetoTarifas(novasTarifas);
-        atualizarTextosPercentualRepasse();
+        await atualizarClubeProMotorista(false);
         iniciarRadarChamadas();
+      });
+
+      socket.on('corrida_finalizada', async () => {
+        await atualizarClubeProMotorista(true);
       });
     }
   } catch (e) {}
@@ -350,7 +563,12 @@ function configurarHistoricoCorridasMotorista() {
     <span style="font-size: 11px; background: rgba(56,189,248,0.2); padding: 2px 8px; border-radius: 999px;">Ver extrato</span>
   `;
 
-  drawerContent.insertAdjacentElement('afterbegin', btnHistorico);
+  const cardPro = document.getElementById('cardClubeHubyPro');
+  if (cardPro) {
+    cardPro.insertAdjacentElement('afterend', btnHistorico);
+  } else {
+    drawerContent.insertAdjacentElement('afterbegin', btnHistorico);
+  }
 
   btnHistorico.addEventListener('click', async () => {
     document.getElementById('driverDrawer')?.classList.remove('active');
@@ -387,7 +605,11 @@ async function abrirModalHistoricoDetalhadoMotorista() {
 
   const listaEl = overlay.querySelector('#listaCorridasDetalhadasMot');
   const token = localStorage.getItem('huby_token') || '';
-  const taxaPct = Number(TAXA_PLATAFORMA_ATUAL ?? 15);
+  const taxaPct = Number(
+    estado.taxaHubyMotorista !== undefined
+      ? estado.taxaHubyMotorista
+      : (TAXA_PLATAFORMA_ATUAL ?? 15)
+  );
   const fatorMot = Math.max(0.1, (100 - taxaPct) / 100);
 
   try {
@@ -654,9 +876,10 @@ function registrarEventosUI() {
   const drawer = document.getElementById('driverDrawer');
   const overlay = document.getElementById('drawerOverlay');
 
-  document.getElementById('btnAbrirDrawerPerfil')?.addEventListener('click', () => {
+  document.getElementById('btnAbrirDrawerPerfil')?.addEventListener('click', async () => {
     drawer?.classList.add('active');
     overlay?.classList.add('active');
+    await atualizarClubeProMotorista(false);
   });
 
   const fecharDrawer = () => {
@@ -692,6 +915,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   inicializarZonasRiscoMapa();
   registrarEventosUI();
   await carregarPerfil();
+  await atualizarClubeProMotorista(false);
   atualizarBarraMetaDiaria();
   iniciarRadarChamadas();
   inicializarPushNotifications();
