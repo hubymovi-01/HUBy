@@ -71,6 +71,7 @@
   <nav class="tabs-nav">
     <button type="button" class="tab-btn active" data-tab="tabMetricas">📊 Desempenho & Caixa</button>
     <button type="button" class="tab-btn" data-tab="tabAgendamentos">📅 Agendamentos</button>
+    <button type="button" class="tab-btn" data-tab="tabDemandaSemCobertura">📉 Demanda Sem Cobertura</button>
     <button type="button" class="tab-btn" data-tab="tabPatrocinadores">🌟 Patrocinadores & Banners</button>
     <button type="button" class="tab-btn" data-tab="tabRadar">📡 Radar ao Vivo</button>
     <button type="button" class="tab-btn" data-tab="tabGrowth">🎁 Indicação & Dinâmica</button>
@@ -187,6 +188,76 @@
         </thead>
         <tbody id="tabelaAgendamentosAdminBody">
           <tr><td colspan="6" class="table-empty-row">Carregando agendamentos...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ABA DEMANDA NÃO ATENDIDA: BAIRROS E HORÁRIOS COM FALTA DE MOTORISTAS -->
+  <section id="tabDemandaSemCobertura" class="tab-pane">
+    <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 16px;">
+      <div class="metric-card">
+        <div class="metric-title">Pedidos Sem Aceite</div>
+        <div id="demandaTotalSemAceite" class="metric-value text-rose">0</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Bairro Com Maior Falta</div>
+        <div id="demandaTopBairro" class="metric-value text-amber" style="font-size: 18px;">--</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Horário Mais Crítico</div>
+        <div id="demandaTopHorario" class="metric-value text-blue" style="font-size: 18px;">--</div>
+      </div>
+    </div>
+
+    <div class="split-grid" style="margin-bottom: 16px;">
+      <div class="table-responsive">
+        <div class="table-header-title">🏘️ Bairros Onde Faltam Motoristas</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Bairro</th>
+              <th>Sem Aceite</th>
+              <th>Horário Crítico</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaDemandaBairroBody">
+            <tr><td colspan="3" class="table-empty-row">Sem registros de demanda não atendida.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="table-responsive">
+        <div class="table-header-title">⏰ Horários Com Maior Falta de Condutores</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Faixa de Horário</th>
+              <th>Sem Aceite</th>
+              <th>Bairro Principal</th>
+            </tr>
+          </thead>
+          <tbody id="tabelaDemandaHorarioBody">
+            <tr><td colspan="3" class="table-empty-row">Sem registros de horário crítico.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <div class="table-header-title">🕒 Últimas Solicitações Não Atendidas</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Bairro</th>
+            <th>Faixa</th>
+            <th>Trajeto (A → B)</th>
+            <th>Motivo</th>
+          </tr>
+        </thead>
+        <tbody id="tabelaDemandaRecentesBody">
+          <tr><td colspan="5" class="table-empty-row">Nenhuma ocorrência recente.</td></tr>
         </tbody>
       </table>
     </div>
@@ -883,3 +954,9 @@
 </body>
 
 </html>
+```[cite: 21]
+
+---
+
+### Próximo Passo
+Agora me envie o seu **`js/admin.js`** (ou o arquivo correspondente do painel) para eu integrá-lo **completo** com a leitura da rota `/api/admin/demanda-nao-atendida`, atualização em tempo real via Socket e filtro de período.

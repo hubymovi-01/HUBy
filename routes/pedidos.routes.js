@@ -1,4 +1,4 @@
-// routes/pedidos.routes.js - Pedidos, Agendamento, Clube HUBy Pro (Níveis), Prioridade no Radar, Web Push e Bônus de Indicação
+// routes/pedidos.routes.js - Pedidos, Agendamento, Clube HUBy Pro (Níveis), Demanda Não Atendida, Web Push e Bônus de Indicação
 import express from 'express';
 import { sql, JWT_SECRET } from '../db.js';
 import jwt from 'jsonwebtoken';
@@ -17,6 +17,72 @@ const NIVEIS_PADRAO = {
   prata: { nome: 'Prata', corridas_min: 50, nota_min: 4.8, taxa_huby: 12 },
   ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
 };
+
+function extrairBairroDeEndereco(enderecoRaw) {
+  const txt = String(enderecoRaw || '').trim();
+  if (!txt || txt.startsWith('Partida (') || txt.startsWith('Local atual (')) {
+    return 'Localização GPS (Sem bairro)';
+  }
+  const partes = txt.split(/[-–,]/).map((p) => p.trim()).filter(Boolean);
+  for (const parte of partes) {
+    if (/^(rua|av\.?|avenida|travessa|tv\.?|praça|praca|rodovia|br-|pi-|são joão do piauí|simplício mendes|pi|brasil)/i.test(parte)) {
+      continue;
+    }
+    if (parte.length >= 3 && parte.length <= 45) {
+      return parte;
+    }
+  }
+  return partes[0] || 'Centro';
+}
+
+async function registrarDemandaNaoAtendida({
+  pedidoId,
+  origemEndereco,
+  destinoEndereco,
+  lat,
+  lng,
+  motivo,
+  io
+}) {
+  try {
+    const agora = new Date();
+    const horaBR = Number(
+      new Intl.DateTimeFormat('pt-BR', {
+        timeZone: 'America/Sao_Paulo',
+        hour: '2-digit',
+        hour12: false
+      }).format(agora)
+    );
+    const horaLimpa = Number.isFinite(horaBR) ? horaBR : agora.getHours();
+    const faixaHorario = `${String(horaLimpa).padStart(2, '0')}h - ${String((horaLimpa + 1) % 24).padStart(2, '0')}h`;
+    const bairro = extrairBairroDeEndereco(origemEndereco);
+
+    const [reg] = await sql`
+      INSERT INTO demandas_nao_atendidas (
+        pedido_id, bairro, origem_endereco, destino_endereco,
+        lat, lng, dia_semana, hora_dia, faixa_horario, motivo
+      ) VALUES (
+        ${pedidoId ? String(pedidoId) : null},
+        ${bairro},
+        ${String(origemEndereco || '').slice(0, 300)},
+        ${String(destinoEndereco || '').slice(0, 300)},
+        ${Number.isFinite(Number(lat)) ? Number(lat) : null},
+        ${Number.isFinite(Number(lng)) ? Number(lng) : null},
+        ${agora.getDay()},
+        ${horaLimpa},
+        ${faixaHorario},
+        ${String(motivo || 'sem_aceite').slice(0, 60)}
+      )
+      RETURNING *;
+    `;
+
+    if (io && reg) {
+      io.emit('demanda_nao_atendida_registrada', reg);
+    }
+  } catch (err) {
+    console.warn('Aviso ao registrar demanda não atendida:', err.message);
+  }
+}
 
 function normalizarConfigNiveis(tarifasBanco) {
   const bruto = tarifasBanco?.niveis_motorista || {};
@@ -538,7 +604,6 @@ export default function pedidosRouter(io) {
         catMotorista = 'carro';
       }
 
-      // Janela de exclusividade por nível: Ouro = 0s, Prata = 4s, Bronze = 8s
       const atrasoPrioridadeSeg = ehAdminToken(req.usuario)
         ? 0
         : (nivelMotorista === 'ouro' ? 0 : (nivelMotorista === 'prata' ? 4 : 8));
@@ -555,7 +620,6 @@ export default function pedidosRouter(io) {
       const listaMoto = ['moto', 'hubymoto', 'huby moto'];
 
       const filtrados = rawPedidos.filter((p) => {
-        // Respeita prioridade nas chamadas imediatas
         if (p.status !== 'agendado' && atrasoPrioridadeSeg > 0) {
           const segs = Number(p.segundos_espera || 0);
           if (segs < atrasoPrioridadeSeg) return false;
@@ -1184,7 +1248,7 @@ export default function pedidosRouter(io) {
   });
 
   // =========================================================================
-  // 9. CANCELAR VIAGEM (CLIENTE SÓ DURANTE BUSCA; MOTORISTA/ADMIN APÓS ACEITE)
+  // 9. CANCELAR VIAGEM (REGISTRA DEMANDA NÃO ATENDIDA QUANDO SEM MOTORISTA)
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
@@ -1193,7 +1257,8 @@ export default function pedidosRouter(io) {
       const usuarioId = String(req.usuario.id);
 
       const pedidos = await sql`
-        SELECT id, status, cliente_id, motorista_id, chegou_origem_em
+        SELECT id, status, cliente_id, motorista_id, chegou_origem_em,
+               origem_endereco, destino_endereco, origem_lat, origem_lng
         FROM pedidos
         WHERE id::text = ${id}::text
         LIMIT 1;
@@ -1259,6 +1324,18 @@ export default function pedidosRouter(io) {
         WHERE id::text = ${id}::text
         RETURNING *;
       `;
+
+      if (aindaBuscando) {
+        await registrarDemandaNaoAtendida({
+          pedidoId: pedido.id,
+          origemEndereco: pedido.origem_endereco,
+          destinoEndereco: pedido.destino_endereco,
+          lat: pedido.origem_lat,
+          lng: pedido.origem_lng,
+          motivo: canceladoPor === 'cliente' ? 'cancelado_durante_busca' : 'sem_aceite',
+          io
+        });
+      }
 
       if (io) {
         io.emit('corrida_cancelada', {

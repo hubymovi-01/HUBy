@@ -1,4 +1,4 @@
-// routes/admin.routes.js - Métricas Corporativas, Despesas, Agendamentos, Frota, Validades CNH/CRLV e Clube HUBy Pro
+// routes/admin.routes.js - Métricas Corporativas, Despesas, Agendamentos, Frota, Validades CNH/CRLV, Clube HUBy Pro e Demanda Não Atendida
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -277,6 +277,24 @@ async function inicializarTabelasAdmin() {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS cnh_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS crlv_validade DATE;`;
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'bronze';`;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS demandas_nao_atendidas (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT,
+        bairro TEXT NOT NULL DEFAULT 'Centro / Não informado',
+        cidade TEXT,
+        origem_endereco TEXT,
+        destino_endereco TEXT,
+        lat NUMERIC,
+        lng NUMERIC,
+        dia_semana INT,
+        hora_dia INT,
+        faixa_horario TEXT,
+        motivo TEXT DEFAULT 'sem_aceite',
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
 
     await sql`
       CREATE TABLE IF NOT EXISTS despesas_corporativas (
@@ -1243,6 +1261,155 @@ export default function adminRoutes(io) {
       res.json({ sucesso: true, pedido });
     } catch (err) {
       res.status(500).json({ erro: 'Falha ao liberar agendamento no radar.' });
+    }
+  });
+
+  // =========================================================================
+  // 13. DEMANDA NÃO ATENDIDA (BAIRROS E HORÁRIOS COM FALTA DE MOTORISTAS)
+  // =========================================================================
+  router.get('/demanda-nao-atendida', autenticarToken, verificarAdmin, async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    try {
+      const periodo = String(req.query.periodo || 'total').toLowerCase().trim();
+
+      const porBairro = periodo === 'hoje'
+        ? await sql`
+            SELECT bairro,
+                   COUNT(*)::int AS total_sem_atendimento,
+                   MODE() WITHIN GROUP (ORDER BY faixa_horario) AS horario_critico,
+                   MAX(criado_em) AS ultima_ocorrencia
+            FROM demandas_nao_atendidas
+            WHERE (criado_em AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+            GROUP BY bairro
+            ORDER BY total_sem_atendimento DESC, ultima_ocorrencia DESC
+            LIMIT 25;
+          `
+        : periodo === '7d' || periodo === '7dias'
+          ? await sql`
+              SELECT bairro,
+                     COUNT(*)::int AS total_sem_atendimento,
+                     MODE() WITHIN GROUP (ORDER BY faixa_horario) AS horario_critico,
+                     MAX(criado_em) AS ultima_ocorrencia
+              FROM demandas_nao_atendidas
+              WHERE criado_em >= NOW() - INTERVAL '7 days'
+              GROUP BY bairro
+              ORDER BY total_sem_atendimento DESC, ultima_ocorrencia DESC
+              LIMIT 25;
+            `
+          : periodo === 'mes'
+            ? await sql`
+                SELECT bairro,
+                       COUNT(*)::int AS total_sem_atendimento,
+                       MODE() WITHIN GROUP (ORDER BY faixa_horario) AS horario_critico,
+                       MAX(criado_em) AS ultima_ocorrencia
+                FROM demandas_nao_atendidas
+                WHERE criado_em >= DATE_TRUNC('month', NOW())
+                GROUP BY bairro
+                ORDER BY total_sem_atendimento DESC, ultima_ocorrencia DESC
+                LIMIT 25;
+              `
+            : await sql`
+                SELECT bairro,
+                       COUNT(*)::int AS total_sem_atendimento,
+                       MODE() WITHIN GROUP (ORDER BY faixa_horario) AS horario_critico,
+                       MAX(criado_em) AS ultima_ocorrencia
+                FROM demandas_nao_atendidas
+                GROUP BY bairro
+                ORDER BY total_sem_atendimento DESC, ultima_ocorrencia DESC
+                LIMIT 25;
+              `;
+
+      const porHorario = periodo === 'hoje'
+        ? await sql`
+            SELECT hora_dia,
+                   faixa_horario,
+                   COUNT(*)::int AS total_sem_atendimento,
+                   MODE() WITHIN GROUP (ORDER BY bairro) AS bairro_critico
+            FROM demandas_nao_atendidas
+            WHERE (criado_em AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+            GROUP BY hora_dia, faixa_horario
+            ORDER BY total_sem_atendimento DESC, hora_dia ASC
+            LIMIT 24;
+          `
+        : periodo === '7d' || periodo === '7dias'
+          ? await sql`
+              SELECT hora_dia,
+                     faixa_horario,
+                     COUNT(*)::int AS total_sem_atendimento,
+                     MODE() WITHIN GROUP (ORDER BY bairro) AS bairro_critico
+              FROM demandas_nao_atendidas
+              WHERE criado_em >= NOW() - INTERVAL '7 days'
+              GROUP BY hora_dia, faixa_horario
+              ORDER BY total_sem_atendimento DESC, hora_dia ASC
+              LIMIT 24;
+            `
+          : periodo === 'mes'
+            ? await sql`
+                SELECT hora_dia,
+                       faixa_horario,
+                       COUNT(*)::int AS total_sem_atendimento,
+                       MODE() WITHIN GROUP (ORDER BY bairro) AS bairro_critico
+                FROM demandas_nao_atendidas
+                WHERE criado_em >= DATE_TRUNC('month', NOW())
+                GROUP BY hora_dia, faixa_horario
+                ORDER BY total_sem_atendimento DESC, hora_dia ASC
+                LIMIT 24;
+              `
+            : await sql`
+                SELECT hora_dia,
+                       faixa_horario,
+                       COUNT(*)::int AS total_sem_atendimento,
+                       MODE() WITHIN GROUP (ORDER BY bairro) AS bairro_critico
+                FROM demandas_nao_atendidas
+                GROUP BY hora_dia, faixa_horario
+                ORDER BY total_sem_atendimento DESC, hora_dia ASC
+                LIMIT 24;
+              `;
+
+      const recentes = periodo === 'hoje'
+        ? await sql`
+            SELECT id, pedido_id, bairro, faixa_horario, motivo, origem_endereco, destino_endereco, criado_em
+            FROM demandas_nao_atendidas
+            WHERE (criado_em AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date
+            ORDER BY criado_em DESC
+            LIMIT 40;
+          `
+        : periodo === '7d' || periodo === '7dias'
+          ? await sql`
+              SELECT id, pedido_id, bairro, faixa_horario, motivo, origem_endereco, destino_endereco, criado_em
+              FROM demandas_nao_atendidas
+              WHERE criado_em >= NOW() - INTERVAL '7 days'
+              ORDER BY criado_em DESC
+              LIMIT 40;
+            `
+          : periodo === 'mes'
+            ? await sql`
+                SELECT id, pedido_id, bairro, faixa_horario, motivo, origem_endereco, destino_endereco, criado_em
+                FROM demandas_nao_atendidas
+                WHERE criado_em >= DATE_TRUNC('month', NOW())
+                ORDER BY criado_em DESC
+                LIMIT 40;
+              `
+            : await sql`
+                SELECT id, pedido_id, bairro, faixa_horario, motivo, origem_endereco, destino_endereco, criado_em
+                FROM demandas_nao_atendidas
+                ORDER BY criado_em DESC
+                LIMIT 40;
+              `;
+
+      const totalGeral = porBairro.reduce((acc, item) => acc + Number(item.total_sem_atendimento || 0), 0);
+
+      res.json({
+        sucesso: true,
+        totalGeral,
+        topBairro: porBairro[0]?.bairro || 'Nenhum',
+        topHorario: porHorario[0]?.faixa_horario || '--',
+        porBairro,
+        porHorario,
+        recentes
+      });
+    } catch (err) {
+      res.status(500).json({ erro: 'Falha ao consultar demanda não atendida.' });
     }
   });
 

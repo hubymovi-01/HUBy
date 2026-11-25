@@ -264,6 +264,24 @@ async function inicializarBanco() {
     `;
 
     await sql`
+      CREATE TABLE IF NOT EXISTS demandas_nao_atendidas (
+        id SERIAL PRIMARY KEY,
+        pedido_id TEXT,
+        bairro TEXT NOT NULL DEFAULT 'Centro / Não informado',
+        cidade TEXT,
+        origem_endereco TEXT,
+        destino_endereco TEXT,
+        lat NUMERIC,
+        lng NUMERIC,
+        dia_semana INT,
+        hora_dia INT,
+        faixa_horario TEXT,
+        motivo TEXT DEFAULT 'sem_aceite',
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+
+    await sql`
       CREATE TABLE IF NOT EXISTS avaliacoes (
         id SERIAL PRIMARY KEY,
         pedido_id TEXT NOT NULL,

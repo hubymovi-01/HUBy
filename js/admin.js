@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Clube Pro Bronze/Prata/Ouro + Taxas Extras + Regiões Push + Caixa Real)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Clube Pro Bronze/Prata/Ouro + Taxas Extras + Demanda Não Atendida + Regiões Push + Caixa Real)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -269,6 +269,7 @@ async function sincronizarTudo(token) {
   await carregarDespesasCorporativas(token);
 
   Promise.allSettled([
+    carregarDemandaNaoAtendida(token, periodoAtual),
     carregarRegioesAtivasPush(token),
     carregarTabelaAgendamentosAdmin(token),
     carregarTabelaPatrocinadores(token),
@@ -290,7 +291,90 @@ function configurarFiltroPeriodo(token) {
   select.addEventListener('change', async () => {
     await carregarMetricasECards(token, select.value);
     await carregarDespesasCorporativas(token);
+    await carregarDemandaNaoAtendida(token, select.value);
   });
+}
+
+// ============================================================================
+// DEMANDA NÃO ATENDIDA: BAIRROS E HORÁRIOS COM FALTA DE MOTORISTAS
+// ============================================================================
+async function carregarDemandaNaoAtendida(token, periodo = 'total') {
+  try {
+    const per = periodo || document.getElementById('selectFiltroPeriodo')?.value || 'total';
+    const res = await fetch(`${API_URL}/api/admin/demanda-nao-atendida?periodo=${encodeURIComponent(per)}&t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const totalGeral = Number(data.totalGeral || 0);
+    const tabBtn = document.querySelector('[data-tab="tabDemandaSemCobertura"]');
+    if (tabBtn) {
+      tabBtn.innerHTML = totalGeral > 0
+        ? `📉 Demanda Sem Cobertura <span style="background:#EF4444;color:#FFF;font-weight:900;padding:1px 6px;border-radius:10px;font-size:10px;margin-left:4px;">${totalGeral}</span>`
+        : '📉 Demanda Sem Cobertura';
+    }
+
+    if (document.getElementById('demandaTotalSemAceite')) {
+      document.getElementById('demandaTotalSemAceite').textContent = String(totalGeral);
+    }
+    if (document.getElementById('demandaTopBairro')) {
+      document.getElementById('demandaTopBairro').textContent = data.topBairro || '--';
+    }
+    if (document.getElementById('demandaTopHorario')) {
+      document.getElementById('demandaTopHorario').textContent = data.topHorario || '--';
+    }
+
+    const tbodyBairro = document.getElementById('tabelaDemandaBairroBody');
+    if (tbodyBairro) {
+      const listaB = Array.isArray(data.porBairro) ? data.porBairro : [];
+      tbodyBairro.innerHTML = listaB.length
+        ? listaB.map((item) => `
+            <tr>
+              <td><strong>${escaparHTML(item.bairro)}</strong></td>
+              <td style="color: var(--rose); font-weight: 800;">${Number(item.total_sem_atendimento || 0)}</td>
+              <td><span class="badge badge-pendente">${escaparHTML(item.horario_critico || '--')}</span></td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="3" class="table-empty-row">Sem registros de demanda não atendida.</td></tr>';
+    }
+
+    const tbodyHorario = document.getElementById('tabelaDemandaHorarioBody');
+    if (tbodyHorario) {
+      const listaH = Array.isArray(data.porHorario) ? data.porHorario : [];
+      tbodyHorario.innerHTML = listaH.length
+        ? listaH.map((item) => `
+            <tr>
+              <td><strong style="color: var(--blue);">${escaparHTML(item.faixa_horario)}</strong></td>
+              <td style="color: var(--rose); font-weight: 800;">${Number(item.total_sem_atendimento || 0)}</td>
+              <td>${escaparHTML(item.bairro_critico || '--')}</td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="3" class="table-empty-row">Sem registros de horário crítico.</td></tr>';
+    }
+
+    const tbodyRecentes = document.getElementById('tabelaDemandaRecentesBody');
+    if (tbodyRecentes) {
+      const listaR = Array.isArray(data.recentes) ? data.recentes : [];
+      tbodyRecentes.innerHTML = listaR.length
+        ? listaR.map((r) => {
+            const dt = r.criado_em
+              ? new Date(r.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+              : '--';
+            return `
+              <tr>
+                <td>${dt}</td>
+                <td><strong>${escaparHTML(r.bairro)}</strong></td>
+                <td>${escaparHTML(r.faixa_horario || '--')}</td>
+                <td><small>${escaparHTML(r.origem_endereco || '')} → ${escaparHTML(r.destino_endereco || '')}</small></td>
+                <td><span class="badge badge-recusado">${escaparHTML(r.motivo || 'sem_aceite')}</span></td>
+              </tr>
+            `;
+          }).join('')
+        : '<tr><td colspan="5" class="table-empty-row">Nenhuma ocorrência recente.</td></tr>';
+    }
+  } catch (e) {}
 }
 
 // ============================================================================
@@ -1685,6 +1769,7 @@ function configurarNavegacaoAbas() {
         tabAlvo.style.display = 'block';
 
         const token = localStorage.getItem('huby_token');
+        const periodo = document.getElementById('selectFiltroPeriodo')?.value || 'total';
 
         if (tabAlvoId === 'tabMetricas') {
           const g = window._ultimosDadosGraficos;
@@ -1694,6 +1779,7 @@ function configurarNavegacaoAbas() {
           carregarDespesasCorporativas(token);
         }
 
+        if (tabAlvoId === 'tabDemandaSemCobertura') carregarDemandaNaoAtendida(token, periodo);
         if (tabAlvoId === 'tabBroadcast') carregarRegioesAtivasPush(token);
         if (tabAlvoId === 'tabAgendamentos') carregarTabelaAgendamentosAdmin(token);
         if (tabAlvoId === 'tabPatrocinadores') carregarTabelaPatrocinadores(token);
@@ -1723,6 +1809,12 @@ function conectarSocketAdmin() {
   const socket = ioClient(API_URL);
   socket.on('posicao_motorista', (dados) => {
     atualizarPosicaoCondutorNoMapa(dados);
+  });
+
+  socket.on('demanda_nao_atendida_registrada', async () => {
+    const token = localStorage.getItem('huby_token');
+    const periodo = document.getElementById('selectFiltroPeriodo')?.value || 'total';
+    await carregarDemandaNaoAtendida(token, periodo);
   });
 
   socket.on('nova_chamada', async (dados) => {
