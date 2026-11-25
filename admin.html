@@ -685,6 +685,18 @@
             <label>Taxa de Retenção Corporativa HUBy (%)</label>
             <input type="number" id="cfgTaxaPlataforma" value="15" min="1" max="50" required>
           </div>
+
+          <div class="flex-row-gap">
+            <div class="form-group flex-1">
+              <label>Taxa por Parada Extra (R$)</label>
+              <input type="number" id="inputTaxaParada" step="0.10" placeholder="Ex: 2.50" value="2.50" required>
+            </div>
+            <div class="form-group flex-1">
+              <label>Taxa de Espera por Min. (R$)</label>
+              <input type="number" id="inputTaxaEspera" step="0.10" placeholder="Ex: 0.50" value="0.50" required>
+            </div>
+          </div>
+
           <div class="categoria-divisor">
             <strong class="categoria-header-txt">🚗 HUBy Carro</strong>
           </div>

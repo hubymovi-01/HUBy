@@ -1,4 +1,4 @@
-// js/admin.js - Orquestrador Geral do Painel Master HUBy (Regiões Dinâmicas Push + Caixa Líquido Real + Agendamentos + Selo Docs Validados)
+// js/admin.js - Orquestrador Geral do Painel Master HUBy (Regiões Dinâmicas Push + Caixa Líquido Real + Agendamentos + Selo Docs Validados + Taxas Extras)
 import { API_URL, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
 import { inicializarRadarMaster, atualizarPosicaoCondutorNoMapa } from './admin-radar.js';
 
@@ -1310,6 +1310,12 @@ async function carregarTarifasConfig(token) {
     if (cfg.taxa_plataforma !== undefined) {
       document.getElementById('cfgTaxaPlataforma').value = cfg.taxa_plataforma;
     }
+    if (cfg.taxa_parada !== undefined) {
+      document.getElementById('inputTaxaParada').value = Number(cfg.taxa_parada).toFixed(2);
+    }
+    if (cfg.taxa_espera !== undefined) {
+      document.getElementById('inputTaxaEspera').value = Number(cfg.taxa_espera).toFixed(2);
+    }
     if (cfg.carro) {
       if (cfg.carro.base !== undefined) document.getElementById('tarifaCarroBase').value = Number(cfg.carro.base).toFixed(2);
       if (cfg.carro.km !== undefined) document.getElementById('tarifaCarroKm').value = Number(cfg.carro.km).toFixed(2);
@@ -1359,6 +1365,8 @@ function configurarFormTarifas(token) {
 
     const payload = {
       taxa_plataforma: lerCampo('cfgTaxaPlataforma', 15),
+      taxa_parada: lerCampo('inputTaxaParada', 2.50),
+      taxa_espera: lerCampo('inputTaxaEspera', 0.50),
       carro: {
         base: lerCampo('tarifaCarroBase', 6.0),
         km: lerCampo('tarifaCarroKm', 2.2),

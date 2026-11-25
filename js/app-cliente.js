@@ -1,5 +1,5 @@
 // js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Chamada Livre + Modais Modernos + Sincronização Total)
-import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas } from './config.js';
+import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas, TAXA_PARADA_EXTRA } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=8';
 import { estadoCliente } from './cliente/cliente-estado.js';
@@ -126,7 +126,6 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
     }
   });
 
-  // Garante que a tarifa dinâmica volte a aparecer caso ele cancele a corrida
   if (!emViagem) {
     sincronizarPrecosDaRotaAtual();
   }
@@ -165,7 +164,10 @@ function atualizarValoresCardsPro(precoBase, distanciaForcadaKm = null) {
 
   const fatorDesconto = estadoRecursos.descontoPercentual > 0 ? (1 - estadoRecursos.descontoPercentual) : 1;
   const paradasReais = (estadoCliente.paradasIntermediarias || []).filter(p => !p.nota);
-  const paradasExtras = paradasReais.length * 2.50;
+  
+  // Utiliza a taxa dinâmica vinda do painel. Se falhar, usa 2.50
+  const taxaExtraAtual = Number(TAXA_PARADA_EXTRA) || 2.50;
+  const paradasExtras = paradasReais.length * taxaExtraAtual;
 
   let numCarro, numMoto, numEntrega;
 
@@ -813,8 +815,8 @@ function configurarFluxoPagamentoMercadoPago() {
       inputChavePix.select();
       navigator.clipboard.writeText(inputChavePix.value);
       notificar('Chave Pix Copia e Cola copiada!', 'sucesso');
-      btnCopiarPix.textContent = 'Copiado!';
-      setTimeout(() => { btnCopiarPix.textContent = 'Copiar'; }, 2000);
+      btnCopiar.textContent = 'Copiado!';
+      setTimeout(() => { btnCopiar.textContent = 'Copiar'; }, 2000);
     }
   });
 }
@@ -978,7 +980,6 @@ function conectarSocketEPollingCliente() {
         }
         alertaProximidadeEmitido = false;
         
-        // NOVO: Guarda a hora exata do aceite para a regra de cancelamento
         estadoCliente.horaAceiteMotorista = Date.now();
         localStorage.setItem('huby_hora_aceite_motorista', estadoCliente.horaAceiteMotorista.toString());
 

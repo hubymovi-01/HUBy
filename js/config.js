@@ -62,6 +62,8 @@ export let CATEGORIAS = {
 };
 
 export let MULTIPLICADOR_PICO = 1.0;
+export let TAXA_PARADA_EXTRA = 2.50; // <-- NOVA VARIÁVEL
+export let TAXA_ESPERA_MINUTO = 0.50; // <-- NOVA VARIÁVEL
 
 export function aplicarObjetoTarifas(raw) {
   if (!raw) return;
@@ -104,11 +106,17 @@ export function aplicarObjetoTarifas(raw) {
   if (dados.multiplicador_pico !== undefined) {
     MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
   }
+  
+  // LÊ AS NOVAS TAXAS VINDAS DO PAINEL ADMIN
+  if (dados.taxa_parada !== undefined) TAXA_PARADA_EXTRA = Number(dados.taxa_parada);
+  if (dados.taxa_espera !== undefined) TAXA_ESPERA_MINUTO = Number(dados.taxa_espera);
 
   try {
     localStorage.setItem('huby_tarifas_cache', JSON.stringify({
       taxa_plataforma: TAXA_PLATAFORMA_ATUAL,
       multiplicador_pico: MULTIPLICADOR_PICO,
+      taxa_parada: TAXA_PARADA_EXTRA,
+      taxa_espera: TAXA_ESPERA_MINUTO,
       carro: { base: CATEGORIAS.carro.base, km: CATEGORIAS.carro.km, min: CATEGORIAS.carro.min },
       moto: { base: CATEGORIAS.moto.base, km: CATEGORIAS.moto.km, min: CATEGORIAS.moto.min },
       entrega: { base: CATEGORIAS.entrega.base, km: CATEGORIAS.entrega.km, min: CATEGORIAS.entrega.min }
@@ -154,6 +162,8 @@ export function calcularPreco(catId, distanciaKm) {
     tipo: cat.tipo,
     valorTotal: valorFinal,
     multiplicador: MULTIPLICADOR_PICO,
+    taxaParadaAplicada: TAXA_PARADA_EXTRA,
+    taxaEsperaAplicada: TAXA_ESPERA_MINUTO,
     minutosChegada: minutosChegadaEstimada,
     tempoEstimadoTexto: `~${minutosChegadaEstimada} min de si`,
     formatado: `R$ ${valorFinal.toFixed(2).replace('.', ',')}`
