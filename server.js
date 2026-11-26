@@ -5,12 +5,13 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import * as Sentry from '@sentry/node';
+import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sql, JWT_SECRET } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
 import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter, { iniciarDespachanteAgendamentos } from './routes/pedidos.routes.js';
-import adminRoutes, { lerTarifasDoBanco } from './routes/admin.routes.js';
+import adminRoutes, { lerTarifasDoBanco, extrairObjetoJSONB } from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
@@ -406,6 +407,10 @@ async function inicializarBanco() {
         ativo BOOLEAN DEFAULT TRUE,
         visualizacoes INT DEFAULT 0,
         cliques INT DEFAULT 0,
+        plano TEXT,
+        valor_pago NUMERIC(10,2) DEFAULT 0.00,
+        pix_txid TEXT,
+        expira_em TIMESTAMP WITH TIME ZONE,
         criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `;
@@ -430,6 +435,10 @@ async function inicializarBanco() {
     await sql`ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS paradas JSONB DEFAULT '[]'::jsonb;`;
     await sql`ALTER TABLE saques_motoristas ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
     await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS foto_perfil_url TEXT;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS plano TEXT;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS valor_pago NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS expira_em TIMESTAMP WITH TIME ZONE;`;
 
     console.log('✅ Banco de dados Neon PostgreSQL sincronizado com sucesso.');
   } catch (e) {
@@ -481,6 +490,20 @@ function autenticarAdminLocal(req, res, next) {
   }
 }
 
+async function obterTokenMercadoPagoBackend() {
+  if (process.env.MP_ACCESS_TOKEN) return process.env.MP_ACCESS_TOKEN;
+  try {
+    const rows = await sql`
+      SELECT valor::text AS valor_txt FROM configuracoes_plataforma
+      WHERE chave = 'gateway_mercadopago' LIMIT 1;
+    `;
+    const gw = extrairObjetoJSONB(rows[0]?.valor_txt, {});
+    return gw.access_token || '';
+  } catch (e) {
+    return '';
+  }
+}
+
 app.get('/api/patrocinadores/ativos', async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
@@ -489,11 +512,160 @@ app.get('/api/patrocinadores/ativos', async (req, res) => {
              whatsapp_link, imagem_base64, exibir_popup, prioridade
       FROM patrocinadores_banners
       WHERE ativo = TRUE
+        AND (expira_em IS NULL OR expira_em > CURRENT_TIMESTAMP)
       ORDER BY prioridade DESC, id DESC;
     `;
     res.json(lista);
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao carregar patrocinadores.' });
+  }
+});
+
+// Portal externo (anuncie.html): cria banner pendente e gera PIX no Mercado Pago
+app.post('/api/patrocinadores/checkout-pix', async (req, res) => {
+  try {
+    const {
+      plano = 'mensal_vip',
+      nome_empresa,
+      titulo_oferta,
+      categoria = 'destaque',
+      descricao = '',
+      cupom_codigo = '',
+      whatsapp_link = '',
+      imagem_base64
+    } = req.body || {};
+
+    if (!nome_empresa || !titulo_oferta || !imagem_base64) {
+      return res.status(400).json({ erro: 'Preencha o nome da empresa, o título da oferta e a arte do banner.' });
+    }
+
+    const ehVip = String(plano).toLowerCase() === 'mensal_vip';
+    const valorPlano = ehVip ? 150.00 : 90.00;
+    const exibirPopup = ehVip;
+    const prioridade = ehVip ? 10 : 5;
+
+    const [criado] = await sql`
+      INSERT INTO patrocinadores_banners (
+        nome_empresa, titulo_oferta, categoria, descricao, cupom_codigo,
+        whatsapp_link, imagem_base64, exibir_popup, prioridade, ativo,
+        plano, valor_pago
+      ) VALUES (
+        ${String(nome_empresa).trim()},
+        ${String(titulo_oferta).trim()},
+        ${String(categoria).trim()},
+        ${String(descricao).trim()},
+        ${String(cupom_codigo).trim().toUpperCase()},
+        ${String(whatsapp_link).trim()},
+        ${imagem_base64},
+        ${exibirPopup},
+        ${prioridade},
+        FALSE,
+        ${ehVip ? 'mensal_vip' : 'mensal_vitrine'},
+        ${valorPlano}
+      )
+      RETURNING id;
+    `;
+
+    const bannerId = criado.id;
+    const referenciaBanner = `banner_${bannerId}`;
+
+    const accessToken = await obterTokenMercadoPagoBackend();
+    if (!accessToken) {
+      return res.status(500).json({ erro: 'Gateway PIX não configurado no servidor.' });
+    }
+
+    const client = new MercadoPagoConfig({ accessToken });
+    const payment = new Payment(client);
+    const notificationUrl = `${process.env.API_URL || 'https://huby.onrender.com'}/api/carteira/webhook/mercadopago`;
+
+    const mpRes = await payment.create({
+      body: {
+        transaction_amount: valorPlano,
+        description: `HUBy Parceiros - ${String(nome_empresa).trim()} (#${referenciaBanner})`,
+        external_reference: referenciaBanner,
+        payment_method_id: 'pix',
+        notification_url: notificationUrl,
+        payer: {
+          email: 'parceiros@huby.app.br',
+          first_name: String(nome_empresa).trim().slice(0, 40),
+          last_name: 'HUBy'
+        }
+      }
+    });
+
+    const pixInfo = mpRes.point_of_interaction?.transaction_data;
+    const txid = String(mpRes.id);
+
+    if (!pixInfo?.qr_code) {
+      return res.status(500).json({ erro: 'Não foi possível gerar o código PIX.' });
+    }
+
+    await sql`UPDATE patrocinadores_banners SET pix_txid = ${txid} WHERE id = ${bannerId};`;
+
+    try {
+      await sql`
+        INSERT INTO cobrancas_pix (txid, transacao_id, pedido_id, valor, status, pix_copia_cola, qr_code, qr_code_base64)
+        VALUES (${txid}, ${txid}, ${referenciaBanner}, ${valorPlano}, 'pendente', ${pixInfo.qr_code}, ${pixInfo.qr_code}, ${pixInfo.qr_code_base64});
+      `;
+    } catch (ePix) {}
+
+    return res.json({
+      sucesso: true,
+      banner_id: bannerId,
+      txid,
+      valor: valorPlano,
+      qr_code: pixInfo.qr_code,
+      qr_code_base64: pixInfo.qr_code_base64
+    });
+  } catch (err) {
+    console.error('Erro em POST /api/patrocinadores/checkout-pix:', err);
+    return res.status(500).json({ erro: 'Falha ao gerar PIX para o anúncio.' });
+  }
+});
+
+// Consulta de status do banner no portal anuncie.html
+app.get('/api/patrocinadores/status/:id', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ erro: 'ID inválido.' });
+    }
+
+    const rows = await sql`
+      SELECT id, ativo, pix_txid, valor_pago, expira_em
+      FROM patrocinadores_banners
+      WHERE id = ${id}
+      LIMIT 1;
+    `;
+    if (!rows.length) return res.status(404).json({ erro: 'Banner não encontrado.' });
+
+    const banner = rows[0];
+    if (!banner.ativo && banner.pix_txid) {
+      const accessToken = await obterTokenMercadoPagoBackend();
+      if (accessToken) {
+        try {
+          const client = new MercadoPagoConfig({ accessToken });
+          const payment = new Payment(client);
+          const info = await payment.get({ id: String(banner.pix_txid) });
+          if (info?.status === 'approved') {
+            const [ativado] = await sql`
+              UPDATE patrocinadores_banners
+              SET ativo = TRUE,
+                  expira_em = COALESCE(expira_em, CURRENT_TIMESTAMP + INTERVAL '30 days')
+              WHERE id = ${id}
+              RETURNING id, ativo, pix_txid, valor_pago, expira_em;
+            `;
+            io.emit('patrocinadores_atualizados', { bannerId: id, ativo: true });
+            return res.json(ativado || banner);
+          }
+        } catch (eMp) {}
+      }
+    }
+
+    return res.json(banner);
+  } catch (err) {
+    return res.status(500).json({ erro: 'Erro ao verificar status do banner.' });
   }
 });
 

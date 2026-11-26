@@ -1,4 +1,4 @@
-// routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago & Saques Automáticos HUBy + Clube Pro
+// routes/carteira.routes.js - Carteira Digital, Pix Mercado Pago (Corridas + Banners Patrocinadores) & Saques Automáticos HUBy + Clube Pro
 import express from 'express';
 import crypto from 'crypto';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
@@ -140,8 +140,8 @@ export async function garantirEstruturaCobrancasPix() {
         status TEXT DEFAULT 'pendente',
         comprovante_url TEXT,
         motivo_recusa TEXT,
-        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        solicitado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        solicitado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         pago_em TIMESTAMP WITH TIME ZONE
       );
     `;
@@ -189,6 +189,53 @@ export async function obterClienteMercadoPago() {
     return { client, payment: new Payment(client), accessToken };
   } catch (err) {
     return null;
+  }
+}
+
+// ============================================================================
+// ATIVAÇÃO AUTOMÁTICA DE BANNER DE PATROCINADOR APÓS PIX APROVADO
+// ============================================================================
+export async function ativarBannerPatrocinadorPorReferencia(referencia, txid, io) {
+  if (!referencia) return false;
+  const match = String(referencia).trim().match(/^banner_(\d+)$/i);
+  if (!match) return false;
+
+  const bannerId = Number(match[1]);
+  if (!Number.isFinite(bannerId) || bannerId <= 0) return false;
+
+  try {
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS plano TEXT;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS valor_pago NUMERIC(10,2) DEFAULT 0.00;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS pix_txid TEXT;`;
+    await sql`ALTER TABLE patrocinadores_banners ADD COLUMN IF NOT EXISTS expira_em TIMESTAMP WITH TIME ZONE;`;
+
+    const [atualizado] = await sql`
+      UPDATE patrocinadores_banners
+      SET ativo = TRUE,
+          pix_txid = COALESCE(${txid ? String(txid) : null}, pix_txid),
+          expira_em = COALESCE(expira_em, CURRENT_TIMESTAMP + INTERVAL '30 days')
+      WHERE id = ${bannerId}
+      RETURNING id, nome_empresa, ativo;
+    `;
+
+    if (txid) {
+      try {
+        await sql`
+          UPDATE cobrancas_pix
+          SET status = 'pago'
+          WHERE txid = ${String(txid)} OR transacao_id = ${String(txid)} OR pedido_id = ${`banner_${bannerId}`};
+        `;
+      } catch (e) {}
+    }
+
+    if (atualizado && io) {
+      io.emit('patrocinadores_atualizados', { bannerId: atualizado.id, ativo: true });
+    }
+
+    return Boolean(atualizado);
+  } catch (err) {
+    console.error('Erro ao ativar banner patrocinador via PIX:', err.message);
+    return false;
   }
 }
 
@@ -275,6 +322,11 @@ export async function executarTransferenciaPixMercadoPago({ saqueId, valor, chav
 export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid, io) {
   if (!pedidoId) return null;
   const idLimpo = String(pedidoId).trim();
+
+  if (idLimpo.startsWith('banner_')) {
+    await ativarBannerPatrocinadorPorReferencia(idLimpo, txid, io);
+    return { bannerAtivado: true, referencia: idLimpo };
+  }
 
   const pedidosAtualizados = await sql`
     UPDATE pedidos
@@ -585,7 +637,7 @@ router.post('/pix/gerar', autenticarToken, async (req, res) => {
 });
 
 // ============================================================================
-// WEBHOOK DO MERCADO PAGO
+// WEBHOOK DO MERCADO PAGO (CORRIDAS, RECARGAS E BANNERS DE PATROCINADORES)
 // ============================================================================
 router.post('/webhook/mercadopago', async (req, res) => {
   try {
@@ -598,14 +650,16 @@ router.post('/webhook/mercadopago', async (req, res) => {
     const info = await mp.payment.get({ id: paymentId });
     if (info.status === 'approved') {
       const io = obterIo(req);
-      let pedidoIdExtraido = info.external_reference || null;
-      if (!pedidoIdExtraido && info.description) {
-        const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+)/i);
-        if (match) pedidoIdExtraido = match[1];
+      let refExtraida = info.external_reference || null;
+      if (!refExtraida && info.description) {
+        const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+|banner_\d+)/i);
+        if (match) refExtraida = match[1];
       }
 
-      if (pedidoIdExtraido && String(pedidoIdExtraido).startsWith('ped_')) {
-        await liquidarCorridaPixPorPedidoId(pedidoIdExtraido, info.transaction_amount, paymentId, io);
+      if (refExtraida && String(refExtraida).startsWith('banner_')) {
+        await ativarBannerPatrocinadorPorReferencia(refExtraida, paymentId, io);
+      } else if (refExtraida && String(refExtraida).startsWith('ped_')) {
+        await liquidarCorridaPixPorPedidoId(refExtraida, info.transaction_amount, paymentId, io);
       } else {
         const cobrancas = await sql`
           SELECT * FROM cobrancas_pix
@@ -657,21 +711,23 @@ router.get('/pix/status/:txid', autenticarToken, async (req, res) => {
       try {
         const info = await mp.payment.get({ id: String(txid) });
         if (info && info.status === 'approved') {
-          let idPedidoAlvo = pedidoIdQuery || cobranca?.pedido_id || info.external_reference || null;
-          if (!idPedidoAlvo && info.description) {
-            const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+)/i);
-            if (match) idPedidoAlvo = match[1];
+          let idAlvo = pedidoIdQuery || cobranca?.pedido_id || info.external_reference || null;
+          if (!idAlvo && info.description) {
+            const match = String(info.description).match(/#(ped_[A-Za-z0-9_-]+|banner_\d+)/i);
+            if (match) idAlvo = match[1];
           }
 
-          if (idPedidoAlvo && String(idPedidoAlvo).startsWith('ped_')) {
-            await liquidarCorridaPixPorPedidoId(idPedidoAlvo, info.transaction_amount, txid, io);
+          if (idAlvo && String(idAlvo).startsWith('banner_')) {
+            await ativarBannerPatrocinadorPorReferencia(idAlvo, txid, io);
+          } else if (idAlvo && String(idAlvo).startsWith('ped_')) {
+            await liquidarCorridaPixPorPedidoId(idAlvo, info.transaction_amount, txid, io);
           } else if (cobranca) {
             await liquidarCobrancaPix(cobranca.id, io);
           }
 
           return res.json({
             txid,
-            pedido_id: idPedidoAlvo,
+            pedido_id: idAlvo,
             valor: info.transaction_amount,
             status: 'pago'
           });

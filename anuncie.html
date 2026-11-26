@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HUBy Parceiros • Anuncie sua Empresa no App</title>
+  <meta name="theme-color" content="#090D16">
+  <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
+
+  <style>
+    :root {
+      --bg-dark: #090D16;
+      --card-dark: #121826;
+      --border: rgba(255, 255, 255, 0.1);
+      --emerald: #10B981;
+      --blue: #38BDF8;
+      --amber: #F59E0B;
+      --text-pri: #F8FAFC;
+      --text-sec: #94A3B8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(circle at top right, #111E36 0%, var(--bg-dark) 55%);
+      color: var(--text-pri);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      padding: 20px 16px 48px;
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .brand {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.5px;
+    }
+
+    .brand .hub { color: #FFF; }
+    .brand .y { color: var(--emerald); }
+    .brand .tag {
+      font-size: 10px;
+      background: rgba(16, 185, 129, 0.16);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      padding: 3px 8px;
+      border-radius: 999px;
+      vertical-align: middle;
+      margin-left: 6px;
+      font-weight: 800;
+    }
+
+    .hero {
+      text-align: center;
+      margin-bottom: 26px;
+    }
+
+    .hero h1 {
+      font-size: 24px;
+      font-weight: 900;
+      line-height: 1.25;
+      margin-bottom: 8px;
+    }
+
+    .hero p {
+      color: var(--text-sec);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .planos-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+
+    @media (max-width: 520px) {
+      .planos-grid { grid-template-columns: 1fr; }
+    }
+
+    .plano-card {
+      background: var(--card-dark);
+      border: 2px solid var(--border);
+      border-radius: 18px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .plano-card.ativo {
+      border-color: var(--emerald);
+      background: rgba(16, 185, 129, 0.08);
+      box-shadow: 0 8px 24px rgba(16, 185, 129, 0.15);
+    }
+
+    .plano-badge {
+      position: absolute;
+      top: -10px;
+      right: 14px;
+      background: var(--amber);
+      color: #000;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 3px 9px;
+      border-radius: 999px;
+    }
+
+    .plano-titulo {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+
+    .plano-preco {
+      font-size: 24px;
+      font-weight: 900;
+      color: var(--emerald);
+      margin-bottom: 8px;
+    }
+
+    .plano-preco small {
+      font-size: 12px;
+      color: var(--text-sec);
+      font-weight: 600;
+    }
+
+    .plano-lista {
+      list-style: none;
+      font-size: 12px;
+      color: #CBD5E1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .card-form {
+      background: var(--card-dark);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    }
+
+    .card-form h2 {
+      font-size: 17px;
+      font-weight: 800;
+      margin-bottom: 14px;
+      color: #FFF;
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      background: #090D16;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: #FFF;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: var(--emerald);
+    }
+
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media (max-width: 520px) {
+      .row-2 { grid-template-columns: 1fr; }
+    }
+
+    .upload-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: rgba(16, 185, 129, 0.07);
+      border: 2px dashed rgba(16, 185, 129, 0.45);
+      border-radius: 14px;
+      padding: 18px;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--emerald);
+      color: #02261C;
+      border: none;
+      border-radius: 14px;
+      padding: 15px;
+      font-size: 15px;
+      font-weight: 900;
+      cursor: pointer;
+      margin-top: 6px;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* TELA DO PIX GERADO */
+    .pix-box {
+      display: none;
+      text-align: center;
+      background: var(--card-dark);
+      border: 1.5px solid rgba(16, 185, 129, 0.45);
+      border-radius: 20px;
+      padding: 24px 18px;
+      margin-top: 16px;
+    }
+
+    .qr-wrapper {
+      background: #FFF;
+      padding: 12px;
+      border-radius: 14px;
+      display: inline-block;
+      margin: 14px 0;
+    }
+
+    .qr-wrapper img {
+      width: 210px;
+      height: 210px;
+      display: block;
+    }
+
+    .copia-cola-box {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .copia-cola-box input {
+      flex: 1;
+      background: #090D16;
+      border: 1px solid var(--border);
+      color: var(--blue);
+      padding: 10px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .btn-copy {
+      background: var(--blue);
+      color: #02131D;
+      border: none;
+      border-radius: 10px;
+      padding: 0 14px;
+      font-weight: 900;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 800;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <header class="top-bar">
+      <div class="brand">
+        <span class="hub">HUB</span><span class="y">y</span>
+        <span class="tag">PORTAL DO PARCEIRO</span>
+      </div>
+      <a href="./index.html" style="color: var(--text-sec); font-size: 12px; text-decoration: none; font-weight: 700;">← Voltar ao App</a>
+    </header>
+
+    <section class="hero">
+      <h1>Divulgue sua empresa para milhares de passageiros todos os dias</h1>
+      <p>Publique seu banner oficial na vitrine e no pop-up inicial do aplicativo HUBy com ativação automática via PIX.</p>
+    </section>
+
+    <!-- SELEÇÃO DE PLANO -->
+    <div class="planos-grid" id="listaPlanos">
+      <div class="plano-card ativo" data-plano="mensal_vip" data-valor="150.00">
+        <span class="plano-badge">🔥 MAIS ESCOLHIDO</span>
+        <div class="plano-titulo">Plano Mensal VIP</div>
+        <div class="plano-preco">R$ 150,00 <small>/ 30 dias</small></div>
+        <ul class="plano-lista">
+          <li>✅ Banner na Vitrine de Parceiros</li>
+          <li>✅ Destaque no Pop-up ao abrir o app</li>
+          <li>✅ Botão direto para seu WhatsApp</li>
+          <li>✅ Cupom de desconto exclusivo</li>
+        </ul>
+      </div>
+
+      <div class="plano-card" data-plano="mensal_vitrine" data-valor="90.00">
+        <div class="plano-titulo">Plano Vitrine Local</div>
+        <div class="plano-preco">R$ 90,00 <small>/ 30 dias</small></div>
+        <ul class="plano-lista">
+          <li>✅ Banner fixo na Vitrine de Parceiros</li>
+          <li>✅ Botão direto para seu WhatsApp</li>
+          <li>✅ Cupom promocional opcional</li>
+          <li>⚪ Sem pop-up de entrada</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- FORMULÁRIO DO ANUNCIANTE -->
+    <div class="card-form" id="cardFormularioAnuncio">
+      <h2>📢 Dados da Campanha & Arte do Banner</h2>
+      <form id="formSolicitarBanner">
+        <div class="form-group">
+          <label>Imagem do Banner (Formato horizontal recomendado)</label>
+          <label for="inputArteBanner" class="upload-box">
+            <span style="font-size: 28px;">🖼️</span>
+            <strong id="lblStatusArte" style="color: var(--emerald); font-size: 13px;">Toque para selecionar a arte da galeria</strong>
+            <small style="color: var(--text-sec); font-size: 11px;">JPG ou PNG • Otimização automática</small>
+            <img id="previewArteBanner" src="" alt="Prévia" style="display:none; width:100%; max-height:200px; object-fit:cover; border-radius:10px; margin-top:8px;">
+          </label>
+          <input type="file" id="inputArteBanner" accept="image/*" style="display:none;">
+        </div>
+
+        <div class="row-2">
+          <div class="form-group">
+            <label>Nome da Empresa / Loja</label>
+            <input type="text" id="empNome" placeholder="Ex: Pizzaria Sabor Real" required>
+          </div>
+          <div class="form-group">
+            <label>Categoria</label>
+            <select id="empCategoria">
+              <option value="destaque">⭐ Destaque VIP</option>
+              <option value="alimentacao">🍔 Alimentação & Delivery</option>
+              <option value="moda">👗 Moda & Lojas</option>
+              <option value="saude">💊 Farmácia & Saúde</option>
+              <option value="servicos">🔧 Serviços & Automotivo</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Título da Oferta ou Chamada</label>
+          <input type="text" id="empOferta" placeholder="Ex: 15% OFF no combo família usando o cupom!" required>
+        </div>
+
+        <div class="row-2">
+          <div class="form-group">
+            <label>WhatsApp Comercial (com DDD)</label>
+            <input type="tel" id="empWhatsapp" placeholder="Ex: 89999999999" required>
+          </div>
+          <div class="form-group">
+            <label>Cupom Promocional (Opcional)</label>
+            <input type="text" id="empCupom" placeholder="Ex: HUBY15" style="text-transform: uppercase;">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Endereço ou Detalhes da Promoção</label>
+          <textarea id="empDescricao" rows="2" placeholder="Ex: Praça Honório Santos, Centro. Aberto de 18h às 23h."></textarea>
+        </div>
+
+        <button type="submit" id="btnGerarPixAnuncio" class="btn-primary">
+          ⚡ Gerar PIX de R$ 150,00 e Publicar Banner
+        </button>
+      </form>
+    </div>
+
+    <!-- ÁREA DO QR CODE PIX -->
+    <div class="pix-box" id="boxPagamentoPix">
+      <h3 style="font-size: 18px; font-weight: 900; color: #FFF;">📲 Pague com PIX para Ativar Imediatamente</h3>
+      <p style="font-size: 12px; color: var(--text-sec); margin-top: 4px;">
+        Assim que o pagamento for confirmado, seu banner entra no ar automaticamente no aplicativo HUBy.
+      </p>
+
+      <div class="qr-wrapper">
+        <img id="imgQrCodeAnuncio" src="" alt="QR Code PIX">
+      </div>
+
+      <div style="font-size: 22px; font-weight: 900; color: var(--emerald);" id="lblValorPixAnuncio">R$ 150,00</div>
+
+      <div class="copia-cola-box">
+        <input type="text" id="inputPixCopiaColaAnuncio" readonly>
+        <button type="button" id="btnCopiarPixAnuncio" class="btn-copy">Copiar Código</button>
+      </div>
+
+      <div class="status-pill" id="statusPagamentoAnuncio">
+        ⏳ Aguardando confirmação automática do PIX...
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { API_URL } from './js/config.js';
+
+    let planoSelecionado = 'mensal_vip';
+    let valorSelecionado = 150.00;
+    let imagemBase64 = null;
+    let intervaloChecagem = null;
+
+    // Seleção de plano
+    document.querySelectorAll('.plano-card').forEach((card) => {
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.plano-card').forEach((c) => c.classList.remove('ativo'));
+        card.classList.add('ativo');
+        planoSelecionado = card.getAttribute('data-plano');
+        valorSelecionado = parseFloat(card.getAttribute('data-valor')) || 150.00;
+        const btn = document.getElementById('btnGerarPixAnuncio');
+        if (btn) {
+          btn.textContent = `⚡ Gerar PIX de R$ ${valorSelecionado.toFixed(2).replace('.', ',')} e Publicar Banner`;
+        }
+      });
+    });
+
+    // Compressão de imagem da galeria
+    function comprimirImagem(file, maxWidth = 860, quality = 0.82) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let w = img.width;
+            let h = img.height;
+            if (w > maxWidth) {
+              h = Math.round((h * maxWidth) / w);
+              w = maxWidth;
+            }
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = reject;
+          img.src = ev.target.result;
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    document.getElementById('inputArteBanner')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      document.getElementById('lblStatusArte').textContent = '⏳ Otimizando imagem...';
+      try {
+        imagemBase64 = await comprimirImagem(file);
+        const prev = document.getElementById('previewArteBanner');
+        prev.src = imagemBase64;
+        prev.style.display = 'block';
+        document.getElementById('lblStatusArte').textContent = '✅ Arte carregada! (Toque para trocar)';
+      } catch (err) {
+        alert('Erro ao ler a imagem selecionada.');
+      }
+    });
+
+    document.getElementById('formSolicitarBanner')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!imagemBase64) {
+        alert('Por favor, selecione a imagem do banner da sua galeria.');
+        return;
+      }
+
+      const btn = document.getElementById('btnGerarPixAnuncio');
+      btn.disabled = true;
+      btn.textContent = '⏳ Gerando cobrança PIX...';
+
+      try {
+        const payload = {
+          plano: planoSelecionado,
+          nome_empresa: document.getElementById('empNome').value.trim(),
+          categoria: document.getElementById('empCategoria').value,
+          titulo_oferta: document.getElementById('empOferta').value.trim(),
+          whatsapp_link: document.getElementById('empWhatsapp').value.trim(),
+          cupom_codigo: document.getElementById('empCupom').value.trim().toUpperCase(),
+          descricao: document.getElementById('empDescricao').value.trim(),
+          imagem_base64: imagemBase64
+        };
+
+        const res = await fetch(`${API_URL}/api/patrocinadores/checkout-pix`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.erro || 'Não foi possível gerar o PIX agora.');
+
+        document.getElementById('cardFormularioAnuncio').style.display = 'none';
+        document.getElementById('boxPagamentoPix').style.display = 'block';
+        document.getElementById('lblValorPixAnuncio').textContent = `R$ ${Number(data.valor).toFixed(2).replace('.', ',')}`;
+        document.getElementById('inputPixCopiaColaAnuncio').value = data.qr_code;
+        document.getElementById('imgQrCodeAnuncio').src = `data:image/png;base64,${data.qr_code_base64}`;
+
+        iniciarMonitoramentoStatus(data.banner_id);
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+        btn.textContent = `⚡ Gerar PIX de R$ ${valorSelecionado.toFixed(2).replace('.', ',')} e Publicar Banner`;
+      }
+    });
+
+    document.getElementById('btnCopiarPixAnuncio')?.addEventListener('click', () => {
+      const inp = document.getElementById('inputPixCopiaColaAnuncio');
+      navigator.clipboard.writeText(inp.value);
+      const btn = document.getElementById('btnCopiarPixAnuncio');
+      btn.textContent = '✅ Copiado!';
+      setTimeout(() => { btn.textContent = 'Copiar Código'; }, 2500);
+    });
+
+    function iniciarMonitoramentoStatus(bannerId) {
+      if (intervaloChecagem) clearInterval(intervaloChecagem);
+      intervaloChecagem = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/patrocinadores/status/${bannerId}?t=${Date.now()}`);
+          if (!res.ok) return;
+          const st = await res.json();
+          if (st.ativo) {
+            clearInterval(intervaloChecagem);
+            const pill = document.getElementById('statusPagamentoAnuncio');
+            pill.style.background = 'rgba(16, 185, 129, 0.2)';
+            pill.style.color = '#10B981';
+            pill.innerHTML = '🎉 Pagamento confirmado! Seu banner já está ATIVO no app HUBy!';
+          }
+        } catch (e) {}
+      }, 4000);
+    }
+  </script>
+</body>
+
+</html>
