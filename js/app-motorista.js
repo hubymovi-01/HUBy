@@ -1,6 +1,6 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
- * Versão Sincronizada em Tempo Real + Clube HUBy Pro (Bronze/Prata/Ouro) + Histórico Detalhado + Suporte IA
+ * Versão Sincronizada em Tempo Real + Clube HUBy Pro (Bronze/Prata/Ouro) + Histórico Detalhado + Suporte
  */
 
 import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
@@ -19,13 +19,6 @@ import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
 import { inicializarZonasRiscoMapa } from './motorista/motorista-zonas-risco.js';
 import { processarFilaOfflineMotorista } from './motorista/motorista-corrida.js';
-import {
-  inicializarCopilotoVoz,
-  definirCodigoAtivacaoMotorista,
-  obterCodigoAtivacaoMotorista,
-  falarTexto,
-  restaurarPreferenciaCopiloto
-} from './ia/motorista-ia.js';
 import { notificar, confirmarAcao } from './util/alertas-huby.js';
 
 const NIVEIS_CLUBE_PADRAO = {
@@ -349,43 +342,6 @@ function configurarMetaDiaria() {
   atualizarBarraMetaDiaria();
 }
 
-function configurarCodigoVozDireto() {
-  const inputComando = document.getElementById('drawerInputCodigoVoz');
-  const btnSalvarComando = document.getElementById('btnSalvarCodigoVoz');
-  const btnTestarComando = document.getElementById('btnTestarCodigoVoz');
-
-  if (inputComando) {
-    inputComando.value = obterCodigoAtivacaoMotorista();
-  }
-
-  if (btnSalvarComando && inputComando) {
-    btnSalvarComando.addEventListener('click', async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const valorDigitado = (inputComando.value || '').trim();
-
-      if (!valorDigitado) {
-        notificar('Digite uma palavra-chave para ativar o copiloto.', 'alerta');
-        inputComando.focus();
-        return;
-      }
-
-      await definirCodigoAtivacaoMotorista(valorDigitado);
-      notificar('Comando de ativação salvo com sucesso!', 'sucesso');
-    });
-  }
-
-  if (btnTestarComando && inputComando) {
-    btnTestarComando.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const comandoAtual = (inputComando.value || '').trim() || obterCodigoAtivacaoMotorista();
-      falarTexto(`Olá. Esta é a configuração da minha voz. Basta me chamar por ${comandoAtual}.`);
-    });
-  }
-}
-
 function escutarAtualizacaoTarifasTempoReal() {
   try {
     const token = localStorage.getItem('huby_token') || '';
@@ -666,7 +622,7 @@ async function abrirModalHistoricoDetalhadoMotorista() {
 }
 
 // ============================================================================
-// CHAT DE SUPORTE CORPORATIVO & IA COM RESPOSTAS DINÂMICAS E FORMAIS
+// CHAT DE SUPORTE CORPORATIVO COM RESPOSTAS DINÂMICAS E FORMAIS
 // ============================================================================
 function inicializarChatSuporteIA() {
   const btnAbrir = document.getElementById('btnAbrirChatSuporte');
@@ -747,7 +703,7 @@ function inicializarChatSuporteIA() {
     if (mensagens.length === 0) {
       const msgInicial = {
         autor: 'ia',
-        texto: 'Olá! Sou o Assistente Virtual da HUBy. Como posso auxiliar na sua jornada hoje?<br><br><small style="color: #94A3B8;">Por favor, descreva detalhadamente a sua solicitação.</small>',
+        texto: 'Olá! Bem-vindo ao Suporte Oficial da HUBy. Como podemos auxiliar na sua jornada hoje?<br><br><small style="color: #94A3B8;">Por favor, descreva detalhadamente a sua solicitação.</small>',
         data: new Date().getTime()
       };
       mensagens.push(msgInicial);
@@ -820,7 +776,7 @@ function inicializarChatSuporteIA() {
       btnEnviar.innerHTML = btnTexto;
       btnEnviar.disabled = false;
       inputMsg.focus();
-    }, 1400);
+    }, 1000);
   }
 
   btnAbrir.addEventListener('click', (e) => {
@@ -899,7 +855,6 @@ function registrarEventosUI() {
 
   configurarHistoricoCorridasMotorista();
   configurarMetaDiaria();
-  configurarCodigoVozDireto();
   configurarBotaoCancelarNaTelaMotorista();
 }
 
@@ -920,9 +875,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   iniciarRadarChamadas();
   inicializarPushNotifications();
   processarFilaOfflineMotorista();
-
-  inicializarCopilotoVoz();
-  restaurarPreferenciaCopiloto();
 
   inicializarChatSuporteIA();
 });

@@ -19,7 +19,6 @@
   <link rel="stylesheet" href="./css/motorista-layout.css?v=5.0.0">
   <link rel="stylesheet" href="./css/motorista-modais.css?v=5.0.0">
   <link rel="stylesheet" href="./css/huby-pro.css?v=1.0.0">
-  <link rel="stylesheet" href="./css/ia.css?v=1.1.0">
   <link rel="stylesheet" href="./css/alertas.css?v=1.1.0">
 
   <script>
@@ -221,7 +220,7 @@
           alt="Motorista" class="avatar-mini" id="topAvatarImg">
         <div style="display: flex; flex-direction: column;">
           <div style="display: flex; align-items: center; gap: 5px;">
-            <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Carol</strong>
+            <strong style="font-size: 13px; color: #FFF;" id="topNomeMotorista">Motorista</strong>
             <span id="badgeNivelTopMotorista"
               style="display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 900; background: rgba(217, 119, 6, 0.16); border: 1px solid rgba(245, 158, 11, 0.45); color: #FBBF24;">
               🥉 BRONZE
@@ -264,7 +263,7 @@
       <div class="drawer-profile-info">
         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80" alt="Foto Perfil" class="drawer-avatar" id="drawerFotoImg">
         <div style="flex: 1;">
-          <strong style="font-size: 17px; color: #FFF; display: block;" id="drawerNomeCondutor">Carol</strong>
+          <strong style="font-size: 17px; color: #FFF; display: block;" id="drawerNomeCondutor">Motorista</strong>
           <span style="font-size: 11px; color: var(--emerald); font-weight: 800; letter-spacing: 0.5px;" id="drawerCategoriaBadge">HUBY CARRO</span>
           <div style="font-size: 11px; color: var(--text-sec); margin-top: 3px;">
             <span style="color: var(--amber); font-weight: 800;" id="drawerAvaliacaoTxt">⭐ 5.0</span> •
@@ -322,44 +321,6 @@
         </div>
         <button type="button" id="btnSalvarPreferenciasPagto" class="btn-drawer-solid" style="margin-top: 14px;">Salvar Preferências</button>
       </div>
-
-      <details class="drawer-section-card collapsible-card" style="border: 1px solid rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05);">
-        <summary class="drawer-section-title" style="cursor: pointer; margin: 0; outline: none; color: #10B981;">
-          🎙️ Configurar Copiloto de Voz
-        </summary>
-        <div style="padding-top: 16px; display: flex; flex-direction: column; gap: 12px;">
-          <label style="display: flex; justify-content: space-between; align-items: center; font-size: 13px;">
-            Ativar Inteligência Artificial
-            <input type="checkbox" id="chkCopilotoAtivo" style="width: 20px; height: 20px; accent-color: #10B981;">
-          </label>
-          <div>
-            <label style="font-size: 10px; color: var(--text-sec);">Nome de Chamada (Ex: Jarvis)</label>
-            <div style="display: flex; gap: 6px; margin-top: 4px;">
-              <input type="text" id="drawerInputCodigoVoz" class="drawer-input" placeholder="Zanix, Falcão...">
-              <button type="button" id="btnSalvarCodigoVoz" class="btn-drawer-solid" style="width: auto; padding: 0 14px;">Salvar</button>
-            </div>
-          </div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <div>
-              <label style="font-size: 10px; color: var(--text-sec);">Tom da Voz</label>
-              <select id="selTomCopiloto" class="drawer-input">
-                <option value="0.75">Grave</option>
-                <option value="1">Normal</option>
-                <option value="1.3">Aguda</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size: 10px; color: var(--text-sec);">Velocidade</label>
-              <input type="range" id="rngVelocidadeCopiloto" min="0.8" max="1.4" step="0.05" style="width: 100%; accent-color: #38BDF8;">
-            </div>
-          </div>
-          <div>
-            <label style="font-size: 10px; color: var(--text-sec);">Voz Base</label>
-            <select id="selVozCopiloto" class="drawer-input"></select>
-          </div>
-          <button type="button" id="btnTestarCodigoVoz" class="btn-drawer-outline">🔊 Testar Voz</button>
-        </div>
-      </details>
 
       <div class="drawer-section-card">
         <h4 class="drawer-section-title">🚘 Veículo Cadastrado</h4>
@@ -437,7 +398,7 @@
           <div style="width: 38px; height: 38px; background: #10B981; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 20px;">🛡️</div>
           <div>
             <h3 style="margin: 0; font-size: 15px; color: #FFF;">Central de Ajuda HUBy</h3>
-            <small style="color: #10B981; font-weight: 700; font-size: 11px;">Assistente Virtual Online</small>
+            <small style="color: #10B981; font-weight: 700; font-size: 11px;">Atendimento Oficial</small>
           </div>
         </div>
         <button type="button" id="btnFecharChatSuporte" style="background: rgba(255,255,255,0.1); border: none; color: #FFF; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; cursor: pointer;">✕</button>
@@ -617,7 +578,7 @@
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script type="module" src="./js/app-motorista.js?v=14.0.0"></script>
+  <script type="module" src="./js/app-motorista.js?v=15.0.0"></script>
   <script type="module" src="./js/push-cliente.js?v=1.0.0"></script>
 
   <!-- Script para garantir atualização imediata da meta diária -->

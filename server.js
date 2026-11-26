@@ -15,7 +15,6 @@ import carteiraRoutes from './routes/carteira.routes.js';
 import dinamicaRoutes from './routes/dinamica.routes.js';
 import motoristaRoutes from './routes/motorista.routes.js';
 import marketplaceRouter from './routes/marketplace.routes.js';
-import iaRoutes from './routes/ia.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import indicacoesRoutes from './routes/indicacoes.routes.js';
 import suporteRouter from './routes/suporte.routes.js';
@@ -627,10 +626,17 @@ app.use('/api/dinamica', dinamicaRoutes);
 app.use('/api/motoristas', motoristaRoutes);
 app.use('/api/motoristas-regras', motoristaRoutes);
 app.use('/api/marketplace', marketplaceRouter);
-app.use('/api/ia', iaRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/indicacoes', indicacoesRoutes);
 app.use('/api/suporte', suporteRouter);
+
+// IA temporariamente pausada para estabilização do lançamento
+app.all('/api/ia{/*path}', (req, res) => {
+  res.status(503).json({
+    ativo: false,
+    erro: 'Assistente de IA temporariamente pausado para estabilização do aplicativo.'
+  });
+});
 
 iniciarDespachanteAgendamentos(io);
 
