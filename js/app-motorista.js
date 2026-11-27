@@ -1,12 +1,13 @@
 /**
  * HUBy 2.0 - Orquestrador Central do Motorista Parceiro (js/app-motorista.js)
  * Versão Sincronizada em Tempo Real + Clube HUBy Pro (Bronze/Prata/Ouro) + Histórico Detalhado + Suporte
+ * Segurança: textos vindos de fora (endereços, mensagens do suporte) são exibidos como texto puro.
  */
 
-import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from './config.js';
+import { API_URL, sincronizarTarifasServidor, aplicarObjetoTarifas } from './config.js';
 import { estado } from './motorista/motorista-estado.js';
 import { inicializarSocket, inicializarMapa } from './motorista/motorista-mapa.js';
-import { alternarStatusOnline, iniciarRadarChamadas } from './motorista/motorista-radar.js';
+import { alternarStatusOnline, iniciarRadarChamadas, taxaDoMotorista } from './motorista/motorista-radar.js';
 import {
   carregarPerfil,
   configurarSalvarPreferenciasPagto,
@@ -18,8 +19,8 @@ import { configurarMarketplace } from './motorista/motorista-loja.js';
 import { inicializarPushNotifications } from './motorista/motorista-push.js';
 import { configurarModosInteligentes } from './motorista/motorista-modos.js';
 import { inicializarZonasRiscoMapa } from './motorista/motorista-zonas-risco.js';
-import { processarFilaOfflineMotorista } from './motorista/motorista-corrida.js';
-import { notificar, confirmarAcao } from './util/alertas-huby.js';
+import { processarFilaOfflineMotorista, executarCancelamentoCorridaMotorista } from './motorista/motorista-corrida.js';
+import { notificar } from './util/alertas-huby.js';
 
 const NIVEIS_CLUBE_PADRAO = {
   bronze: { nome: 'Bronze', corridas_min: 0, nota_min: 0.0, taxa_huby: 15 },
@@ -27,16 +28,30 @@ const NIVEIS_CLUBE_PADRAO = {
   ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
 };
 
+function escaparHTML(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function numero(valor, padrao = 0) {
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : padrao;
+}
+
 function validarAutenticacaoMotorista() {
   const token = localStorage.getItem('huby_token');
-  const role = localStorage.getItem('huby_user_role');
+  const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
 
   if (!token || token === 'null' || token === 'undefined') {
     window.location.replace('./login.html?perfil=motorista');
     return false;
   }
 
-  if (role && role !== 'motorista' && role !== 'admin') {
+  if (role && !['motorista', 'admin', 'administrador'].includes(role)) {
     window.location.replace('./login.html?perfil=motorista');
     return false;
   }
@@ -45,11 +60,7 @@ function validarAutenticacaoMotorista() {
 }
 
 export function atualizarTextosPercentualRepasse() {
-  const taxa = Number(
-    estado.taxaHubyMotorista !== undefined
-      ? estado.taxaHubyMotorista
-      : (TAXA_PLATAFORMA_ATUAL || 15)
-  );
+  const taxa = taxaDoMotorista();
   const pctLiquido = Math.max(1, 100 - taxa);
 
   const lblCarteira = document.querySelector('.wallet-meta small');
@@ -88,15 +99,14 @@ export async function atualizarClubeProMotorista(notificarPromocao = false) {
     const perfil = await resp.json();
     const nivelAnterior = estado.nivelMotorista || null;
 
-    const nivel = String(perfil.nivel || 'bronze').toLowerCase();
-    const totalCorridas = Number(perfil.total_corridas || 0);
-    const notaMedia = Number(perfil.avaliacao_media ?? 5.0);
-    const niveisCfg = perfil.niveis_config || NIVEIS_CLUBE_PADRAO;
-    const taxaAtual = Number(
-      perfil.taxa_huby_atual ??
-      niveisCfg[nivel]?.taxa_huby ??
-      TAXA_PLATAFORMA_ATUAL ??
-      15
+    const nivelBruto = String(perfil.nivel || 'bronze').toLowerCase();
+    const nivel = ['bronze', 'prata', 'ouro'].includes(nivelBruto) ? nivelBruto : 'bronze';
+    const totalCorridas = Math.max(0, Math.round(numero(perfil.total_corridas, 0)));
+    const notaMedia = numero(perfil.avaliacao_media, 5.0);
+    const niveisCfg = (perfil.niveis_config && typeof perfil.niveis_config === 'object') ? perfil.niveis_config : NIVEIS_CLUBE_PADRAO;
+    const taxaAtual = numero(
+      perfil.taxa_huby_atual ?? niveisCfg[nivel]?.taxa_huby,
+      NIVEIS_CLUBE_PADRAO[nivel].taxa_huby
     );
 
     estado.nivelMotorista = nivel;
@@ -106,18 +116,12 @@ export async function atualizarClubeProMotorista(notificarPromocao = false) {
     estado.niveisConfig = niveisCfg;
 
     atualizarTextosPercentualRepasse();
-    renderizarSeloEProgressoClubePro({
-      nivel,
-      totalCorridas,
-      notaMedia,
-      taxaAtual,
-      niveisCfg
-    });
+    renderizarSeloEProgressoClubePro({ nivel, totalCorridas, notaMedia, taxaAtual, niveisCfg });
 
     if (notificarPromocao && nivelAnterior && nivelAnterior !== nivel) {
       const titulos = { prata: '🥈 Prata', ouro: '🥇 Ouro', bronze: '🥉 Bronze' };
       notificar(
-        `🎉 Parabéns! Você agora é Nível ${titulos[nivel] || nivel.toUpperCase()} no Clube HUBy Pro (Taxa de ${taxaAtual}%)!`,
+        `🎉 Você agora é Nível ${titulos[nivel]} no Clube HUBy Pro (Taxa de ${taxaAtual}%)!`,
         'sucesso',
         7000
       );
@@ -162,35 +166,30 @@ function renderizarSeloEProgressoClubePro({ nivel, totalCorridas, notaMedia, tax
 
   const visual = temas[nivel] || temas.bronze;
 
-  let proximoNivelNome = '';
-  let corridasMeta = 0;
-  let notaMeta = 0;
-  let taxaProxima = taxaAtual;
   let progressoPct = 100;
   let textoMetaHTML = '';
 
-  if (nivel === 'bronze') {
-    proximoNivelNome = '🥈 Prata';
-    corridasMeta = Number(niveisCfg.prata?.corridas_min ?? 50);
-    notaMeta = Number(niveisCfg.prata?.nota_min ?? 4.8);
-    taxaProxima = Number(niveisCfg.prata?.taxa_huby ?? 12);
-    progressoPct = corridasMeta > 0 ? Math.min(100, Math.round((totalCorridas / corridasMeta) * 100)) : 100;
+  const montarMeta = (proximoNome, corridasMeta, notaMeta, taxaProxima) => {
     const faltam = Math.max(0, corridasMeta - totalCorridas);
-    textoMetaHTML = faltam > 0
-      ? `Faltam <strong>${faltam} corrida(s)</strong> (e nota ≥ ${notaMeta.toFixed(1)}) para <strong>${proximoNivelNome}</strong> (taxa de ${taxaProxima}%)`
-      : `Mantenha nota ≥ <strong>${notaMeta.toFixed(1)}</strong> para ativar <strong>${proximoNivelNome}</strong>`;
+    return faltam > 0
+      ? `Faltam <strong>${faltam} corrida(s)</strong> (e nota ≥ ${notaMeta.toFixed(1)}) para <strong>${proximoNome}</strong> (taxa de ${taxaProxima}%)`
+      : `Mantenha nota ≥ <strong>${notaMeta.toFixed(1)}</strong> para ativar <strong>${proximoNome}</strong>`;
+  };
+
+  if (nivel === 'bronze') {
+    const corridasMeta = numero(niveisCfg.prata?.corridas_min, 50);
+    const notaMeta = numero(niveisCfg.prata?.nota_min, 4.8);
+    const taxaProxima = numero(niveisCfg.prata?.taxa_huby, 12);
+    progressoPct = corridasMeta > 0 ? Math.min(100, Math.round((totalCorridas / corridasMeta) * 100)) : 100;
+    textoMetaHTML = montarMeta('🥈 Prata', corridasMeta, notaMeta, taxaProxima);
   } else if (nivel === 'prata') {
-    proximoNivelNome = '🥇 Ouro';
-    corridasMeta = Number(niveisCfg.ouro?.corridas_min ?? 150);
-    notaMeta = Number(niveisCfg.ouro?.nota_min ?? 4.9);
-    taxaProxima = Number(niveisCfg.ouro?.taxa_huby ?? 10);
-    const basePrata = Number(niveisCfg.prata?.corridas_min ?? 50);
+    const corridasMeta = numero(niveisCfg.ouro?.corridas_min, 150);
+    const notaMeta = numero(niveisCfg.ouro?.nota_min, 4.9);
+    const taxaProxima = numero(niveisCfg.ouro?.taxa_huby, 10);
+    const basePrata = numero(niveisCfg.prata?.corridas_min, 50);
     const faixa = Math.max(1, corridasMeta - basePrata);
     progressoPct = Math.min(100, Math.max(5, Math.round(((totalCorridas - basePrata) / faixa) * 100)));
-    const faltam = Math.max(0, corridasMeta - totalCorridas);
-    textoMetaHTML = faltam > 0
-      ? `Faltam <strong>${faltam} corrida(s)</strong> (e nota ≥ ${notaMeta.toFixed(1)}) para <strong>${proximoNivelNome}</strong> (taxa de ${taxaProxima}%)`
-      : `Mantenha nota ≥ <strong>${notaMeta.toFixed(1)}</strong> para ativar <strong>${proximoNivelNome}</strong>`;
+    textoMetaHTML = montarMeta('🥇 Ouro', corridasMeta, notaMeta, taxaProxima);
   } else {
     progressoPct = 100;
     textoMetaHTML = `🏆 Você atingiu o nível máximo! Aproveite a menor taxa (<strong>${taxaAtual}%</strong>) e prioridade total.`;
@@ -205,7 +204,7 @@ function renderizarSeloEProgressoClubePro({ nivel, totalCorridas, notaMedia, tax
     badgeTop.textContent = `${visual.icone} ${nivel.toUpperCase()} • ${pctRepasse}%`;
   }
 
-  // 2. Cartão completo de gamificação no topo do Menu Lateral
+  // 2. Cartão completo no topo do Menu Lateral (só números e textos fixos entram no HTML)
   const drawerContent = document.querySelector('#driverDrawer .drawer-content');
   if (!drawerContent) return;
 
@@ -259,16 +258,13 @@ function renderizarSeloEProgressoClubePro({ nivel, totalCorridas, notaMedia, tax
 }
 
 export function atualizarBarraMetaDiaria(novoValorMeta = null) {
-  if (novoValorMeta !== null && !isNaN(Number(novoValorMeta)) && Number(novoValorMeta) >= 10) {
+  if (novoValorMeta !== null && Number(novoValorMeta) >= 10) {
     estado.metaDiaria = Number(novoValorMeta);
     localStorage.setItem('huby_meta_diaria', String(estado.metaDiaria));
   }
 
-  const meta = Number(estado.metaDiaria || localStorage.getItem('huby_meta_diaria') || 200);
-  const ganhosTexto = document.getElementById('lblGanhosHojeValor')?.textContent || 'R$ 0,00';
-  const ganhosNumerico = Number(
-    ganhosTexto.replace(/[^\d,-]/g, '').replace(',', '.')
-  ) || Number(estado.ganhosHoje || 0);
+  const meta = numero(estado.metaDiaria || localStorage.getItem('huby_meta_diaria'), 200) || 200;
+  const ganhosNumerico = numero(estado.ganhosHoje, 0);
 
   const percentual = meta > 0 ? Math.min(100, Math.round((ganhosNumerico / meta) * 100)) : 0;
 
@@ -294,7 +290,7 @@ function configurarMetaDiaria() {
 
   const abrirModalMeta = () => {
     if (!modal) return;
-    const metaAtual = Number(estado.metaDiaria || localStorage.getItem('huby_meta_diaria') || 200);
+    const metaAtual = numero(estado.metaDiaria || localStorage.getItem('huby_meta_diaria'), 200);
     if (inputValor) inputValor.value = metaAtual.toFixed(2);
     modal.style.display = 'flex';
   };
@@ -327,8 +323,8 @@ function configurarMetaDiaria() {
 
   if (btnSalvar) {
     btnSalvar.onclick = () => {
-      const valorDigitado = parseFloat(inputValor?.value);
-      if (!valorDigitado || valorDigitado < 10) {
+      const valorDigitado = parseFloat(String(inputValor?.value || '').replace(',', '.'));
+      if (!valorDigitado || valorDigitado < 10 || valorDigitado > 100000) {
         notificar('Informe uma meta diária a partir de R$ 10,00.', 'alerta');
         return;
       }
@@ -342,152 +338,42 @@ function configurarMetaDiaria() {
   atualizarBarraMetaDiaria();
 }
 
-function escutarAtualizacaoTarifasTempoReal() {
-  try {
-    const token = localStorage.getItem('huby_token') || '';
-    const socket = estado.socket || (window.io ? window.io(API_URL, { auth: { token } }) : null);
-    if (socket) {
-      socket.on('tarifas_atualizadas', async (novasTarifas) => {
-        aplicarObjetoTarifas(novasTarifas);
-        await atualizarClubeProMotorista(false);
-        iniciarRadarChamadas();
-      });
-
-      socket.on('corrida_finalizada', async () => {
-        await atualizarClubeProMotorista(true);
-      });
-    }
-  } catch (e) {}
+function corridaAtualDoMotoristaId() {
+  return String(estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id || localStorage.getItem('huby_corrida_ativa_mot_id') || '');
 }
 
-// ============================================================================
-// BOTÃO EXCLUSIVO DE CANCELAMENTO NA TELA DO MOTORISTA
-// ============================================================================
-export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
-  const pedidoId =
-    pedidoIdAlvo ||
-    estado.pedidoAceitoAtual?.id ||
-    estado.pedidoAtivo?.id ||
-    estado.corridaAtiva?.id ||
-    localStorage.getItem('huby_corrida_ativa_mot_id');
+// Usa a conexão principal (a do mapa): não abre conexões extras
+function escutarAtualizacaoTarifasTempoReal() {
+  const socket = estado.socket;
+  if (!socket) return;
 
-  if (!pedidoId) {
+  socket.on('tarifas_atualizadas', async (novasTarifas) => {
+    aplicarObjetoTarifas(novasTarifas);
+    await atualizarClubeProMotorista(false);
+    // O radar já atualiza as chamadas sozinho quando as tarifas mudam
+  });
+
+  // Só recarrega o nível quando a corrida finalizada é DESTE motorista
+  socket.on('corrida_finalizada', async (dados) => {
+    const minha = corridaAtualDoMotoristaId();
+    if (minha && String(dados?.pedidoId) === minha) {
+      setTimeout(() => atualizarClubeProMotorista(true), 1500);
+    }
+  });
+}
+
+// Compatibilidade: outros módulos (ex.: copiloto de voz) podem chamar este nome
+export async function cancelarCorridaPeloMotorista(pedidoIdAlvo = null) {
+  const id = pedidoIdAlvo || corridaAtualDoMotoristaId();
+  const dados = estado.pedidoAtivo || estado.pedidoAceitoAtual || (id ? { id } : null);
+  if (!dados) {
     notificar('Nenhuma corrida ativa encontrada para cancelar.', 'alerta');
     return;
   }
-
-  const executarCancelamento = async () => {
-    const token = localStorage.getItem('huby_token') || '';
-    try {
-      const resp = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ motivo: 'Cancelado pelo motorista parceiro' })
-      });
-
-      const data = await resp.json().catch(() => ({}));
-      if (!resp.ok) throw new Error(data.erro || 'Não foi possível cancelar a corrida.');
-
-      estado.pedidoAceitoAtual = null;
-      estado.pedidoAtivo = null;
-      estado.corridaAtiva = null;
-      estado.pedidoEmAnalise = null;
-      localStorage.removeItem('huby_corrida_ativa_mot_id');
-
-      document.getElementById('btnCancelarCorridaMotoristaDock')?.remove();
-
-      const btnChat = document.getElementById('btnAbrirChat');
-      if (btnChat) btnChat.style.display = 'none';
-
-      notificar(data.mensagem || 'Corrida cancelada com sucesso.', 'aviso');
-      iniciarRadarChamadas();
-    } catch (err) {
-      notificar(err.message, 'erro');
-    }
-  };
-
-  if (typeof confirmarAcao === 'function') {
-    confirmarAcao({
-      titulo: 'Cancelar Corrida?',
-      mensagem: 'Confirma o cancelamento desta viagem? O passageiro será notificado.',
-      textoConfirmar: 'Confirmar Cancelamento',
-      onConfirmar: executarCancelamento
-    });
-  } else if (window.confirm('Confirma o cancelamento desta corrida?')) {
-    await executarCancelamento();
-  }
+  await executarCancelamentoCorridaMotorista(dados);
 }
 
 window.cancelarCorridaPeloMotorista = cancelarCorridaPeloMotorista;
-
-function configurarBotaoCancelarNaTelaMotorista() {
-  const dock = document.querySelector('.driver-dock');
-  const feed = document.getElementById('listaChamadasPendentes');
-  if (!dock || !feed) return;
-
-  const garantirBotaoCancelar = () => {
-    const pedidoAtual = estado.pedidoAceitoAtual || estado.pedidoAtivo || estado.corridaAtiva;
-    const corridaId = pedidoAtual?.id || localStorage.getItem('huby_corrida_ativa_mot_id');
-    const btnExistente = document.getElementById('btnCancelarCorridaMotoristaDock');
-
-    if (!corridaId) {
-      if (btnExistente) btnExistente.remove();
-      return;
-    }
-
-    const botoesNoDock = Array.from(dock.querySelectorAll('button'));
-    const jaExisteBotaoCancelarNoCard = botoesNoDock.some((btn) => {
-      if (btn.id === 'btnCancelarCorridaMotoristaDock') return false;
-      const texto = (btn.textContent || '').toLowerCase();
-      return texto.includes('cancelar');
-    });
-
-    if (jaExisteBotaoCancelarNoCard) {
-      if (btnExistente) btnExistente.remove();
-      return;
-    }
-
-    if (btnExistente) return;
-
-    const btnCancelar = document.createElement('button');
-    btnCancelar.type = 'button';
-    btnCancelar.id = 'btnCancelarCorridaMotoristaDock';
-    btnCancelar.innerHTML = '❌ Cancelar Corrida';
-    btnCancelar.style.cssText = [
-      'width: 100%',
-      'margin: 8px 0 10px',
-      'padding: 12px',
-      'border-radius: 12px',
-      'background: rgba(239, 68, 68, 0.16)',
-      'border: 1.5px solid rgba(239, 68, 68, 0.5)',
-      'color: #F87171',
-      'font-size: 13px',
-      'font-weight: 900',
-      'cursor: pointer',
-      'display: flex',
-      'align-items: center',
-      'justify-content: center',
-      'gap: 6px'
-    ].join(';');
-
-    btnCancelar.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      cancelarCorridaPeloMotorista(corridaId);
-    });
-
-    feed.insertAdjacentElement('afterend', btnCancelar);
-  };
-
-  const observer = new MutationObserver(() => {
-    garantirBotaoCancelar();
-  });
-  observer.observe(dock, { childList: true, subtree: true });
-  setInterval(garantirBotaoCancelar, 1000);
-}
 
 // ============================================================================
 // HISTÓRICO DETALHADO DE CORRIDAS E REPASSES DO MOTORISTA
@@ -526,7 +412,7 @@ function configurarHistoricoCorridasMotorista() {
     drawerContent.insertAdjacentElement('afterbegin', btnHistorico);
   }
 
-  btnHistorico.addEventListener('click', async () => {
+  btnHistorico.addEventListener('click', () => {
     document.getElementById('driverDrawer')?.classList.remove('active');
     document.getElementById('drawerOverlay')?.classList.remove('active');
     abrirModalHistoricoDetalhadoMotorista();
@@ -545,7 +431,7 @@ async function abrirModalHistoricoDetalhadoMotorista() {
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
         <div>
           <h3 style="margin: 0; font-size: 17px; font-weight: 900; color: #FFF;">📋 Minhas Corridas & Ganhos</h3>
-          <small style="color: #94A3B8; font-size: 11px;">Detalhamento transparente de repasse líquido, taxa e avaliação</small>
+          <small style="color: #94A3B8; font-size: 11px;">Ganho estimado com a sua taxa atual de nível</small>
         </div>
         <button type="button" id="btnFecharHistMot" style="background: rgba(255,255,255,0.08); border: none; color: #FFF; width: 32px; height: 32px; border-radius: 50%; cursor: pointer;">✕</button>
       </div>
@@ -561,43 +447,55 @@ async function abrirModalHistoricoDetalhadoMotorista() {
 
   const listaEl = overlay.querySelector('#listaCorridasDetalhadasMot');
   const token = localStorage.getItem('huby_token') || '';
-  const taxaPct = Number(
-    estado.taxaHubyMotorista !== undefined
-      ? estado.taxaHubyMotorista
-      : (TAXA_PLATAFORMA_ATUAL ?? 15)
-  );
+  const taxaPct = taxaDoMotorista();
   const fatorMot = Math.max(0.1, (100 - taxaPct) / 100);
+
+  const rotulosStatus = {
+    concluido: 'Concluída',
+    cancelado: 'Cancelada',
+    em_viagem: 'Em viagem',
+    em_andamento: 'Em viagem',
+    a_caminho: 'A caminho',
+    aceito: 'Aceita',
+    chegou_local: 'No local'
+  };
 
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/historico?t=${Date.now()}`, {
       cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` }
     });
-    const corridas = await resp.json();
+    if (!resp.ok) throw new Error('falha');
+    const dados = await resp.json();
+    const corridas = Array.isArray(dados) ? dados : (Array.isArray(dados?.viagens) ? dados.viagens : []);
 
-    if (!Array.isArray(corridas) || corridas.length === 0) {
+    if (corridas.length === 0) {
       listaEl.innerHTML = `<div style="text-align:center; color:#94A3B8; padding:30px 10px;">Nenhuma corrida registrada no seu histórico ainda.</div>`;
       return;
     }
 
-    listaEl.innerHTML = corridas.map((c) => {
-      const bruto = Number(c.valor_total || 0);
-      const liquido = Number((bruto * fatorMot).toFixed(2));
-      const taxa = Number((bruto - liquido).toFixed(2));
-      const dataFmt = c.criado_em ? new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '--';
-      const nota = c.avaliacao_nota ? `⭐ ${Number(c.avaliacao_nota).toFixed(1)}` : 'Sem avaliação';
+    listaEl.innerHTML = corridas.slice(0, 100).map((c) => {
       const st = String(c.status || '').toLowerCase();
-      const corSt = st === 'concluido' ? '#10B981' : (st === 'cancelado' ? '#EF4444' : '#38BDF8');
+      const concluida = st === 'concluido';
+      const bruto = numero(c.valor_total, 0);
+      const liquido = concluida ? Number((bruto * fatorMot).toFixed(2)) : 0;
+      const taxa = concluida ? Number((bruto - liquido).toFixed(2)) : 0;
+      const dataObj = c.criado_em ? new Date(c.criado_em) : null;
+      const dataFmt = dataObj && Number.isFinite(dataObj.getTime())
+        ? dataObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : '--';
+      const corSt = concluida ? '#10B981' : (st === 'cancelado' ? '#EF4444' : '#38BDF8');
+      const rotuloSt = rotulosStatus[st] || 'Em andamento';
 
       return `
         <div style="background: #090D16; border: 1px solid rgba(255,255,255,0.09); border-radius: 14px; padding: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <span style="font-size: 11px; color: #94A3B8; font-weight: 700;">#${String(c.id).slice(-4)} • ${dataFmt}</span>
-            <span style="font-size: 10px; font-weight: 900; color: ${corSt}; text-transform: uppercase; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 6px;">${c.status}</span>
+            <span style="font-size: 11px; color: #94A3B8; font-weight: 700;">#${escaparHTML(String(c.id ?? '').slice(-4))} • ${escaparHTML(dataFmt)}</span>
+            <span style="font-size: 10px; font-weight: 900; color: ${corSt}; text-transform: uppercase; background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 6px;">${escaparHTML(rotuloSt)}</span>
           </div>
-          <div style="font-size: 12.5px; color: #E2E8F0; margin-bottom: 8px; line-height: 1.35;">
-            <div><strong style="color:#10B981;">A</strong> ${c.origem_endereco || 'Origem'}</div>
-            <div><strong style="color:#EF4444;">B</strong> ${c.destino_endereco || 'Destino'}</div>
+          <div style="font-size: 12.5px; color: #E2E8F0; margin-bottom: 8px; line-height: 1.35; word-break: break-word;">
+            <div><strong style="color:#10B981;">A</strong> ${escaparHTML(c.origem_endereco || 'Origem')}</div>
+            <div><strong style="color:#EF4444;">B</strong> ${escaparHTML(c.destino_endereco || 'Destino')}</div>
           </div>
           <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: rgba(255,255,255,0.03); padding: 8px; border-radius: 10px; font-size: 11px;">
             <div>
@@ -609,8 +507,8 @@ async function abrirModalHistoricoDetalhadoMotorista() {
               <strong style="color:#F59E0B;">R$ ${taxa.toFixed(2).replace('.', ',')}</strong>
             </div>
             <div style="text-align:right;">
-              <small style="color:#94A3B8; display:block;">Avaliação</small>
-              <strong style="color:#FBBF24;">${nota}</strong>
+              <small style="color:#94A3B8; display:block;">Valor da corrida</small>
+              <strong style="color:#E2E8F0;">R$ ${bruto.toFixed(2).replace('.', ',')}</strong>
             </div>
           </div>
         </div>
@@ -622,9 +520,9 @@ async function abrirModalHistoricoDetalhadoMotorista() {
 }
 
 // ============================================================================
-// CHAT DE SUPORTE CORPORATIVO COM RESPOSTAS DINÂMICAS E FORMAIS
+// CHAT DE SUPORTE (mensagens sempre exibidas como texto puro)
 // ============================================================================
-function inicializarChatSuporteIA() {
+function inicializarChatSuporte() {
   const btnAbrir = document.getElementById('btnAbrirChatSuporte');
   const btnFechar = document.getElementById('btnFecharChatSuporte');
   const modal = document.getElementById('modalChatSuporteIA');
@@ -632,24 +530,23 @@ function inicializarChatSuporteIA() {
   const btnEnviar = document.getElementById('btnEnviarMsgSuporte');
   const areaMensagens = document.getElementById('suporteAreaMensagens');
 
-  if (!btnAbrir || !modal) return;
+  if (!btnAbrir || !modal || !areaMensagens) return;
 
   const CHAT_STORAGE_KEY = 'huby_suporte_chat_history';
   const TEMPO_EXPIRACAO_MS = 24 * 60 * 60 * 1000;
+  const MAX_MENSAGENS = 60;
+  let enviando = false;
 
   function carregarHistorico() {
     try {
       const dataString = localStorage.getItem(CHAT_STORAGE_KEY);
       if (!dataString) return [];
-
       const data = JSON.parse(dataString);
-      const agora = new Date().getTime();
-
-      if (data.ultimaAtualizacao && (agora - data.ultimaAtualizacao > TEMPO_EXPIRACAO_MS)) {
+      if (data.ultimaAtualizacao && (Date.now() - data.ultimaAtualizacao > TEMPO_EXPIRACAO_MS)) {
         localStorage.removeItem(CHAT_STORAGE_KEY);
         return [];
       }
-      return data.mensagens || [];
+      return Array.isArray(data.mensagens) ? data.mensagens : [];
     } catch (e) {
       return [];
     }
@@ -657,38 +554,43 @@ function inicializarChatSuporteIA() {
 
   function salvarHistorico(mensagens) {
     localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({
-      ultimaAtualizacao: new Date().getTime(),
-      mensagens: mensagens
+      ultimaAtualizacao: Date.now(),
+      mensagens: mensagens.slice(-MAX_MENSAGENS)
     }));
   }
 
   function renderizarMensagem(msg) {
     const isUser = msg.autor === 'user';
     const isAdmin = msg.autor === 'admin';
-    const alignSelf = isUser ? 'flex-end' : 'flex-start';
-
-    const bgColor = isUser ? '#38BDF8' : (isAdmin ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.1)');
-    const color = isUser ? '#02131D' : '#FFF';
-    const border = isUser ? 'none' : (isAdmin ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)');
-    const borderRadius = isUser ? '12px 12px 0 12px' : '0 12px 12px 12px';
-    const textAlign = isUser ? 'right' : 'left';
 
     const divWrapper = document.createElement('div');
-    divWrapper.style.cssText = `align-self: ${alignSelf}; max-width: 85%;`;
+    divWrapper.style.cssText = `align-self: ${isUser ? 'flex-end' : 'flex-start'}; max-width: 85%;`;
 
     const divMsg = document.createElement('div');
-    divMsg.style.cssText = `background: ${bgColor}; border: ${border}; color: ${color}; padding: 12px; border-radius: ${borderRadius}; font-size: 13px; line-height: 1.5;`;
+    divMsg.style.cssText = [
+      `background: ${isUser ? '#38BDF8' : (isAdmin ? 'rgba(56, 189, 248, 0.15)' : 'rgba(16, 185, 129, 0.1)')}`,
+      `border: ${isUser ? 'none' : (isAdmin ? '1px solid rgba(56, 189, 248, 0.4)' : '1px solid rgba(16, 185, 129, 0.3)')}`,
+      `color: ${isUser ? '#02131D' : '#FFF'}`,
+      'padding: 12px',
+      `border-radius: ${isUser ? '12px 12px 0 12px' : '0 12px 12px 12px'}`,
+      'font-size: 13px',
+      'line-height: 1.5',
+      'white-space: pre-line',
+      'word-break: break-word'
+    ].join(';');
 
     if (isAdmin) {
-      divMsg.innerHTML = `<strong style="color: #38BDF8; display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;">🛡️ Equipe HUBy</strong> ${msg.texto}`;
-    } else {
-      divMsg.innerHTML = msg.texto;
+      const rotulo = document.createElement('strong');
+      rotulo.style.cssText = 'color: #38BDF8; display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;';
+      rotulo.textContent = '🛡️ Equipe HUBy';
+      divMsg.appendChild(rotulo);
     }
+    divMsg.appendChild(document.createTextNode(String(msg.texto ?? '').slice(0, 2000)));
 
     const smallTime = document.createElement('small');
-    smallTime.style.cssText = `display: block; color: #64748B; font-size: 10px; margin-top: 4px; text-align: ${textAlign};`;
-    const horaFormatada = new Date(msg.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    smallTime.textContent = horaFormatada;
+    smallTime.style.cssText = `display: block; color: #64748B; font-size: 10px; margin-top: 4px; text-align: ${isUser ? 'right' : 'left'};`;
+    const dataMsg = new Date(Number(msg.data) || Date.now());
+    smallTime.textContent = dataMsg.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     divWrapper.appendChild(divMsg);
     divWrapper.appendChild(smallTime);
@@ -697,86 +599,77 @@ function inicializarChatSuporteIA() {
   }
 
   function renderizarChatInteiro() {
-    areaMensagens.innerHTML = '';
+    areaMensagens.textContent = '';
     const mensagens = carregarHistorico();
 
     if (mensagens.length === 0) {
-      const msgInicial = {
-        autor: 'ia',
-        texto: 'Olá! Bem-vindo ao Suporte Oficial da HUBy. Como podemos auxiliar na sua jornada hoje?<br><br><small style="color: #94A3B8;">Por favor, descreva detalhadamente a sua solicitação.</small>',
-        data: new Date().getTime()
-      };
-      mensagens.push(msgInicial);
+      mensagens.push({
+        autor: 'sistema',
+        texto: 'Olá! Este é o Suporte Oficial da HUBy.\nDescreva com detalhes o que aconteceu. Sua mensagem vai para a nossa equipe.',
+        data: Date.now()
+      });
       salvarHistorico(mensagens);
     }
 
     mensagens.forEach(renderizarMensagem);
   }
 
-  async function escalarParaCentral(mensagemTexto, assuntoCategoria = 'Suporte HUBy') {
-    const token = localStorage.getItem('huby_token');
-    try {
-      await fetch(`${API_URL}/api/suporte/chamado`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          pedido_id: null,
-          assunto: assuntoCategoria,
-          mensagem: mensagemTexto
-        })
-      });
-    } catch (e) {}
+  function classificarAssunto(texto) {
+    const txt = texto.toLowerCase();
+    if (/(pagamento|saque|dinheiro|pix|receber|carteira|repasse)/.test(txt)) return 'Financeiro';
+    if (/(passageiro|cliente|corrida|viagem|bagagem)/.test(txt)) return 'Viagem';
+    if (/(aplicativo|erro|bug|mapa|travar|trava)/.test(txt)) return 'Suporte Técnico App';
+    return 'Suporte Geral';
   }
 
   async function enviarMensagem() {
-    const texto = inputMsg.value.trim();
-    if (!texto) return;
+    const texto = String(inputMsg?.value || '').trim().slice(0, 1000);
+    if (!texto || enviando) return;
 
+    enviando = true;
     inputMsg.value = '';
 
-    const novaMensagem = { autor: 'user', texto: texto, data: new Date().getTime() };
+    const novaMensagem = { autor: 'user', texto, data: Date.now() };
     const mensagens = carregarHistorico();
     mensagens.push(novaMensagem);
     salvarHistorico(mensagens);
     renderizarMensagem(novaMensagem);
 
-    const btnTexto = btnEnviar.innerHTML;
-    btnEnviar.innerHTML = '⏳';
+    btnEnviar.textContent = '⏳';
     btnEnviar.disabled = true;
 
-    setTimeout(async () => {
-      let respostaTexto = '';
-      let categoriaTicket = 'Suporte Geral';
-      const txt = texto.toLowerCase();
+    let resposta;
+    try {
+      const token = localStorage.getItem('huby_token');
+      const resp = await fetch(`${API_URL}/api/suporte/chamado`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          pedido_id: corridaAtualDoMotoristaId() || null,
+          assunto: classificarAssunto(texto),
+          mensagem: texto
+        })
+      });
+      resposta = resp.ok
+        ? '✅ Mensagem recebida pela equipe HUBy. Vamos analisar e responder o mais rápido possível.'
+        : '⚠️ Não conseguimos registrar sua mensagem agora. Tente novamente em instantes.';
+    } catch (e) {
+      resposta = '⚠️ Sem conexão. Sua mensagem NÃO foi enviada. Tente novamente quando a internet voltar.';
+    }
 
-      if (txt.includes('pagamento') || txt.includes('saque') || txt.includes('dinheiro') || txt.includes('pix') || txt.includes('receber')) {
-        respostaTexto = 'Compreendido. Para questões financeiras e de repasse, solicitamos que verifique a aba "Ganhos" e confirme a exatidão da sua chave Pix. O seu relato foi encaminhado para o departamento financeiro para análise de pendências.';
-        categoriaTicket = 'Auditoria Financeira';
-      } else if (txt.includes('passageiro') || txt.includes('cliente') || txt.includes('corrida') || txt.includes('viagem') || txt.includes('bagagem')) {
-        respostaTexto = 'A segurança e a excelência no atendimento são fundamentais na HUBy. O seu relato sobre a viagem foi devidamente registrado e direcionado para a nossa equipe de qualidade.';
-        categoriaTicket = 'Auditoria de Viagem';
-      } else if (txt.includes('aplicativo') || txt.includes('erro') || txt.includes('bug') || txt.includes('mapa') || txt.includes('travar')) {
-        respostaTexto = 'Agradecemos o apontamento. A nossa equipe técnica foi notificada sobre este comportamento no aplicativo e trabalhará para garantir a estabilidade do sistema.';
-        categoriaTicket = 'Suporte Técnico App';
-      } else {
-        respostaTexto = 'Agradecemos o seu contato. A solicitação foi registrada com sucesso no sistema da HUBy. O caso será analisado e, se necessária uma intervenção, retornaremos através deste canal de atendimento.';
-      }
+    const msgSistema = { autor: 'sistema', texto: resposta, data: Date.now() };
+    const mensagensAtuais = carregarHistorico();
+    mensagensAtuais.push(msgSistema);
+    salvarHistorico(mensagensAtuais);
+    renderizarMensagem(msgSistema);
 
-      await escalarParaCentral(texto, categoriaTicket);
-
-      const respostaIA = { autor: 'ia', texto: respostaTexto, data: new Date().getTime() };
-      const mensagensAtuais = carregarHistorico();
-      mensagensAtuais.push(respostaIA);
-      salvarHistorico(mensagensAtuais);
-      renderizarMensagem(respostaIA);
-
-      btnEnviar.innerHTML = btnTexto;
-      btnEnviar.disabled = false;
-      inputMsg.focus();
-    }, 1000);
+    btnEnviar.textContent = '➤';
+    btnEnviar.disabled = false;
+    enviando = false;
+    inputMsg.focus();
   }
 
   btnAbrir.addEventListener('click', (e) => {
@@ -785,38 +678,37 @@ function inicializarChatSuporteIA() {
     modal.style.display = 'flex';
   });
 
-  btnFechar.addEventListener('click', () => {
+  btnFechar?.addEventListener('click', () => {
     modal.style.display = 'none';
   });
 
-  btnEnviar.addEventListener('click', enviarMensagem);
+  btnEnviar?.addEventListener('click', enviarMensagem);
 
-  inputMsg.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') enviarMensagem();
+  inputMsg?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      enviarMensagem();
+    }
   });
 
-  const token = localStorage.getItem('huby_token') || '';
-  const socket = window.io ? window.io(API_URL, { auth: { token } }) : null;
-  if (socket) {
-    socket.on('resposta_suporte_admin', (dados) => {
-      if (dados && dados.resposta) {
-        const respostaAdmin = {
-          autor: 'admin',
-          texto: dados.resposta,
-          data: dados.data || new Date().getTime()
-        };
-        const mensagensAtuais = carregarHistorico();
-        mensagensAtuais.push(respostaAdmin);
-        salvarHistorico(mensagensAtuais);
+  // Resposta da equipe (usa a conexão principal, sem abrir outra)
+  estado.socket?.on('resposta_suporte_admin', (dados) => {
+    if (!dados || !dados.resposta) return;
+    const respostaAdmin = {
+      autor: 'admin',
+      texto: String(dados.resposta).slice(0, 2000),
+      data: Number(dados.data) || Date.now()
+    };
+    const mensagensAtuais = carregarHistorico();
+    mensagensAtuais.push(respostaAdmin);
+    salvarHistorico(mensagensAtuais);
 
-        if (modal.style.display === 'flex') {
-          renderizarMensagem(respostaAdmin);
-        } else {
-          notificar('Recebeu um novo retorno da Administração HUBy no suporte.', 'aviso');
-        }
-      }
-    });
-  }
+    if (modal.style.display === 'flex') {
+      renderizarMensagem(respostaAdmin);
+    } else {
+      notificar('Você recebeu uma resposta da equipe HUBy no suporte.', 'aviso');
+    }
+  });
 }
 
 function registrarEventosUI() {
@@ -846,16 +738,15 @@ function registrarEventosUI() {
   document.getElementById('btnFecharDrawerPerfil')?.addEventListener('click', fecharDrawer);
   overlay?.addEventListener('click', fecharDrawer);
 
-  if (typeof configurarChatMotorista === 'function') configurarChatMotorista();
-  if (typeof configurarEventosSaque === 'function') configurarEventosSaque();
-  if (typeof configurarSalvarPreferenciasPagto === 'function') configurarSalvarPreferenciasPagto();
-  if (typeof configurarEdicaoPerfil === 'function') configurarEdicaoPerfil();
-  if (typeof configurarMarketplace === 'function') configurarMarketplace();
-  if (typeof configurarModosInteligentes === 'function') configurarModosInteligentes();
+  configurarChatMotorista();
+  configurarEventosSaque();
+  configurarSalvarPreferenciasPagto();
+  configurarEdicaoPerfil();
+  configurarMarketplace();
+  configurarModosInteligentes();
 
   configurarHistoricoCorridasMotorista();
   configurarMetaDiaria();
-  configurarBotaoCancelarNaTelaMotorista();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -876,5 +767,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   inicializarPushNotifications();
   processarFilaOfflineMotorista();
 
-  inicializarChatSuporteIA();
+  inicializarChatSuporte();
 });
