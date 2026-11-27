@@ -39,6 +39,7 @@ export function extrairObjetoJSONB(raw, fallback = {}) {
 }
 
 export const TARIFAS_PADRAO_SISTEMA = {
+  versao_formula: 2,
   taxa_plataforma: 15,
   taxa_parada: 2.50,
   taxa_espera: 0.50,
@@ -47,10 +48,94 @@ export const TARIFAS_PADRAO_SISTEMA = {
     prata: { nome: 'Prata', corridas_min: 50, nota_min: 4.8, taxa_huby: 12 },
     ouro: { nome: 'Ouro', corridas_min: 150, nota_min: 4.9, taxa_huby: 10 }
   },
-  carro: { base: 6.0, km: 2.2, min: 0.30 },
-  moto: { base: 4.0, km: 1.4, min: 0.20 },
-  entrega: { base: 5.0, km: 1.8, min: 0.25 }
+  // base: R$ fixo | km: R$ por km além dos incluídos | min: R$ por minuto
+  // km_incluidos: km já cobertos pela base | minimo: valor mínimo da corrida
+  carro: { base: 6.0, km: 2.2, min: 0, km_incluidos: 0, minimo: 0 },
+  moto: { base: 4.0, km: 1.4, min: 0, km_incluidos: 0, minimo: 0 },
+  entrega: { base: 5.0, km: 1.8, min: 0, km_incluidos: 0, minimo: 0 }
 };
+
+export const CONFIG_INDICACAO_PADRAO = {
+  ativo: true,
+  desconto_indicado: 5.00,
+  bonus_indicador: 5.00,
+  bonus_motorista: 25.00,
+  meta_corridas_motorista: 15
+};
+
+export const CONFIG_DINAMICA_PADRAO = {
+  ativa: true,
+  gatilho_chamadas: 3,
+  multiplicador_maximo: 1.8,
+  multiplicador_manual: 1.0
+};
+
+function numTarifa(valor, padrao) {
+  const n = Number(String(valor ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n >= 0 ? Number(n.toFixed(2)) : padrao;
+}
+
+// Lê uma categoria da tabela salva. Tabelas antigas (antes da fórmula v2) não usavam
+// o campo "min" no preço, então ele é lido como 0 para o valor não mudar sozinho.
+function lerCategoriaTarifa(salvo, padrao, formulaNova) {
+  return {
+    base: numTarifa(salvo?.base, padrao.base),
+    km: numTarifa(salvo?.km, padrao.km),
+    min: formulaNova ? numTarifa(salvo?.min, padrao.min) : 0,
+    km_incluidos: numTarifa(salvo?.km_incluidos, padrao.km_incluidos),
+    minimo: numTarifa(salvo?.minimo, padrao.minimo)
+  };
+}
+
+export async function lerTarifasDoBanco() {
+  try {
+    const config = await sql`
+      SELECT valor::text AS valor_txt FROM configuracoes_plataforma 
+      WHERE chave = 'tarifas' LIMIT 1;
+    `;
+    if (!config.length || !config[0].valor_txt) {
+      return TARIFAS_PADRAO_SISTEMA;
+    }
+    const obj = extrairObjetoJSONB(config[0].valor_txt, TARIFAS_PADRAO_SISTEMA);
+    const formulaNova = Number(obj.versao_formula || 1) >= 2;
+    const niveisBruto = obj.niveis_motorista || {};
+    const taxaBronze = Number(niveisBruto.bronze?.taxa_huby ?? obj.taxa_plataforma ?? 15);
+    const P = TARIFAS_PADRAO_SISTEMA;
+
+    return {
+      versao_formula: 2,
+      taxa_plataforma: taxaBronze,
+      taxa_parada: numTarifa(obj.taxa_parada, 2.50),
+      taxa_espera: numTarifa(obj.taxa_espera, 0.50),
+      niveis_motorista: {
+        bronze: {
+          nome: 'Bronze',
+          corridas_min: Number(niveisBruto.bronze?.corridas_min ?? 0),
+          nota_min: Number(niveisBruto.bronze?.nota_min ?? 0.0),
+          taxa_huby: taxaBronze
+        },
+        prata: {
+          nome: 'Prata',
+          corridas_min: Number(niveisBruto.prata?.corridas_min ?? 50),
+          nota_min: Number(niveisBruto.prata?.nota_min ?? 4.8),
+          taxa_huby: Number(niveisBruto.prata?.taxa_huby ?? 12)
+        },
+        ouro: {
+          nome: 'Ouro',
+          corridas_min: Number(niveisBruto.ouro?.corridas_min ?? 150),
+          nota_min: Number(niveisBruto.ouro?.nota_min ?? 4.9),
+          taxa_huby: Number(niveisBruto.ouro?.taxa_huby ?? 10)
+        }
+      },
+      carro: lerCategoriaTarifa(obj.carro, P.carro, formulaNova),
+      moto: lerCategoriaTarifa(obj.moto, P.moto, formulaNova),
+      entrega: lerCategoriaTarifa(obj.entrega, P.entrega, formulaNova)
+    };
+  } catch (err) {
+    console.warn('Erro ao ler tarifas do banco:', err.message);
+    return TARIFAS_PADRAO_SISTEMA;
+  }
+}
 
 export const CONFIG_INDICACAO_PADRAO = {
   ativo: true,
@@ -649,69 +734,66 @@ export default function adminRoutes(io) {
     res.json(tarifas);
   });
 
-  router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
+   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const body = req.body || {};
       const atuais = await lerTarifasDoBanco();
 
-      const lerNum = (val, padrao) => {
+      const lerNum = (val, padrao, maximo = 100000) => {
         const n = Number(String(val ?? '').replace(',', '.'));
-        return Number.isFinite(n) && n >= 0 ? Number(n.toFixed(2)) : padrao;
+        if (!Number.isFinite(n) || n < 0) return padrao;
+        return Number(Math.min(maximo, n).toFixed(2));
+      };
+
+      const lerCategoria = (chave) => {
+        const b = body[chave] || {};
+        const a = atuais[chave];
+        return {
+          base: lerNum(b.base, a.base, 1000),
+          km: lerNum(b.km, a.km, 100),
+          min: lerNum(b.min, a.min, 50),
+          km_incluidos: lerNum(b.km_incluidos, a.km_incluidos, 100),
+          minimo: lerNum(b.minimo, a.minimo, 1000)
+        };
       };
 
       const niveisBody = body.niveis_motorista || {};
       const taxaBronze = lerNum(
         niveisBody.bronze?.taxa_huby ?? body.taxa_plataforma,
-        atuais.niveis_motorista.bronze.taxa_huby
+        atuais.niveis_motorista.bronze.taxa_huby,
+        60
       );
-      const taxaPrata = lerNum(
-        niveisBody.prata?.taxa_huby,
-        atuais.niveis_motorista.prata.taxa_huby
-      );
-      const taxaOuro = lerNum(
-        niveisBody.ouro?.taxa_huby,
-        atuais.niveis_motorista.ouro.taxa_huby
-      );
+      const taxaPrata = lerNum(niveisBody.prata?.taxa_huby, atuais.niveis_motorista.prata.taxa_huby, 60);
+      const taxaOuro = lerNum(niveisBody.ouro?.taxa_huby, atuais.niveis_motorista.ouro.taxa_huby, 60);
 
       const novasTarifas = {
+        versao_formula: 2,
         taxa_plataforma: taxaBronze,
-        taxa_parada: lerNum(body.taxa_parada, atuais.taxa_parada),
-        taxa_espera: lerNum(body.taxa_espera, atuais.taxa_espera),
+        taxa_parada: lerNum(body.taxa_parada, atuais.taxa_parada, 100),
+        taxa_espera: lerNum(body.taxa_espera, atuais.taxa_espera, 50),
         niveis_motorista: {
           bronze: {
             nome: 'Bronze',
             corridas_min: lerNum(niveisBody.bronze?.corridas_min, atuais.niveis_motorista.bronze.corridas_min),
-            nota_min: lerNum(niveisBody.bronze?.nota_min, atuais.niveis_motorista.bronze.nota_min),
+            nota_min: lerNum(niveisBody.bronze?.nota_min, atuais.niveis_motorista.bronze.nota_min, 5),
             taxa_huby: taxaBronze
           },
           prata: {
             nome: 'Prata',
             corridas_min: lerNum(niveisBody.prata?.corridas_min, atuais.niveis_motorista.prata.corridas_min),
-            nota_min: lerNum(niveisBody.prata?.nota_min, atuais.niveis_motorista.prata.nota_min),
+            nota_min: lerNum(niveisBody.prata?.nota_min, atuais.niveis_motorista.prata.nota_min, 5),
             taxa_huby: taxaPrata
           },
           ouro: {
             nome: 'Ouro',
             corridas_min: lerNum(niveisBody.ouro?.corridas_min, atuais.niveis_motorista.ouro.corridas_min),
-            nota_min: lerNum(niveisBody.ouro?.nota_min, atuais.niveis_motorista.ouro.nota_min),
+            nota_min: lerNum(niveisBody.ouro?.nota_min, atuais.niveis_motorista.ouro.nota_min, 5),
             taxa_huby: taxaOuro
           }
         },
-        carro: {
-          base: lerNum(body.carro?.base, atuais.carro.base),
-          km: lerNum(body.carro?.km, atuais.carro.km),
-          min: lerNum(body.carro?.min, atuais.carro.min)
-        },
-        moto: {
-          base: lerNum(body.moto?.base, atuais.moto.base),
-          km: lerNum(body.moto?.km, atuais.moto.km),
-          min: lerNum(body.moto?.min, atuais.moto.min)
-        },
-        entrega: {
-          base: lerNum(body.entrega?.base, atuais.entrega.base),
-          km: lerNum(body.entrega?.km, atuais.entrega.km),
-          min: lerNum(body.entrega?.min, atuais.entrega.min)
-        }
+        carro: lerCategoria('carro'),
+        moto: lerCategoria('moto'),
+        entrega: lerCategoria('entrega')
       };
 
       const jsonTexto = JSON.stringify(novasTarifas);

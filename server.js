@@ -9,7 +9,6 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sql, JWT_SECRET } from './db.js';
 
 import authRoutes from './routes/auth.routes.js';
-import usuariosRouter from './routes/usuarios.routes.js';
 import pedidosRouter, { iniciarDespachanteAgendamentos } from './routes/pedidos.routes.js';
 import adminRoutes, { lerTarifasDoBanco, extrairObjetoJSONB } from './routes/admin.routes.js';
 import carteiraRoutes from './routes/carteira.routes.js';
@@ -787,11 +786,12 @@ app.delete('/api/patrocinadores/admin/:id', autenticarAdminLocal, async (req, re
 // REGISTO DE ROTAS MODULARES (SEM DIVISÃO DE SÓCIOS)
 // ============================================================================
 app.use(['/api/auth/login', '/api/auth/login-motorista', '/api/usuarios/login', '/api/usuarios/login-motorista'], limitarLogin);
-app.use(['/api/auth/cadastro', '/api/usuarios/registo'], limitarCadastro);
-
+app.use([
+  '/api/auth/cadastro', '/api/auth/registo', '/api/usuarios/cadastro', '/api/usuarios/registo',
+  '/api/auth/enviar-codigo', '/api/auth/verificar-codigo', '/api/usuarios/enviar-codigo', '/api/usuarios/verificar-codigo'
+], limitarCadastro);
 app.use('/api/auth', authRoutes);
-app.use('/api/usuarios', usuariosRouter || authRoutes);
-app.use('/api/pedidos', pedidosRouter(io));
+app.use('/api/usuarios', authRoutes); // nome antigo: aponta para as mesmas rotas segurasapp.use('/api/pedidos', pedidosRouter(io));
 app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
 app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);

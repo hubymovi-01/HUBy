@@ -1,7 +1,7 @@
 /**
  * ============================================================================
  * HUBy 2.0 - Configuração Central de Segurança e Endpoint da API (js/config.js)
- * Versão Blindada e Sincronizada em Tempo Real com o Painel Admin Master
+ * Preço: MESMA fórmula do servidor (services/precificacao.service.js)
  * ============================================================================
  */
 
@@ -13,7 +13,7 @@ const DOMINIOS_AUTORIZADOS = [
 
 function validarOrigemSegura() {
   if (typeof window === 'undefined') return true;
-  
+
   const hostAtual = window.location.hostname;
   const protocoloAtual = window.location.protocol;
 
@@ -24,7 +24,7 @@ function validarOrigemSegura() {
   }
 
   const autorizado = DOMINIOS_AUTORIZADOS.some(dominio => hostAtual === dominio || hostAtual.endsWith('.' + dominio));
-  
+
   if (!autorizado) {
     console.warn('⚠️ ALERTA DE SEGURANÇA: Tentativa de execução em domínio não autorizado (' + hostAtual + ').');
     try {
@@ -45,25 +45,46 @@ export const API_URL = (window.location.hostname === 'localhost' || window.locat
   ? 'http://localhost:3000'
   : 'https://huby.onrender.com';
 
+// "Acorda" o servidor do Render enquanto a página carrega
 try {
   fetch(`${API_URL}/`, { method: 'HEAD', mode: 'no-cors' }).catch(() => {});
 } catch (e) {}
 
 export const OPCOES_RECARGA_PIX = [1.00, 10.00, 20.00, 50.00, 100.00];
 
+// ============================================================================
+// TARIFAS (valores padrão iguais aos do servidor; são trocados pelos do painel admin)
+// ============================================================================
 export let TAXA_PLATAFORMA_ATUAL = 15;
+export let MULTIPLICADOR_PICO = 1.0;      // última tarifa dinâmica recebida do servidor
+export let TAXA_PARADA_EXTRA = 2.50;      // R$ por parada extra
+export let TAXA_ESPERA_MINUTO = 0.50;     // R$ por minuto de espera
 
+const VALOR_MINIMO_ABSOLUTO = 0.50;
+
+// Só existem 3 tabelas de preço: carro, moto e entrega
 export let CATEGORIAS = {
-  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 1.0, km: 1.0, min: 0.30 },
-  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 1.0, km: 0.8, min: 0.20 },
-  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 1.0, km: 1.0, min: 0.25 },
-  flash_moto: { id: 'flash_moto', tipo: 'flash_moto', nome: 'Flash Moto', icone: '📦', base: 1.0, km: 1.0, min: 0.25 },
-  cargo_pickup: { id: 'cargo_pickup', tipo: 'cargo_pickup', nome: 'Picape Frete', icone: '🛻', base: 10.0, km: 2.0, min: 10.0 }
+  carro: { id: 'carro', tipo: 'carro', nome: 'HUBy Carro', icone: '🚗', base: 6.0, km: 2.2, min: 0, km_incluidos: 0, minimo: 0 },
+  moto: { id: 'moto', tipo: 'moto', nome: 'HUBy Moto', icone: '🏍️', base: 4.0, km: 1.4, min: 0, km_incluidos: 0, minimo: 0 },
+  entrega: { id: 'entrega', tipo: 'entrega', nome: 'HUBy Entrega', icone: '📦', base: 5.0, km: 1.8, min: 0, km_incluidos: 0, minimo: 0 }
 };
 
-export let MULTIPLICADOR_PICO = 1.0;
-export let TAXA_PARADA_EXTRA = 2.50; // <-- NOVA VARIÁVEL
-export let TAXA_ESPERA_MINUTO = 0.50; // <-- NOVA VARIÁVEL
+// Converte qualquer nome de categoria do app para uma das 3 tabelas (igual ao servidor)
+export function chaveCategoriaPreco(categoria) {
+  const c = String(categoria || 'carro').toLowerCase().trim();
+  if (['moto', 'hubymoto', 'huby moto'].includes(c)) return 'moto';
+  if (['entrega', 'flash', 'flash_moto', 'hubyflash', 'huby flash', 'frete', 'cargo_pickup'].includes(c)) return 'entrega';
+  return 'carro';
+}
+
+function numeroSeguro(v, padrao = 0) {
+  const n = Number(String(v ?? '').replace(',', '.'));
+  return Number.isFinite(n) ? n : padrao;
+}
+
+function arred(n) {
+  return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
 
 export function aplicarObjetoTarifas(raw) {
   if (!raw) return;
@@ -86,40 +107,35 @@ export function aplicarObjetoTarifas(raw) {
     if (Number.isFinite(t) && t >= 0) TAXA_PLATAFORMA_ATUAL = t;
   }
 
-  ['carro', 'moto', 'entrega'].forEach(chave => {
-    if (dados[chave] && CATEGORIAS[chave]) {
-      const b = Number(dados[chave].base);
-      const k = Number(dados[chave].km);
-      const m = Number(dados[chave].min);
-      if (Number.isFinite(b) && b >= 0) CATEGORIAS[chave].base = b;
-      if (Number.isFinite(k) && k >= 0) CATEGORIAS[chave].km = k;
-      if (Number.isFinite(m) && m >= 0) CATEGORIAS[chave].min = m;
-    }
+  ['carro', 'moto', 'entrega'].forEach((chave) => {
+    const origem = dados[chave];
+    if (!origem || typeof origem !== 'object') return;
+    ['base', 'km', 'min', 'km_incluidos', 'minimo'].forEach((campo) => {
+      if (origem[campo] === undefined || origem[campo] === null) return;
+      const n = Number(origem[campo]);
+      if (Number.isFinite(n) && n >= 0) CATEGORIAS[chave][campo] = n;
+    });
   });
 
-  if (CATEGORIAS.entrega && CATEGORIAS.flash_moto) {
-    CATEGORIAS.flash_moto.base = CATEGORIAS.entrega.base;
-    CATEGORIAS.flash_moto.km = CATEGORIAS.entrega.km;
-    CATEGORIAS.flash_moto.min = CATEGORIAS.entrega.min;
+  if (dados.taxa_parada !== undefined) {
+    const n = Number(dados.taxa_parada);
+    if (Number.isFinite(n) && n >= 0) TAXA_PARADA_EXTRA = n;
   }
-
-  if (dados.multiplicador_pico !== undefined) {
-    MULTIPLICADOR_PICO = Number(dados.multiplicador_pico) || 1.0;
+  if (dados.taxa_espera !== undefined) {
+    const n = Number(dados.taxa_espera);
+    if (Number.isFinite(n) && n >= 0) TAXA_ESPERA_MINUTO = n;
   }
-  
-  // LÊ AS NOVAS TAXAS VINDAS DO PAINEL ADMIN
-  if (dados.taxa_parada !== undefined) TAXA_PARADA_EXTRA = Number(dados.taxa_parada);
-  if (dados.taxa_espera !== undefined) TAXA_ESPERA_MINUTO = Number(dados.taxa_espera);
 
   try {
+    const copiaCat = (c) => ({ base: c.base, km: c.km, min: c.min, km_incluidos: c.km_incluidos, minimo: c.minimo });
     localStorage.setItem('huby_tarifas_cache', JSON.stringify({
       taxa_plataforma: TAXA_PLATAFORMA_ATUAL,
-      multiplicador_pico: MULTIPLICADOR_PICO,
       taxa_parada: TAXA_PARADA_EXTRA,
       taxa_espera: TAXA_ESPERA_MINUTO,
-      carro: { base: CATEGORIAS.carro.base, km: CATEGORIAS.carro.km, min: CATEGORIAS.carro.min },
-      moto: { base: CATEGORIAS.moto.base, km: CATEGORIAS.moto.km, min: CATEGORIAS.moto.min },
-      entrega: { base: CATEGORIAS.entrega.base, km: CATEGORIAS.entrega.km, min: CATEGORIAS.entrega.min }
+      ...(dados.niveis_motorista ? { niveis_motorista: dados.niveis_motorista } : {}),
+      carro: copiaCat(CATEGORIAS.carro),
+      moto: copiaCat(CATEGORIAS.moto),
+      entrega: copiaCat(CATEGORIAS.entrega)
     }));
   } catch (e) {}
 }
@@ -146,32 +162,154 @@ export async function sincronizarTarifasServidor() {
   } catch (err) {}
 }
 
-export function calcularPreco(catId, distanciaKm) {
-  let chave = String(catId || 'carro').toLowerCase();
-  if (chave === 'flash') chave = 'entrega';
-  const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
-  
-  const dist = Math.max(0.1, Number(distanciaKm) || 1.0);
-  const minutosChegadaEstimada = Math.max(2, Math.round(dist * 1.8));
+// ============================================================================
+// ESTIMATIVA INSTANTÂNEA (mesma conta do servidor, sem descontos)
+//   km cobrados = km - km incluídos
+//   valor = (base + km cobrados × R$/km + minutos × R$/min) × dinâmica
+//   nunca abaixo do mínimo da categoria, + paradas + adicionais
+// O preço OFICIAL vem de cotarCorrida(); esta conta só serve para mostrar algo na hora.
+// ============================================================================
+export function normalizarDistanciaTempo(distanciaKm, duracaoMin) {
+  const km = arred(Math.max(0.2, numeroSeguro(distanciaKm, 0)));
+  const minimoMin = Math.max(2, km * 1.2);
+  const maximoMin = km * 6 + 20;
+  const informado = numeroSeguro(duracaoMin, 0) || km * 2;
+  const minutos = Math.round(Math.min(maximoMin, Math.max(minimoMin, informado)));
+  return { km, minutos };
+}
 
-  const custoBaseMaisKm = Number(cat.base || 0) + (dist * Number(cat.km || 0));
-  const valorFinal = Number(Math.max(0.50, custoBaseMaisKm * MULTIPLICADOR_PICO).toFixed(2));
+export function calcularPreco(catId, distanciaKm, duracaoMin, opcoes = {}) {
+  const chave = chaveCategoriaPreco(catId);
+  const cat = CATEGORIAS[chave] || CATEGORIAS.carro;
+  const { km, minutos } = normalizarDistanciaTempo(distanciaKm, duracaoMin);
+
+  const qtdParadas = Math.min(10, Math.max(0, parseInt(opcoes.qtdParadas, 10) || 0));
+  const adicionais = Math.min(500, Math.max(0, numeroSeguro(opcoes.adicionais, 0)));
+  const multiplicador = Math.max(1, numeroSeguro(opcoes.multiplicador ?? MULTIPLICADOR_PICO, 1));
+
+  const kmCobrados = Math.max(0, km - Math.max(0, numeroSeguro(cat.km_incluidos)));
+  const valorCorrida = Math.max(0, numeroSeguro(cat.base))
+    + kmCobrados * Math.max(0, numeroSeguro(cat.km))
+    + minutos * Math.max(0, numeroSeguro(cat.min));
+  const comMinimo = Math.max(Math.max(0, numeroSeguro(cat.minimo)), valorCorrida * multiplicador);
+  const valorParadas = qtdParadas * TAXA_PARADA_EXTRA;
+  const valorFinal = arred(Math.max(VALOR_MINIMO_ABSOLUTO, comMinimo + valorParadas + adicionais));
+
+  const minutosChegadaEstimada = Math.max(2, Math.round(km * 1.8));
 
   return {
     categoria: cat.nome,
     tipo: cat.tipo,
+    chavePreco: chave,
+    distanciaKm: km,
+    duracaoMin: minutos,
     valorTotal: valorFinal,
-    multiplicador: MULTIPLICADOR_PICO,
+    valorParadas: arred(valorParadas),
+    multiplicador,
     taxaParadaAplicada: TAXA_PARADA_EXTRA,
     taxaEsperaAplicada: TAXA_ESPERA_MINUTO,
     minutosChegada: minutosChegadaEstimada,
-    tempoEstimadoTexto: `~${minutosChegadaEstimada} min de si`,
+    tempoEstimadoTexto: `~${minutosChegadaEstimada} min`,
     formatado: `R$ ${valorFinal.toFixed(2).replace('.', ',')}`
   };
 }
 
+// ============================================================================
+// COTAÇÃO OFICIAL NO SERVIDOR (preço que será cobrado, com dinâmica, indicação e cupom)
+// Uso:
+//   const cot = await cotarCorrida({
+//     origem: [lat, lng], destino: [lat, lng],
+//     distanciaKm, duracaoMin, qtdParadas, adicionais, cupom, categoria
+//   });
+//   cot.categorias.carro.valorFinal  → valor a mostrar
+//   Se der erro de rede, devolve null (mostre a estimativa de calcularPreco).
+// ============================================================================
+const cacheCotacoes = new Map();
+const VALIDADE_COTACAO_MS = 15000;
+
+export async function cotarCorrida({
+  origem, destino,
+  distanciaKm, duracaoMin,
+  qtdParadas = 0,
+  adicionais = 0,
+  cupom = null,
+  categoria = null
+} = {}) {
+  const [origLat, origLng] = Array.isArray(origem) ? origem.map(Number) : [];
+  const [destLat, destLng] = Array.isArray(destino) ? destino.map(Number) : [];
+  if (![origLat, origLng, destLat, destLng].every(Number.isFinite)) return null;
+
+  const corpo = {
+    origem_lat: origLat,
+    origem_lng: origLng,
+    destino_lat: destLat,
+    destino_lng: destLng,
+    distancia_km: numeroSeguro(distanciaKm, 0),
+    duracao_min: numeroSeguro(duracaoMin, 0),
+    qtdParadas: Math.max(0, parseInt(qtdParadas, 10) || 0),
+    valor_adicionais: Math.max(0, numeroSeguro(adicionais, 0)),
+    cupom_codigo: cupom ? String(cupom).trim().toUpperCase() : null,
+    categoria: categoria || null
+  };
+
+  // Mesma consulta em menos de 15 s reaproveita a resposta (não estoura o limite do servidor)
+  const chaveCache = JSON.stringify(corpo);
+  const emCache = cacheCotacoes.get(chaveCache);
+  if (emCache && Date.now() - emCache.em < VALIDADE_COTACAO_MS) return emCache.promessa;
+
+  const promessa = (async () => {
+    try {
+      const token = localStorage.getItem('huby_token');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const resp = await fetch(`${API_URL}/api/pedidos/cotacao`, {
+        method: 'POST',
+        cache: 'no-store',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && token !== 'null' && token !== 'undefined' ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(corpo)
+      });
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) {
+        cacheCotacoes.delete(chaveCache);
+        return null;
+      }
+      const dados = await resp.json();
+      if (!dados || !dados.categorias) {
+        cacheCotacoes.delete(chaveCache);
+        return null;
+      }
+
+      const mult = Number(dados.multiplicador);
+      if (Number.isFinite(mult) && mult >= 1) MULTIPLICADOR_PICO = mult;
+      const taxaParada = Number(dados.taxaParada);
+      if (Number.isFinite(taxaParada) && taxaParada >= 0) TAXA_PARADA_EXTRA = taxaParada;
+
+      return dados;
+    } catch (err) {
+      cacheCotacoes.delete(chaveCache);
+      return null;
+    }
+  })();
+
+  cacheCotacoes.set(chaveCache, { em: Date.now(), promessa });
+  if (cacheCotacoes.size > 50) {
+    const maisAntiga = cacheCotacoes.keys().next().value;
+    cacheCotacoes.delete(maisAntiga);
+  }
+  return promessa;
+}
+
 sincronizarTarifasServidor();
 
+// ============================================================================
+// SONS DO APP
+// ============================================================================
 class AudioEfeitosHUBy {
   constructor() {
     this.ctx = null;

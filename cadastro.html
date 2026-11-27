@@ -1,53 +1,18 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>Criar Conta • HUBy</title>
-  <link rel="stylesheet" href="./css/base.css">
-  <link rel="stylesheet" href="./css/auth.css">
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0B0F19">
+  <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
+  <link rel="stylesheet" href="./css/base.css?v=2.2.1">
+  <link rel="stylesheet" href="./css/auth.css?v=2.3.0">
   <style>
-    .password-wrapper {
-      position: relative;
-      display: flex;
-      align-items: center;
-      width: 100%;
-    }
-
-    .password-wrapper input {
-      width: 100%;
-      padding-right: 44px !important;
-    }
-
-    .btn-toggle-senha {
-      position: absolute;
-      right: 12px;
-      top: 50%;
-      transform: translateY(-50%);
-      background: transparent;
-      border: none;
-      color: #94A3B8;
-      cursor: pointer;
-      padding: 4px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      line-height: 1;
-    }
-
-    .btn-toggle-senha.ativo {
-      color: #10B981;
-    }
-
-    .upload-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
-    }
-
+    .upload-group { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+    .upload-group > span { font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; }
     .upload-box {
       border: 2px dashed rgba(16, 185, 129, 0.4);
       background: rgba(16, 185, 129, 0.05);
@@ -59,94 +24,34 @@
       font-size: 13px;
       font-weight: 700;
     }
-
-    .upload-box.has-file {
-      border-style: solid;
-      background: rgba(16, 185, 129, 0.15);
-      color: #FFF;
+    .upload-box.has-file { border-style: solid; background: rgba(16, 185, 129, 0.15); color: #FFF; }
+    .file-input { display: none; }
+    .dica-campo { font-size: 11px; color: #64748B; margin-top: 2px; }
+    .linha-dupla { display: flex; gap: 8px; }
+    .linha-dupla .input-group { flex: 1; min-width: 0; }
+    .termos-box {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px; padding: 10px 12px; margin-top: 6px;
+      font-size: 12px; color: #CBD5E1; line-height: 1.45;
     }
-
-    .file-input {
-      display: none;
+    .termos-box input { width: 18px; height: 18px; margin-top: 1px; accent-color: #10B981; flex-shrink: 0; }
+    .termos-box a { color: #38BDF8; font-weight: 800; }
+    .senha-wrapper { position: relative; }
+    .senha-wrapper input { padding-right: 70px; }
+    .btn-ver-senha {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: #94A3B8; font-size: 11px; font-weight: 800; padding: 6px 9px;
+      border-radius: 8px; cursor: pointer;
     }
-
-    .otp-row {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .btn-otp-action {
-      background: rgba(56, 189, 248, 0.16);
-      border: 1px solid rgba(56, 189, 248, 0.4);
-      color: #38BDF8;
-      padding: 12px 14px;
-      border-radius: 10px;
-      font-weight: 800;
-      font-size: 12px;
-      cursor: pointer;
-      white-space: nowrap;
-    }
-
-    .btn-otp-action.verified {
-      background: rgba(16, 185, 129, 0.2);
-      border-color: #10B981;
-      color: #10B981;
-    }
-
-    .lgpd-box {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      margin-top: 16px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      padding: 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      color: #CBD5E1;
-      line-height: 1.45;
-    }
-
-    .lgpd-box input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      margin-top: 2px;
-      accent-color: #10B981;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .lgpd-box a {
-      color: #38BDF8;
-      font-weight: 700;
-      text-decoration: underline;
-    }
-
-    .auto-audit-box {
-      margin-top: 14px;
-      background: rgba(56, 189, 248, 0.08);
-      border: 1px solid rgba(56, 189, 248, 0.28);
-      border-radius: 12px;
-      padding: 12px;
-      font-size: 12px;
-      color: #CBD5E1;
-    }
-
-    .auto-audit-item {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 4px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .auto-audit-item:last-child {
-      border-bottom: none;
+    .aviso-analise {
+      background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #FBBF24; border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.45;
+      margin-bottom: 12px;
     }
   </style>
 </head>
-
 <body class="auth-body">
 
   <div class="auth-ambient-glow"></div>
@@ -167,81 +72,66 @@
 
       <form id="formCadastroHuby" class="auth-form" novalidate>
         <div class="input-group">
-          <label>Nome Completo</label>
-          <input type="text" id="cadNome" placeholder="Digite seu nome completo" required>
+          <label for="cadNome">Nome completo</label>
+          <input type="text" id="cadNome" placeholder="Digite seu nome completo" autocomplete="name" maxlength="120" required>
         </div>
 
         <div class="input-group">
-          <label>E-mail</label>
-          <input type="email" id="cadEmail" placeholder="seu@email.com" required>
+          <label for="cadEmail">E-mail</label>
+          <input type="email" id="cadEmail" placeholder="seu@email.com" autocomplete="email" maxlength="254" required>
         </div>
 
         <div class="input-group">
-          <label>Telemóvel / WhatsApp (Verificação Obrigatória)</label>
-          <div class="otp-row">
-            <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" required style="flex: 1;">
-            <button type="button" id="btnEnviarOTP" class="btn-otp-action">📲 Enviar Código</button>
+          <label for="cadTelefone">Celular / WhatsApp</label>
+          <input type="tel" id="cadTelefone" placeholder="(00) 00000-0000" maxlength="15" autocomplete="tel" required>
+        </div>
+
+        <div class="input-group">
+          <label for="cadCPF">CPF</label>
+          <input type="text" id="cadCPF" placeholder="000.000.000-00" maxlength="14" inputmode="numeric" required>
+        </div>
+
+        <div class="input-group">
+          <label for="cadSenha">Senha</label>
+          <div class="senha-wrapper">
+            <input type="password" id="cadSenha" placeholder="••••••••" autocomplete="new-password" maxlength="72" required>
+            <button type="button" class="btn-ver-senha" data-alvo="cadSenha">Ver</button>
           </div>
-        </div>
-
-        <!-- CAMPO DE VERIFICAÇÃO DO CÓDIGO OTP -->
-        <div class="input-group" id="boxCodigoOTP" style="display: none;">
-          <label style="color: #38BDF8;">Código de 6 Dígitos Enviado</label>
-          <div class="otp-row">
-            <input type="tel" id="cadCodigoOTP" placeholder="000000" maxlength="6"
-              style="flex: 1; text-align: center; letter-spacing: 4px; font-weight: 900; font-size: 16px;">
-            <button type="button" id="btnConfirmarOTP" class="btn-otp-action"
-              style="background: #10B981; color: #02261C; border: none;">✓ Confirmar</button>
-          </div>
+          <span class="dica-campo">Mínimo de 8 caracteres, com letras e números.</span>
         </div>
 
         <div class="input-group">
-          <label>CPF</label>
-          <input type="text" id="cadCPF" placeholder="000.000.000-00" maxlength="14" required>
+          <label for="cadSenha2">Confirme a senha</label>
+          <input type="password" id="cadSenha2" placeholder="••••••••" autocomplete="new-password" maxlength="72" required>
         </div>
 
         <div class="input-group">
-          <label>Palavra-passe</label>
-          <div class="password-wrapper">
-            <input type="password" id="cadSenha" placeholder="••••••••" required>
-            <button type="button" class="btn-toggle-senha" data-target="cadSenha" aria-label="Mostrar ou ocultar palavra-passe" title="Mostrar ou ocultar palavra-passe">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <div class="input-group">
-          <label>🎁 Código de Convite / Indicação (Opcional)</label>
-          <input type="text" id="cadCodigoIndicacao" placeholder="Ex: HUBY-A1B2 (Ganha R$ 5 de desconto)"
-            style="text-transform: uppercase;" maxlength="15">
+          <label for="cadConvite">Código de convite (opcional)</label>
+          <input type="text" id="cadConvite" placeholder="Ex: HUBY1234" maxlength="20" style="text-transform: uppercase;">
         </div>
 
         <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
-        <div id="blocoMotorista"
-          style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 16px;">
-          <h4 style="margin-bottom: 4px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Documentação e Veículo</h4>
-          <p style="font-size: 11.5px; color: #94A3B8; margin-bottom: 12px;">
-            Aprovação automática imediata após conferência dos dados e validades abaixo.
-          </p>
+        <div id="blocoMotorista" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 8px;">
+          <h4 style="margin: 0 0 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do veículo e CNH</h4>
 
-          <div style="display: flex; gap: 8px;">
-            <div class="input-group" style="flex: 1.4;">
-              <label>Nº da CNH (11 dígitos)</label>
-              <input type="tel" id="cadCNH" placeholder="00000000000" maxlength="11">
+          <div class="aviso-analise">
+            Depois de enviar, seus documentos passam por análise da equipe HUBy. Você poderá entrar no app, mas só fica online após a aprovação.
+          </div>
+
+          <div class="linha-dupla">
+            <div class="input-group" style="flex: 1.3;">
+              <label for="cadCNH">Nº da CNH</label>
+              <input type="tel" id="cadCNH" placeholder="11 dígitos" maxlength="11" inputmode="numeric">
             </div>
-            <div class="input-group" style="flex: 1;">
-              <label>Validade CNH</label>
-              <input type="date" id="cadCnhValidade">
+            <div class="input-group">
+              <label for="cadCNHValidade">Validade da CNH</label>
+              <input type="date" id="cadCNHValidade">
             </div>
           </div>
 
           <div class="input-group">
-            <label>Categoria do Veículo</label>
-            <select id="cadCategoriaVeiculo"
-              style="width: 100%; padding: 12px; background: #090D16; border: 1px solid rgba(255,255,255,0.08); color: #FFF; border-radius: 10px;">
+            <label for="cadCategoriaVeiculo">Categoria do veículo</label>
+            <select id="cadCategoriaVeiculo">
               <option value="carro">Carro Padrão</option>
               <option value="moto">Moto Passageiro</option>
               <option value="flash_moto">Flash (Entregas)</option>
@@ -250,82 +140,60 @@
           </div>
 
           <div class="input-group">
-            <label>Modelo do Veículo</label>
-            <input type="text" id="cadModelo" placeholder="Ex: Chevrolet Onix 1.0 / Honda CG 160">
+            <label for="cadModelo">Modelo do veículo</label>
+            <input type="text" id="cadModelo" placeholder="Ex: Chevrolet Onix 1.0 / Honda CG 160" maxlength="100">
           </div>
 
-          <div style="display: flex; gap: 8px;">
+          <div class="linha-dupla">
             <div class="input-group" style="flex: 1.2;">
-              <label>Placa Mercosul</label>
-              <input type="text" id="cadPlaca" placeholder="ABC1D23" style="text-transform: uppercase;" maxlength="7">
+              <label for="cadPlaca">Placa</label>
+              <input type="text" id="cadPlaca" placeholder="ABC1D23" style="text-transform: uppercase;" maxlength="8">
             </div>
-            <div class="input-group" style="flex: 1;">
-              <label>Cor</label>
-              <input type="text" id="cadCor" placeholder="Ex: Prata">
+            <div class="input-group">
+              <label for="cadCor">Cor</label>
+              <input type="text" id="cadCor" placeholder="Ex: Prata" maxlength="30">
             </div>
             <div class="input-group" style="flex: 0.9;">
-              <label>Ano</label>
-              <input type="number" id="cadAno" placeholder="2022" min="1995" max="2027">
+              <label for="cadAno">Ano</label>
+              <input type="number" id="cadAno" placeholder="2022" min="1995">
             </div>
           </div>
 
           <div class="input-group">
-            <label>Validade do Licenciamento (CRLV)</label>
-            <input type="date" id="cadCrlvValidade">
+            <label for="cadCRLVValidade">Validade do CRLV (licenciamento)</label>
+            <input type="date" id="cadCRLVValidade">
           </div>
 
           <div class="upload-group">
-            <label>Fotografia da CNH (Obrigatória)</label>
+            <span>Foto da CNH</span>
             <label class="upload-box" id="boxCNH">
-              📸 Tocar para fotografar ou anexar a CNH
-              <input type="file" id="fileCNH" class="file-input" accept="image/*">
+              📸 Tocar para fotografar a CNH
+              <input type="file" id="fileCNH" class="file-input" accept="image/*" capture="environment">
             </label>
           </div>
 
           <div class="upload-group">
-            <label>Fotografia do CRLV (Obrigatória)</label>
+            <span>Foto do CRLV (documento do veículo)</span>
             <label class="upload-box" id="boxCRLV">
-              📸 Tocar para fotografar ou anexar o CRLV
-              <input type="file" id="fileCRLV" class="file-input" accept="image/*">
+              📸 Tocar para fotografar o CRLV
+              <input type="file" id="fileCRLV" class="file-input" accept="image/*" capture="environment">
             </label>
-          </div>
-
-          <!-- CHECKLIST EM TEMPO REAL DA AUDITORIA AUTOMÁTICA -->
-          <div class="auto-audit-box" id="boxAuditoriaAutomatica">
-            <strong style="color: #38BDF8; display: block; margin-bottom: 6px; font-size: 11px; text-transform: uppercase;">
-              ⚡ Conferência Automática para Liberação Imediata
-            </strong>
-            <div class="auto-audit-item">
-              <span>CNH (11 dígitos) e Placa válida</span>
-              <span id="chkItemDados">⏳ Pendente</span>
-            </div>
-            <div class="auto-audit-item">
-              <span>Validade CNH e CRLV em dia</span>
-              <span id="chkItemDatas">⏳ Pendente</span>
-            </div>
-            <div class="auto-audit-item">
-              <span>Fotos nítidas da CNH e CRLV</span>
-              <span id="chkItemFotos">⏳ Pendente</span>
-            </div>
           </div>
         </div>
 
-        <!-- ACEITE LGPD E TERMOS DE USO -->
-        <label class="lgpd-box">
-          <input type="checkbox" id="chkAceiteLGPD" required>
-          <span>
-            Li e aceito os <a href="./termos.html" target="_blank">Termos de Uso e Política de Privacidade (LGPD)</a> do HUBy, autorizando o tratamento dos meus dados para segurança e operação das viagens.
-          </span>
+        <label class="termos-box" for="cadTermos">
+          <input type="checkbox" id="cadTermos">
+          <span>Li e aceito os <a href="./termos.html" target="_blank" rel="noopener">Termos de Uso e a Política de Privacidade</a> da HUBy.</span>
         </label>
 
-        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action" style="margin-top: 18px;">
+        <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action" style="margin-top: 16px;">
           <span>Criar Conta</span>
         </button>
       </form>
 
       <footer class="auth-footer-nav" style="margin-top: 20px;">
         <span>Já tem conta?</span>
-        <a href="./login.html">Iniciar sessão</a>
+        <a href="./login.html" id="linkLogin">Iniciar sessão</a>
       </footer>
     </div>
   </main>
@@ -333,84 +201,30 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    const svgOlhoAberto = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    const svgOlhoFechado = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-
-    document.querySelectorAll('.btn-toggle-senha').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const input = document.getElementById(btn.dataset.target);
-        if (!input) return;
-        const visivel = input.type === 'text';
-        input.type = visivel ? 'password' : 'text';
-        btn.innerHTML = visivel ? svgOlhoAberto : svgOlhoFechado;
-        btn.classList.toggle('ativo', !visivel);
-      });
-    });
-
-    const hojeISO = new Date().toISOString().slice(0, 10);
-    const inpCnhVal = document.getElementById('cadCnhValidade');
-    const inpCrlvVal = document.getElementById('cadCrlvValidade');
-    if (inpCnhVal) inpCnhVal.min = hojeISO;
-    if (inpCrlvVal) inpCrlvVal.min = hojeISO;
+    const VERSAO_TERMOS = '1.0';
 
     let roleAtual = 'cliente';
     let cnhBase64 = null;
     let crlvBase64 = null;
-    let telefoneVerificado = false;
 
     const urlParams = new URLSearchParams(window.location.search);
     const perfilParam = urlParams.get('perfil');
-    const conviteParam = urlParams.get('convite');
-
-    if (conviteParam) {
-      const inpConv = document.getElementById('cadCodigoIndicacao');
-      if (inpConv) inpConv.value = conviteParam.toUpperCase();
-    }
+    const conviteParam = (urlParams.get('convite') || urlParams.get('ref') || '').trim().toUpperCase().slice(0, 20);
 
     const btnCliente = document.getElementById('btnRoleCliente');
     const btnMotorista = document.getElementById('btnRoleMotorista');
     const blocoMot = document.getElementById('blocoMotorista');
     const subtitulo = document.getElementById('txtSubtituloCadastro');
     const alertaBox = document.getElementById('alertaCadastroBox');
+    const linkLogin = document.getElementById('linkLogin');
 
-    function atualizarChecklistAuditoriaMotorista() {
-      const cnh = document.getElementById('cadCNH')?.value.replace(/\D/g, '') || '';
-      const placa = document.getElementById('cadPlaca')?.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() || '';
-      const modelo = document.getElementById('cadModelo')?.value.trim() || '';
-      const cnhVal = inpCnhVal?.value || '';
-      const crlvVal = inpCrlvVal?.value || '';
+    if (conviteParam) document.getElementById('cadConvite').value = conviteParam;
 
-      const dadosOk = cnh.length === 11 && /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa) && modelo.length >= 2;
-      const datasOk = Boolean(cnhVal && crlvVal && cnhVal >= hojeISO && crlvVal >= hojeISO);
-      const fotosOk = Boolean(cnhBase64 && crlvBase64);
-
-      const elDados = document.getElementById('chkItemDados');
-      const elDatas = document.getElementById('chkItemDatas');
-      const elFotos = document.getElementById('chkItemFotos');
-
-      if (elDados) {
-        elDados.textContent = dadosOk ? '✅ OK' : '⏳ Pendente';
-        elDados.style.color = dadosOk ? '#10B981' : '#94A3B8';
-      }
-      if (elDatas) {
-        if ((cnhVal && cnhVal < hojeISO) || (crlvVal && crlvVal < hojeISO)) {
-          elDatas.textContent = '❌ Vencido';
-          elDatas.style.color = '#F87171';
-        } else {
-          elDatas.textContent = datasOk ? '✅ Em dia' : '⏳ Pendente';
-          elDatas.style.color = datasOk ? '#10B981' : '#94A3B8';
-        }
-      }
-      if (elFotos) {
-        elFotos.textContent = fotosOk ? '✅ Anexadas' : '⏳ Pendente';
-        elFotos.style.color = fotosOk ? '#10B981' : '#94A3B8';
-      }
-    }
-
-    ['cadCNH', 'cadPlaca', 'cadModelo', 'cadCnhValidade', 'cadCrlvValidade'].forEach((id) => {
-      document.getElementById(id)?.addEventListener('input', atualizarChecklistAuditoriaMotorista);
-      document.getElementById(id)?.addEventListener('change', atualizarChecklistAuditoriaMotorista);
-    });
+    // Datas mínimas = hoje (documento não pode estar vencido)
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    document.getElementById('cadCNHValidade').min = hojeISO;
+    document.getElementById('cadCRLVValidade').min = hojeISO;
+    document.getElementById('cadAno').max = String(new Date().getFullYear() + 1);
 
     function alternarPerfil(role) {
       roleAtual = role;
@@ -418,28 +232,39 @@
         btnMotorista.classList.add('active');
         btnCliente.classList.remove('active');
         blocoMot.style.display = 'block';
-        subtitulo.textContent = 'Cadastro Automático de Motorista Parceiro';
-        atualizarChecklistAuditoriaMotorista();
+        subtitulo.textContent = 'Crie a sua conta de Motorista Parceiro';
+        linkLogin.href = './login.html?perfil=motorista';
       } else {
         btnCliente.classList.add('active');
         btnMotorista.classList.remove('active');
         blocoMot.style.display = 'none';
         subtitulo.textContent = 'Crie a sua conta de Passageiro';
+        linkLogin.href = './login.html?perfil=cliente';
       }
       esconderAlerta();
     }
 
-    if (perfilParam === 'motorista') alternarPerfil('motorista');
+    alternarPerfil(perfilParam === 'motorista' ? 'motorista' : 'cliente');
     btnCliente.addEventListener('click', () => alternarPerfil('cliente'));
     btnMotorista.addEventListener('click', () => alternarPerfil('motorista'));
 
+    // Mostrar / esconder senha
+    document.querySelectorAll('.btn-ver-senha').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const alvo = document.getElementById(btn.getAttribute('data-alvo'));
+        if (!alvo) return;
+        const mostrar = alvo.type === 'password';
+        alvo.type = mostrar ? 'text' : 'password';
+        btn.textContent = mostrar ? 'Ocultar' : 'Ver';
+      });
+    });
+
+    // MÁSCARA CPF
     const inputCpf = document.getElementById('cadCPF');
     inputCpf.addEventListener('input', (e) => {
-      let v = e.target.value.replace(/\D/g, '');
-      if (v.length > 11) v = v.slice(0, 11);
-
+      let v = e.target.value.replace(/\D/g, '').slice(0, 11);
       if (v.length > 9) {
-        v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+        v = v.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
       } else if (v.length > 6) {
         v = v.replace(/(\d{3})(\d{3})(\d{1,3})/, '$1.$2.$3');
       } else if (v.length > 3) {
@@ -448,95 +273,38 @@
       e.target.value = v;
     });
 
+    // MÁSCARA TELEFONE
     const inputTel = document.getElementById('cadTelefone');
-    const btnEnviarOTP = document.getElementById('btnEnviarOTP');
-    const boxCodigoOTP = document.getElementById('boxCodigoOTP');
-    const inputCodigoOTP = document.getElementById('cadCodigoOTP');
-    const btnConfirmarOTP = document.getElementById('btnConfirmarOTP');
-
     inputTel.addEventListener('input', (e) => {
-      let v = e.target.value.replace(/\D/g, '');
-      if (v.length > 11) v = v.slice(0, 11);
+      let v = e.target.value.replace(/\D/g, '').slice(0, 11);
       v = v.replace(/^(\d{2})(\d)/g, '($1) $2');
       v = v.replace(/(\d{5})(\d{4})$/, '$1-$2');
       e.target.value = v;
-
-      if (telefoneVerificado) {
-        telefoneVerificado = false;
-        btnEnviarOTP.classList.remove('verified');
-        btnEnviarOTP.textContent = '📲 Enviar Código';
-      }
     });
 
-    btnEnviarOTP.addEventListener('click', async () => {
-      esconderAlerta();
-      const telLimpo = inputTel.value.replace(/\D/g, '');
-      if (telLimpo.length < 10) {
-        exibirAlerta('Digite o número de WhatsApp/Telefone com DDD antes de pedir o código.', 'error');
-        return;
-      }
-
-      btnEnviarOTP.disabled = true;
-      btnEnviarOTP.textContent = 'Enviando...';
-
-      try {
-        const resp = await fetch(`${API_URL}/api/auth/enviar-codigo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: telLimpo })
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Falha ao enviar código.');
-
-        boxCodigoOTP.style.display = 'block';
-        exibirAlerta(data.mensagem || 'Código enviado!', 'success');
-
-        if (data.codigoTeste) {
-          inputCodigoOTP.value = data.codigoTeste;
-        }
-      } catch (err) {
-        exibirAlerta(err.message, 'error');
-      } finally {
-        btnEnviarOTP.disabled = false;
-        if (!telefoneVerificado) btnEnviarOTP.textContent = '🔄 Reenviar';
-      }
+    document.getElementById('cadCNH').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/\D/g, '').slice(0, 11);
     });
 
-    btnConfirmarOTP.addEventListener('click', async () => {
-      esconderAlerta();
-      const telLimpo = inputTel.value.replace(/\D/g, '');
-      const codigo = inputCodigoOTP.value.replace(/\D/g, '');
-
-      if (codigo.length !== 6) {
-        exibirAlerta('Informe o código de 6 dígitos.', 'error');
-        return;
-      }
-
-      btnConfirmarOTP.disabled = true;
-      btnConfirmarOTP.textContent = '...';
-
-      try {
-        const resp = await fetch(`${API_URL}/api/auth/verificar-codigo`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ telefone: telLimpo, codigo })
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.erro || 'Código inválido.');
-
-        telefoneVerificado = true;
-        boxCodigoOTP.style.display = 'none';
-        btnEnviarOTP.classList.add('verified');
-        btnEnviarOTP.textContent = '✅ Verificado';
-        inputTel.readOnly = true;
-        exibirAlerta('Telefone confirmado com sucesso!', 'success');
-      } catch (err) {
-        exibirAlerta(err.message, 'error');
-      } finally {
-        btnConfirmarOTP.disabled = false;
-        btnConfirmarOTP.textContent = '✓ Confirmar';
-      }
+    document.getElementById('cadPlaca').addEventListener('input', (e) => {
+      e.target.value = e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 7);
     });
+
+    // Validação de CPF (mesma regra do servidor)
+    function cpfValido(cpf) {
+      cpf = String(cpf).replace(/\D/g, '');
+      if (cpf.length !== 11 || /^(\d)\1+$/.test(cpf)) return false;
+      let soma = 0;
+      for (let i = 0; i < 9; i++) soma += parseInt(cpf.charAt(i), 10) * (10 - i);
+      let resto = (soma * 10) % 11;
+      if (resto === 10 || resto === 11) resto = 0;
+      if (resto !== parseInt(cpf.charAt(9), 10)) return false;
+      soma = 0;
+      for (let i = 0; i < 10; i++) soma += parseInt(cpf.charAt(i), 10) * (11 - i);
+      resto = (soma * 10) % 11;
+      if (resto === 10 || resto === 11) resto = 0;
+      return resto === parseInt(cpf.charAt(10), 10);
+    }
 
     function processarUpload(inputId, boxId, callback) {
       const input = document.getElementById(inputId);
@@ -544,111 +312,113 @@
       input.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          exibirAlerta('Envie uma foto (imagem) do documento.', 'error');
+          return;
+        }
 
         const reader = new FileReader();
         reader.onload = (event) => {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_WIDTH = 900;
-            const MAX_HEIGHT = 900;
+            const MAX = 1100;
             let width = img.width;
             let height = img.height;
 
-            if (width > height) {
-              if (width > MAX_WIDTH) {
-                height *= MAX_WIDTH / width;
-                width = MAX_WIDTH;
-              }
-            } else {
-              if (height > MAX_HEIGHT) {
-                width *= MAX_HEIGHT / height;
-                height = MAX_HEIGHT;
-              }
+            if (width > height && width > MAX) {
+              height *= MAX / width;
+              width = MAX;
+            } else if (height >= width && height > MAX) {
+              width *= MAX / height;
+              height = MAX;
             }
 
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
+            canvas.width = Math.round(width);
+            canvas.height = Math.round(height);
+            canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
 
-            const base64Comprimido = canvas.toDataURL('image/jpeg', 0.82);
-            callback(base64Comprimido);
+            callback(canvas.toDataURL('image/jpeg', 0.8));
             box.classList.add('has-file');
-            box.innerHTML = '✅ Fotografia validada e anexada!';
-            atualizarChecklistAuditoriaMotorista();
+            box.textContent = '✅ Foto guardada. Toque para trocar.';
+            box.appendChild(input);
           };
+          img.onerror = () => exibirAlerta('Não foi possível ler esta imagem. Tente outra foto.', 'error');
           img.src = event.target.result;
         };
         reader.readAsDataURL(file);
       });
     }
 
-    processarUpload('fileCNH', 'boxCNH', (b64) => cnhBase64 = b64);
-    processarUpload('fileCRLV', 'boxCRLV', (b64) => crlvBase64 = b64);
+    processarUpload('fileCNH', 'boxCNH', (b64) => { cnhBase64 = b64; });
+    processarUpload('fileCRLV', 'boxCRLV', (b64) => { crlvBase64 = b64; });
 
     document.getElementById('formCadastroHuby').addEventListener('submit', async (e) => {
       e.preventDefault();
       esconderAlerta();
 
-      const aceitouTermos = document.getElementById('chkAceiteLGPD')?.checked;
-      if (!aceitouTermos) {
-        exibirAlerta('Marque a caixa aceitando os Termos de Uso e a Política de Privacidade (LGPD).', 'error');
-        return;
-      }
-
-      if (!telefoneVerificado) {
-        exibirAlerta('Por favor, valide seu número de telefone enviando e confirmando o código de 6 dígitos.', 'error');
-        return;
-      }
+      const senha = document.getElementById('cadSenha').value;
+      const senha2 = document.getElementById('cadSenha2').value;
 
       const payload = {
         nome: document.getElementById('cadNome').value.trim(),
         email: document.getElementById('cadEmail').value.trim(),
         telefone: inputTel.value.replace(/\D/g, ''),
         cpf: inputCpf.value.replace(/\D/g, ''),
-        senha: document.getElementById('cadSenha').value,
-        codigoIndicacao: document.getElementById('cadCodigoIndicacao')?.value.trim().toUpperCase() || null,
+        senha,
         role: roleAtual,
-        aceitouTermos: true,
-        versaoTermos: '1.0'
+        aceitouTermos: document.getElementById('cadTermos').checked,
+        versaoTermos: VERSAO_TERMOS,
+        codigoIndicacao: document.getElementById('cadConvite').value.trim().toUpperCase() || undefined
       };
 
-      if (!payload.nome || !payload.email || !payload.telefone || !payload.cpf || !payload.senha) {
-        exibirAlerta('Por favor, preencha todos os campos obrigatórios.', 'error');
-        return;
+      // Validações rápidas (o servidor confere tudo de novo)
+      if (payload.nome.length < 3 || !payload.email || !payload.telefone || !payload.cpf || !senha) {
+        return exibirAlerta('Preencha todos os campos obrigatórios.', 'error');
+      }
+      if (payload.telefone.length < 10) {
+        return exibirAlerta('Informe o celular com DDD.', 'error');
+      }
+      if (!cpfValido(payload.cpf)) {
+        return exibirAlerta('CPF inválido. Confira os números.', 'error');
+      }
+      if (senha.length < 8 || !/[A-Za-z]/.test(senha) || !/[0-9]/.test(senha)) {
+        return exibirAlerta('A senha precisa ter pelo menos 8 caracteres, com letras e números.', 'error');
+      }
+      if (senha !== senha2) {
+        return exibirAlerta('As senhas não são iguais.', 'error');
       }
 
       if (roleAtual === 'motorista') {
         payload.cnh = document.getElementById('cadCNH').value.replace(/\D/g, '');
         payload.cnh_numero = payload.cnh;
-        payload.cnh_validade = inpCnhVal?.value || null;
-        payload.crlv_validade = inpCrlvVal?.value || null;
+        payload.cnh_validade = document.getElementById('cadCNHValidade').value;
+        payload.crlv_validade = document.getElementById('cadCRLVValidade').value;
         payload.categoria_veiculo = document.getElementById('cadCategoriaVeiculo').value;
         payload.categoria = payload.categoria_veiculo;
         payload.veiculo_modelo = document.getElementById('cadModelo').value.trim();
-        payload.veiculo_placa = document.getElementById('cadPlaca').value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+        payload.veiculo_placa = document.getElementById('cadPlaca').value.trim().toUpperCase();
         payload.veiculo_cor = document.getElementById('cadCor').value.trim();
         payload.veiculo_ano = document.getElementById('cadAno').value.trim();
-        payload.doc_cnh_url = cnhBase64 || null;
-        payload.doc_crlv_url = crlvBase64 || null;
+        payload.doc_cnh_url = cnhBase64;
+        payload.doc_crlv_url = crlvBase64;
 
-        if (payload.cnh.length !== 11 || !payload.veiculo_modelo || !/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(payload.veiculo_placa)) {
-          exibirAlerta('Verifique o nº da CNH (11 dígitos), modelo e placa válida do veículo.', 'error');
-          return;
+        if (payload.cnh.length !== 11) {
+          return exibirAlerta('Informe os 11 dígitos da CNH.', 'error');
         }
         if (!payload.cnh_validade || !payload.crlv_validade) {
-          exibirAlerta('Informe a data de validade da CNH e do CRLV do veículo.', 'error');
-          return;
+          return exibirAlerta('Informe a validade da CNH e do CRLV.', 'error');
         }
-        if (payload.cnh_validade < hojeISO || payload.crlv_validade < hojeISO) {
-          exibirAlerta('CNH ou CRLV vencido. Apenas documentos dentro da validade são aprovados automaticamente.', 'error');
-          return;
+        if (!payload.veiculo_modelo || !payload.veiculo_placa) {
+          return exibirAlerta('Preencha o modelo e a placa do veículo.', 'error');
         }
-        if (!payload.doc_cnh_url || !payload.doc_crlv_url) {
-          exibirAlerta('Anexe as fotografias da CNH e do CRLV para aprovação automática.', 'error');
-          return;
+        if (!cnhBase64 || !crlvBase64) {
+          return exibirAlerta('Envie a foto da CNH e a foto do CRLV.', 'error');
         }
+      }
+
+      if (!payload.aceitouTermos) {
+        return exibirAlerta('Para continuar, aceite os Termos de Uso e a Política de Privacidade.', 'error');
       }
 
       const btnSub = document.getElementById('btnSubmeterCadastro');
@@ -656,7 +426,7 @@
 
       try {
         btnSub.disabled = true;
-        if (spanBtn) spanBtn.textContent = roleAtual === 'motorista' ? 'Validando documentos...' : 'A criar conta...';
+        if (spanBtn) spanBtn.textContent = 'Criando conta...';
 
         const resp = await fetch(`${API_URL}/api/auth/cadastro`, {
           method: 'POST',
@@ -664,59 +434,84 @@
           body: JSON.stringify(payload)
         });
 
-        const data = await resp.json();
+        const data = await resp.json().catch(() => ({}));
 
-        if (resp.status === 409 || !resp.ok) {
-          throw new Error(data.erro || 'Este e-mail ou CPF já está registado.');
+        if (resp.status === 429) {
+          throw new Error('Muitas tentativas de cadastro. Aguarde alguns minutos.');
+        }
+        if (resp.status === 409) {
+          const erro = new Error(data.erro || 'Este e-mail, telefone ou CPF já está registrado.');
+          erro.duplicado = true;
+          throw erro;
+        }
+        if (!resp.ok || !data.token || !data.usuario) {
+          throw new Error(data.erro || 'Não foi possível concluir o cadastro.');
         }
 
-        if (data.token) {
-          localStorage.setItem('huby_token', data.token);
-          localStorage.setItem('huby_user_role', data.usuario?.role || roleAtual);
-          localStorage.setItem('huby_user_name', data.usuario?.nome || payload.nome);
+        guardarSessao(data);
+
+        const u = data.usuario;
+        const ehMotorista = u.role === 'motorista';
+        const pendente = ehMotorista && String(u.status_aprovacao || '').toLowerCase() !== 'aprovado';
+
+        if (pendente) {
+          exibirAlerta(data.mensagem || 'Cadastro recebido! Seus documentos estão em análise.', 'warning');
+          setTimeout(() => window.location.replace('./motorista.html'), 2600);
+        } else {
+          exibirAlerta(data.mensagem || 'Conta criada com sucesso!', 'success');
+          setTimeout(() => window.location.replace(ehMotorista ? './motorista.html' : './index.html'), 900);
         }
-
-        exibirAlerta(data.mensagem || 'Conta criada e aprovada automaticamente!', 'success');
-        setTimeout(() => {
-          window.location.replace(roleAtual === 'motorista' ? './motorista.html' : './index.html');
-        }, 900);
-
       } catch (err) {
-        let msgErro = err.message;
-        if (msgErro.includes('already exists') || msgErro.includes('conflito') || msgErro.includes('409')) {
-          msgErro = 'Este e-mail ou CPF já possui cadastro. <a href="./login.html" style="color: #38BDF8; font-weight: 800;">Clique aqui para fazer login</a>';
+        console.error('Erro no cadastro:', err);
+        exibirAlerta(err.message, 'error');
+        if (err.duplicado) {
+          const link = document.createElement('a');
+          link.href = linkLogin.href;
+          link.textContent = ' Fazer login';
+          link.style.cssText = 'color: #38BDF8; font-weight: 800; margin-left: 4px;';
+          alertaBox.appendChild(link);
         }
-        exibirAlertaHtml(msgErro, 'error');
         btnSub.disabled = false;
         if (spanBtn) spanBtn.textContent = 'Criar Conta';
       }
     });
 
-    function exibirAlerta(msg, tipo) {
-      if (!alertaBox) return;
-      alertaBox.textContent = msg;
-      alertaBox.className = `auth-alert ${tipo}`;
-      alertaBox.style.display = 'block';
-      alertaBox.style.background = tipo === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)';
-      alertaBox.style.border = `1px solid ${tipo === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`;
-      alertaBox.style.color = tipo === 'error' ? '#F87171' : '#10B981';
+    function guardarSessao(data) {
+      [
+        'huby_token', 'huby_user_role', 'huby_user_name', 'huby_user_id',
+        'huby_motorista_id', 'huby_status_aprovacao', 'huby_motorista_online',
+        'huby_corrida_ativa_mot_id', 'huby_pedido_ativo_id'
+      ].forEach((k) => localStorage.removeItem(k));
+
+      const u = data.usuario;
+      localStorage.setItem('huby_token', data.token);
+      localStorage.setItem('huby_user_role', u.role || 'cliente');
+      localStorage.setItem('huby_user_name', u.nome || '');
+      localStorage.setItem('huby_user_id', u.id);
+      localStorage.setItem('huby_tipo_acesso', u.role === 'motorista' ? 'motorista' : 'cliente');
+      if (u.motoristaId) localStorage.setItem('huby_motorista_id', u.motoristaId);
+      if (u.status_aprovacao) localStorage.setItem('huby_status_aprovacao', u.status_aprovacao);
     }
 
-    function exibirAlertaHtml(html, tipo) {
+    function exibirAlerta(msg, tipo) {
       if (!alertaBox) return;
-      alertaBox.innerHTML = html;
-      alertaBox.className = `auth-alert ${tipo}`;
+      const cores = {
+        error: { bg: 'rgba(239, 68, 68, 0.15)', borda: 'rgba(239, 68, 68, 0.3)', txt: '#F87171' },
+        warning: { bg: 'rgba(245, 158, 11, 0.15)', borda: 'rgba(245, 158, 11, 0.35)', txt: '#FBBF24' },
+        success: { bg: 'rgba(16, 185, 129, 0.15)', borda: 'rgba(16, 185, 129, 0.3)', txt: '#10B981' }
+      };
+      const c = cores[tipo] || cores.success;
+      alertaBox.textContent = msg;
       alertaBox.style.display = 'block';
-      alertaBox.style.background = 'rgba(239, 68, 68, 0.15)';
-      alertaBox.style.border = '1px solid rgba(239, 68, 68, 0.3)';
-      alertaBox.style.color = '#F87171';
+      alertaBox.style.background = c.bg;
+      alertaBox.style.border = `1px solid ${c.borda}`;
+      alertaBox.style.color = c.txt;
+      alertaBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
 
     function esconderAlerta() {
-      if (!alertaBox) return;
-      alertaBox.style.display = 'none';
+      if (alertaBox) alertaBox.style.display = 'none';
     }
   </script>
 </body>
-
 </html>

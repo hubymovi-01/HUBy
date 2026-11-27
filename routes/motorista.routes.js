@@ -1,4 +1,4 @@
-// routes/motorista.routes.js - Módulos de Suporte, Zonas de Risco e Verificação Facial do Motorista HUBy
+// routes/motorista.routes.js - Perfil, Pausa, Destino, Selfie, Extrato, Ganhos e Saque do Motorista HUBy
 import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
@@ -6,6 +6,12 @@ import { lerTarifasDoBanco } from './admin.routes.js';
 
 const router = express.Router();
 
+const MAX_FOTO_CHARS = 1_500_000;  // ~1 MB em base64
+const MAX_SELFIE_CHARS = 2_000_000;
+
+// ============================================================================
+// ESTRUTURA
+// ============================================================================
 async function garantirColunasSuporte() {
   try {
     await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS destino_casa_lat NUMERIC;`;
@@ -35,103 +41,117 @@ async function garantirColunasSuporte() {
 }
 garantirColunasSuporte();
 
-// =========================================================================
-// LISTAR ZONAS DE RISCO ATIVAS PARA O MAPA DO MOTORISTA
-// =========================================================================
+// ============================================================================
+// AUXILIARES DE SEGURANÇA
+// ============================================================================
+const textoOuNull = (v, max = 100) => {
+  const t = String(v ?? '').replace(/[<>]/g, '').trim();
+  return t ? t.slice(0, max) : null;
+};
+
+function ehImagemBase64(v, max) {
+  return typeof v === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(v) && v.length <= max;
+}
+
+// Só deixa passar quem está logado como motorista (ou admin)
+function somenteMotorista(req, res, next) {
+  const role = String(req.usuario?.role || '').toLowerCase();
+  if (role !== 'motorista' && role !== 'admin' && role !== 'administrador') {
+    return res.status(403).json({ erro: 'Área exclusiva para motoristas parceiros.' });
+  }
+  next();
+}
+
+// Encontra SOMENTE o motorista dono do token. Nunca usa "outro motorista" como reserva.
+async function motoristaDoToken(req) {
+  const ids = [req.usuario?.motoristaId, req.usuario?.id].filter(Boolean).map(String);
+  if (!ids.length) return null;
+  const rows = await sql`
+    SELECT * FROM motoristas
+    WHERE id::text = ANY(${ids}) OR usuario_id::text = ANY(${ids})
+    LIMIT 1;
+  `;
+  return rows[0] || null;
+}
+
+// Middleware: carrega o motorista do token em req.motorista
+async function carregarMotorista(req, res, next) {
+  try {
+    const mot = await motoristaDoToken(req);
+    if (!mot) return res.status(404).json({ erro: 'Cadastro de motorista não localizado para esta conta.' });
+    req.motorista = mot;
+    next();
+  } catch (err) {
+    console.error('Erro ao localizar motorista:', err);
+    res.status(500).json({ erro: 'Falha ao localizar seu cadastro.' });
+  }
+}
+
+const doMotorista = [autenticarToken, somenteMotorista, carregarMotorista];
+
+// ============================================================================
+// ZONAS DE RISCO (mapa do motorista)
+// ============================================================================
 router.get('/zonas-risco', autenticarToken, async (req, res) => {
   try {
     const zonas = await sql`
       SELECT id, nome, descricao, nivel_risco, raio_metros, lat, lng, horario_inicio, horario_fim, ativo
       FROM zonas_risco
-      WHERE COALESCE(ativo, TRUE) = TRUE
-        AND lat IS NOT NULL
-        AND lng IS NOT NULL
+      WHERE COALESCE(ativo, TRUE) = TRUE AND lat IS NOT NULL AND lng IS NOT NULL
       ORDER BY id DESC;
     `;
     return res.json({ sucesso: true, zonas });
   } catch (err) {
-    console.error('Erro ao buscar zonas de risco para o motorista:', err);
+    console.error('Erro ao buscar zonas de risco:', err);
     return res.status(500).json({ erro: 'Falha ao carregar zonas de risco.' });
   }
 });
 
-// =========================================================================
-// 0. VERIFICAÇÃO POR SELFIE AO FICAR ONLINE
-// =========================================================================
-router.post('/verificar-selfie', autenticarToken, async (req, res) => {
+// ============================================================================
+// 0. SELFIE AO FICAR ONLINE
+// ============================================================================
+router.post('/verificar-selfie', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = String(req.usuario.id);
-    const emailUsuario = req.usuario.email || '';
-    const selfieBase64 = String(req.body?.selfie_base64 || '').trim();
-
-    if (!selfieBase64 || !selfieBase64.startsWith('data:image/')) {
-      return res.status(400).json({ erro: 'Imagem de selfie inválida. Capture novamente pela câmera.' });
+    const selfie = String(req.body?.selfie_base64 || '').trim();
+    if (!ehImagemBase64(selfie, MAX_SELFIE_CHARS)) {
+      return res.status(400).json({ erro: 'Selfie inválida ou muito grande. Capture novamente pela câmera.' });
     }
 
-    if (selfieBase64.length > 2 * 1024 * 1024) {
-      return res.status(400).json({ erro: 'Imagem muito grande. Tente capturar novamente.' });
-    }
-
-    let mot = await sql`
-      SELECT id, nome FROM motoristas
-      WHERE id::text = ${usuarioId}::text
-         OR usuario_id::text = ${usuarioId}::text
-         OR (email = ${emailUsuario} AND ${emailUsuario} != '')
-      LIMIT 1;
-    `;
-
-    if (mot.length === 0) {
-      mot = await sql`SELECT id, nome FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1;`;
-    }
-
-    if (mot.length === 0) {
-      return res.status(404).json({ erro: 'Cadastro de motorista não localizado.' });
-    }
-
-    const motoristaIdReal = String(mot[0].id);
+    const motId = String(req.motorista.id);
 
     await sql`
       UPDATE motoristas
-      SET ultima_selfie_url = ${selfieBase64},
-          ultima_selfie_em = CURRENT_TIMESTAMP
-      WHERE id::text = ${motoristaIdReal}::text;
+      SET ultima_selfie_url = ${selfie}, ultima_selfie_em = CURRENT_TIMESTAMP
+      WHERE id = ${motId};
     `;
-
     await sql`
       INSERT INTO verificacoes_selfie_motorista (motorista_id, selfie_url, ip_origem)
-      VALUES (${motoristaIdReal}, ${selfieBase64}, ${String(req.ip || '').slice(0, 50)});
+      VALUES (${motId}, ${selfie}, ${String(req.ip || '').slice(0, 50)});
     `;
 
-    return res.status(201).json({
-      sucesso: true,
-      verificadoEm: new Date().toISOString()
-    });
+    return res.status(201).json({ sucesso: true, verificadoEm: new Date().toISOString() });
   } catch (err) {
-    console.error('Erro ao registrar selfie de verificação:', err);
+    console.error('Erro ao registrar selfie:', err);
     return res.status(500).json({ erro: 'Falha ao validar selfie no servidor.' });
   }
 });
 
-// =========================================================================
-// 1. MAPA DE CALOR: PONTOS DE DEMANDA RECENTES (ÚLTIMAS 2 HORAS)
-// =========================================================================
-router.get('/calor', autenticarToken, async (req, res) => {
+// ============================================================================
+// 1. MAPA DE CALOR (últimas 2 horas)
+// ============================================================================
+router.get('/calor', autenticarToken, somenteMotorista, async (req, res) => {
   try {
     const pontos = await sql`
-      SELECT 
-        origem_lat AS lat, 
-        origem_lng AS lng,
-        COUNT(id)::int AS intensidade
+      SELECT ROUND(origem_lat::numeric, 3) AS lat, ROUND(origem_lng::numeric, 3) AS lng, COUNT(id)::int AS intensidade
       FROM pedidos
-      WHERE origem_lat IS NOT NULL 
-        AND origem_lng IS NOT NULL
+      WHERE origem_lat IS NOT NULL AND origem_lng IS NOT NULL
         AND criado_em >= NOW() - INTERVAL '2 hours'
-      GROUP BY origem_lat, origem_lng
+      GROUP BY 1, 2
       ORDER BY intensidade DESC
       LIMIT 150;
     `;
 
-    const heatmapData = pontos.map(p => [
+    const heatmapData = pontos.map((p) => [
       Number(p.lat),
       Number(p.lng),
       Math.min(1.0, Math.max(0.2, Number(p.intensidade) * 0.3))
@@ -139,284 +159,206 @@ router.get('/calor', autenticarToken, async (req, res) => {
 
     res.json({ sucesso: true, pontos: heatmapData });
   } catch (err) {
-    console.error('Erro ao gerar dados do mapa de calor:', err);
+    console.error('Erro no mapa de calor:', err);
     res.status(500).json({ erro: 'Falha ao processar mapa de calor.' });
   }
 });
 
-// =========================================================================
-// 2. MODO PAUSA RÁPIDA (ABASTECIMENTO / ALMOÇO)
-// =========================================================================
-router.put('/modo-pausa', autenticarToken, async (req, res) => {
+// ============================================================================
+// 2. MODO PAUSA
+// ============================================================================
+router.put('/modo-pausa', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const { emPausa, minutos } = req.body;
-
-    const duracaoMin = Number(minutos) || 15;
+    const emPausa = Boolean(req.body?.emPausa);
+    const duracaoMin = Math.min(120, Math.max(5, Number(req.body?.minutos) || 15));
     const pausaAte = emPausa ? new Date(Date.now() + duracaoMin * 60 * 1000) : null;
 
-    const mot = await sql`
-      UPDATE motoristas
-      SET em_pausa = ${!!emPausa},
-          pausa_ate = ${pausaAte}
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text
-      RETURNING id, em_pausa, pausa_ate;
+    await sql`
+      UPDATE motoristas SET em_pausa = ${emPausa}, pausa_ate = ${pausaAte}
+      WHERE id = ${req.motorista.id};
     `;
-
-    if (mot.length === 0) return res.status(404).json({ erro: 'Motorista não encontrado.' });
 
     res.json({
       sucesso: true,
-      emPausa: !!emPausa,
+      emPausa,
       pausaAte,
       mensagem: emPausa ? `Pausa ativada por ${duracaoMin} minutos.` : 'Pausa finalizada. Pronto para receber chamadas!'
     });
   } catch (err) {
-    console.error('Erro ao alternar modo pausa:', err);
+    console.error('Erro ao alternar pausa:', err);
     res.status(500).json({ erro: 'Falha ao alterar pausa.' });
   }
 });
 
-// =========================================================================
-// 3. CONFIGURAR OU ALTERNAR FILTRO "DIREÇÃO DE CASA"
-// =========================================================================
-router.put('/filtro-destino', autenticarToken, async (req, res) => {
+// ============================================================================
+// 3. FILTRO "DIREÇÃO DE CASA"
+// ============================================================================
+router.put('/filtro-destino', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const { lat, lng, ativo } = req.body;
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    const coordsOk = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+    const ativo = Boolean(req.body?.ativo);
 
-    const mot = await sql`
+    const [mot] = await sql`
       UPDATE motoristas
-      SET destino_casa_lat = ${lat ? Number(lat) : null},
-          destino_casa_lng = ${lng ? Number(lng) : null},
-          destino_casa_ativo = ${!!ativo}
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text
+      SET destino_casa_lat = ${coordsOk ? lat : null},
+          destino_casa_lng = ${coordsOk ? lng : null},
+          destino_casa_ativo = ${ativo && coordsOk}
+      WHERE id = ${req.motorista.id}
       RETURNING id, destino_casa_lat, destino_casa_lng, destino_casa_ativo;
     `;
 
-    if (mot.length === 0) return res.status(404).json({ erro: 'Motorista não encontrado.' });
-    res.json({ sucesso: true, config: mot[0] });
+    res.json({ sucesso: true, config: mot });
   } catch (err) {
-    console.error('Erro ao atualizar filtro de destino:', err);
+    console.error('Erro no filtro de destino:', err);
     res.status(500).json({ erro: 'Falha ao salvar preferência de rota.' });
   }
 });
 
-// =========================================================================
-// 4. CONSULTA DE PERFIL (COM CÓDIGO PESSOAL DE VOZ)
-// =========================================================================
-const handlerObterPerfil = async (req, res) => {
-  try {
-    const usuarioId = req.usuario?.id || '';
-    const emailUsuario = req.usuario?.email || '';
-
-    let mot = await sql`
-      SELECT 
-        id, usuario_id, nome, email, telefone, categoria,
-        saldo_carteira, status_aprovacao, foto_perfil_url,
-        avaliacao_media, total_corridas,
-        veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-        chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
-        em_pausa, pausa_ate, destino_casa_ativo, ultima_selfie_em
-      FROM motoristas
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text 
-         OR (email = ${emailUsuario} AND ${emailUsuario} != '')
-      LIMIT 1;
-    `;
-
-    if (mot.length === 0) {
-      mot = await sql`
-        SELECT 
-          id, usuario_id, nome, email, telefone, categoria,
-          saldo_carteira, status_aprovacao, foto_perfil_url,
-          avaliacao_media, total_corridas,
-          veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-          chave_pix_padrao, COALESCE(codigo_voz, 'Zank') AS codigo_voz,
-          em_pausa, pausa_ate, destino_casa_ativo, ultima_selfie_em
-        FROM motoristas
-        ORDER BY saldo_carteira DESC, criado_em ASC
-        LIMIT 1;
-      `;
-
-      if (mot.length > 0 && usuarioId) {
-        await sql`
-          UPDATE motoristas 
-          SET usuario_id = ${usuarioId}
-          WHERE id = ${mot[0].id};
-        `;
-      }
-    }
-
-    if (mot.length > 0) {
-      const m = mot[0];
-      return res.json({
-        id: m.id,
-        usuario_id: m.usuario_id || usuarioId,
-        nome: m.nome || 'Motorista Parceiro',
-        email: m.email || '',
-        telefone: m.telefone || '',
-        categoria: m.categoria || 'carro',
-        saldo_carteira: Number(m.saldo_carteira || 0),
-        status_aprovacao: m.status_aprovacao || 'aprovado',
-        foto_perfil_url: m.foto_perfil_url || '',
-        avaliacao_media: Number(m.avaliacao_media || 5.0),
-        total_corridas: Number(m.total_corridas || 0),
-        veiculo_modelo: m.veiculo_modelo || 'Onix',
-        veiculo_placa: m.veiculo_placa || 'ABC1D23',
-        veiculo_cor: m.veiculo_cor || 'Prata',
-        veiculo_ano: m.veiculo_ano || '2023',
-        chave_pix_padrao: m.chave_pix_padrao || '',
-        codigo_voz: m.codigo_voz || 'Zank',
-        em_pausa: !!m.em_pausa,
-        pausa_ate: m.pausa_ate,
-        destino_casa_ativo: !!m.destino_casa_ativo,
-        ultima_selfie_em: m.ultima_selfie_em
-      });
-    }
-
-    return res.status(404).json({ erro: 'Nenhum perfil de motorista cadastrado.' });
-  } catch (err) {
-    console.error('Erro ao consultar perfil do motorista:', err);
-    res.status(500).json({ erro: 'Falha ao consultar perfil.' });
-  }
+// ============================================================================
+// 4. PERFIL DO MOTORISTA
+// ============================================================================
+const handlerObterPerfil = (req, res) => {
+  const m = req.motorista;
+  res.json({
+    id: m.id,
+    usuario_id: m.usuario_id || m.id,
+    nome: m.nome || 'Motorista Parceiro',
+    email: m.email || '',
+    telefone: m.telefone || '',
+    categoria: m.categoria || 'carro',
+    saldo_carteira: Number(m.saldo_carteira || 0),
+    status_aprovacao: m.status_aprovacao || 'pendente',
+    foto_perfil_url: m.foto_perfil_url || '',
+    avaliacao_media: Number(m.avaliacao_media || 5.0),
+    total_corridas: Number(m.total_corridas || 0),
+    nivel: m.nivel || 'bronze',
+    veiculo_modelo: m.veiculo_modelo || '',
+    veiculo_placa: m.veiculo_placa || '',
+    veiculo_cor: m.veiculo_cor || '',
+    veiculo_ano: m.veiculo_ano || '',
+    chave_pix_padrao: m.chave_pix_padrao || '',
+    codigo_voz: m.codigo_voz || 'Zank',
+    em_pausa: Boolean(m.em_pausa),
+    pausa_ate: m.pausa_ate,
+    destino_casa_ativo: Boolean(m.destino_casa_ativo),
+    ultima_selfie_em: m.ultima_selfie_em
+  });
 };
 
-router.get('/perfil', autenticarToken, handlerObterPerfil);
-router.get('/meu-perfil', autenticarToken, handlerObterPerfil);
+router.get('/perfil', ...doMotorista, handlerObterPerfil);
+router.get('/meu-perfil', ...doMotorista, handlerObterPerfil);
 
-// =========================================================================
-// 5. ATUALIZAR DADOS DO PERFIL
-// =========================================================================
-router.put('/perfil', autenticarToken, async (req, res) => {
+// ============================================================================
+// 5. ATUALIZAR PERFIL
+// Placa e modelo NÃO mudam por aqui: troca de veículo passa pelo admin (novo CRLV).
+// ============================================================================
+router.put('/perfil', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const emailUsuario = req.usuario.email || '';
-    const {
-      nome, telefone, foto_perfil_url, foto_base64,
-      veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-      chave_pix_padrao, codigo_voz
-    } = req.body;
+    const b = req.body || {};
+    const fNome = textoOuNull(b.nome, 120);
+    const fTel = b.telefone ? String(b.telefone).replace(/\D/g, '').slice(0, 13) || null : null;
+    const fotoBruta = b.foto_base64 || b.foto_perfil_url || null;
+    const fFoto = fotoBruta && ehImagemBase64(fotoBruta, MAX_FOTO_CHARS) ? fotoBruta : null;
+    const fCor = textoOuNull(b.veiculo_cor, 30);
+    const anoNum = parseInt(b.veiculo_ano, 10);
+    const fAno = Number.isInteger(anoNum) && anoNum >= 1995 && anoNum <= new Date().getFullYear() + 1 ? String(anoNum) : null;
+    const fPix = textoOuNull(b.chave_pix_padrao, 150);
+    const fCodVoz = textoOuNull(b.codigo_voz, 30);
 
-    const fNome = (nome && nome.trim()) ? nome.trim() : null;
-    const fTel = (telefone && telefone.trim()) ? telefone.trim() : null;
-    const fFoto = (foto_base64 && foto_base64.trim()) ? foto_base64.trim() : ((foto_perfil_url && foto_perfil_url.trim()) ? foto_perfil_url.trim() : null);
-    const fMod = (veiculo_modelo && veiculo_modelo.trim()) ? veiculo_modelo.trim() : null;
-    const fPlaca = (veiculo_placa && veiculo_placa.trim()) ? veiculo_placa.trim().toUpperCase() : null;
-    const fCor = (veiculo_cor && veiculo_cor.trim()) ? veiculo_cor.trim() : null;
-    const fAno = (veiculo_ano && String(veiculo_ano).trim()) ? String(veiculo_ano).trim() : null;
-    const fPix = (chave_pix_padrao && chave_pix_padrao.trim()) ? chave_pix_padrao.trim() : null;
-    const fCodVoz = (codigo_voz && codigo_voz.trim()) ? codigo_voz.trim() : null;
+    if (fotoBruta && !fFoto) {
+      return res.status(400).json({ erro: 'Foto inválida ou muito grande (máx. 1 MB).' });
+    }
+    if (fTel && fTel.length < 10) {
+      return res.status(400).json({ erro: 'Telefone inválido.' });
+    }
 
-    let mot = await sql`
+    const placaPedida = b.veiculo_placa ? String(b.veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null;
+    const modeloPedido = textoOuNull(b.veiculo_modelo, 80);
+    const tentouTrocarVeiculo =
+      (placaPedida && placaPedida !== String(req.motorista.veiculo_placa || '').toUpperCase()) ||
+      (modeloPedido && modeloPedido !== req.motorista.veiculo_modelo);
+
+    const [mot] = await sql`
       UPDATE motoristas
-      SET 
-        nome = COALESCE(${fNome}, nome),
-        telefone = COALESCE(${fTel}, telefone),
-        foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
-        veiculo_modelo = COALESCE(${fMod}, veiculo_modelo),
-        veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
-        veiculo_cor = COALESCE(${fCor}, veiculo_cor),
-        veiculo_ano = COALESCE(${fAno}, veiculo_ano),
-        chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
-        codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text 
-         OR (email = ${emailUsuario} AND ${emailUsuario} != '')
-      RETURNING *;
-    `;
-
-    if (mot.length === 0) {
-      mot = await sql`
-        UPDATE motoristas
-        SET 
-          usuario_id = ${usuarioId},
-          nome = COALESCE(${fNome}, nome),
+      SET nome = COALESCE(${fNome}, nome),
           telefone = COALESCE(${fTel}, telefone),
           foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
-          veiculo_modelo = COALESCE(${fMod}, veiculo_modelo),
-          veiculo_placa = COALESCE(${fPlaca}, veiculo_placa),
           veiculo_cor = COALESCE(${fCor}, veiculo_cor),
           veiculo_ano = COALESCE(${fAno}, veiculo_ano),
           chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
           codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
-        WHERE id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1)
-        RETURNING *;
-      `;
-    }
+      WHERE id = ${req.motorista.id}
+      RETURNING id, nome, telefone, foto_perfil_url, veiculo_modelo, veiculo_placa,
+                veiculo_cor, veiculo_ano, chave_pix_padrao, codigo_voz;
+    `;
 
     await sql`
       UPDATE usuarios
-      SET 
-        nome = COALESCE(${fNome}, nome),
-        telefone = COALESCE(${fTel}, telefone),
-        foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url)
-      WHERE id::text = ${usuarioId}::text;
+      SET nome = COALESCE(${fNome}, nome),
+          telefone = COALESCE(${fTel}, telefone),
+          foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url)
+      WHERE id::text = ${String(req.motorista.usuario_id || req.motorista.id)}::text;
     `;
 
-    res.json({ sucesso: true, motorista: mot[0] || {} });
+    res.json({
+      sucesso: true,
+      motorista: mot,
+      aviso: tentouTrocarVeiculo
+        ? 'Placa e modelo não foram alterados. Para trocar de veículo, fale com o suporte HUBy e envie o novo CRLV.'
+        : undefined
+    });
   } catch (err) {
-    console.error('Erro detalhado ao atualizar perfil do motorista:', err);
-    res.status(500).json({ erro: err.message || 'Falha ao salvar dados do perfil.' });
+    console.error('Erro ao atualizar perfil do motorista:', err);
+    if (err?.code === '23505') return res.status(409).json({ erro: 'Este telefone já está em uso.' });
+    res.status(500).json({ erro: 'Falha ao salvar dados do perfil.' });
   }
 });
 
-router.put('/chave-pix', autenticarToken, async (req, res) => {
+router.put('/chave-pix', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const { chavePix } = req.body;
+    const chavePix = textoOuNull(req.body?.chavePix, 150);
+    if (!chavePix || chavePix.length < 5) {
+      return res.status(400).json({ erro: 'Informe uma chave Pix válida.' });
+    }
 
-    await sql`
-      UPDATE motoristas 
-      SET chave_pix_padrao = ${chavePix}
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text
-         OR id = (SELECT id FROM motoristas ORDER BY saldo_carteira DESC LIMIT 1);
-    `;
-
+    await sql`UPDATE motoristas SET chave_pix_padrao = ${chavePix} WHERE id = ${req.motorista.id};`;
     res.json({ sucesso: true, mensagem: 'Chave Pix atualizada!' });
   } catch (err) {
-    res.status(500).json({ erro: 'Falha ao salvar chave Pix' });
+    res.status(500).json({ erro: 'Falha ao salvar chave Pix.' });
   }
 });
 
-// =========================================================================
-// 6. EXTRATO FINANCEIRO COMPLETO (Sincronizado com a taxa do banco)
-// =========================================================================
-router.get('/extrato', autenticarToken, async (req, res) => {
+// ============================================================================
+// 6. EXTRATO (repasse calculado com a taxa do NÍVEL do motorista)
+// ============================================================================
+async function fatorRepasseDoMotorista(mot) {
+  const tarifas = await lerTarifasDoBanco();
+  const nivel = String(mot.nivel || 'bronze').toLowerCase();
+  const taxa = Number(tarifas.niveis_motorista?.[nivel]?.taxa_huby ?? tarifas.taxa_plataforma ?? 15);
+  return { fator: Math.max(0.1, (100 - taxa) / 100), taxa };
+}
+
+router.get('/extrato', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-
-    const mot = await sql`
-      SELECT id FROM motoristas 
-      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
-      ORDER BY saldo_carteira DESC LIMIT 1;
-    `;
-    const motoristaIdReal = mot[0]?.id || usuarioId;
-
-    const tarifas = await lerTarifasDoBanco();
-    const fatorMotorista = Math.max(0.1, (100 - Number(tarifas.taxa_plataforma ?? 15)) / 100);
+    const motId = String(req.motorista.id);
+    const { fator } = await fatorRepasseDoMotorista(req.motorista);
 
     const saques = await sql`
       SELECT id, valor, chave_pix, tipo_chave, status, criado_em
       FROM saques_motoristas
-      WHERE motorista_id::text = ${motoristaIdReal}::text 
-         OR motorista_id::text = ${usuarioId}::text
+      WHERE motorista_id::text = ${motId}
       ORDER BY criado_em DESC
       LIMIT 15;
     `;
 
     const corridas = await sql`
-      SELECT 
-        id, valor_total, 
-        ROUND(COALESCE(valor_total, 0) * ${fatorMotorista}, 2) AS repasse_liquido,
-        valor_adicionais, concluido_em, criado_em, origem_endereco, destino_endereco
+      SELECT id, valor_total,
+             ROUND(COALESCE(valor_total, 0) * ${fator}, 2) AS repasse_liquido,
+             valor_adicionais, concluido_em, criado_em, origem_endereco, destino_endereco
       FROM pedidos
-      WHERE LOWER(status) = 'concluido'
-        AND (motorista_id::text = ${motoristaIdReal}::text 
-             OR motorista_id::text = ${usuarioId}::text)
+      WHERE LOWER(status) = 'concluido' AND motorista_id::text = ${motId}
       ORDER BY COALESCE(concluido_em, criado_em) DESC
       LIMIT 20;
     `;
@@ -428,40 +370,29 @@ router.get('/extrato', autenticarToken, async (req, res) => {
   }
 });
 
-// =========================================================================
-// 7. GANHOS DE HOJE E TURNO (Sincronizado com a taxa do banco)
-// =========================================================================
-router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
+// ============================================================================
+// 7. GANHOS DE HOJE (fuso de Brasília)
+// ============================================================================
+router.get('/ganhos-hoje', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
+    const motId = String(req.motorista.id);
+    const { fator, taxa } = await fatorRepasseDoMotorista(req.motorista);
 
-    const mot = await sql`
-      SELECT id FROM motoristas 
-      WHERE id::text = ${usuarioId}::text OR usuario_id::text = ${usuarioId}::text
-      ORDER BY saldo_carteira DESC LIMIT 1;
-    `;
-    const motoristaIdReal = mot[0]?.id || usuarioId;
-
-    const tarifas = await lerTarifasDoBanco();
-    const fatorMotorista = Math.max(0.1, (100 - Number(tarifas.taxa_plataforma ?? 15)) / 100);
-
-    const corridasHoje = await sql`
-      SELECT 
-        COUNT(*)::int AS total_corridas,
-        COALESCE(SUM(valor_total * ${fatorMotorista}), 0) AS ganhos_liquidos
+    const [dados] = await sql`
+      SELECT COUNT(*)::int AS total_corridas,
+             COALESCE(SUM(valor_total * ${fator}), 0) AS ganhos_liquidos
       FROM pedidos
       WHERE LOWER(status) = 'concluido'
-        AND COALESCE(concluido_em, criado_em) >= CURRENT_DATE
-        AND (motorista_id::text = ${motoristaIdReal}::text 
-             OR motorista_id::text = ${usuarioId}::text);
+        AND motorista_id::text = ${motId}
+        AND (COALESCE(concluido_em, criado_em) AT TIME ZONE 'America/Sao_Paulo')::date
+            = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date;
     `;
-
-    const dados = corridasHoje[0] || { total_corridas: 0, ganhos_liquidos: 0 };
 
     res.json({
       sucesso: true,
-      corridasHoje: Number(dados.total_corridas || 0),
-      ganhosHoje: Number(Number(dados.ganhos_liquidos || 0).toFixed(2))
+      corridasHoje: Number(dados?.total_corridas || 0),
+      ganhosHoje: Number(Number(dados?.ganhos_liquidos || 0).toFixed(2)),
+      taxaAplicada: taxa
     });
   } catch (err) {
     console.error('Erro ao calcular ganhos do dia:', err);
@@ -469,73 +400,92 @@ router.get('/ganhos-hoje', autenticarToken, async (req, res) => {
   }
 });
 
-// =========================================================================
-// 8. ATUALIZAR STATUS ONLINE / OFFLINE
-// =========================================================================
-router.put('/status-online', autenticarToken, async (req, res) => {
+// ============================================================================
+// 8. ONLINE / OFFLINE (só motorista aprovado fica online)
+// ============================================================================
+router.put('/status-online', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const { online } = req.body;
+    const online = Boolean(req.body?.online);
 
-    const mot = await sql`
-      UPDATE motoristas
-      SET status_online = ${!!online}
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text
+    if (online && req.motorista.status_aprovacao !== 'aprovado') {
+      return res.status(403).json({
+        erro: req.motorista.status_aprovacao === 'recusado'
+          ? 'Seu cadastro foi recusado. Fale com o suporte HUBy.'
+          : 'Seu cadastro ainda está em análise. Você poderá ficar online assim que for aprovado.'
+      });
+    }
+
+    const [mot] = await sql`
+      UPDATE motoristas SET status_online = ${online}
+      WHERE id = ${req.motorista.id}
       RETURNING id, status_online;
     `;
 
-    res.json({ sucesso: true, online: !!online, motorista: mot[0] || null });
+    res.json({ sucesso: true, online, motorista: mot });
   } catch (err) {
     console.error('Erro ao alternar status online:', err);
     res.status(500).json({ erro: 'Falha ao atualizar status online.' });
   }
 });
 
-// =========================================================================
-// 9. SOLICITAR SAQUE PIX
-// =========================================================================
-router.post('/saque', autenticarToken, async (req, res) => {
+// ============================================================================
+// 9. SAQUE PIX (débito atômico: impossível sacar duas vezes o mesmo saldo)
+// ============================================================================
+router.post('/saque', ...doMotorista, async (req, res) => {
   try {
-    const usuarioId = req.usuario.id;
-    const { valor, chavePix, tipoChave } = req.body;
+    const valorNum = Math.round((Number(String(req.body?.valor ?? '').replace(',', '.')) || 0) * 100) / 100;
+    const chavePix = textoOuNull(req.body?.chavePix, 150);
+    const tipoChave = textoOuNull(req.body?.tipoChave, 20) || 'cpf';
 
-    const valorNum = Number(valor);
-    if (!valorNum || valorNum <= 0) {
-      return res.status(400).json({ erro: 'Valor de saque inválido.' });
+    if (!valorNum || valorNum < 1) {
+      return res.status(400).json({ erro: 'O valor mínimo de saque é R$ 1,00.' });
+    }
+    if (!chavePix || chavePix.length < 5) {
+      return res.status(400).json({ erro: 'Informe a chave Pix de destino.' });
     }
 
-    const mot = await sql`
-      SELECT id, nome, saldo_carteira FROM motoristas
-      WHERE id::text = ${usuarioId}::text 
-         OR usuario_id::text = ${usuarioId}::text
-      ORDER BY saldo_carteira DESC
-      LIMIT 1;
-    `;
-
-    if (!mot.length) return res.status(404).json({ erro: 'Motorista não encontrado.' });
-    if (Number(mot[0].saldo_carteira) < valorNum) {
-      return res.status(400).json({ erro: 'Saldo insuficiente para saque.' });
-    }
-
-    await sql`
-      UPDATE motoristas 
+    const [debitado] = await sql`
+      UPDATE motoristas
       SET saldo_carteira = saldo_carteira - ${valorNum}
-      WHERE id = ${mot[0].id};
+      WHERE id = ${req.motorista.id}
+        AND status_aprovacao = 'aprovado'
+        AND COALESCE(saldo_carteira, 0) >= ${valorNum}
+      RETURNING id, nome, saldo_carteira;
     `;
 
-    await sql`
-      INSERT INTO saques_motoristas (
-        motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status
-      ) VALUES (
-        ${mot[0].id}, ${mot[0].nome}, ${chavePix}, ${tipoChave || 'pix'}, ${valorNum}, 'pendente'
-      );
-    `;
+    if (!debitado) {
+      return res.status(400).json({ erro: 'Saldo insuficiente ou cadastro ainda não aprovado.' });
+    }
 
-    res.json({ sucesso: true, mensagem: 'Saque solicitado com sucesso!' });
+    try {
+      const [saque] = await sql`
+        INSERT INTO saques_motoristas (motorista_id, motorista_nome, chave_pix, tipo_chave, valor, status)
+        VALUES (${debitado.id}, ${debitado.nome}, ${chavePix}, ${tipoChave}, ${valorNum}, 'pendente')
+        RETURNING id;
+      `;
+
+      await sql`
+        INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
+        VALUES (${debitado.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${String(saque.id)});
+      `;
+
+      const io = req.io || req.app.get('io');
+      io?.emit('novo_saque_solicitado', { saqueId: saque.id, motorista_nome: debitado.nome, valor: valorNum });
+
+      res.json({
+        sucesso: true,
+        saqueId: saque.id,
+        novoSaldo: Number(debitado.saldo_carteira),
+        mensagem: 'Saque solicitado! Ele será pago após a conferência da equipe HUBy.'
+      });
+    } catch (erroRegistro) {
+      // Se o registro falhar, devolve o dinheiro
+      await sql`UPDATE motoristas SET saldo_carteira = saldo_carteira + ${valorNum} WHERE id = ${debitado.id};`;
+      throw erroRegistro;
+    }
   } catch (err) {
     console.error('Erro ao processar saque:', err);
-    res.status(500).json({ erro: 'Falha ao processar saque.' });
+    if (!res.headersSent) res.status(500).json({ erro: 'Falha ao processar saque.' });
   }
 });
 

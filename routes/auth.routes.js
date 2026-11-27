@@ -1,4 +1,4 @@
-// routes/auth.routes.js - Cadastro com Auditoria Automática de Documentos/Datas, OTP, LGPD e Perfil HUBy
+// routes/auth.routes.js - Cadastro, Login (passageiro e motorista com senha), OTP, LGPD e Perfil HUBy
 import express from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
@@ -10,6 +10,10 @@ import { registrarIndicacaoNoCadastro } from './indicacoes.routes.js';
 const router = express.Router();
 
 const MSG_CREDENCIAIS = 'Credenciais inválidas.';
+const SENHA_MIN = 8;
+const EM_PRODUCAO = process.env.NODE_ENV === 'production';
+// Motorista novo entra como 'pendente'. Para aprovar automaticamente, crie no Render: APROVACAO_AUTOMATICA_MOTORISTA=true
+const APROVACAO_AUTOMATICA = String(process.env.APROVACAO_AUTOMATICA_MOTORISTA || '').toLowerCase() === 'true';
 
 async function garantirEstruturaAuthSeguranca() {
   try {
@@ -68,6 +72,18 @@ function validarPlacaVeiculo(placa) {
   return /^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(limpa);
 }
 
+function validarEmail(email) {
+  return /^[^\s@<>"']{1,64}@[^\s@<>"']{1,190}\.[a-z]{2,}$/i.test(String(email || ''));
+}
+
+function validarSenha(senha) {
+  const s = String(senha || '');
+  if (s.length < SENHA_MIN) return `A senha precisa ter pelo menos ${SENHA_MIN} caracteres.`;
+  if (s.length > 72) return 'A senha pode ter no máximo 72 caracteres.';
+  if (!/[A-Za-z]/.test(s) || !/[0-9]/.test(s)) return 'A senha precisa ter letras e números.';
+  return null;
+}
+
 function validarDataFuturaDocumento(dataStr, nomeDoc) {
   if (!dataStr || !/^\d{4}-\d{2}-\d{2}$/.test(String(dataStr).slice(0, 10))) {
     return { valida: false, erro: `Informe a data de validade do(a) ${nomeDoc}.` };
@@ -93,7 +109,7 @@ function validarFoto(url, maxCaracteres = 1_500_000) {
   const m = url.match(/^data:image\/(jpeg|jpg|png|webp);base64,/i);
   if (!m) return false;
   const corpo = url.slice(m[0].length);
-  return corpo.length >= 500 && corpo.length <= maxCaracteres;
+  return corpo.length >= 500 && corpo.length <= maxCaracteres && /^[A-Za-z0-9+/=]+$/.test(corpo);
 }
 
 function auditarDocumentacaoMotorista({
@@ -170,11 +186,14 @@ function extrairRoleLimpa(usr) {
   return bruto;
 }
 
+// Só "recusado" impede o login. "pendente" entra, mas não recebe corridas até ser aprovado.
 function bloqueioDeAprovacao(mot) {
-  const s = mot?.status_aprovacao;
-  if (!s || s === 'aprovado') return null;
+  const s = String(mot?.status_aprovacao || '').toLowerCase();
   if (s === 'recusado') {
     return `Cadastro recusado${mot.motivo_recusa ? `: ${mot.motivo_recusa}` : '.'}`;
+  }
+  if (s === 'bloqueado' || s === 'suspenso') {
+    return 'Sua conta de motorista está suspensa. Fale com o suporte HUBy.';
   }
   return null;
 }
@@ -185,6 +204,68 @@ function emitirTokenMotorista(mot) {
     JWT_SECRET,
     { expiresIn: '30d' }
   );
+}
+
+function respostaLoginMotorista(mot, nomeAlternativo) {
+  const status = String(mot.status_aprovacao || 'pendente').toLowerCase();
+  return {
+    sucesso: true,
+    token: emitirTokenMotorista(mot),
+    usuario: {
+      id: mot.id,
+      motoristaId: mot.id,
+      nome: mot.nome || nomeAlternativo,
+      email: mot.email,
+      telefone: mot.telefone,
+      role: 'motorista',
+      categoria: mot.categoria || 'carro',
+      status_aprovacao: status
+    },
+    aviso: status === 'aprovado'
+      ? undefined
+      : 'Seu cadastro está em análise. Você poderá ficar online assim que for aprovado.'
+  };
+}
+
+// Busca motorista por e-mail, telefone, CPF ou CNH e confere a senha (obrigatória)
+async function autenticarMotorista(identificador, senha) {
+  const idLimpo = String(identificador || '').trim().toLowerCase();
+  const idNumeros = String(identificador || '').replace(/\D/g, '');
+
+  if (!idLimpo || !senha) {
+    return { erro: 'Informe seu e-mail (ou telefone/CPF) e a senha.', status: 400 };
+  }
+
+  const motoristas = await sql`
+    SELECT * FROM motoristas
+    WHERE LOWER(TRIM(email)) = ${idLimpo}
+       OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+       OR (cpf IS NOT NULL AND regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+       OR (cnh_numero IS NOT NULL AND regexp_replace(cnh_numero, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
+    LIMIT 1;
+  `;
+
+  if (!motoristas.length) {
+    return { erro: MSG_CREDENCIAIS, status: 401 };
+  }
+
+  const mot = motoristas[0];
+
+  if (!mot.senha_hash) {
+    return {
+      erro: 'Sua conta de motorista ainda não tem senha. Fale com o suporte HUBy para criar uma.',
+      status: 403
+    };
+  }
+
+  if (!(await bcrypt.compare(String(senha), mot.senha_hash))) {
+    return { erro: MSG_CREDENCIAIS, status: 401 };
+  }
+
+  const bloqueio = bloqueioDeAprovacao(mot);
+  if (bloqueio) return { erro: bloqueio, status: 403 };
+
+  return { mot };
 }
 
 // ============================================================================
@@ -222,7 +303,6 @@ async function despacharMensagemWhatsApp(telefoneNumeros, codigo) {
 
 router.post('/enviar-codigo', async (req, res) => {
   try {
-    await garantirEstruturaAuthSeguranca();
     const telLimpo = String(req.body?.telefone || '').replace(/\D/g, '');
 
     if (telLimpo.length < 10 || telLimpo.length > 13) {
@@ -238,7 +318,7 @@ router.post('/enviar-codigo', async (req, res) => {
       return res.status(429).json({ erro: 'Muitos códigos solicitados. Aguarde alguns minutos.' });
     }
 
-    const codigo = String(crypto.randomInt(100000, 999999));
+    const codigo = String(crypto.randomInt(100000, 1000000));
     const expiraEm = new Date(Date.now() + 5 * 60 * 1000);
 
     await sql`
@@ -248,13 +328,19 @@ router.post('/enviar-codigo', async (req, res) => {
 
     const envio = await despacharMensagemWhatsApp(telLimpo, codigo);
 
+    if (!envio.enviadoReal && EM_PRODUCAO) {
+      // Em produção o código NUNCA volta na resposta (senão a verificação não vale nada)
+      return res.status(503).json({ erro: 'Não foi possível enviar o código agora. Tente novamente em instantes.' });
+    }
+
     return res.json({
       sucesso: true,
       enviadoViaWhatsApp: envio.enviadoReal,
+      // Só em ambiente de teste (NODE_ENV diferente de production)
       codigoTeste: envio.enviadoReal ? undefined : codigo,
       mensagem: envio.enviadoReal
         ? 'Código de 6 dígitos enviado para o seu WhatsApp!'
-        : `Código de verificação gerado: ${codigo}`
+        : `Modo de teste: seu código é ${codigo}`
     });
   } catch (err) {
     console.error('Erro ao gerar OTP:', err);
@@ -264,7 +350,6 @@ router.post('/enviar-codigo', async (req, res) => {
 
 router.post('/verificar-codigo', async (req, res) => {
   try {
-    await garantirEstruturaAuthSeguranca();
     const telLimpo = String(req.body?.telefone || '').replace(/\D/g, '');
     const codigoInformado = String(req.body?.codigo || '').replace(/\D/g, '');
 
@@ -289,7 +374,10 @@ router.post('/verificar-codigo', async (req, res) => {
       return res.status(429).json({ erro: 'Limite de tentativas excedido. Solicite um novo código.' });
     }
 
-    if (reg.codigo !== codigoInformado) {
+    const codigoOk = reg.codigo.length === codigoInformado.length
+      && crypto.timingSafeEqual(Buffer.from(reg.codigo), Buffer.from(codigoInformado));
+
+    if (!codigoOk) {
       await sql`UPDATE codigos_verificacao SET tentativas = tentativas + 1 WHERE id = ${reg.id};`;
       return res.status(400).json({ erro: 'Código incorreto. Verifique os 6 dígitos e tente novamente.' });
     }
@@ -307,12 +395,12 @@ router.post('/verificar-codigo', async (req, res) => {
 });
 
 // ============================================================================
-// CADASTRO COM AUDITORIA AUTOMÁTICA DE DOCUMENTOS E APROVAÇÃO IMEDIATA
+// CADASTRO (PASSAGEIRO OU MOTORISTA)
+// Motorista: documentos conferidos automaticamente; aprovação final pelo admin
+// (ou automática se APROVACAO_AUTOMATICA_MOTORISTA=true no Render).
 // ============================================================================
-router.post('/cadastro', async (req, res) => {
+async function handlerCadastro(req, res) {
   try {
-    await garantirEstruturaAuthSeguranca();
-
     const {
       nome, email, telefone, cpf, senha, role,
       aceitouTermos, versaoTermos, codigoIndicacao,
@@ -321,45 +409,54 @@ router.post('/cadastro', async (req, res) => {
       categoria, categoria_veiculo,
       veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
       doc_cnh_url, doc_crlv_url
-    } = req.body;
+    } = req.body || {};
 
-    if (aceitouTermos === false) {
-      return res.status(400).json({ erro: 'Você precisa ler e aceitar os Termos de Uso e a Política de Privacidade (LGPD).' });
+    if (aceitouTermos !== true) {
+      return res.status(400).json({ erro: 'Você precisa ler e aceitar os Termos de Uso e a Política de Privacidade.' });
     }
 
     const papelDesejado = role === 'motorista' ? 'motorista' : 'cliente';
 
-    if (!nome || !senha || (!email && !telefone)) {
-      return res.status(400).json({ erro: 'Preencha os campos obrigatórios (Nome, Senha e Contato).' });
-    }
-
-    const nomeLimpo = String(nome).trim();
-    const senhaTexto = String(senha);
-    const emailLimpo = email ? String(email).trim().toLowerCase() : null;
+    const nomeLimpo = String(nome || '').trim().slice(0, 120);
+    const emailLimpo = email ? String(email).trim().toLowerCase().slice(0, 254) : null;
     const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
     const cpfLimpo = cpf ? String(cpf).replace(/\D/g, '') : '';
     const versaoFinalTermos = String(versaoTermos || '1.0').slice(0, 20);
     const codigoConviteLimpo = codigoIndicacao ? String(codigoIndicacao).trim().toUpperCase().slice(0, 20) : null;
 
+    if (nomeLimpo.length < 3) {
+      return res.status(400).json({ erro: 'Informe seu nome completo.' });
+    }
+    if (!emailLimpo || !validarEmail(emailLimpo)) {
+      return res.status(400).json({ erro: 'Informe um e-mail válido.' });
+    }
+    if (!telLimpo || telLimpo.length < 10 || telLimpo.length > 13) {
+      return res.status(400).json({ erro: 'Informe um telefone válido com DDD.' });
+    }
     if (!cpfLimpo || !validarNumeroCPF(cpfLimpo)) {
       return res.status(400).json({ erro: 'Número de CPF inválido.' });
     }
 
-    let telVerificado = false;
-    if (telLimpo) {
-      const checkOtp = await sql`
-        SELECT id FROM codigos_verificacao
-        WHERE telefone = ${telLimpo} AND verificado = TRUE
-        ORDER BY id DESC LIMIT 1;
-      `;
-      if (checkOtp.length) {
-        telVerificado = true;
-      }
+    const erroSenha = validarSenha(senha);
+    if (erroSenha) {
+      return res.status(400).json({ erro: erroSenha });
     }
 
-    const dataNascSql = dataNascimento ? String(dataNascimento).slice(0, 10) : null;
-    const salt = await bcrypt.genSalt(10);
-    const senhaHash = await bcrypt.hash(senhaTexto, salt);
+    // Telefone verificado nos últimos 30 minutos (se o app usou a verificação)
+    let telVerificado = false;
+    const checkOtp = await sql`
+      SELECT id FROM codigos_verificacao
+      WHERE telefone = ${telLimpo} AND verificado = TRUE
+        AND criado_em >= NOW() - INTERVAL '30 minutes'
+      ORDER BY id DESC LIMIT 1;
+    `;
+    if (checkOtp.length) telVerificado = true;
+
+    const dataNascSql = dataNascimento && /^\d{4}-\d{2}-\d{2}/.test(String(dataNascimento))
+      ? String(dataNascimento).slice(0, 10)
+      : null;
+
+    const senhaHash = await bcrypt.hash(String(senha), 10);
 
     if (papelDesejado === 'motorista') {
       const auditoria = auditarDocumentacaoMotorista({
@@ -380,6 +477,7 @@ router.post('/cadastro', async (req, res) => {
       const corLimpa = veiculo_cor ? String(veiculo_cor).trim().slice(0, 30) : 'Não informada';
       const catFinal = String(categoria || categoria_veiculo || 'carro').slice(0, 30);
       const idMotorista = novoId('mot');
+      const statusInicial = APROVACAO_AUTOMATICA ? 'aprovado' : 'pendente';
 
       await sql`
         INSERT INTO usuarios (
@@ -400,13 +498,15 @@ router.post('/cadastro', async (req, res) => {
             cnh_numero, cnh_validade, crlv_validade,
             categoria, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
             saldo_carteira, status_aprovacao, docs_validados_auto, avaliacao_media, total_corridas,
+            status_online,
             doc_cnh_url, doc_crlv_url, termos_aceitos_em, versao_termos, telefone_verificado, indicado_por_codigo
           ) VALUES (
             ${idMotorista}, ${idMotorista}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
             ${dataNascSql}, ${senhaHash},
             ${auditoria.cnhLimpa}, ${auditoria.cnhValSql}, ${auditoria.crlvValSql},
             ${catFinal}, ${auditoria.modeloLimpo}, ${auditoria.placaLimpa}, ${corLimpa}, ${auditoria.anoLimpo},
-            0.00, 'aprovado', TRUE, 5.00, 0,
+            0.00, ${statusInicial}, TRUE, 5.00, 0,
+            FALSE,
             ${doc_cnh_url}, ${doc_crlv_url}, CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
           )
           RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria, status_aprovacao;
@@ -421,16 +521,18 @@ router.post('/cadastro', async (req, res) => {
         await registrarIndicacaoNoCadastro({
           novoUsuarioId: idMotorista,
           novoUsuarioNome: nomeLimpo,
+          novoUsuarioRole: 'motorista',
           codigoConvite: codigoConviteLimpo
         });
       }
 
+      const resposta = respostaLoginMotorista(motoristaCriado, nomeLimpo);
       return res.status(201).json({
-        sucesso: true,
-        aprovadoAutomaticamente: true,
-        mensagem: 'Documentos validados e cadastro aprovado automaticamente! Bem-vindo à HUBy.',
-        token: emitirTokenMotorista(motoristaCriado),
-        usuario: { ...motoristaCriado, motoristaId: motoristaCriado.id, role: 'motorista', status_aprovacao: 'aprovado' }
+        ...resposta,
+        aprovadoAutomaticamente: statusInicial === 'aprovado',
+        mensagem: statusInicial === 'aprovado'
+          ? 'Cadastro aprovado! Bem-vindo à HUBy.'
+          : 'Cadastro recebido! Seus documentos estão em análise. Você será avisado quando for aprovado.'
       });
     }
 
@@ -444,7 +546,7 @@ router.post('/cadastro', async (req, res) => {
         ${idUsuario}, ${nomeLimpo}, ${emailLimpo}, ${telLimpo}, ${cpfLimpo},
         ${dataNascSql},
         ${contatoEmergenciaNome ? String(contatoEmergenciaNome).trim().slice(0, 150) : null},
-        ${contatoEmergenciaTelefone ? String(contatoEmergenciaTelefone).trim().slice(0, 25) : null},
+        ${contatoEmergenciaTelefone ? String(contatoEmergenciaTelefone).replace(/\D/g, '').slice(0, 25) : null},
         ${senhaHash}, 'cliente', CURRENT_TIMESTAMP, ${versaoFinalTermos}, ${telVerificado}, ${codigoConviteLimpo}
       )
       RETURNING id, nome, email, telefone, role;
@@ -454,6 +556,7 @@ router.post('/cadastro', async (req, res) => {
       await registrarIndicacaoNoCadastro({
         novoUsuarioId: idUsuario,
         novoUsuarioNome: nomeLimpo,
+        novoUsuarioRole: 'cliente',
         codigoConvite: codigoConviteLimpo
       });
     }
@@ -465,7 +568,7 @@ router.post('/cadastro', async (req, res) => {
       { expiresIn: '30d' }
     );
 
-    res.status(201).json({ sucesso: true, token, usuario: criado });
+    res.status(201).json({ sucesso: true, token, usuario: { ...criado, role: 'cliente' } });
   } catch (err) {
     console.error('ERRO NO CADASTRO:', err);
     if (erroDeDuplicidade(err)) {
@@ -473,56 +576,33 @@ router.post('/cadastro', async (req, res) => {
     }
     res.status(500).json({ erro: 'Não foi possível concluir o cadastro. Tente novamente.' });
   }
-});
+}
 
-// LOGIN
+router.post('/cadastro', handlerCadastro);
+// Nome antigo usado por versões anteriores do app
+router.post('/registo', handlerCadastro);
+
+// ============================================================================
+// LOGIN (PASSAGEIRO E ADMIN; MOTORISTA TAMBÉM PODE ENTRAR POR AQUI COM SENHA)
+// ============================================================================
 router.post('/login', async (req, res) => {
   try {
-    const identificador = req.body.identificador || req.body.emailOuTelefone || req.body.email;
-    const senha = req.body.senha;
-    const perfilDesejado = req.body.perfilDesejado || 'cliente';
+    const identificador = req.body?.identificador || req.body?.emailOuTelefone || req.body?.email;
+    const senha = req.body?.senha;
+    const perfilDesejado = req.body?.perfilDesejado || 'cliente';
 
     if (!identificador || !senha) {
-      return res.status(400).json({ erro: 'Indique os dados de acesso e a palavra-passe.' });
+      return res.status(400).json({ erro: 'Informe seus dados de acesso e a senha.' });
+    }
+
+    if (perfilDesejado === 'motorista') {
+      const r = await autenticarMotorista(identificador, senha);
+      if (r.erro) return res.status(r.status).json({ erro: r.erro });
+      return res.json(respostaLoginMotorista(r.mot));
     }
 
     const idLimpo = String(identificador).trim().toLowerCase();
     const idNumeros = String(identificador).replace(/\D/g, '');
-
-    if (perfilDesejado === 'motorista') {
-      const motoristas = await sql`
-        SELECT * FROM motoristas
-        WHERE LOWER(TRIM(email)) = ${idLimpo}
-           OR (telefone IS NOT NULL AND regexp_replace(telefone, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
-           OR (cpf IS NOT NULL AND regexp_replace(cpf, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
-           OR (cnh_numero IS NOT NULL AND regexp_replace(cnh_numero, '\\D', '', 'g') = ${idNumeros} AND ${idNumeros} != '')
-        LIMIT 1;
-      `;
-
-      if (!motoristas.length || !motoristas[0].senha_hash) {
-        return res.status(401).json({ erro: MSG_CREDENCIAIS });
-      }
-
-      const mot = motoristas[0];
-      if (!(await bcrypt.compare(String(senha), mot.senha_hash))) {
-        return res.status(401).json({ erro: MSG_CREDENCIAIS });
-      }
-
-      const bloqueio = bloqueioDeAprovacao(mot);
-      if (bloqueio) return res.status(403).json({ erro: bloqueio });
-
-      await sql`UPDATE motoristas SET status_online = TRUE, status_aprovacao = 'aprovado' WHERE id = ${mot.id};`;
-
-      return res.json({
-        sucesso: true,
-        token: emitirTokenMotorista(mot),
-        usuario: {
-          id: mot.id, motoristaId: mot.id, nome: mot.nome, email: mot.email, telefone: mot.telefone,
-          role: 'motorista', categoria: mot.categoria || 'carro',
-          veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`, saldo: mot.saldo_carteira
-        }
-      });
-    }
 
     const usuarios = await sql`
       SELECT * FROM usuarios
@@ -550,7 +630,7 @@ router.post('/login', async (req, res) => {
 
     if (roleFinal === 'motorista') {
       const registro = await sql`
-        SELECT id, nome, categoria, status_aprovacao, motivo_recusa
+        SELECT *
         FROM motoristas
         WHERE id::text = ${String(usr.id)}::text OR usuario_id::text = ${String(usr.id)}::text
         LIMIT 1;
@@ -560,21 +640,13 @@ router.post('/login', async (req, res) => {
       const bloqueio = bloqueioDeAprovacao(registro[0]);
       if (bloqueio) return res.status(403).json({ erro: bloqueio });
 
-      return res.json({
-        sucesso: true,
-        token: emitirTokenMotorista(registro[0]),
-        usuario: {
-          id: registro[0].id, motoristaId: registro[0].id, nome: usr.nome,
-          email: usr.email, telefone: usr.telefone, role: 'motorista',
-          categoria: registro[0].categoria || 'carro'
-        }
-      });
+      return res.json(respostaLoginMotorista(registro[0], usr.nome));
     }
 
     const token = jwt.sign(
       { id: usr.id, nome: usr.nome, email: usr.email, role: roleFinal },
       JWT_SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: roleFinal === 'admin' ? '12h' : '30d' }
     );
 
     res.json({
@@ -594,62 +666,28 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// LOGIN DO MOTORISTA
+// ============================================================================
+// LOGIN DO MOTORISTA (SENHA OBRIGATÓRIA)
+// Aceita: { identificador, senha } ou o formato antigo { email, senha }
+// ============================================================================
 router.post('/login-motorista', async (req, res) => {
   try {
-    const { email, cnh, veiculo_placa, senha } = req.body;
-    if (!email || !cnh || !veiculo_placa) {
-      return res.status(400).json({ erro: 'Preencha E-mail, CNH e Placa.' });
-    }
+    const identificador = req.body?.identificador || req.body?.email || req.body?.telefone || req.body?.cpf;
+    const senha = req.body?.senha;
 
-    const emailLimpo = String(email).trim().toLowerCase();
-    const cnhLimpa = String(cnh).replace(/\D/g, '');
-    const placaLimpa = String(veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const r = await autenticarMotorista(identificador, senha);
+    if (r.erro) return res.status(r.status).json({ erro: r.erro });
 
-    const motoristas = await sql`
-      SELECT * FROM motoristas
-      WHERE LOWER(TRIM(email)) = ${emailLimpo}
-        AND regexp_replace(COALESCE(cnh_numero, ''), '\\D', '', 'g') = ${cnhLimpa}
-        AND UPPER(REPLACE(TRIM(COALESCE(veiculo_placa, '')), '-', '')) = ${placaLimpa}
-      LIMIT 1;
-    `;
-
-    if (!motoristas.length) return res.status(401).json({ erro: MSG_CREDENCIAIS });
-
-    const mot = motoristas[0];
-    if (senha && mot.senha_hash) {
-      if (!(await bcrypt.compare(String(senha), mot.senha_hash))) {
-        return res.status(401).json({ erro: MSG_CREDENCIAIS });
-      }
-    }
-
-    const bloqueio = bloqueioDeAprovacao(mot);
-    if (bloqueio) return res.status(403).json({ erro: bloqueio });
-
-    await sql`UPDATE motoristas SET status_online = TRUE, status_aprovacao = 'aprovado' WHERE id = ${mot.id};`;
-
-    res.json({
-      sucesso: true,
-      token: emitirTokenMotorista(mot),
-      usuario: {
-        id: mot.id,
-        motoristaId: mot.id,
-        nome: mot.nome,
-        email: mot.email,
-        telefone: mot.telefone,
-        role: 'motorista',
-        categoria: mot.categoria || 'carro',
-        veiculo: `${mot.veiculo_modelo} (${mot.veiculo_placa})`,
-        saldo: mot.saldo_carteira
-      }
-    });
+    return res.json(respostaLoginMotorista(r.mot));
   } catch (err) {
     console.error('Erro no login do motorista:', err);
-    res.status(500).json({ erro: 'Falha interna ao validar credenciais do veículo.' });
+    res.status(500).json({ erro: 'Falha interna ao validar credenciais.' });
   }
 });
 
+// ============================================================================
 // PERFIL
+// ============================================================================
 router.get('/perfil', autenticarToken, async (req, res) => {
   try {
     const idToken = String(req.usuario.id);
@@ -658,7 +696,7 @@ router.get('/perfil', autenticarToken, async (req, res) => {
     const dados = ehMotorista
       ? await sql`
           SELECT id, nome, email, telefone, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano,
-                 foto_perfil_url AS foto_url
+                 foto_perfil_url AS foto_url, status_aprovacao
           FROM motoristas
           WHERE id::text = ${idToken}::text OR usuario_id::text = ${idToken}::text
           LIMIT 1;
@@ -682,14 +720,27 @@ router.put('/perfil', autenticarToken, async (req, res) => {
   try {
     const idToken = String(req.usuario.id);
     const ehMotorista = String(req.usuario.role || '').toLowerCase() === 'motorista';
-    const { nome, email, telefone, foto_url } = req.body;
+    const { nome, email, telefone, foto_url } = req.body || {};
 
-    const nomeLimpo = nome ? String(nome).trim() : null;
-    const emailLimpo = email ? String(email).trim().toLowerCase() : null;
+    const nomeLimpo = nome ? String(nome).trim().slice(0, 120) : null;
+    const emailLimpo = email ? String(email).trim().toLowerCase().slice(0, 254) : null;
     const telLimpo = telefone ? String(telefone).replace(/\D/g, '') : null;
 
+    if (nomeLimpo !== null && nomeLimpo.length < 2) {
+      return res.status(400).json({ erro: 'Nome muito curto.' });
+    }
+    if (emailLimpo && !validarEmail(emailLimpo)) {
+      return res.status(400).json({ erro: 'E-mail inválido.' });
+    }
+    if (telLimpo && (telLimpo.length < 10 || telLimpo.length > 13)) {
+      return res.status(400).json({ erro: 'Telefone inválido.' });
+    }
+
     let foto = null;
-    if (foto_url && validarFoto(foto_url, 700_000)) {
+    if (foto_url) {
+      if (!validarFoto(foto_url, 700_000)) {
+        return res.status(400).json({ erro: 'Foto inválida ou muito grande.' });
+      }
       foto = foto_url;
     }
 
@@ -702,16 +753,17 @@ router.put('/perfil', autenticarToken, async (req, res) => {
             telefone = COALESCE(${telLimpo}, telefone),
             foto_perfil_url = COALESCE(${foto}, foto_perfil_url)
         WHERE id::text = ${idToken}::text OR usuario_id::text = ${idToken}::text
-        RETURNING id, nome, email, telefone, veiculo_modelo, veiculo_placa, foto_perfil_url AS foto_url;
+        RETURNING id, usuario_id, nome, email, telefone, veiculo_modelo, veiculo_placa, foto_perfil_url AS foto_url;
       `;
 
+      const idUsuarioVinculado = atualizado[0]?.usuario_id || idToken;
       await sql`
         UPDATE usuarios
         SET nome = COALESCE(${nomeLimpo}, nome),
             email = COALESCE(${emailLimpo}, email),
             telefone = COALESCE(${telLimpo}, telefone),
             foto_perfil_url = COALESCE(${foto}, foto_perfil_url)
-        WHERE id::text = ${idToken}::text;
+        WHERE id::text = ${String(idUsuarioVinculado)}::text;
       `;
     } else {
       atualizado = await sql`
@@ -726,7 +778,8 @@ router.put('/perfil', autenticarToken, async (req, res) => {
     }
 
     if (!atualizado.length) return res.status(404).json({ erro: 'Utilizador não encontrado.' });
-    res.json({ sucesso: true, mensagem: 'Perfil atualizado!', usuario: atualizado[0] });
+    const { usuario_id, ...usuarioSemVinculo } = atualizado[0];
+    res.json({ sucesso: true, mensagem: 'Perfil atualizado!', usuario: usuarioSemVinculo });
   } catch (err) {
     console.error('ERRO AO ATUALIZAR PERFIL:', err);
     if (erroDeDuplicidade(err)) {

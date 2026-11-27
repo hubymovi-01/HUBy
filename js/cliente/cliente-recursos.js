@@ -1,22 +1,92 @@
 // js/cliente/cliente-recursos.js - Módulo de Cupom, Observação, Agendamento e Veículo 3D
+// Cupons: quem valida é o SERVIDOR (tabela de cupons do painel admin). Nada de cupom escrito no app.
 import { estadoCliente } from './cliente-estado.js';
 import { notificar } from '../util/alertas-huby.js';
-import { atualizarResumoValores } from './cliente-pedidos.js';
+import { atualizarResumoValores, atualizarCotacaoServidor, obterParametrosCotacao } from './cliente-pedidos.js';
 
 export const estadoRecursos = {
   formaPagamento: 'livre',
   cupomAplicado: null,
-  descontoPercentual: 0,
+  cupomInfo: null, // { tipo: 'porcentagem' | 'fixo', valor } vindo do servidor
   notaMotorista: '',
   dataAgendada: null,
   markerVeiculoAnimado: null
 };
 
-const CUPONS_VALIDOS = {
-  'HUBY10': 0.10,
-  'PRIMEIRA10': 0.10,
-  'HUBYVIP': 0.15
-};
+let callbackPrecoCupom = null;
+
+function textoDescontoCupom(info) {
+  if (!info) return '';
+  const valor = Number(info.valor || 0);
+  return info.tipo === 'porcentagem'
+    ? `-${valor}%`
+    : `-R$ ${valor.toFixed(2).replace('.', ',')}`;
+}
+
+// Mostra o cupom na tela (texto seguro, sem HTML vindo do usuário)
+function pintarCupomNaTela(codigo, info) {
+  const btnCupom = document.getElementById('btnAplicarCupom');
+  const lblBtnCupom = document.getElementById('lblBtnCupom');
+  const tagCupom = document.getElementById('tagCupomAtivo');
+
+  if (codigo) {
+    if (tagCupom) {
+      tagCupom.textContent = '';
+      tagCupom.append('🏷️ Cupom ');
+      const forte = document.createElement('strong');
+      forte.textContent = codigo;
+      tagCupom.append(forte);
+      const desc = textoDescontoCupom(info);
+      tagCupom.append(desc ? ` aplicado (${desc})` : ' será conferido ao escolher o destino');
+      tagCupom.style.display = 'block';
+    }
+    if (lblBtnCupom) lblBtnCupom.textContent = 'Remover';
+    if (btnCupom) {
+      btnCupom.style.background = 'rgba(16, 185, 129, 0.2)';
+      btnCupom.style.color = '#10B981';
+      btnCupom.style.borderColor = '#10B981';
+    }
+  } else {
+    if (tagCupom) {
+      tagCupom.textContent = '';
+      tagCupom.style.display = 'none';
+    }
+    if (lblBtnCupom) lblBtnCupom.textContent = 'Cupom';
+    if (btnCupom) {
+      btnCupom.style.background = '';
+      btnCupom.style.color = '';
+      btnCupom.style.borderColor = '';
+    }
+  }
+}
+
+// Remove o cupom da tela e recalcula o preço (silencioso = sem aviso)
+export function limparCupomAplicado(silencioso = false) {
+  if (!estadoRecursos.cupomAplicado) return;
+  estadoRecursos.cupomAplicado = null;
+  estadoRecursos.cupomInfo = null;
+  pintarCupomNaTela(null, null);
+  const inputCupom = document.getElementById('inputCupomDesconto');
+  if (inputCupom) inputCupom.value = '';
+  atualizarResumoValores();
+  if (typeof callbackPrecoCupom === 'function') callbackPrecoCupom();
+  if (!silencioso) notificar('Cupom removido.', 'info');
+}
+
+// Chamado depois de cada cotação: se o servidor recusou o cupom, avisa e retira
+export function conferirCupomNaCotacao(dadosCotacao) {
+  if (!estadoRecursos.cupomAplicado || !dadosCotacao?.cupom) return;
+  const c = dadosCotacao.cupom;
+  if (String(c.codigo || '').toUpperCase() !== estadoRecursos.cupomAplicado) return;
+
+  if (c.valido) {
+    estadoRecursos.cupomInfo = { tipo: c.tipo, valor: c.valor };
+    pintarCupomNaTela(estadoRecursos.cupomAplicado, estadoRecursos.cupomInfo);
+  } else {
+    notificar(c.motivo || 'Cupom inválido.', 'alerta');
+    limparCupomAplicado(true);
+  }
+}
 
 export function configurarSeletorPagamentoRapido() {
   // Chamada livre sem seletor de pagamento na tela inicial
@@ -63,7 +133,7 @@ export function configurarNotaMotorista() {
   });
 
   btnConfirmar?.addEventListener('click', () => {
-    const msg = (inputObs?.value || '').trim();
+    const msg = (inputObs?.value || '').trim().slice(0, 400);
     if (!msg) {
       notificar('Digite uma observação antes de salvar.', 'alerta');
       return;
@@ -76,7 +146,10 @@ export function configurarNotaMotorista() {
 
     if (badgeText) {
       badgeText.style.display = 'block';
-      badgeText.innerHTML = `📝 Obs: <strong>${msg}</strong>`;
+      badgeText.textContent = '📝 Obs: ';
+      const forte = document.createElement('strong');
+      forte.textContent = msg;
+      badgeText.append(forte);
     }
     if (btnLimparNota) btnLimparNota.style.display = 'flex';
 
@@ -96,16 +169,16 @@ export function configurarNotaMotorista() {
   });
 }
 
-// 2. CUPOM PROMOCIONAL (MODAL MODERNO)
+// 2. CUPOM PROMOCIONAL (MODAL MODERNO) - validado no servidor
 export function configurarCupomDesconto(aoAtualizarPrecoCallback = null) {
   const btnCupom = document.getElementById('btnAplicarCupom');
-  const lblBtnCupom = document.getElementById('lblBtnCupom');
-  const tagCupom = document.getElementById('tagCupomAtivo');
   const modal = document.getElementById('modalCupomHUBy');
   const inputCupom = document.getElementById('inputCupomDesconto');
   const btnFechar = document.getElementById('btnFecharModalCupom');
   const btnCancelar = document.getElementById('btnCancelarModalCupom');
   const btnConfirmar = document.getElementById('btnConfirmarModalCupom');
+
+  callbackPrecoCupom = aoAtualizarPrecoCallback;
 
   if (!btnCupom || !modal) return;
 
@@ -115,17 +188,7 @@ export function configurarCupomDesconto(aoAtualizarPrecoCallback = null) {
 
   btnCupom.addEventListener('click', () => {
     if (estadoRecursos.cupomAplicado) {
-      estadoRecursos.cupomAplicado = null;
-      estadoRecursos.descontoPercentual = 0;
-      if (tagCupom) tagCupom.style.display = 'none';
-      if (lblBtnCupom) lblBtnCupom.textContent = 'Cupom';
-      btnCupom.style.background = '';
-      btnCupom.style.color = '';
-      btnCupom.style.borderColor = '';
-      if (inputCupom) inputCupom.value = '';
-      atualizarResumoValores();
-      if (typeof aoAtualizarPrecoCallback === 'function') aoAtualizarPrecoCallback();
-      notificar('Cupom removido.', 'info');
+      limparCupomAplicado();
       return;
     }
 
@@ -148,35 +211,64 @@ export function configurarCupomDesconto(aoAtualizarPrecoCallback = null) {
     });
   });
 
-  btnConfirmar?.addEventListener('click', () => {
-    const codigo = (inputCupom?.value || '').trim().toUpperCase();
+  btnConfirmar?.addEventListener('click', async () => {
+    const codigo = (inputCupom?.value || '').trim().toUpperCase().slice(0, 40);
     if (!codigo) {
       notificar('Informe o código do cupom.', 'alerta');
       return;
     }
-
-    if (!CUPONS_VALIDOS[codigo]) {
-      notificar('Cupom inválido ou expirado.', 'alerta');
+    if (!/^[A-Z0-9_-]{2,40}$/.test(codigo)) {
+      notificar('Código de cupom inválido.', 'alerta');
       return;
     }
 
-    estadoRecursos.cupomAplicado = codigo;
-    estadoRecursos.descontoPercentual = CUPONS_VALIDOS[codigo];
-
-    const pct = Math.round(CUPONS_VALIDOS[codigo] * 100);
-    if (tagCupom) {
-      tagCupom.innerHTML = `🏷️ Cupom <strong>${codigo}</strong> aplicado (-${pct}%)`;
-      tagCupom.style.display = 'block';
+    // Sem destino ainda: guarda o código e confere quando a rota existir
+    if (!obterParametrosCotacao()) {
+      estadoRecursos.cupomAplicado = codigo;
+      estadoRecursos.cupomInfo = null;
+      pintarCupomNaTela(codigo, null);
+      fecharModal();
+      notificar('Cupom guardado. Ele será conferido quando você escolher o destino.', 'info');
+      return;
     }
-    if (lblBtnCupom) lblBtnCupom.textContent = 'Remover';
-    btnCupom.style.background = 'rgba(16, 185, 129, 0.2)';
-    btnCupom.style.color = '#10B981';
-    btnCupom.style.borderColor = '#10B981';
 
-    atualizarResumoComDesconto();
-    if (typeof aoAtualizarPrecoCallback === 'function') aoAtualizarPrecoCallback();
-    fecharModal();
-    notificar(`Cupom ${codigo} (-${pct}%) aplicado!`, 'sucesso');
+    btnConfirmar.disabled = true;
+    const textoOriginal = btnConfirmar.textContent;
+    btnConfirmar.textContent = 'Conferindo...';
+
+    const cupomAnterior = estadoRecursos.cupomAplicado;
+    const infoAnterior = estadoRecursos.cupomInfo;
+    estadoRecursos.cupomAplicado = codigo;
+
+    try {
+      const dados = await atualizarCotacaoServidor();
+
+      if (!dados) {
+        estadoRecursos.cupomAplicado = cupomAnterior;
+        estadoRecursos.cupomInfo = infoAnterior;
+        notificar('Não foi possível conferir o cupom agora. Tente de novo.', 'erro');
+        return;
+      }
+
+      if (!dados.cupom?.valido) {
+        estadoRecursos.cupomAplicado = cupomAnterior;
+        estadoRecursos.cupomInfo = infoAnterior;
+        notificar(dados.cupom?.motivo || 'Cupom inválido ou expirado.', 'alerta');
+        // Recalcula sem o cupom recusado
+        if (typeof callbackPrecoCupom === 'function') callbackPrecoCupom();
+        return;
+      }
+
+      estadoRecursos.cupomInfo = { tipo: dados.cupom.tipo, valor: dados.cupom.valor };
+      pintarCupomNaTela(codigo, estadoRecursos.cupomInfo);
+      atualizarResumoValores();
+      if (typeof callbackPrecoCupom === 'function') callbackPrecoCupom();
+      fecharModal();
+      notificar(`Cupom ${codigo} (${textoDescontoCupom(estadoRecursos.cupomInfo)}) aplicado!`, 'sucesso');
+    } finally {
+      btnConfirmar.disabled = false;
+      btnConfirmar.textContent = textoOriginal;
+    }
   });
 }
 
@@ -261,7 +353,10 @@ export function configurarAgendamentoCorrida(aoAtualizarBotaoCallback = null) {
 
     if (badgeAgendamento) {
       badgeAgendamento.style.display = 'block';
-      badgeAgendamento.innerHTML = `⏰ Agendada para: <strong>${formatado}</strong>`;
+      badgeAgendamento.textContent = '⏰ Agendada para: ';
+      const forte = document.createElement('strong');
+      forte.textContent = formatado;
+      badgeAgendamento.append(forte);
     }
     if (btnLimparAgendamento) btnLimparAgendamento.style.display = 'flex';
     if (typeof aoAtualizarBotaoCallback === 'function') aoAtualizarBotaoCallback();
@@ -281,22 +376,6 @@ export function configurarAgendamentoCorrida(aoAtualizarBotaoCallback = null) {
     if (typeof aoAtualizarBotaoCallback === 'function') aoAtualizarBotaoCallback();
     notificar('Agendamento removido.', 'info');
   });
-}
-
-export function atualizarResumoComDesconto() {
-  if (!estadoCliente.rotaAtual || !estadoCliente.rotaAtual.preco) return;
-
-  const precoBruto = Number(estadoCliente.rotaAtual.preco);
-  let precoFinal = precoBruto;
-
-  if (estadoRecursos.descontoPercentual > 0) {
-    precoFinal = precoBruto * (1 - estadoRecursos.descontoPercentual);
-  }
-
-  const lblPreco = document.getElementById('txtPrecoEstimado');
-  if (lblPreco) {
-    lblPreco.textContent = `R$ ${precoFinal.toFixed(2).replace('.', ',')}`;
-  }
 }
 
 export function criarOuAtualizarVeiculoMapa(mapaInstancia, lat, lng, heading = 0, categoria = 'carro') {

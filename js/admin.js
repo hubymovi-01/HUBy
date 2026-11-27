@@ -1433,8 +1433,46 @@ async function carregarTabelaViagens(token) {
 }
 
 // ============================================================================
-// PARÂMETROS, TARIFAS DINÂMICAS & REGRAS DAS MEDALHAS CLUBE HUBY PRO
+// TARIFAS E REGRAS DAS MEDALHAS (mesma fórmula de preço do servidor)
 // ============================================================================
+const CAMPOS_TARIFA = {
+  carro: { prefixo: 'tarifaCarro', sim: 'simCarro', padrao: { base: 6.0, km: 2.2, min: 0, km_incluidos: 0, minimo: 0 } },
+  moto: { prefixo: 'tarifaMoto', sim: 'simMoto', padrao: { base: 4.0, km: 1.4, min: 0, km_incluidos: 0, minimo: 0 } },
+  entrega: { prefixo: 'tarifaFlash', sim: 'simFlash', padrao: { base: 5.0, km: 1.8, min: 0, km_incluidos: 0, minimo: 0 } }
+};
+
+function lerCampoNumerico(id, padrao) {
+  const el = document.getElementById(id);
+  if (!el) return padrao;
+  const val = parseFloat(String(el.value ?? '').replace(',', '.'));
+  return Number.isFinite(val) && val >= 0 ? val : padrao;
+}
+
+function lerCategoriaDoFormulario(chave) {
+  const { prefixo, padrao } = CAMPOS_TARIFA[chave];
+  return {
+    base: lerCampoNumerico(`${prefixo}Base`, padrao.base),
+    km: lerCampoNumerico(`${prefixo}Km`, padrao.km),
+    min: lerCampoNumerico(`${prefixo}Min`, padrao.min),
+    km_incluidos: lerCampoNumerico(`${prefixo}KmInc`, padrao.km_incluidos),
+    minimo: lerCampoNumerico(`${prefixo}Minimo`, padrao.minimo)
+  };
+}
+
+// Mostra ao lado de cada categoria quanto custaria a corrida de teste
+function atualizarSimulacaoTarifas() {
+  const km = lerCampoNumerico('simKm', 3);
+  const minutos = lerCampoNumerico('simMin', 8);
+  Object.keys(CAMPOS_TARIFA).forEach((chave) => {
+    const el = document.getElementById(CAMPOS_TARIFA[chave].sim);
+    if (!el) return;
+    const c = lerCategoriaDoFormulario(chave);
+    const kmCobrados = Math.max(0, km - c.km_incluidos);
+    const valor = Math.max(0.5, Math.max(c.minimo, c.base + kmCobrados * c.km + minutos * c.min));
+    el.textContent = `${km} km / ${minutos} min = R$ ${valor.toFixed(2).replace('.', ',')}`;
+  });
+}
+
 async function carregarTarifasConfig(token) {
   const setVal = (id, val) => {
     const el = document.getElementById(id);
@@ -1473,21 +1511,18 @@ async function carregarTarifasConfig(token) {
     if (cfg.taxa_parada !== undefined) setVal('inputTaxaParada', Number(cfg.taxa_parada).toFixed(2));
     if (cfg.taxa_espera !== undefined) setVal('inputTaxaEspera', Number(cfg.taxa_espera).toFixed(2));
 
-    if (cfg.carro) {
-      if (cfg.carro.base !== undefined) setVal('tarifaCarroBase', Number(cfg.carro.base).toFixed(2));
-      if (cfg.carro.km !== undefined) setVal('tarifaCarroKm', Number(cfg.carro.km).toFixed(2));
-      if (cfg.carro.min !== undefined) setVal('tarifaCarroMin', Number(cfg.carro.min).toFixed(2));
-    }
-    if (cfg.moto) {
-      if (cfg.moto.base !== undefined) setVal('tarifaMotoBase', Number(cfg.moto.base).toFixed(2));
-      if (cfg.moto.km !== undefined) setVal('tarifaMotoKm', Number(cfg.moto.km).toFixed(2));
-      if (cfg.moto.min !== undefined) setVal('tarifaMotoMin', Number(cfg.moto.min).toFixed(2));
-    }
-    if (cfg.entrega) {
-      if (cfg.entrega.base !== undefined) setVal('tarifaFlashBase', Number(cfg.entrega.base).toFixed(2));
-      if (cfg.entrega.km !== undefined) setVal('tarifaFlashKm', Number(cfg.entrega.km).toFixed(2));
-      if (cfg.entrega.min !== undefined) setVal('tarifaFlashMin', Number(cfg.entrega.min).toFixed(2));
-    }
+    Object.keys(CAMPOS_TARIFA).forEach((chave) => {
+      const c = cfg[chave];
+      if (!c) return;
+      const { prefixo } = CAMPOS_TARIFA[chave];
+      if (c.base !== undefined) setVal(`${prefixo}Base`, Number(c.base).toFixed(2));
+      if (c.km !== undefined) setVal(`${prefixo}Km`, Number(c.km).toFixed(2));
+      if (c.min !== undefined) setVal(`${prefixo}Min`, Number(c.min).toFixed(2));
+      setVal(`${prefixo}KmInc`, Number(c.km_incluidos ?? 0).toFixed(1));
+      setVal(`${prefixo}Minimo`, Number(c.minimo ?? 0).toFixed(2));
+    });
+
+    atualizarSimulacaoTarifas();
   };
 
   try {
@@ -1513,88 +1548,73 @@ async function carregarTarifasConfig(token) {
 }
 
 function configurarFormTarifas(token) {
-  document.getElementById('formConfiguracoes')?.addEventListener('submit', async (e) => {
+  const formTarifas = document.getElementById('formConfiguracoes');
+  const formMedalhas = document.getElementById('formClubeProMedalhas');
+
+  // Simulação atualiza enquanto o admin digita
+  formTarifas?.addEventListener('input', atualizarSimulacaoTarifas);
+  atualizarSimulacaoTarifas();
+
+  // Tarifas e medalhas ficam no mesmo registro do banco: os dois formulários salvam tudo junto
+  formTarifas?.addEventListener('submit', (e) => {
     e.preventDefault();
-    const lerCampo = (id, padrao) => {
-      const el = document.getElementById(id);
-      if (!el) return padrao;
-      const val = parseFloat(String(el.value ?? '').replace(',', '.'));
-      return Number.isFinite(val) && val >= 0 ? val : padrao;
-    };
-
-    const taxaBronze = lerCampo('cfgTaxaBronze', lerCampo('cfgTaxaPlataforma', 15));
-    const corridasBronze = Math.round(lerCampo('cfgCorridasBronze', 0));
-    const notaBronze = Math.min(5, lerCampo('cfgNotaBronze', 0.0));
-
-    const taxaPrata = lerCampo('cfgTaxaPrata', 12);
-    const corridasPrata = Math.round(lerCampo('cfgCorridasPrata', 50));
-    const notaPrata = Math.min(5, lerCampo('cfgNotaPrata', 4.8));
-
-    const taxaOuro = lerCampo('cfgTaxaOuro', 10);
-    const corridasOuro = Math.round(lerCampo('cfgCorridasOuro', 150));
-    const notaOuro = Math.min(5, lerCampo('cfgNotaOuro', 4.9));
-
-    const payload = {
-      taxa_plataforma: taxaBronze,
-      taxa_parada: lerCampo('inputTaxaParada', 2.50),
-      taxa_espera: lerCampo('inputTaxaEspera', 0.50),
-      niveis_motorista: {
-        bronze: {
-          nome: 'Bronze',
-          corridas_min: corridasBronze,
-          nota_min: notaBronze,
-          taxa_huby: taxaBronze
-        },
-        prata: {
-          nome: 'Prata',
-          corridas_min: corridasPrata,
-          nota_min: notaPrata,
-          taxa_huby: taxaPrata
-        },
-        ouro: {
-          nome: 'Ouro',
-          corridas_min: corridasOuro,
-          nota_min: notaOuro,
-          taxa_huby: taxaOuro
-        }
-      },
-      carro: {
-        base: lerCampo('tarifaCarroBase', 6.0),
-        km: lerCampo('tarifaCarroKm', 2.2),
-        min: lerCampo('tarifaCarroMin', 0.30)
-      },
-      moto: {
-        base: lerCampo('tarifaMotoBase', 4.0),
-        km: lerCampo('tarifaMotoKm', 1.4),
-        min: lerCampo('tarifaMotoMin', 0.20)
-      },
-      entrega: {
-        base: lerCampo('tarifaFlashBase', 5.0),
-        km: lerCampo('tarifaFlashKm', 1.8),
-        min: lerCampo('tarifaFlashMin', 0.25)
-      }
-    };
-
-    niveisAtuaisCache = payload.niveis_motorista;
-    aplicarObjetoTarifas(payload);
-
-    try {
-      const res = await fetch(`${API_URL}/api/admin/tarifas`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(payload)
-      });
-      if (res.ok) {
-        const respData = await res.json().catch(() => null);
-        if (respData?.tarifas) aplicarObjetoTarifas(respData.tarifas);
-        notificarAdmin('Regras das medalhas Bronze, Prata e Ouro e tarifas salvas no banco!', 'sucesso');
-      } else {
-        notificarAdmin('Falha ao atualizar tabela tarifária no servidor.', 'erro');
-      }
-    } catch (err) {
-      notificarAdmin('Erro de conexão ao salvar tarifas.', 'erro');
-    }
+    salvarTarifasEMedalhas(token, formTarifas.querySelector('button[type="submit"]'));
   });
+  formMedalhas?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    salvarTarifasEMedalhas(token, formMedalhas.querySelector('button[type="submit"]'));
+  });
+}
+
+async function salvarTarifasEMedalhas(token, btn) {
+  const taxaBronze = Math.min(60, lerCampoNumerico('cfgTaxaBronze', lerCampoNumerico('cfgTaxaPlataforma', 15)));
+  const corridasBronze = Math.round(lerCampoNumerico('cfgCorridasBronze', niveisAtuaisCache.bronze?.corridas_min ?? 0));
+  const notaBronze = Math.min(5, lerCampoNumerico('cfgNotaBronze', niveisAtuaisCache.bronze?.nota_min ?? 0.0));
+
+  const taxaPrata = Math.min(60, lerCampoNumerico('cfgTaxaPrata', niveisAtuaisCache.prata?.taxa_huby ?? 12));
+  const corridasPrata = Math.round(lerCampoNumerico('cfgCorridasPrata', niveisAtuaisCache.prata?.corridas_min ?? 50));
+  const notaPrata = Math.min(5, lerCampoNumerico('cfgNotaPrata', niveisAtuaisCache.prata?.nota_min ?? 4.8));
+
+  const taxaOuro = Math.min(60, lerCampoNumerico('cfgTaxaOuro', niveisAtuaisCache.ouro?.taxa_huby ?? 10));
+  const corridasOuro = Math.round(lerCampoNumerico('cfgCorridasOuro', niveisAtuaisCache.ouro?.corridas_min ?? 150));
+  const notaOuro = Math.min(5, lerCampoNumerico('cfgNotaOuro', niveisAtuaisCache.ouro?.nota_min ?? 4.9));
+
+  const payload = {
+    versao_formula: 2,
+    taxa_plataforma: taxaBronze,
+    taxa_parada: lerCampoNumerico('inputTaxaParada', 2.50),
+    taxa_espera: lerCampoNumerico('inputTaxaEspera', 0.50),
+    niveis_motorista: {
+      bronze: { nome: 'Bronze', corridas_min: corridasBronze, nota_min: notaBronze, taxa_huby: taxaBronze },
+      prata: { nome: 'Prata', corridas_min: corridasPrata, nota_min: notaPrata, taxa_huby: taxaPrata },
+      ouro: { nome: 'Ouro', corridas_min: corridasOuro, nota_min: notaOuro, taxa_huby: taxaOuro }
+    },
+    carro: lerCategoriaDoFormulario('carro'),
+    moto: lerCategoriaDoFormulario('moto'),
+    entrega: lerCategoriaDoFormulario('entrega')
+  };
+
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_URL}/api/admin/tarifas`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload)
+    });
+    const respData = await res.json().catch(() => null);
+    if (res.ok && respData?.tarifas) {
+      niveisAtuaisCache = respData.tarifas.niveis_motorista || payload.niveis_motorista;
+      aplicarObjetoTarifas(respData.tarifas);
+      notificarAdmin('Tarifas e medalhas salvas! O app já usa os novos valores.', 'sucesso');
+    } else {
+      notificarAdmin(respData?.erro || 'Falha ao salvar no servidor.', 'erro');
+    }
+  } catch (err) {
+    notificarAdmin('Erro de conexão ao salvar tarifas.', 'erro');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 // ============================================================================
@@ -1868,12 +1888,16 @@ function conectarSocketAdmin() {
     aplicarObjetoTarifas(novasTarifas);
   });
 
-  socket.on('alerta_sos', (dados) => {
-    notificarAdmin(`🚨 ALERTA SOS: Viagem #${dados.pedidoId} - ${dados.relato || 'Emergência reportada!'}`, 'erro');
+  // O servidor avisa o SOS pelo evento 'alerta_sos_admin' (o nome antigo 'alerta_sos' continua aceito)
+  const tratarAlertaSos = (dados) => {
+    const quem = dados?.origem === 'motorista' ? 'Motorista' : (dados?.origem === 'cliente' ? 'Passageiro' : 'Usuário');
+    notificarAdmin(`🚨 ALERTA SOS (${quem}): Viagem #${String(dados?.pedidoId || '').slice(-6)} - ${dados?.relato || 'Emergência reportada!'}`, 'erro');
     const token = localStorage.getItem('huby_token');
     carregarTabelaSeguranca(token);
     carregarMetricasECards(token);
-  });
+  };
+  socket.on('alerta_sos_admin', tratarAlertaSos);
+  socket.on('alerta_sos', tratarAlertaSos);
 }
 
 // ============================================================================
@@ -2224,7 +2248,7 @@ async function carregarTabelaPatrocinadores(token) {
     tbody.innerHTML = lista.map(p => `
       <tr>
         <td>
-          <img src="${p.imagem_base64}" alt="${escaparHTML(p.nome_empresa)}" class="img-banner-zoom"
+          <img src="${escaparHTML(p.imagem_base64)}" alt="${escaparHTML(p.nome_empresa)}" class="img-banner-zoom"
             data-titulo="Banner - ${escaparHTML(p.nome_empresa)}"
             style="width: 68px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15); cursor: pointer;" />
         </td>

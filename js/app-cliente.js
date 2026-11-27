@@ -1,11 +1,22 @@
 // js/app-cliente.js - Orquestrador Principal HUBy Passageiro (Chamada Livre + Modais Modernos + Sincronização Total)
-import { API_URL, sonsHUBy, sincronizarTarifasServidor, calcularPreco, aplicarObjetoTarifas, TAXA_PARADA_EXTRA } from './config.js';
+import { API_URL, sonsHUBy, sincronizarTarifasServidor, aplicarObjetoTarifas } from './config.js';
 import { HubyMapa } from './mapa.js';
 import { configurarPesquisaLocal } from './pesquisa.js?v=8';
 import { estadoCliente } from './cliente/cliente-estado.js';
 import { carregarSaldoCarteiraCliente, configurarDrawerMenu, verificarAcessoAdminMenu, fecharDrawer, carregarEExibirHistoricoModal } from './cliente/cliente-ui-menu.js';
 import { configurarModalAvaliacao, configurarBotoesGorjeta } from './cliente/cliente-avaliacao.js';
-import { atualizarBotaoChamar, atualizarResumoValores, submeterPedido, cancelarBusca, resetarPainelCliente } from './cliente/cliente-pedidos.js?v=4.0.0';
+import {
+  atualizarBotaoChamar,
+  atualizarResumoValores,
+  submeterPedido,
+  cancelarBusca,
+  resetarPainelCliente,
+  atualizarCotacaoServidor,
+  cotacaoValida,
+  precoCategoria,
+  extrairDistanciaKm,
+  fotoSegura
+} from './cliente/cliente-pedidos.js';
 import { configurarChatCliente, encerrarMonitoramentoChatCliente } from './cliente/cliente-chat.js';
 import { notificar } from './util/alertas-huby.js';
 import { abrirPromptParada } from './cliente-ui.js';
@@ -15,8 +26,9 @@ import {
   configurarCupomDesconto,
   configurarAgendamentoCorrida,
   criarOuAtualizarVeiculoMapa,
+  conferirCupomNaCotacao,
   estadoRecursos
-} from './cliente/cliente-recursos.js?v=2.0.0';
+} from './cliente/cliente-recursos.js';
 
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
@@ -44,67 +56,41 @@ function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function extrairDistanciaKmDaRota(rota) {
-  if (!rota) return 0;
-  const bruta = Number(
-    rota.distanciaKm ??
-    rota.distancia_km ??
-    rota.distancia ??
-    (rota.distance ? rota.distance / 1000 : 0)
-  );
-  if (Number.isFinite(bruta) && bruta > 0) {
-    return bruta;
-  }
-  if (estadoCliente.coordsOrigem && estadoCliente.coordsDestino) {
-    const m = calcularDistanciaMetros(
-      estadoCliente.coordsOrigem[0],
-      estadoCliente.coordsOrigem[1],
-      estadoCliente.coordsDestino[0],
-      estadoCliente.coordsDestino[1]
-    );
-    return Math.max(0.2, Number(((m / 1000) * 1.3).toFixed(2)));
-  }
-  return 0;
-}
-
-function sincronizarPrecosDaRotaAtual() {
-  if (!estadoCliente.rotaAtual && !estadoCliente.coordsDestino) {
-    atualizarValoresCardsPro(0);
+// ============================================================================
+// PREÇOS NA TELA
+// 1) mostra na hora a estimativa local (mesma fórmula do servidor)
+// 2) busca o preço oficial no servidor e troca pelos valores definitivos
+// ============================================================================
+async function sincronizarPrecosDaRotaAtual() {
+  if (!estadoCliente.coordsDestino || !(extrairDistanciaKm() > 0)) {
+    atualizarValoresCardsPro();
+    atualizarAlertaDinamica(1);
     return;
-  }
-
-  const distKm = extrairDistanciaKmDaRota(estadoCliente.rotaAtual);
-  if (!distKm || distKm <= 0) {
-    atualizarValoresCardsPro(0);
-    return;
-  }
-
-  const catSelecionada = estadoCliente.categoriaSelecionada || 'carro';
-  const calcSelecionada = calcularPreco(catSelecionada, distKm);
-
-  // ALERTA DE ALTA DEMANDA
-  const alerta = document.getElementById('alertaAltaDemanda');
-  const txtMultiplicador = document.getElementById('txtMultiplicadorDemanda');
-  const multiplicador = calcSelecionada.multiplicador || 1.0;
-
-  if (alerta && txtMultiplicador) {
-    if (multiplicador > 1.0) {
-      alerta.style.display = 'flex';
-      txtMultiplicador.textContent = `Horário de pico ou chuva. Os preços estão multiplicados por x${Number(multiplicador).toFixed(1).replace('.', ',')}.`;
-    } else {
-      alerta.style.display = 'none';
-    }
-  }
-
-  if (estadoCliente.rotaAtual) {
-    estadoCliente.rotaAtual.distanciaKm = distKm;
-    estadoCliente.rotaAtual.distancia = distKm;
-    estadoCliente.rotaAtual.preco = calcSelecionada.valorTotal;
-    estadoCliente.rotaAtual.valorTotal = calcSelecionada.valorTotal;
   }
 
   atualizarResumoValores();
-  atualizarValoresCardsPro(calcSelecionada.valorTotal, distKm);
+  atualizarValoresCardsPro();
+
+  const dados = await atualizarCotacaoServidor();
+  if (!dados) return;
+
+  conferirCupomNaCotacao(dados);
+  atualizarAlertaDinamica(Number(dados.multiplicador || 1));
+  atualizarResumoValores();
+  atualizarValoresCardsPro();
+}
+
+function atualizarAlertaDinamica(multiplicador) {
+  const alerta = document.getElementById('alertaAltaDemanda');
+  const txtMultiplicador = document.getElementById('txtMultiplicadorDemanda');
+  if (!alerta || !txtMultiplicador) return;
+
+  if (multiplicador > 1.0) {
+    alerta.style.display = 'flex';
+    txtMultiplicador.textContent = `Alta procura agora. Os preços estão multiplicados por x${Number(multiplicador).toFixed(1).replace('.', ',')}.`;
+  } else {
+    alerta.style.display = 'none';
+  }
 }
 
 export function alternarModoVisualViagemAtiva(emViagem = false) {
@@ -146,65 +132,34 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
   }
 }
 
-function atualizarValoresCardsPro(precoBase, distanciaForcadaKm = null) {
-  const lblCarro = document.getElementById('priceEstCarro');
-  const lblMoto = document.getElementById('priceEstMoto');
-  const lblEntrega = document.getElementById('priceEstEntrega');
+function atualizarValoresCardsPro() {
+  const rotulos = {
+    carro: document.getElementById('priceEstCarro'),
+    moto: document.getElementById('priceEstMoto'),
+    entrega: document.getElementById('priceEstEntrega')
+  };
   const lblPrincipal = document.getElementById('txtPrecoEstimado');
 
-  const distKm = distanciaForcadaKm ?? extrairDistanciaKmDaRota(estadoCliente.rotaAtual);
+  const temRota = Boolean(estadoCliente.coordsDestino && estadoCliente.rotaAtual);
+  const oficial = Boolean(cotacaoValida());
 
-  if ((!precoBase || precoBase <= 0) && (!distKm || distKm <= 0)) {
-    if (lblCarro) lblCarro.textContent = '--';
-    if (lblMoto) lblMoto.textContent = '--';
-    if (lblEntrega) lblEntrega.textContent = '--';
-    if (lblPrincipal) lblPrincipal.textContent = '--';
-    return;
+  Object.entries(rotulos).forEach(([cat, el]) => {
+    if (!el) return;
+    const preco = temRota ? precoCategoria(cat) : null;
+    // "≈" enquanto o valor ainda é estimativa; some quando chega o preço oficial
+    el.textContent = preco
+      ? `${oficial ? '' : '≈ '}R$ ${preco.valor.toFixed(2).replace('.', ',')}`
+      : '--';
+  });
+
+  const atual = temRota ? precoCategoria(estadoCliente.categoriaSelecionada || 'carro') : null;
+  if (lblPrincipal) {
+    lblPrincipal.textContent = atual ? `R$ ${atual.valor.toFixed(2).replace('.', ',')}` : '--';
   }
-
-  const fatorDesconto = estadoRecursos.descontoPercentual > 0 ? (1 - estadoRecursos.descontoPercentual) : 1;
-  const paradasReais = (estadoCliente.paradasIntermediarias || []).filter(p => !p.nota);
-  
-  // Utiliza a taxa dinâmica vinda do painel. Se falhar, usa 2.50
-  const taxaExtraAtual = Number(TAXA_PARADA_EXTRA) || 2.50;
-  const paradasExtras = paradasReais.length * taxaExtraAtual;
-
-  let numCarro, numMoto, numEntrega;
-
-  if (distKm > 0) {
-    numCarro = (calcularPreco('carro', distKm).valorTotal + paradasExtras) * fatorDesconto;
-    numMoto = (calcularPreco('moto', distKm).valorTotal + paradasExtras) * fatorDesconto;
-    numEntrega = (calcularPreco('entrega', distKm).valorTotal + paradasExtras) * fatorDesconto;
-  } else {
-    numCarro = precoBase * fatorDesconto;
-    numMoto = precoBase * 0.65 * fatorDesconto;
-    numEntrega = precoBase * 0.75 * fatorDesconto;
+  if (atual && estadoCliente.rotaAtual) {
+    estadoCliente.rotaAtual.preco = atual.valor;
+    estadoCliente.rotaAtual.valorTotal = atual.valor;
   }
-
-  const valCarro = numCarro.toFixed(2).replace('.', ',');
-  const valMoto = numMoto.toFixed(2).replace('.', ',');
-  const valEntrega = numEntrega.toFixed(2).replace('.', ',');
-
-  if (lblCarro) lblCarro.textContent = `R$ ${valCarro}`;
-  if (lblMoto) lblMoto.textContent = `R$ ${valMoto}`;
-  if (lblEntrega) lblEntrega.textContent = `R$ ${valEntrega}`;
-
-  let valAtual = valCarro;
-  let numAtual = numCarro;
-  if (estadoCliente.categoriaSelecionada === 'moto') {
-    valAtual = valMoto;
-    numAtual = numMoto;
-  } else if (estadoCliente.categoriaSelecionada === 'entrega') {
-    valAtual = valEntrega;
-    numAtual = numEntrega;
-  }
-
-  if (estadoCliente.rotaAtual) {
-    estadoCliente.rotaAtual.preco = Number(numAtual.toFixed(2));
-    estadoCliente.rotaAtual.valorTotal = Number(numAtual.toFixed(2));
-  }
-
-  if (lblPrincipal) lblPrincipal.textContent = `R$ ${valAtual}`;
 }
 
 function configurarParadasIntermediariasSemPrompt() {
@@ -230,8 +185,10 @@ function configurarParadasIntermediariasSemPrompt() {
           estadoCliente.paradasIntermediarias = [];
         }
 
+        const idParada = `par_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         estadoCliente.paradasIntermediarias.push({
-          endereco: enderecoParada,
+          id: idParada,
+          endereco: String(enderecoParada).slice(0, 200),
           lat: null,
           lng: null
         });
@@ -246,7 +203,7 @@ function configurarParadasIntermediariasSemPrompt() {
           `;
 
           item.querySelector('.stop-remove-btn').addEventListener('click', () => {
-            const index = estadoCliente.paradasIntermediarias.findIndex(p => p.endereco === enderecoParada);
+            const index = estadoCliente.paradasIntermediarias.findIndex(p => p.id === idParada);
             if (index > -1) estadoCliente.paradasIntermediarias.splice(index, 1);
             item.remove();
             sincronizarPrecosDaRotaAtual();
@@ -298,7 +255,8 @@ function configurarLimpezaDestino() {
 
     if (txtDestino) txtDestino.textContent = 'Selecione no mapa ou pesquise';
     if (containerParadas) containerParadas.innerHTML = '';
-    atualizarValoresCardsPro(0);
+    estadoCliente.cotacaoServidor = null;
+    atualizarValoresCardsPro();
     atualizarResumoValores();
   });
 }
@@ -476,7 +434,6 @@ async function iniciarSubmissaoPedidoFinal() {
   estadoCliente.rotaAtual.subTipoId = estadoCliente.categoriaSelecionada || 'carro';
   estadoCliente.rotaAtual.subTipoLabel = `HUBy ${String(estadoCliente.categoriaSelecionada).charAt(0).toUpperCase() + String(estadoCliente.categoriaSelecionada).slice(1)}`;
 
-  sincronizarPrecosDaRotaAtual();
   await submeterPedido();
 }
 
@@ -491,7 +448,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await sincronizarTarifasServidor();
   await carregarSaldoCarteiraCliente();
-  atualizarValoresCardsPro(0);
+  atualizarValoresCardsPro();
+
+  // Quando o servidor devolve um preço novo (ex.: "o preço mudou"), redesenha os cards
+  window.addEventListener('huby_precos_atualizados', () => atualizarValoresCardsPro());
 
   try {
     if (!estadoCliente.hubyMapa) {
@@ -815,8 +775,8 @@ function configurarFluxoPagamentoMercadoPago() {
       inputChavePix.select();
       navigator.clipboard.writeText(inputChavePix.value);
       notificar('Chave Pix Copia e Cola copiada!', 'sucesso');
-      btnCopiar.textContent = 'Copiado!';
-      setTimeout(() => { btnCopiar.textContent = 'Copiar'; }, 2000);
+      btnCopiarPix.textContent = 'Copiado!';
+      setTimeout(() => { btnCopiarPix.textContent = 'Copiar'; }, 2000);
     }
   });
 }
@@ -904,8 +864,15 @@ function iniciarMonitoramentoPix(txid, valor) {
   }, 3000);
 }
 
-function exibirModalPixCorridaCliente(pix) {
+function exibirModalPixCorridaCliente(pixBruto) {
   document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+
+  // Só aceita dados no formato esperado (QR em base64 e código Pix em texto)
+  const pix = {
+    valor: Number(pixBruto?.valor || 0),
+    qr_code: String(pixBruto?.qr_code || ''),
+    qr_code_base64: String(pixBruto?.qr_code_base64 || '').replace(/[^A-Za-z0-9+/=]/g, '')
+  };
 
   const modalHTML = `
     <div id="modalPixCorridaAtivaCliente" style="position:fixed;inset:0;background:rgba(9,13,22,0.92);backdrop-filter:blur(10px);z-index:10010;display:flex;align-items:center;justify-content:center;padding:16px;">
@@ -923,7 +890,7 @@ function exibirModalPixCorridaCliente(pix) {
           <img src="data:image/png;base64,${pix.qr_code_base64}" alt="QR Code Pix" style="width:190px;height:190px;display:block;object-fit:contain;">
         </div>
         <div style="margin-top:14px;">
-          <input type="text" id="inputPixCopiaColaCliente" readonly value="${pix.qr_code || ''}" 
+          <input type="text" id="inputPixCopiaColaCliente" readonly value="${escaparHTML(pix.qr_code)}" 
             style="width:100%;background:#080C14;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 10px;color:#94A3B8;font-size:11px;font-family:monospace;outline:none;text-align:center;margin-bottom:8px;">
           <button type="button" id="btnCopiarPixCorridaCliente"
             style="width:100%;background:#8B5CF6;border:none;color:#FFF;padding:12px;border-radius:10px;font-weight:900;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:background 0.2s;">
@@ -1144,11 +1111,11 @@ function renderizarMotoristaChegando(mot = {}) {
   const pedidoId = mot.id || estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
   const nome = escaparHTML(mot.nome || 'Motorista Parceiro');
   const veiculo = escaparHTML(mot.veiculo || 'Veículo');
-  const placa = escaparHTML((mot.placa || 'ABC1D23').toUpperCase());
-  const cor = escaparHTML(mot.cor || 'Prata');
-  const foto = mot.foto || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80';
+  const placa = escaparHTML(String(mot.placa || '---').toUpperCase());
+  const cor = escaparHTML(mot.cor || '--');
+  const foto = escaparHTML(fotoSegura(mot.foto, 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80'));
   const nota = Number(mot.avaliacao || 5.0).toFixed(1);
-  const telefone = mot.telefone || '';
+  const telefone = String(mot.telefone || '').replace(/[^\d+]/g, '');
 
   const aceitaDinheiro = mot.aceita_dinheiro !== false;
   const aceitaCartao = mot.aceita_cartao !== false;
@@ -1369,7 +1336,7 @@ function abrirPopupPatrocinadorDestaque(p) {
   const elTitulo = document.getElementById('popupSponsorTitulo');
   const elDesc = document.getElementById('popupSponsorDesc');
 
-  if (elImg) elImg.src = p.imagem_base64;
+  if (elImg) elImg.src = fotoSegura(p.imagem_base64, '');
   if (elEmpresa) elEmpresa.textContent = p.nome_empresa || 'Parceiro Oficial';
   if (elTitulo) elTitulo.textContent = p.titulo_oferta || '';
   if (elDesc) elDesc.textContent = p.descricao || '';
@@ -1422,7 +1389,7 @@ function renderizarVitrineParceirosCliente() {
     return `
       <div style="background: #0F1624; border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(0,0,0,0.45);">
         <div style="position: relative; width: 100%; height: 175px; background: #090D16;">
-          <img src="${p.imagem_base64}" alt="${escaparHTML(p.nome_empresa)}" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+          <img src="${escaparHTML(fotoSegura(p.imagem_base64, ''))}" alt="${escaparHTML(p.nome_empresa)}" style="width: 100%; height: 100%; object-fit: cover; display: block;">
           ${p.cupom_codigo ? `
             <span style="position: absolute; bottom: 10px; right: 10px; background: rgba(9,13,22,0.92); border: 1px dashed #10B981; color: #10B981; font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 8px;">
               🏷️ CUPOM: ${escaparHTML(p.cupom_codigo)}
@@ -1438,8 +1405,8 @@ function renderizarVitrineParceirosCliente() {
           </h4>
           ${p.descricao ? `<p style="margin: 0 0 12px; font-size: 12px; color: #94A3B8; line-height: 1.4;">${escaparHTML(p.descricao)}</p>` : ''}
           ${urlContato !== '#' ? `
-            <a href="${urlContato}" target="_blank" rel="noopener"
-              onclick="window.registrarCliqueParceiroVitrine(${p.id})"
+            <a href="${escaparHTML(urlContato)}" target="_blank" rel="noopener"
+              onclick="window.registrarCliqueParceiroVitrine(${Number(p.id) || 0})"
               style="width: 100%; background: rgba(16, 185, 129, 0.16); border: 1px solid #10B981; color: #10B981; font-weight: 900; padding: 10px; border-radius: 10px; font-size: 12px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px;">
               📲 Falar com Parceiro / Ver Oferta
             </a>
