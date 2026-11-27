@@ -53,9 +53,17 @@
     }
 
     @keyframes popInSponsor {
-      0% { opacity: 0; transform: scale(0.9) translateY(15px); }
-      100% { opacity: 1; transform: scale(1) translateY(0); }
+      0% {
+        opacity: 0;
+        transform: scale(0.9) translateY(15px);
+      }
+
+      100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+      }
     }
+
     .sponsor-popup-card {
       position: relative;
       width: 100%;
@@ -67,6 +75,7 @@
       box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9);
       animation: popInSponsor 0.32s cubic-bezier(0.16, 1, 0.3, 1);
     }
+
     .btn-close-sponsor-x {
       position: absolute;
       top: 12px;
@@ -86,6 +95,7 @@
       justify-content: center;
       backdrop-filter: blur(8px);
     }
+
     .sponsor-tag-badge {
       position: absolute;
       top: 12px;
@@ -99,6 +109,7 @@
       padding: 4px 10px;
       border-radius: 20px;
     }
+
     .partner-filter-pill {
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.12);
@@ -110,6 +121,7 @@
       cursor: pointer;
       white-space: nowrap;
     }
+
     .partner-filter-pill.active {
       background: rgba(16, 185, 129, 0.22);
       border-color: #10B981;
@@ -128,6 +140,7 @@
       margin-bottom: 10px;
       position: relative;
     }
+
     .clean-route-inputs {
       flex: 1;
       display: flex;
@@ -135,6 +148,7 @@
       gap: 6px;
       min-width: 0;
     }
+
     .clean-input-row {
       display: flex;
       align-items: center;
@@ -145,10 +159,12 @@
       border: 1px solid transparent;
       transition: border-color 0.2s;
     }
+
     .clean-input-row:focus-within {
       border-color: rgba(16, 185, 129, 0.55);
       background: rgba(255, 255, 255, 0.07);
     }
+
     .clean-input-row input {
       flex: 1;
       background: transparent;
@@ -159,10 +175,12 @@
       outline: none;
       min-width: 0;
     }
+
     .clean-input-row input::placeholder {
       color: #94A3B8;
       font-weight: 500;
     }
+
     .clean-mini-btn {
       background: rgba(255, 255, 255, 0.08);
       border: none;
@@ -178,6 +196,7 @@
       align-items: center;
       justify-content: center;
     }
+
     .clean-results-dropdown {
       list-style: none;
       margin: 0 0 8px 0;
@@ -202,6 +221,7 @@
       animation: popInSponsor 0.25s cubic-bezier(0.16, 1, 0.3, 1);
       color: #F8FAFC;
     }
+
     .huby-chip-suggestion {
       background: rgba(255, 255, 255, 0.06);
       border: 1px solid rgba(255, 255, 255, 0.12);
@@ -213,9 +233,11 @@
       cursor: pointer;
       transition: all 0.15s;
     }
+
     .huby-chip-suggestion:active {
       transform: scale(0.96);
     }
+
     .huby-field-dark {
       width: 100%;
       box-sizing: border-box;
@@ -229,6 +251,7 @@
       outline: none;
       color-scheme: dark;
     }
+
     .huby-field-dark:focus {
       border-color: #10B981;
     }
@@ -253,7 +276,8 @@
 
   <!-- TOPO MINIMALISTA -->
   <header class="top-nav-bar" style="justify-content: space-between; pointer-events: none;">
-    <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu" style="pointer-events: auto;">
+    <button type="button" id="btnAbrirMenu" class="btn-menu-burger" aria-label="Abrir Menu"
+      style="pointer-events: auto;">
       <span></span><span></span><span></span>
     </button>
 
@@ -261,9 +285,11 @@
       <span class="hub-txt">HUB</span><span class="y-txt">y</span>
     </div>
 
-    <button type="button" id="btnLocalizarGPS" aria-label="Recentralizar no meu GPS" title="Focar na minha localização atual"
+    <button type="button" id="btnLocalizarGPS" aria-label="Recentralizar no meu GPS"
+      title="Focar na minha localização atual"
       style="pointer-events: auto; width: 42px; height: 42px; border-radius: 50%; background: rgba(11, 16, 27, 0.92); border: 1px solid rgba(16, 185, 129, 0.45); color: #10B981; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 16px rgba(0,0,0,0.55); cursor: pointer; backdrop-filter: blur(12px);">
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"
+        stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="7"></circle>
         <line x1="12" y1="1" x2="12" y2="5"></line>
         <line x1="12" y1="19" x2="12" y2="23"></line>
@@ -280,7 +306,9 @@
 
     <nav class="drawer-nav">
       <div style="display: flex; justify-content: space-between; align-items: center; margin: 4px 10px 4px;">
-        <span style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus Favoritos</span>
+        <span
+          style="font-size: 11px; font-weight: 800; color: #64748B; text-transform: uppercase; letter-spacing: 0.5px;">Meus
+          Favoritos</span>
       </div>
 
       <div class="drawer-fav-card">
@@ -339,7 +367,8 @@
       <a href="./admin.html" id="menuItemAdmin" class="drawer-item"
         style="display: none; border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); margin-top: 4px;">
         <span class="d-icon">⚡</span>
-        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e financeiro</small></div>
+        <div class="d-info"><strong style="color: #F87171;">Painel de Controlo</strong><small>Métricas, motoristas e
+            financeiro</small></div>
       </a>
       <a href="./perfil.html" class="drawer-item">
         <span class="d-icon">👤</span>
@@ -369,22 +398,27 @@
 
     <!-- CARTÃO ÚNICO DE PARTIDA E DESTINO -->
     <div id="blocoResumo" class="clean-route-box">
-      <div style="width: 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 14px 0; flex-shrink: 0;">
-        <span style="width: 10px; height: 10px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.8); flex-shrink: 0;"></span>
-        <span style="width: 2px; flex: 1; background: linear-gradient(180deg, #10B981 0%, #EF4444 100%); margin: 3px 0; border-radius: 2px;"></span>
-        <span style="width: 10px; height: 10px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 8px rgba(239,68,68,0.8); flex-shrink: 0;"></span>
+      <div
+        style="width: 14px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 14px 0; flex-shrink: 0;">
+        <span
+          style="width: 10px; height: 10px; border-radius: 50%; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.8); flex-shrink: 0;"></span>
+        <span
+          style="width: 2px; flex: 1; background: linear-gradient(180deg, #10B981 0%, #EF4444 100%); margin: 3px 0; border-radius: 2px;"></span>
+        <span
+          style="width: 10px; height: 10px; border-radius: 50%; background: #EF4444; box-shadow: 0 0 8px rgba(239,68,68,0.8); flex-shrink: 0;"></span>
       </div>
 
       <div class="clean-route-inputs">
         <div class="clean-input-row">
           <input type="text" id="inputOrigemLocal" placeholder="📍 Minha localização atual (GPS)" autocomplete="off" />
-          <button type="button" id="btnUsarMeuGPSOrigem" class="clean-mini-btn" style="color: #10B981; display: none;" title="Voltar ao meu GPS">GPS</button>
+          <button type="button" id="btnUsarMeuGPSOrigem" class="clean-mini-btn" style="color: #10B981; display: none;"
+            title="Voltar ao meu GPS">GPS</button>
         </div>
 
         <div class="clean-input-row">
           <input type="text" id="inputPesquisaLocal" placeholder="Para onde você vai?" autocomplete="off" />
-          <button type="button" id="btnBuscaIA" class="clean-mini-btn" aria-label="Buscar por voz" title="Falar destino por voz"
-            style="color: #38BDF8; background: rgba(56, 189, 248, 0.14);">
+          <button type="button" id="btnBuscaIA" class="clean-mini-btn" aria-label="Buscar por voz"
+            title="Falar destino por voz" style="color: #38BDF8; background: rgba(56, 189, 248, 0.14);">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
               stroke-linecap="round" stroke-linejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -403,10 +437,12 @@
     </div>
 
     <!-- ALERTA DE ALTA DEMANDA (DINÂMICA) -->
-    <div id="alertaAltaDemanda" style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; align-items: center; gap: 10px; animation: popInSponsor 0.3s ease;">
+    <div id="alertaAltaDemanda"
+      style="display: none; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 10px 14px; margin-bottom: 12px; align-items: center; gap: 10px; animation: popInSponsor 0.3s ease;">
       <span style="font-size: 22px; animation: pulse 2s infinite;">📈</span>
       <div>
-        <strong style="color: #F59E0B; font-size: 13px; display: block; margin-bottom: 2px;">Alta Demanda na Região</strong>
+        <strong style="color: #F59E0B; font-size: 13px; display: block; margin-bottom: 2px;">Alta Demanda na
+          Região</strong>
         <small style="color: #FCD34D; font-size: 11px; line-height: 1.3; display: block;" id="txtMultiplicadorDemanda">
           Horário de pico. Os preços estão multiplicados por x1,0.
         </small>
@@ -417,19 +453,25 @@
     <div class="categories-container" id="sliderCategorias">
       <div class="category-card-pro active" data-id="carro">
         <div class="cat-left"><span class="cat-emoji">🚗</span></div>
-        <div class="cat-center"><div class="cat-name-row"><strong>HUBy Carro</strong></div></div>
+        <div class="cat-center">
+          <div class="cat-name-row"><strong>HUBy Carro</strong></div>
+        </div>
         <div class="cat-right"><span class="cat-price-est" id="priceEstCarro">--</span></div>
       </div>
 
       <div class="category-card-pro" data-id="moto">
         <div class="cat-left"><span class="cat-emoji">🏍️</span></div>
-        <div class="cat-center"><div class="cat-name-row"><strong>HUBy Moto</strong></div></div>
+        <div class="cat-center">
+          <div class="cat-name-row"><strong>HUBy Moto</strong></div>
+        </div>
         <div class="cat-right"><span class="cat-price-est" id="priceEstMoto">--</span></div>
       </div>
 
       <div class="category-card-pro" data-id="entrega">
         <div class="cat-left"><span class="cat-emoji">📦</span></div>
-        <div class="cat-center"><div class="cat-name-row"><strong>HUBy Flash</strong></div></div>
+        <div class="cat-center">
+          <div class="cat-name-row"><strong>HUBy Flash</strong></div>
+        </div>
         <div class="cat-right"><span class="cat-price-est" id="priceEstEntrega">--</span></div>
       </div>
     </div>
@@ -447,14 +489,16 @@
     </div>
 
     <!-- AÇÕES DIRETAS LIMPAS: CUPOM, OBSERVAÇÃO E AGENDAR -->
-    <div class="dock-quick-actions-row pro-actions" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+    <div class="dock-quick-actions-row pro-actions"
+      style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
       <button type="button" id="btnAplicarCupom" class="btn-dock-quick-pill modern-pill" title="Adicionar Cupom">
         <span class="pill-icon">🏷️</span>
         <span class="pill-text" id="lblBtnCupom">Cupom</span>
       </button>
 
       <div style="position: relative;">
-        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Observação para o motorista">
+        <button type="button" id="btnAdicionarNotaMotorista" class="btn-dock-quick-pill modern-pill"
+          style="width: 100%;" title="Observação para o motorista">
           <span class="pill-icon">📝</span>
           <span class="pill-text">Obs</span>
         </button>
@@ -462,7 +506,8 @@
       </div>
 
       <div style="position: relative;">
-        <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" style="width: 100%;" title="Agendar solicitação">
+        <button type="button" id="btnAgendarViagem" class="btn-dock-quick-pill modern-pill" style="width: 100%;"
+          title="Agendar solicitação">
           <span class="pill-icon">⏰</span>
           <span class="pill-text">Agendar</span>
         </button>
@@ -472,8 +517,12 @@
 
     <!-- BADGES ATIVOS SINCRONIZADOS -->
     <div id="txtNotaMotoristaBadge" class="badge-nota-motorista" style="display: none;"></div>
-    <div id="txtAgendamentoBadge" class="badge-nota-motorista" style="display: none; background: rgba(245, 158, 11, 0.16); border: 1px solid rgba(245, 158, 11, 0.4); color: #FBBF24;"></div>
-    <div id="tagCupomAtivo" class="badge-nota-motorista" style="display: none; background: rgba(16, 185, 129, 0.16); border: 1px solid rgba(16, 185, 129, 0.4); color: #10B981;"></div>
+    <div id="txtAgendamentoBadge" class="badge-nota-motorista"
+      style="display: none; background: rgba(245, 158, 11, 0.16); border: 1px solid rgba(245, 158, 11, 0.4); color: #FBBF24;">
+    </div>
+    <div id="tagCupomAtivo" class="badge-nota-motorista"
+      style="display: none; background: rgba(16, 185, 129, 0.16); border: 1px solid rgba(16, 185, 129, 0.4); color: #10B981;">
+    </div>
 
     <div id="cardStatusViagem" class="active-ride-card modern-radar" style="display: none;">
       <div class="ride-header">
@@ -496,7 +545,8 @@
   <!-- ==================== MODAIS MODERNOS HUBy ==================== -->
 
   <!-- MODAL 1: CUPOM PROMOCIONAL -->
-  <div id="modalCupomHUBy" class="modal-backdrop" style="display: none; z-index: 10030; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
+  <div id="modalCupomHUBy" class="modal-backdrop"
+    style="display: none; z-index: 10030; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
     <div class="huby-sheet-modal">
       <div class="modal-header-row" style="margin-bottom: 6px;">
         <h3 style="margin: 0; font-size: 17px; font-weight: 900;">🏷️ Cupom de Desconto</h3>
@@ -506,19 +556,24 @@
         Informe seu código promocional para aplicar desconto na corrida e sincronizar com o motorista.
       </p>
 
-      <input type="text" id="inputCupomDesconto" class="huby-field-dark" placeholder="Ex: HUBY10" style="text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;" />
+      <input type="text" id="inputCupomDesconto" class="huby-field-dark" placeholder="Ex: HUBY10"
+        style="text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;" />
 
       <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
         <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="HUBY10">✨ HUBY10 (10%)</button>
-        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="PRIMEIRA10">🎁 PRIMEIRA10 (10%)</button>
-        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="HUBYVIP">👑 HUBYVIP (15%)</button>
+        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="PRIMEIRA10">🎁 PRIMEIRA10
+          (10%)</button>
+        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="HUBYVIP">👑 HUBYVIP
+          (15%)</button>
       </div>
 
       <div style="display: flex; gap: 8px;">
-        <button type="button" id="btnCancelarModalCupom" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; cursor: pointer;">
+        <button type="button" id="btnCancelarModalCupom"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; cursor: pointer;">
           Cancelar
         </button>
-        <button type="button" id="btnConfirmarModalCupom" style="flex: 1.5; background: #10B981; border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; cursor: pointer;">
+        <button type="button" id="btnConfirmarModalCupom"
+          style="flex: 1.5; background: #10B981; border: none; color: #02261C; font-weight: 900; padding: 12px; border-radius: 12px; cursor: pointer;">
           Aplicar Cupom
         </button>
       </div>
@@ -526,7 +581,8 @@
   </div>
 
   <!-- MODAL 2: OBSERVAÇÃO PARA O MOTORISTA -->
-  <div id="modalObservacaoHUBy" class="modal-backdrop" style="display: none; z-index: 10030; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
+  <div id="modalObservacaoHUBy" class="modal-backdrop"
+    style="display: none; z-index: 10030; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
     <div class="huby-sheet-modal">
       <div class="modal-header-row" style="margin-bottom: 6px;">
         <h3 style="margin: 0; font-size: 17px; font-weight: 900;">📝 Observação da Viagem</h3>
@@ -536,19 +592,26 @@
         Essa mensagem aparecerá diretamente no card da chamada para o motorista parceiro.
       </p>
 
-      <textarea id="inputObsMotoristaModal" rows="3" class="huby-field-dark" placeholder="Ex: Estou na frente da praça, camiseta preta..." style="resize: none; margin-bottom: 10px;"></textarea>
+      <textarea id="inputObsMotoristaModal" rows="3" class="huby-field-dark"
+        placeholder="Ex: Estou na frente da praça, camiseta preta..."
+        style="resize: none; margin-bottom: 10px;"></textarea>
 
       <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
-        <button type="button" class="huby-chip-suggestion chip-obs-rapida" data-obs="Estou aguardando no portão">🚪 No portão</button>
-        <button type="button" class="huby-chip-suggestion chip-obs-rapida" data-obs="Estou com malas / bagagem">🧳 Com bagagem</button>
-        <button type="button" class="huby-chip-suggestion chip-obs-rapida" data-obs="Preciso de troco para R$ 50">💵 Troco p/ 50</button>
+        <button type="button" class="huby-chip-suggestion chip-obs-rapida" data-obs="Estou aguardando no portão">🚪 No
+          portão</button>
+        <button type="button" class="huby-chip-suggestion chip-obs-rapida" data-obs="Estou com malas / bagagem">🧳 Com
+          bagagem</button>
+        <button type="button" class="huby-chip-suggestion chip-obs-rapida" data-obs="Preciso de troco para R$ 50">💵
+          Troco p/ 50</button>
       </div>
 
       <div style="display: flex; gap: 8px;">
-        <button type="button" id="btnCancelarModalObs" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; cursor: pointer;">
+        <button type="button" id="btnCancelarModalObs"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; cursor: pointer;">
           Cancelar
         </button>
-        <button type="button" id="btnConfirmarModalObs" style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; font-weight: 900; padding: 12px; border-radius: 12px; cursor: pointer;">
+        <button type="button" id="btnConfirmarModalObs"
+          style="flex: 1.5; background: #38BDF8; border: none; color: #02131D; font-weight: 900; padding: 12px; border-radius: 12px; cursor: pointer;">
           Salvar Observação
         </button>
       </div>
@@ -556,17 +619,21 @@
   </div>
 
   <!-- MODAL 3: AGENDAMENTO DE SOLICITAÇÃO -->
-  <div id="modalAgendamentoHUBy" class="modal-backdrop" style="display: none; z-index: 10030; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
+  <div id="modalAgendamentoHUBy" class="modal-backdrop"
+    style="display: none; z-index: 10030; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
     <div class="huby-sheet-modal">
       <div class="modal-header-row" style="margin-bottom: 6px;">
         <h3 style="margin: 0; font-size: 17px; font-weight: 900;">⏰ Agendar Corrida</h3>
         <button type="button" id="btnFecharModalAgendamento" class="btn-icon-close">✕</button>
       </div>
       <p style="margin: 0 0 12px; font-size: 12px; color: #94A3B8;">
-        Escolha o dia e horário. Sua solicitação irá para a aba <strong style="color: #FBBF24;">Agendados</strong> dos motoristas e você será avisado na hora!
+        Escolha o dia e horário. Sua solicitação irá para a aba <strong style="color: #FBBF24;">Agendados</strong> dos
+        motoristas e você será avisado na hora!
       </p>
 
-      <label style="font-size: 11px; font-weight: 800; color: #CBD5E1; text-transform: uppercase; display: block; margin-bottom: 6px;">Data e Horário</label>
+      <label
+        style="font-size: 11px; font-weight: 800; color: #CBD5E1; text-transform: uppercase; display: block; margin-bottom: 6px;">Data
+        e Horário</label>
       <input type="datetime-local" id="inputDataHoraAgendamento" class="huby-field-dark" style="margin-bottom: 10px;" />
 
       <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
@@ -576,10 +643,12 @@
       </div>
 
       <div style="display: flex; gap: 8px;">
-        <button type="button" id="btnCancelarModalAgendamento" style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; cursor: pointer;">
+        <button type="button" id="btnCancelarModalAgendamento"
+          style="flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #CBD5E1; font-weight: 800; padding: 12px; border-radius: 12px; cursor: pointer;">
           Cancelar
         </button>
-        <button type="button" id="btnConfirmarModalAgendamento" style="flex: 1.5; background: #F59E0B; border: none; color: #1C1002; font-weight: 900; padding: 12px; border-radius: 12px; cursor: pointer;">
+        <button type="button" id="btnConfirmarModalAgendamento"
+          style="flex: 1.5; background: #F59E0B; border: none; color: #1C1002; font-weight: 900; padding: 12px; border-radius: 12px; cursor: pointer;">
           Confirmar Horário
         </button>
       </div>
@@ -587,23 +656,30 @@
   </div>
 
   <!-- POP-UP SPLASH DE PATROCINADOR -->
-  <div id="modalPopupPatrocinador" class="modal-backdrop" style="display: none; z-index: 10050; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
+  <div id="modalPopupPatrocinador" class="modal-backdrop"
+    style="display: none; z-index: 10050; background: rgba(6, 10, 18, 0.88); backdrop-filter: blur(12px);">
     <div class="sponsor-popup-card">
       <span class="sponsor-tag-badge" id="popupSponsorTag">✨ Parceiro Oficial</span>
-      <button type="button" id="btnFecharPopupPatrocinador" class="btn-close-sponsor-x" aria-label="Fechar Anúncio">✕</button>
+      <button type="button" id="btnFecharPopupPatrocinador" class="btn-close-sponsor-x"
+        aria-label="Fechar Anúncio">✕</button>
 
       <div style="width: 100%; max-height: 360px; overflow: hidden; background: #090D16;">
-        <img id="popupSponsorImg" src="" alt="Banner Patrocinador" style="width: 100%; height: 100%; max-height: 360px; object-fit: cover; display: block;">
+        <img id="popupSponsorImg" src="" alt="Banner Patrocinador"
+          style="width: 100%; height: 100%; max-height: 360px; object-fit: cover; display: block;">
       </div>
 
       <div style="padding: 18px;">
-        <small id="popupSponsorEmpresa" style="color: #10B981; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; display: block; margin-bottom: 4px;"></small>
-        <h3 id="popupSponsorTitulo" style="margin: 0 0 6px; font-size: 18px; font-weight: 900; color: #FFF; line-height: 1.25;"></h3>
+        <small id="popupSponsorEmpresa"
+          style="color: #10B981; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.6px; display: block; margin-bottom: 4px;"></small>
+        <h3 id="popupSponsorTitulo"
+          style="margin: 0 0 6px; font-size: 18px; font-weight: 900; color: #FFF; line-height: 1.25;"></h3>
         <p id="popupSponsorDesc" style="margin: 0 0 14px; font-size: 12px; color: #94A3B8; line-height: 1.4;"></p>
 
-        <div id="popupSponsorCupomBox" style="display: none; background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; text-align: center;">
+        <div id="popupSponsorCupomBox"
+          style="display: none; background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 10px; padding: 8px 12px; margin-bottom: 14px; text-align: center;">
           <small style="color: #94A3B8; font-size: 10px; display: block;">CUPOM EXCLUSIVO</small>
-          <strong id="popupSponsorCupomCodigo" style="color: #10B981; font-size: 16px; font-weight: 900; letter-spacing: 1.5px;"></strong>
+          <strong id="popupSponsorCupomCodigo"
+            style="color: #10B981; font-size: 16px; font-weight: 900; letter-spacing: 1.5px;"></strong>
         </div>
 
         <div style="display: flex; gap: 8px;">
@@ -621,8 +697,10 @@
   </div>
 
   <!-- VITRINE DE PARCEIROS -->
-  <div id="modalVitrineParceiros" class="modal-backdrop" style="display: none; z-index: 10040; background: rgba(6, 10, 18, 0.9); backdrop-filter: blur(12px);">
-    <div class="modal-card modal-wide" style="max-width: 440px; max-height: 88dvh; display: flex; flex-direction: column; padding: 18px;">
+  <div id="modalVitrineParceiros" class="modal-backdrop"
+    style="display: none; z-index: 10040; background: rgba(6, 10, 18, 0.9); backdrop-filter: blur(12px);">
+    <div class="modal-card modal-wide"
+      style="max-width: 440px; max-height: 88dvh; display: flex; flex-direction: column; padding: 18px;">
       <div class="modal-header-row" style="margin-bottom: 10px;">
         <div>
           <h3 style="margin: 0; font-size: 18px; color: #FFF; font-weight: 900;">✨ Parceiros & Patrocinadores</h3>
@@ -631,7 +709,8 @@
         <button type="button" id="btnFecharVitrineParceiros" class="btn-icon-close">✕</button>
       </div>
 
-      <div id="filtrosVitrineParceiros" style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px;">
+      <div id="filtrosVitrineParceiros"
+        style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 10px;">
         <button type="button" class="partner-filter-pill active" data-cat="todos">Todos</button>
         <button type="button" class="partner-filter-pill" data-cat="destaque">⭐ Destaques</button>
         <button type="button" class="partner-filter-pill" data-cat="alimentacao">🍔 Alimentação</button>
@@ -640,7 +719,8 @@
         <button type="button" class="partner-filter-pill" data-cat="servicos">🔧 Serviços</button>
       </div>
 
-      <div id="listaCardsParceirosCliente" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px;">
+      <div id="listaCardsParceirosCliente"
+        style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; padding-right: 4px;">
         <p class="loading-txt">Carregando parceiros oficiais...</p>
       </div>
 
@@ -662,11 +742,14 @@
         <button type="button" id="btnFecharModalFav" class="btn-icon-close">✕</button>
       </div>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar Endereço</label>
+        <label style="font-size: 11px; font-weight: 700; color: #CBD5E1; text-transform: uppercase;">Digitar
+          Endereço</label>
         <input type="text" id="inputEnderecoFavTexto" placeholder="Ex: Rua Senador Cândido Ferraz, 120"
           style="width: 100%; box-sizing: border-box; background: #080C14; border: 1px solid rgba(255,255,255,0.12); border-radius: 10px; padding: 12px; color: #FFF; font-size: 13px; outline: none;" />
-        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">💾 Salvar</button>
-        <button type="button" id="btnMarcarFavNoMapa" style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+        <button type="button" id="btnSalvarFavTexto" class="btn-primary-modal" style="margin-top: 4px;">💾
+          Salvar</button>
+        <button type="button" id="btnMarcarFavNoMapa"
+          style="background: rgba(56, 189, 248, 0.15); border: 1.5px solid #38BDF8; color: #38BDF8; font-weight: 800; padding: 12px; border-radius: 10px; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
           📍 Marcar no Mapa
         </button>
       </div>
@@ -695,41 +778,48 @@
       <p id="txtDescricaoModalIndique" style="font-size: 13px; color: #94A3B8; margin: 8px 0 14px;">
         Compartilhe seu código! Seu amigo ganha desconto na 1ª viagem e você recebe bônus.
       </p>
-      <div style="background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px;">
-        <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px;">HUBY-VIP</div>
+      <div
+        style="background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px;">
+        <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px;">
+          HUBY-VIP</div>
       </div>
       <div style="display: flex; gap: 8px;">
         <button type="button" id="btnCopiarCodigoInd" class="btn-secondary-modal" style="flex: 1;">📋 Copiar</button>
-        <button type="button" id="btnCompartilharCodigoZap" class="btn-primary-modal" style="flex: 1.5;">📲 Enviar WhatsApp</button>
+        <button type="button" id="btnCompartilharCodigoZap" class="btn-primary-modal" style="flex: 1.5;">📲 Enviar
+          WhatsApp</button>
       </div>
     </div>
   </div>
 
   <!-- MODAL DE REGRAS DE CANCELAMENTO (PASSAGEIRO) -->
-  <div id="modalRegrasCancelamentoCliente" class="modal-backdrop-custom" style="display: none; z-index: 10050; position: fixed; inset: 0; background: rgba(6,10,18,0.85); backdrop-filter: blur(10px); align-items: center; justify-content: center; padding: 16px;">
-    <div style="background: #121826; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 20px; width: 100%; max-width: 360px; padding: 20px; color: #F8FAFC; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.85);">
-      
-      <div style="width: 50px; height: 50px; background: rgba(239, 68, 68, 0.15); color: #EF4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 12px;">
+  <div id="modalRegrasCancelamentoCliente" class="modal-backdrop-custom"
+    style="display: none; z-index: 10050; position: fixed; inset: 0; background: rgba(6,10,18,0.85); backdrop-filter: blur(10px); align-items: center; justify-content: center; padding: 16px;">
+    <div
+      style="background: #121826; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 20px; width: 100%; max-width: 360px; padding: 20px; color: #F8FAFC; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.85);">
+
+      <div
+        style="width: 50px; height: 50px; background: rgba(239, 68, 68, 0.15); color: #EF4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; margin: 0 auto 12px;">
         ⚠️
       </div>
-      
+
       <h3 style="margin: 0 0 10px; font-size: 18px; font-weight: 800; color: #FFF;">Política de Cancelamento</h3>
-      
-      <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 12px; margin-bottom: 16px; text-align: left; font-size: 13px; line-height: 1.5; color: #94A3B8;">
-        <p style="margin: 0 0 8px;">⏱️ <strong>Até 2 minutos após o aceite:</strong> Gratuito.</p>
-        <p style="margin: 0 0 8px;">🚗 <strong>Após 2 minutos (motorista a caminho):</strong> Taxa fixa de <strong style="color: #EF4444;">R$ 5,00</strong> repassada ao motorista.</p>
-        <p style="margin: 0;">⏳ <strong>Espera no local:</strong> Se o motorista chegar e aguardar mais de 3 min, a corrida pode ser encerrada com cobrança da taxa.</p>
+
+      <div
+        style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 12px; margin-bottom: 16px; text-align: left; font-size: 13px; line-height: 1.5; color: #94A3B8;">
+        <p style="margin: 0 0 8px;">🚗 <strong>O motorista já está a caminho.</strong> Se você cancelar agora, ele será
+          avisado na hora.</p>
+        <p style="margin: 0;">✅ <strong>Sem taxa de cancelamento</strong> no momento.</p>
       </div>
 
-      <div id="avisoTempoDecorrido" style="color: #F59E0B; font-weight: 700; font-size: 13px; margin-bottom: 16px; display: none;">
-        Já se passaram mais de 2 minutos. Uma taxa de R$ 5,00 será cobrada.
-      </div>
+      <div id="avisoTempoDecorrido" style="display: none;"></div>
 
       <div style="display: flex; gap: 8px;">
-        <button type="button" id="btnDesistirCancelamento" style="flex: 1; background: #10B981; border: none; color: #02261C; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer;">
+        <button type="button" id="btnDesistirCancelamento"
+          style="flex: 1; background: #10B981; border: none; color: #02261C; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer;">
           Manter Corrida
         </button>
-        <button type="button" id="btnConfirmarCancelamento" style="flex: 1; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #EF4444; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer;">
+        <button type="button" id="btnConfirmarCancelamento"
+          style="flex: 1; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: #EF4444; padding: 12px; border-radius: 10px; font-weight: 800; cursor: pointer;">
           Sim, Cancelar
         </button>
       </div>
@@ -739,7 +829,7 @@
   <!-- CONTROLES ESSENCIAIS DO MENU LATERAL & SINCRONIZAÇÃO INDIQUE E GANHE -->
   <script type="module">
     import { API_URL } from './js/config.js';
-    
+
     function checarAdminInstantaneo() {
       const token = localStorage.getItem('huby_token');
       const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
@@ -804,7 +894,7 @@
         if (descModal) {
           descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     document.getElementById('menuItemIndique')?.addEventListener('click', async (e) => {
@@ -827,7 +917,7 @@
           if (descModal) {
             descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
     });
 
@@ -853,7 +943,7 @@
       atualizarMenuLateral();
       sincronizarRegrasIndicacaoUI();
     });
-    
+
     document.getElementById('btnAbrirMenu')?.addEventListener('click', () => {
       checarAdminInstantaneo();
       atualizarMenuLateral();
@@ -862,7 +952,7 @@
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
-  <script type="module" src="./js/app-cliente.js?v=14.0.0"></script>
+  <script type="module" src="./js/app-cliente.js?v=16.0.0"></script>
   <!-- INTELIGÊNCIA ARTIFICIAL E COMANDOS DE VOZ DO PASSAGEIRO -->
   <script type="module" src="./js/ia/cliente-ia.js?v=2.0.0"></script>
   <!-- RECIBO E PUSH -->
@@ -871,4 +961,3 @@
 </body>
 
 </html>
-

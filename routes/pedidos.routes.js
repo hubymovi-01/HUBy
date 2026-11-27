@@ -320,9 +320,9 @@ function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLng / 2) *
-      Math.sin(dLng / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) *
+    Math.sin(dLng / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
@@ -635,7 +635,7 @@ export default function pedidosRouter(io) {
       if (cupomReservadoId) {
         try {
           await sql`UPDATE cupons_desconto SET usos_atuais = GREATEST(usos_atuais - 1, 0) WHERE id = ${cupomReservadoId};`;
-        } catch (e) {}
+        } catch (e) { }
       }
       return res.status(500).json({ erro: 'Falha ao salvar a corrida. Tente novamente.' });
     }
@@ -977,8 +977,12 @@ export default function pedidosRouter(io) {
 
       const mot = await buscarMotoristaDoToken(req.usuario);
       const papel = papelNoPedido(pedidos[0], req.usuario, mot);
-      if (papel !== 'motorista' && papel !== 'admin') {
-        return res.status(403).json({ erro: 'Apenas o motorista desta corrida pode alterar o status.' });
+      // Passageiro pode cancelar enquanto procura motorista OU enquanto o motorista vem buscá-lo.
+      // Depois do embarque (em viagem) não dá mais para cancelar pelo app.
+      // Por enquanto sem taxa para o passageiro (ainda não existe cobrança de cancelamento).
+      const passageiroPodeCancelar = aindaBuscando || STATUS_A_CAMINHO.includes(statusAtual);
+      if (papel === 'cliente' && !passageiroPodeCancelar) {
+        return res.status(403).json({ erro: 'A viagem já começou. Para encerrar, fale com o motorista ou com o suporte.' });
       }
 
       const ehChegadaNoLocal = STATUS_CHEGADA.includes(novoStatus);
@@ -1303,7 +1307,7 @@ export default function pedidosRouter(io) {
             INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
             VALUES (${String(pedido.motorista_id)}, 'motorista', 'repasse_conclusao_admin', ${repasseMotorista}, ${String(id)});
           `;
-        } catch (eTx) {}
+        } catch (eTx) { }
       }
 
       if (pedido.cliente_id) {
@@ -1416,7 +1420,7 @@ export default function pedidosRouter(io) {
             INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
             VALUES (${String(pedido.motorista_id)}, 'motorista', 'desconto_comissao_viagem_especie', ${-taxaPlataforma}, ${String(id)});
           `;
-        } catch (eTrans) {}
+        } catch (eTrans) { }
 
         if (pedido.cliente_id) {
           await liquidarBonusIndicacaoPrimeiraCorrida(pedido.cliente_id);
@@ -1492,7 +1496,7 @@ export default function pedidosRouter(io) {
 
       try {
         await sql`UPDATE pedidos SET pix_txid = ${txidGerado} WHERE id::text = ${String(id)}::text;`;
-      } catch (ePed) {}
+      } catch (ePed) { }
 
       try {
         await sql`ALTER TABLE cobrancas_pix ADD COLUMN IF NOT EXISTS txid VARCHAR(64);`;
@@ -1607,7 +1611,7 @@ export default function pedidosRouter(io) {
             INSERT INTO transacoes_carteira (usuario_id, tipo_usuario, tipo_transacao, valor, pedido_id)
             VALUES (${String(pedido.motorista_id)}, 'motorista', 'taxa_espera_cancelamento', ${repasseEsperaMotorista}, ${String(id)});
           `;
-        } catch (eTx) {}
+        } catch (eTx) { }
       }
 
       if (aindaBuscando) {
@@ -1849,7 +1853,7 @@ export default function pedidosRouter(io) {
               foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url)
             WHERE id::text = ${String(mot.usuario_id)}::text;
           `;
-        } catch (eUsr) {}
+        } catch (eUsr) { }
       }
 
       return res.json({

@@ -477,8 +477,28 @@ export function inicializarSocket() {
         if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
           sonsHUBy.tocarMetaBatida();
         }
-        concluirLimpezaPosCorrida();
+               concluirLimpezaPosCorrida();
       }
+    });
+
+    // Passageiro (ou a central) cancelou a corrida que este motorista aceitou
+    estado.socket.on('corrida_cancelada', (dados) => {
+      const pedidoIdAtual = estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id;
+      if (!pedidoIdAtual || String(dados?.pedidoId) !== String(pedidoIdAtual)) return;
+      if (dados?.canceladoPor === 'motorista') return; // o próprio motorista já trata o cancelamento dele
+
+      fecharModaisPagamento();
+      if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarAlertaChamada) {
+        sonsHUBy.tocarAlertaChamada();
+      }
+      notificar(
+        dados?.canceladoPor === 'admin'
+          ? '🚫 A central HUBy cancelou esta corrida.'
+          : '🚫 O passageiro cancelou a corrida. Você já pode receber novas chamadas.',
+        'alerta',
+        7000
+      );
+      concluirLimpezaPosCorrida();
     });
   }
 }

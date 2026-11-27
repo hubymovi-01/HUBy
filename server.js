@@ -91,32 +91,201 @@ io.use((socket, next) => {
   next();
 });
 
+// ============================================================================
+// SOCKET: SALAS POR CORRIDA (só passageiro, motorista da corrida e admin recebem o GPS)
+// ============================================================================
+const SALA_ADMINS = 'admins';
+const salaCorrida = (pedidoId) => `corrida:${pedidoId}`;
+const STATUS_RASTREAVEIS = [
+  'aceito', 'a_caminho', 'chegou_local', 'aguardando_passageiro',
+  'no_local', 'motorista_no_local', 'em_andamento', 'em_viagem'
+];
+const INTERVALO_MIN_GPS_MS = 700;
+const cacheCorridas = new Map();
+const ultimaPosicaoPorCorrida = new Map();
+
+// Limpa posições antigas a cada 5 minutos
+setInterval(() => {
+  const limite = Date.now() - 10 * 60 * 1000;
+  for (const [id, reg] of ultimaPosicaoPorCorrida) {
+    if (reg.em < limite) ultimaPosicaoPorCorrida.delete(id);
+  }
+}, 5 * 60 * 1000).unref();
+
+function ehAdminSocket(usuario) {
+  const role = String(usuario?.role || usuario?.funcao || '').toLowerCase();
+  return role === 'admin' || role === 'administrador';
+}
+
+// Descobre (uma vez por conexão) qual motorista está neste socket
+async function motoristaIdDoSocket(socket) {
+  if (socket.data.motoristaId !== undefined) return socket.data.motoristaId;
+  const usuario = socket.data.usuario;
+  if (!usuario || String(usuario.role || '').toLowerCase() !== 'motorista') {
+    socket.data.motoristaId = null;
+    return null;
+  }
+  const ids = [usuario.id, usuario.motoristaId]
+    .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+    .map(String);
+  if (!ids.length) {
+    socket.data.motoristaId = null;
+    return null;
+  }
+  try {
+    const rows = await sql`
+      SELECT id FROM motoristas
+      WHERE id::text = ANY(${ids}) OR usuario_id::text = ANY(${ids})
+      LIMIT 1;
+    `;
+    socket.data.motoristaId = rows[0]?.id ? String(rows[0].id) : null;
+  } catch (e) {
+    return null;
+  }
+  return socket.data.motoristaId;
+}
+
+// Dono e status da corrida (guardado por 15 segundos para não pesar o banco)
+async function dadosDaCorrida(pedidoIdBruto) {
+  const pedidoId = String(pedidoIdBruto ?? '').trim();
+  if (!/^[A-Za-z0-9_-]{4,64}$/.test(pedidoId)) return null;
+
+  const emCache = cacheCorridas.get(pedidoId);
+  if (emCache && Date.now() - emCache.em < 15000) return emCache;
+
+  const rows = await sql`
+    SELECT id, cliente_id, motorista_id, status
+    FROM pedidos
+    WHERE id::text = ${pedidoId}
+    LIMIT 1;
+  `;
+  if (!rows.length) {
+    cacheCorridas.delete(pedidoId);
+    return null;
+  }
+
+  const dados = {
+    id: String(rows[0].id),
+    clienteId: rows[0].cliente_id ? String(rows[0].cliente_id) : null,
+    motoristaId: rows[0].motorista_id ? String(rows[0].motorista_id) : null,
+    status: String(rows[0].status || '').toLowerCase(),
+    em: Date.now()
+  };
+  cacheCorridas.set(pedidoId, dados);
+  if (cacheCorridas.size > 2000) cacheCorridas.clear();
+  return dados;
+}
+
 io.on('connection', (socket) => {
-  socket.on('posicao_motorista', (dados) => {
-    socket.broadcast.emit('posicao_motorista_atualizada', dados);
+  if (ehAdminSocket(socket.data.usuario)) {
+    socket.join(SALA_ADMINS);
+  }
+
+  // Passageiro ou motorista pede para acompanhar UMA corrida (o servidor confere se é dele)
+  socket.on('entrar_corrida', async (dados, ack) => {
+    const responder = typeof ack === 'function' ? ack : () => {};
+    try {
+      const usuario = socket.data.usuario;
+      if (!usuario) return responder({ ok: false, erro: 'Login necessário.' });
+
+      const pedidoId = (dados && typeof dados === 'object') ? dados.pedidoId : dados;
+      const corrida = await dadosDaCorrida(pedidoId);
+      if (!corrida) return responder({ ok: false, erro: 'Corrida não encontrada.' });
+
+      const motoristaId = await motoristaIdDoSocket(socket);
+      const permitido =
+        ehAdminSocket(usuario) ||
+        (corrida.clienteId && corrida.clienteId === String(usuario.id)) ||
+        (motoristaId && corrida.motoristaId === motoristaId);
+
+      if (!permitido) return responder({ ok: false, erro: 'Sem acesso a esta corrida.' });
+
+      // Uma corrida por vez: sai das salas de corridas anteriores
+      for (const sala of socket.rooms) {
+        if (sala.startsWith('corrida:') && sala !== salaCorrida(corrida.id)) socket.leave(sala);
+      }
+      socket.join(salaCorrida(corrida.id));
+      responder({ ok: true, status: corrida.status });
+
+      // Quem entra agora já recebe a última posição conhecida do carro
+      const ultima = ultimaPosicaoPorCorrida.get(corrida.id);
+      if (ultima && Date.now() - ultima.em < 2 * 60 * 1000) {
+        socket.emit('posicao_corrida', ultima.dados);
+      }
+    } catch (err) {
+      responder({ ok: false, erro: 'Falha ao entrar na corrida.' });
+    }
   });
 
-  socket.on('motorista_aceitou', (dados) => {
-    socket.broadcast.emit('corrida_aceita', dados);
+  socket.on('sair_corrida', (dados) => {
+    const pedidoId = (dados && typeof dados === 'object') ? dados.pedidoId : dados;
+    if (pedidoId) socket.leave(salaCorrida(String(pedidoId)));
   });
 
-  socket.on('motorista_chegou', (dados) => {
-    socket.broadcast.emit('motorista_chegou_local', dados);
+  // GPS do motorista: só é aceito de um motorista logado, e só vai para quem pode ver
+  socket.on('posicao_motorista', async (dados) => {
+    try {
+      const motoristaId = await motoristaIdDoSocket(socket);
+      if (!motoristaId) return;
+
+      const agora = Date.now();
+      if (socket.data.ultimoGps && agora - socket.data.ultimoGps < INTERVALO_MIN_GPS_MS) return;
+      socket.data.ultimoGps = agora;
+
+      const lat = Number(dados?.lat);
+      const lng = Number(dados?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
+      if (lat === 0 && lng === 0) return;
+
+      const headingBruto = Number(dados?.heading);
+      const velocidade = Number(dados?.velocidadeKmh);
+
+      const pacote = {
+        motoristaId,
+        lat,
+        lng,
+        heading: Number.isFinite(headingBruto) ? ((headingBruto % 360) + 360) % 360 : 0,
+        velocidadeKmh: Number.isFinite(velocidade) && velocidade >= 0 ? Math.min(velocidade, 250) : 0,
+        emCorrida: Boolean(dados?.pedidoId),
+        atualizadoEm: new Date(agora).toISOString()
+      };
+
+      // Radar do painel admin
+      io.to(SALA_ADMINS).emit('posicao_motorista', pacote);
+
+      // Passageiro da corrida (somente se este motorista for mesmo o da corrida)
+      if (dados?.pedidoId) {
+        const corrida = await dadosDaCorrida(dados.pedidoId);
+        if (corrida && corrida.motoristaId === motoristaId && STATUS_RASTREAVEIS.includes(corrida.status)) {
+          const paraPassageiro = { ...pacote, pedidoId: corrida.id, status: corrida.status };
+          ultimaPosicaoPorCorrida.set(corrida.id, { dados: paraPassageiro, em: agora });
+          io.to(salaCorrida(corrida.id)).emit('posicao_corrida', paraPassageiro);
+        }
+      }
+    } catch (err) {
+      // GPS perdido não derruba nada
+    }
   });
 
-  socket.on('corrida_iniciada', (dados) => {
-    socket.broadcast.emit('passageiro_a_bordo', dados);
+  // "Cheguei": só o motorista da corrida consegue avisar o passageiro
+  socket.on('motorista_chegou', async (dados) => {
+    try {
+      const motoristaId = await motoristaIdDoSocket(socket);
+      if (!motoristaId) return;
+      const corrida = await dadosDaCorrida(dados?.pedidoId);
+      if (corrida && corrida.motoristaId === motoristaId) {
+        io.to(salaCorrida(corrida.id)).emit('motorista_chegou_local', { pedidoId: corrida.id });
+      }
+    } catch (err) {}
   });
 
-  socket.on('corrida_finalizada_motorista', (dados) => {
-    socket.broadcast.emit('corrida_finalizada', dados);
-  });
-
-  socket.on('corrida_cancelada_motorista', (dados) => {
-    socket.broadcast.emit('corrida_cancelada', { ...dados, canceladoPor: 'motorista' });
-  });
-  socket.on('cliente_cancelou_busca', (dados) => {
-    socket.broadcast.emit('corrida_cancelada', { ...dados, canceladoPor: 'cliente' });
+  // Os avisos abaixo eram repassados para TODO mundo sem conferir quem mandou
+  // (dava para cancelar ou "finalizar" corrida dos outros na tela).
+  // Agora esses avisos saem só do servidor, pelas rotas oficiais (aceitar, embarque,
+  // finalizar e cancelar). Os nomes continuam escutados para não gerar erro no app antigo.
+  ['motorista_aceitou', 'corrida_iniciada', 'corrida_finalizada_motorista',
+    'corrida_cancelada_motorista', 'cliente_cancelou_busca'].forEach((evento) => {
+    socket.on(evento, () => {});
   });
 });
 

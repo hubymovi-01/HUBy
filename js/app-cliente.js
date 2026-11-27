@@ -25,13 +25,23 @@ import {
   configurarNotaMotorista,
   configurarCupomDesconto,
   configurarAgendamentoCorrida,
-  criarOuAtualizarVeiculoMapa,
   conferirCupomNaCotacao,
   estadoRecursos
 } from './cliente/cliente-recursos.js';
+import { iniciarRastreioCorrida, definirFaseRastreio, pararRastreioCorrida } from './cliente/cliente-rastreio.js';
 
 let intervalChecagemPix = null;
 let alertaProximidadeEmitido = false;
+
+// Acompanhamento da corrida aceita
+let socketCliente = null;
+let cartaoRenderizadoPara = null;   // id da corrida cujo cartão do motorista já está na tela
+let faseCartao = null;              // 'buscando' | 'viagem'
+let motoristaChegou = false;
+
+const STATUS_INDO_BUSCAR = ['aceito', 'a_caminho'];
+const STATUS_NO_LOCAL = ['chegou_local', 'aguardando_passageiro', 'no_local', 'motorista_no_local'];
+const STATUS_EM_VIAGEM = ['em_viagem', 'em_andamento'];
 let cachePatrocinadoresAtivos = [];
 let categoriaFiltroParceiro = 'todos';
 
@@ -43,17 +53,6 @@ function escaparHTML(str) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
-}
-
-function calcularDistanciaMetros(lat1, lon1, lat2, lon2) {
-  const R = 6371e3;
-  const rad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * rad;
-  const dLon = (lon2 - lon1) * rad;
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * rad) * Math.cos(lat2 * rad) *
-    Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 // ============================================================================
@@ -107,8 +106,18 @@ export function alternarModoVisualViagemAtiva(emViagem = false) {
   ];
 
   elementosParaEsconder.forEach(el => {
-    if (el) {
-      el.style.display = emViagem ? 'none' : '';
+    if (!el) return;
+    if (emViagem) {
+      el.style.display = 'none';
+      return;
+    }
+    // Ao voltar, alguns blocos só aparecem quando fazem sentido
+    if (el.id === 'cardStatusViagem' || el.id === 'alertaAltaDemanda') {
+      el.style.display = 'none';
+    } else if (el.id === 'blocoDetalhesEntrega') {
+      el.style.display = estadoCliente.categoriaSelecionada === 'entrega' ? 'block' : 'none';
+    } else {
+      el.style.display = '';
     }
   });
 
@@ -700,6 +709,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     configurarChatCliente(pedidoAtivoSalvo);
   }
 
+  // Corrida nova criada (cliente-pedidos.js avisa): começa a acompanhar
+  window.addEventListener('huby_corrida_iniciada', () => {
+    limparEstadoCorridaNaTela(false);
+    iniciarPollingCorrida();
+  });
+
+  // Painel voltou ao início (corrida cancelada/encerrada): mostra de novo as opções de pedido
+  window.addEventListener('huby_painel_resetado', () => {
+    limparEstadoCorridaNaTela(true);
+  });
+
   conectarSocketEPollingCliente();
   inicializarPatrocinadoresCliente();
 
@@ -922,111 +942,71 @@ function exibirModalPixCorridaCliente(pixBruto) {
   });
 }
 
+// ============================================================================
+// ACOMPANHAMENTO DA CORRIDA (SOCKET + CONSULTA DE STATUS + MAPA AO VIVO)
+// ============================================================================
+function pedidoAtivoAtual() {
+  return estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id') || null;
+}
+
+function ehDaMinhaCorrida(pedidoId) {
+  const ativo = pedidoAtivoAtual();
+  return Boolean(ativo && pedidoId && String(pedidoId) === String(ativo));
+}
+
+function coordsDe(lat, lng) {
+  const a = Number(lat);
+  const b = Number(lng);
+  return Number.isFinite(a) && Number.isFinite(b) && !(a === 0 && b === 0) ? [a, b] : null;
+}
+
 function conectarSocketEPollingCliente() {
   const token = localStorage.getItem('huby_token');
-  const socket = window.io ? window.io(API_URL, {
+  socketCliente = window.io ? window.io(API_URL, {
     auth: { token: token || '' },
     transports: ['websocket', 'polling']
   }) : null;
 
+  const socket = socketCliente;
+
   if (socket) {
     socket.on('tarifas_atualizadas', (novasTarifas) => {
       aplicarObjetoTarifas(novasTarifas);
-      sincronizarPrecosDaRotaAtual();
+      if (!pedidoAtivoAtual()) sincronizarPrecosDaRotaAtual();
     });
 
     socket.on('patrocinadores_atualizados', () => {
       carregarBannersPatrocinadores(false);
     });
 
+    // Só reage a avisos da SUA corrida
     socket.on('corrida_aceita', (data) => {
-      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
-        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarSucessoAceite) {
-          sonsHUBy.tocarSucessoAceite();
-        }
-        alertaProximidadeEmitido = false;
-        
-        estadoCliente.horaAceiteMotorista = Date.now();
-        localStorage.setItem('huby_hora_aceite_motorista', estadoCliente.horaAceiteMotorista.toString());
-
-        alternarModoVisualViagemAtiva(true);
-        renderizarMotoristaChegando({ id: data.pedidoId || pedidoAtivo, ...data.motorista });
-      }
+      if (!ehDaMinhaCorrida(data?.pedidoId)) return;
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      estadoCliente.horaAceiteMotorista = Date.now();
+      localStorage.setItem('huby_hora_aceite_motorista', String(estadoCliente.horaAceiteMotorista));
+      mostrarCorridaAceita({ id: data.pedidoId, status: 'a_caminho', ...(data.motorista || {}) });
     });
 
     socket.on('motorista_chegou_local', (data) => {
-      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || String(data?.pedidoId) === String(pedidoAtivo)) {
-        if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarAlertaChamada) {
-          sonsHUBy.tocarAlertaChamada();
-        }
-        notificar('📍 O seu motorista acabou de chegar ao local de embarque!', 'sucesso');
-        const lblStatus = document.getElementById('lblStatusTextoPassageiro');
-        if (lblStatus) {
-          lblStatus.textContent = '📍 O MOTORISTA CHEGOU! DIRIJA-SE AO VEÍCULO';
-          lblStatus.style.color = '#10B981';
-        }
-      }
+      if (ehDaMinhaCorrida(data?.pedidoId)) marcarMotoristaChegou();
+    });
+
+    socket.on('status_corrida_atualizado', (data) => {
+      if (!ehDaMinhaCorrida(data?.pedidoId)) return;
+      if (STATUS_NO_LOCAL.includes(String(data?.status || '').toLowerCase())) marcarMotoristaChegou();
     });
 
     socket.on('passageiro_a_bordo', (data) => {
-      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
-        alternarModoVisualViagemAtiva(true);
-        atualizarParaViagemEmAndamento();
-      }
+      if (ehDaMinhaCorrida(data?.pedidoId)) iniciarFaseViagem();
     });
 
     socket.on('corrida_cancelada', (data) => {
-      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo) return;
-      if (String(data?.pedidoId) === String(pedidoAtivo)) {
-        if (estadoCliente.intervalPolling) {
-          clearInterval(estadoCliente.intervalPolling);
-          estadoCliente.intervalPolling = null;
-        }
-        resetarPainelCliente();
-        if (data?.canceladoPor && data.canceladoPor !== 'cliente') {
-          notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
-        }
-      }
+      if (ehDaMinhaCorrida(data?.pedidoId)) encerrarPorCancelamento(data?.canceladoPor);
     });
 
-    const processarMovimentoCarro = (pos) => {
-      if (estadoCliente.hubyMapa && estadoCliente.hubyMapa.map && pos.lat && pos.lng) {
-        criarOuAtualizarVeiculoMapa(
-          estadoCliente.hubyMapa.map,
-          pos.lat,
-          pos.lng,
-          pos.heading || 0,
-          estadoCliente.categoriaSelecionada || 'carro'
-        );
-      }
-
-      const coordsEmbarque = estadoCliente.rotaAtual?.origemCoords || estadoCliente.coordsOrigem;
-      if (coordsEmbarque && !alertaProximidadeEmitido && pos.lat && pos.lng) {
-        const dist = calcularDistanciaMetros(pos.lat, pos.lng, coordsEmbarque[0], coordsEmbarque[1]);
-        if (dist <= 200) {
-          alertaProximidadeEmitido = true;
-          if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarAlertaChamada) {
-            sonsHUBy.tocarAlertaChamada();
-          }
-          notificar('Motorista está a menos de 200 metros!', 'info');
-          const lblStatus = document.getElementById('lblStatusTextoPassageiro');
-          if (lblStatus) {
-            lblStatus.textContent = '⚡ MOTORISTA ESTÁ CHEGANDO (MENOS DE 200M)!';
-            lblStatus.style.color = '#10B981';
-          }
-        }
-      }
-    };
-
-    socket.on('posicao_motorista', processarMovimentoCarro);
-    socket.on('posicao_motorista_atualizada', processarMovimentoCarro);
-
     socket.onAny((evento, dados) => {
-      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+      const pedidoAtivo = pedidoAtivoAtual();
       if (pedidoAtivo && evento === `exibir_pix_corrida_${pedidoAtivo}`) {
         exibirModalPixCorridaCliente(dados);
       }
@@ -1037,70 +1017,215 @@ function conectarSocketEPollingCliente() {
     });
 
     socket.on('corrida_finalizada', (data) => {
-      const pedidoAtivo = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-      if (!pedidoAtivo || String(data.pedidoId) === String(pedidoAtivo)) {
-        document.getElementById('modalPixCorridaAtivaCliente')?.remove();
-        finalizarViagemCliente(data);
-      }
+      if (!ehDaMinhaCorrida(data?.pedidoId)) return;
+      document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+      finalizarViagemCliente(data);
     });
   }
 
+  iniciarPollingCorrida();
+}
+
+// Consulta o status a cada 3,5 s (garante a tela certa mesmo se algum aviso do socket se perder)
+function iniciarPollingCorrida() {
   if (estadoCliente.intervalPolling) clearInterval(estadoCliente.intervalPolling);
-  estadoCliente.intervalPolling = setInterval(async () => {
-    const pedidoId = estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
-    if (!pedidoId) return;
+  estadoCliente.intervalPolling = setInterval(consultarStatusCorrida, 3500);
+  consultarStatusCorrida();
+}
 
-    const tokenAtual = localStorage.getItem('huby_token');
+function pararPollingCorrida() {
+  if (estadoCliente.intervalPolling) {
+    clearInterval(estadoCliente.intervalPolling);
+    estadoCliente.intervalPolling = null;
+  }
+}
 
-    try {
-      const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/status`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(tokenAtual ? { 'Authorization': `Bearer ${tokenAtual}` } : {})
-        }
-      });
+async function consultarStatusCorrida() {
+  const pedidoId = pedidoAtivoAtual();
+  if (!pedidoId) return;
 
-      if (res.status === 401 || res.status === 404) {
-        clearInterval(estadoCliente.intervalPolling);
-        estadoCliente.intervalPolling = null;
-        resetarPainelCliente();
-        return;
+  const tokenAtual = localStorage.getItem('huby_token');
+
+  try {
+    const res = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(pedidoId)}/status`, {
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(tokenAtual ? { Authorization: `Bearer ${tokenAtual}` } : {})
       }
+    });
 
-      if (!res.ok) return;
-      const p = await res.json();
+    if (res.status === 401 || res.status === 404) {
+      pararPollingCorrida();
+      resetarPainelCliente();
+      return;
+    }
+    if (!res.ok) return;
 
-      if (p.status === 'a_caminho' || p.status === 'aceito' || p.status === 'em_andamento' || p.status === 'chegou_local') {
-        alternarModoVisualViagemAtiva(true);
-        renderizarMotoristaChegando({
-          id: p.id || pedidoId,
-          nome: p.motorista_nome,
-          telefone: p.motorista_telefone,
-          veiculo: p.motorista_veiculo,
-          placa: p.motorista_placa,
-          cor: p.veiculo_cor,
-          foto: p.motorista_foto,
-          avaliacao: p.motorista_avaliacao,
-          aceita_dinheiro: p.aceita_dinheiro,
-          aceita_cartao: p.aceita_cartao,
-          aceita_pix: p.aceita_pix
-        });
-      } else if (p.status === 'em_viagem') {
-        alternarModoVisualViagemAtiva(true);
-        atualizarParaViagemEmAndamento();
-      } else if (p.status === 'concluido') {
-        document.getElementById('modalPixCorridaAtivaCliente')?.remove();
-        finalizarViagemCliente({ pedidoId });
-      } else if (p.status === 'cancelado') {
-        clearInterval(estadoCliente.intervalPolling);
-        estadoCliente.intervalPolling = null;
-        resetarPainelCliente();
-        if (p.cancelado_por && p.cancelado_por !== 'cliente') {
-          notificar('A corrida foi cancelada pelo motorista parceiro.', 'alerta');
-        }
-      }
-    } catch (e) {}
-  }, 3500);
+    const p = await res.json();
+    if (!ehDaMinhaCorrida(p.id || pedidoId)) return;
+    const status = String(p.status || '').toLowerCase();
+
+    const dadosCartao = {
+      id: p.id || pedidoId,
+      status,
+      nome: p.motorista_nome,
+      telefone: p.motorista_telefone,
+      veiculo: p.motorista_veiculo,
+      placa: p.motorista_placa,
+      cor: p.veiculo_cor,
+      foto: p.motorista_foto,
+      avaliacao: p.motorista_avaliacao,
+      aceita_dinheiro: p.aceita_dinheiro,
+      aceita_cartao: p.aceita_cartao,
+      aceita_pix: p.aceita_pix,
+      origem_lat: p.origem_lat,
+      origem_lng: p.origem_lng,
+      destino_lat: p.destino_lat,
+      destino_lng: p.destino_lng
+    };
+
+    if (STATUS_INDO_BUSCAR.includes(status) || STATUS_NO_LOCAL.includes(status)) {
+      mostrarCorridaAceita(dadosCartao);
+      if (STATUS_NO_LOCAL.includes(status)) marcarMotoristaChegou();
+    } else if (STATUS_EM_VIAGEM.includes(status)) {
+      mostrarCorridaAceita(dadosCartao);
+      iniciarFaseViagem();
+    } else if (status === 'concluido') {
+      document.getElementById('modalPixCorridaAtivaCliente')?.remove();
+      finalizarViagemCliente({ pedidoId });
+    } else if (status === 'cancelado') {
+      encerrarPorCancelamento(p.cancelado_por);
+    }
+  } catch (e) {}
+}
+
+// Motorista aceitou: mostra o cartão (uma vez) e liga o mapa ao vivo
+function mostrarCorridaAceita(dados = {}) {
+  const pedidoId = String(dados.id || pedidoAtivoAtual() || '');
+  if (!pedidoId) return;
+
+  alternarModoVisualViagemAtiva(true);
+
+  if (cartaoRenderizadoPara !== pedidoId) {
+    renderizarMotoristaChegando(dados);
+    cartaoRenderizadoPara = pedidoId;
+    faseCartao = 'buscando';
+    motoristaChegou = false;
+    alertaProximidadeEmitido = false;
+  }
+
+  const embarque = coordsDe(dados.origem_lat, dados.origem_lng)
+    || estadoCliente.rotaAtual?.origemCoords
+    || estadoCliente.coordsOrigem
+    || null;
+  const destino = coordsDe(dados.destino_lat, dados.destino_lng)
+    || estadoCliente.rotaAtual?.destinoCoords
+    || estadoCliente.coordsDestino
+    || null;
+
+  if (socketCliente && estadoCliente.hubyMapa && embarque) {
+    iniciarRastreioCorrida({
+      socket: socketCliente,
+      pedidoId,
+      mapa: estadoCliente.hubyMapa,
+      embarque,
+      destino,
+      fase: STATUS_EM_VIAGEM.includes(String(dados.status || '').toLowerCase()) ? 'viagem' : 'buscando',
+      categoria: estadoCliente.categoriaSelecionada || 'carro',
+      aoAtualizar: atualizarEtaCartao
+    });
+  }
+}
+
+// Recebe do mapa ao vivo o tempo e a distância e escreve no cartão
+function atualizarEtaCartao(info = {}) {
+  const eta = document.getElementById('txtEtaRastreio');
+  if (!eta) return;
+
+  const km = Number.isFinite(info.distanciaKm) && info.distanciaKm > 0
+    ? ` · ${info.distanciaKm.toFixed(1).replace('.', ',')} km`
+    : '';
+
+  if (info.semSinal) {
+    eta.textContent = '📡 Sem sinal do motorista no momento...';
+    return;
+  }
+
+  if (info.fase === 'viagem') {
+    eta.textContent = info.minutos
+      ? `Chegada ao destino em ${info.minutos} min${km}`
+      : 'Calculando a chegada ao destino...';
+    return;
+  }
+
+  if (motoristaChegou) {
+    eta.textContent = 'Seu motorista está no local de embarque';
+    return;
+  }
+
+  eta.textContent = info.minutos
+    ? `Chega em ${info.minutos} min${km}`
+    : (info.temPosicao ? 'Calculando o caminho...' : 'Localizando o motorista no mapa...');
+
+  // Aviso de "está chegando" quando o carro fica a menos de 200 m
+  if (!alertaProximidadeEmitido && Number.isFinite(info.distanciaAteAlvoM) && info.distanciaAteAlvoM <= 200) {
+    alertaProximidadeEmitido = true;
+    if (sonsHUBy?.tocarAlertaChamada) sonsHUBy.tocarAlertaChamada();
+    notificar('Seu motorista está a menos de 200 metros!', 'info');
+    const lblStatus = document.getElementById('lblStatusTextoPassageiro');
+    if (lblStatus) {
+      lblStatus.textContent = '⚡ Motorista chegando (menos de 200 m)';
+      lblStatus.style.color = '#10B981';
+    }
+  }
+}
+
+function marcarMotoristaChegou() {
+  if (motoristaChegou || faseCartao === 'viagem') return;
+  motoristaChegou = true;
+
+  if (sonsHUBy?.tocarAlertaChamada) sonsHUBy.tocarAlertaChamada();
+  notificar('📍 Seu motorista chegou ao local de embarque!', 'sucesso');
+
+  const lblStatus = document.getElementById('lblStatusTextoPassageiro');
+  if (lblStatus) {
+    lblStatus.textContent = '📍 O motorista chegou! Dirija-se ao veículo';
+    lblStatus.style.color = '#10B981';
+  }
+  const eta = document.getElementById('txtEtaRastreio');
+  if (eta) eta.textContent = 'Seu motorista está no local de embarque';
+}
+
+// Passageiro embarcou: a linha passa a ir até o destino
+function iniciarFaseViagem() {
+  if (faseCartao === 'viagem') return;
+  faseCartao = 'viagem';
+  motoristaChegou = false;
+  definirFaseRastreio('viagem');
+  atualizarParaViagemEmAndamento();
+}
+
+function encerrarPorCancelamento(canceladoPor) {
+  pararPollingCorrida();
+  resetarPainelCliente();
+  if (canceladoPor && canceladoPor !== 'cliente') {
+    notificar(
+      canceladoPor === 'admin' ? 'A corrida foi cancelada pela central HUBy.' : 'A corrida foi cancelada pelo motorista parceiro.',
+      'alerta',
+      6000
+    );
+  }
+}
+
+// Zera o que a tela guarda da corrida (mostrarOpcoes = volta a mostrar categorias e botões)
+function limparEstadoCorridaNaTela(mostrarOpcoes) {
+  pararRastreioCorrida();
+  cartaoRenderizadoPara = null;
+  faseCartao = null;
+  motoristaChegou = false;
+  alertaProximidadeEmitido = false;
+  if (mostrarOpcoes) alternarModoVisualViagemAtiva(false);
 }
 
 function renderizarMotoristaChegando(mot = {}) {
@@ -1108,7 +1233,7 @@ function renderizarMotoristaChegando(mot = {}) {
   if (!painel) painel = document.getElementById('cardStatusViagemPassageiro');
   if (!painel) return;
 
-  const pedidoId = mot.id || estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  const pedidoId = mot.id || pedidoAtivoAtual();
   const nome = escaparHTML(mot.nome || 'Motorista Parceiro');
   const veiculo = escaparHTML(mot.veiculo || 'Veículo');
   const placa = escaparHTML(String(mot.placa || '---').toUpperCase());
@@ -1136,8 +1261,8 @@ function renderizarMotoristaChegando(mot = {}) {
       <div style="color: #38BDF8; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;" id="lblStatusTextoPassageiro">
         🚘 Motorista a caminho!
       </div>
-      <div style="color: #FFF; font-size: 18px; font-weight: 900; margin-top: 2px;">
-        Chegando para o seu embarque
+      <div style="color: #FFF; font-size: 18px; font-weight: 900; margin-top: 2px;" id="txtEtaRastreio">
+        Localizando o motorista no mapa...
       </div>
     </div>
 
@@ -1175,8 +1300,17 @@ function renderizarMotoristaChegando(mot = {}) {
           💬 Mensagem
         </button>
       </div>
+
+      <button type="button" id="btnCancelarCorridaPassageiro"
+        style="margin-top: 10px; width: 100%; background: transparent; border: 1px solid rgba(239, 68, 68, 0.35); color: #F87171; font-weight: 800; padding: 9px; border-radius: 10px; font-size: 12px; cursor: pointer;">
+        Cancelar corrida
+      </button>
     </div>
   `;
+
+  document.getElementById('btnCancelarCorridaPassageiro')?.addEventListener('click', () => {
+    cancelarBusca();
+  });
 
   const btnChatFlutuante = document.getElementById('btnAbrirChat');
   if (btnChatFlutuante) {
@@ -1190,23 +1324,29 @@ function renderizarMotoristaChegando(mot = {}) {
 function atualizarParaViagemEmAndamento() {
   const lblStatus = document.getElementById('lblStatusTextoPassageiro');
   const boxCronometro = document.getElementById('boxCronometroChegada');
+  const eta = document.getElementById('txtEtaRastreio');
 
-  if (lblStatus) lblStatus.textContent = '🚀 Em viagem ao destino!';
+  if (lblStatus) {
+    lblStatus.textContent = '🚀 Em viagem ao destino';
+    lblStatus.style.color = '#10B981';
+  }
   if (boxCronometro) {
     boxCronometro.style.background = 'rgba(16, 185, 129, 0.12)';
     boxCronometro.style.borderColor = 'rgba(16, 185, 129, 0.4)';
-    const subtitulo = boxCronometro.querySelector('div:last-child');
-    if (subtitulo) subtitulo.textContent = 'Aproveite a sua viagem com segurança';
   }
+  if (eta && !/Chegada ao destino/.test(eta.textContent || '')) {
+    eta.textContent = 'Calculando a chegada ao destino...';
+  }
+
+  // Depois do embarque não dá mais para cancelar pelo app
+  document.getElementById('btnCancelarCorridaPassageiro')?.remove();
 }
 
 function finalizarViagemCliente(data) {
-  if (estadoCliente.intervalPolling) {
-    clearInterval(estadoCliente.intervalPolling);
-    estadoCliente.intervalPolling = null;
-  }
+  pararPollingCorrida();
+  pararRastreioCorrida();
 
-  const pedidoFinalizadoId = data?.pedidoId || estadoCliente.pedidoAtivoId || localStorage.getItem('huby_pedido_ativo_id');
+  const pedidoFinalizadoId = data?.pedidoId || pedidoAtivoAtual();
   if (pedidoFinalizadoId) {
     estadoCliente.corridaParaAvaliarId = pedidoFinalizadoId;
     localStorage.setItem('huby_ultima_corrida_id', pedidoFinalizadoId);
@@ -1221,7 +1361,13 @@ function finalizarViagemCliente(data) {
   }
 
   localStorage.removeItem('huby_pedido_ativo_id');
+  localStorage.removeItem('huby_hora_aceite_motorista');
   estadoCliente.pedidoAtivoId = null;
+
+  cartaoRenderizadoPara = null;
+  faseCartao = null;
+  motoristaChegou = false;
+  alertaProximidadeEmitido = false;
 
   alternarModoVisualViagemAtiva(false);
 
@@ -1231,7 +1377,7 @@ function finalizarViagemCliente(data) {
     btnChatFlutuante.style.setProperty('display', 'none', 'important');
   }
 
-  if (typeof sonsHUBy !== 'undefined' && sonsHUBy.tocarMetaBatida) {
+  if (sonsHUBy?.tocarMetaBatida) {
     sonsHUBy.tocarMetaBatida();
   }
 
