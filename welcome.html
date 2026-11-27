@@ -8,318 +8,788 @@
   <meta http-equiv="Expires" content="0">
   <title>Bem-vindo ao HUBy</title>
 
+  <!-- PWA & CORES DO SISTEMA -->
   <link rel="manifest" href="./manifest.json">
-  <meta name="theme-color" content="#0B0F19">
+  <meta name="theme-color" content="#06090F">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HUBy">
 
+  <!-- ÍCONES -->
   <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
   <link rel="apple-touch-icon" sizes="512x512" href="./img/icon-512.png">
   <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
 
-  <link rel="stylesheet" href="./css/base.css?v=2.2.1">
-  <link rel="stylesheet" href="./css/auth.css?v=2.2.1">
+  <script>
+    // Quem já está logado vai direto para a sua tela (sem abertura)
+    (function () {
+      var token = localStorage.getItem('huby_token');
+      var papel = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
+      if (!token || token === 'null' || !papel) return;
+      if (papel === 'admin' || papel === 'administrador') window.location.replace('./admin.html');
+      else if (papel === 'motorista') window.location.replace('./motorista.html');
+      else window.location.replace('./index.html');
+    })();
+  </script>
 
   <style>
-    .onboarding-slider {
-      position: relative;
+    :root {
+      --fundo: #06090F;
+      --fundo-2: #0B111C;
+      --vidro: rgba(13, 19, 31, 0.78);
+      --borda: rgba(255, 255, 255, 0.09);
+      --texto: #F8FAFC;
+      --texto-2: #94A3B8;
+      --texto-3: #64748B;
+      --verde: #10B981;
+      --verde-claro: #34D399;
+      --azul: #38BDF8;
+      --curva: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--fundo);
+      color: var(--texto);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
       overflow: hidden;
-      width: 100%;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .onboarding-step {
-      display: none;
-      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    /* ================= MAPA DE FUNDO ================= */
+    .mapa-fundo {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      overflow: hidden;
+      background:
+        radial-gradient(120% 70% at 50% 0%, #0E1A2B 0%, var(--fundo) 60%),
+        var(--fundo);
+    }
+    .mapa-fundo svg { width: 100%; height: 100%; display: block; }
+    .rua { stroke: rgba(148, 163, 184, 0.09); stroke-width: 2; fill: none; }
+    .rua-larga { stroke: rgba(148, 163, 184, 0.14); stroke-width: 5; fill: none; }
+    .quadra { fill: rgba(255, 255, 255, 0.018); }
+    .rota-fundo { stroke: var(--verde); stroke-width: 3.5; fill: none; stroke-linecap: round; opacity: 0.55; filter: url(#brilho); }
+    .trafego { filter: url(#brilho); }
+
+    .mapa-fundo::after {
+      /* escurece a parte de baixo, onde fica o cartão */
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(6, 9, 15, 0) 30%, rgba(6, 9, 15, 0.85) 62%, var(--fundo) 85%);
+      pointer-events: none;
     }
 
-    .onboarding-step.active {
-      display: block;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(12px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
-    .role-selection-grid, .action-choice-grid {
+    /* ================= CONTEÚDO ================= */
+    .pagina {
+      position: relative;
+      z-index: 1;
+      height: 100%;
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      margin: 18px 0;
+      justify-content: flex-end;
+      padding: calc(env(safe-area-inset-top, 0px) + 16px) 16px calc(env(safe-area-inset-bottom, 0px) + 16px);
     }
 
-    .card-choice {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 16px;
-      padding: 16px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-align: left;
-    }
-
-    .card-choice:hover,
-    .card-choice:active {
-      border-color: #10B981;
-      background: rgba(16, 185, 129, 0.08);
-      transform: scale(0.99);
-    }
-
-    .card-choice-icon {
-      width: 48px;
-      height: 48px;
-      background: #151D2C;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      flex-shrink: 0;
-    }
-
-    .card-choice-info h3 {
-      margin: 0;
-      font-size: 15px;
-      font-weight: 800;
-      color: #FFF;
-    }
-
-    .card-choice-info p {
-      margin: 4px 0 0;
-      font-size: 12px;
-      color: #94A3B8;
-      line-height: 1.35;
-    }
-
-    .indicator-dots {
+    .marca-topo {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 0px) + 18px);
+      left: 0;
+      right: 0;
       display: flex;
       justify-content: center;
+      opacity: 0;
+      transition: opacity 0.6s var(--curva) 0.15s;
+    }
+    body.pronto .marca-topo { opacity: 1; }
+
+    .selo-ao-vivo {
+      display: inline-flex;
+      align-items: center;
       gap: 8px;
-      margin-top: 18px;
-    }
-
-    .dot {
-      width: 8px;
-      height: 8px;
+      padding: 7px 13px;
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.2);
-      transition: all 0.3s ease;
+      background: rgba(10, 16, 27, 0.7);
+      border: 1px solid var(--borda);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--texto-2);
+      letter-spacing: 0.2px;
+    }
+    .selo-ao-vivo i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--verde);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6);
+      animation: pulsoPonto 2s infinite;
+    }
+    @keyframes pulsoPonto {
+      0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.55); }
+      70% { box-shadow: 0 0 0 9px rgba(16, 185, 129, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
 
-    .dot.active {
-      width: 24px;
-      background: #10B981;
+    .cartao {
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+      background: var(--vidro);
+      border: 1px solid var(--borda);
+      border-radius: 28px;
+      padding: 26px 22px 20px;
+      backdrop-filter: blur(22px) saturate(140%);
+      -webkit-backdrop-filter: blur(22px) saturate(140%);
+      box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      transform: translateY(40px);
+      opacity: 0;
+      transition: transform 0.8s var(--curva), opacity 0.6s var(--curva);
+    }
+    body.pronto .cartao { transform: translateY(0); opacity: 1; }
+
+    .passo { display: none; }
+    .passo.ativo { display: block; animation: entrarPasso 0.45s var(--curva) both; }
+    .passo.voltando { animation-name: entrarPassoVolta; }
+    @keyframes entrarPasso {
+      from { opacity: 0; transform: translateX(22px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes entrarPassoVolta {
+      from { opacity: 0; transform: translateX(-22px); }
+      to { opacity: 1; transform: translateX(0); }
     }
 
-    .selected-role-badge {
+    .logo {
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 1;
+      margin: 0;
+    }
+    .logo span { color: var(--verde); }
+    .logo-legenda {
+      display: block;
+      margin-top: 6px;
+      font-size: 10.5px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--texto-3);
+      text-transform: uppercase;
+    }
+
+    .titulo {
+      margin: 22px 0 8px;
+      font-size: 26px;
+      line-height: 1.15;
+      font-weight: 850;
+      letter-spacing: -0.6px;
+    }
+    .titulo em {
+      font-style: normal;
+      background: linear-gradient(90deg, var(--verde-claro), var(--azul));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .subtitulo {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--texto-2);
+    }
+
+    .vantagens {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin: 20px 0 22px;
+    }
+    .vantagem {
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid var(--borda);
+      border-radius: 16px;
+      padding: 12px 8px;
+      text-align: center;
+    }
+    .vantagem svg { width: 22px; height: 22px; color: var(--verde); display: block; margin: 0 auto 6px; }
+    .vantagem strong { display: block; font-size: 12px; font-weight: 800; }
+    .vantagem small { display: block; margin-top: 2px; font-size: 10.5px; color: var(--texto-3); line-height: 1.3; }
+
+    .botao-principal {
+      position: relative;
+      width: 100%;
+      border: none;
+      border-radius: 18px;
+      padding: 17px 20px;
+      font-size: 15.5px;
+      font-weight: 850;
+      color: #02221A;
+      background: linear-gradient(135deg, #34D399 0%, #10B981 55%, #059669 100%);
+      box-shadow: 0 12px 30px rgba(16, 185, 129, 0.32);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      overflow: hidden;
+      transition: transform 0.15s ease, box-shadow 0.2s ease;
+    }
+    .botao-principal:active { transform: scale(0.98); }
+    .botao-principal::after {
+      /* brilho passando pelo botão */
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 40%;
+      left: -60%;
+      background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+      transform: skewX(-20deg);
+      animation: brilhoBotao 3.6s ease-in-out 1.6s infinite;
+    }
+    @keyframes brilhoBotao {
+      0%, 60% { left: -60%; }
+      100% { left: 130%; }
+    }
+    .botao-principal svg { width: 18px; height: 18px; }
+
+    .cabecalho-passo { margin-bottom: 18px; }
+    .etiqueta {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: rgba(16, 185, 129, 0.12);
-      border: 1px solid rgba(16, 185, 129, 0.3);
-      color: #10B981;
-      padding: 6px 12px;
+      padding: 5px 11px;
       border-radius: 999px;
-      font-size: 12px;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      color: var(--verde-claro);
+      font-size: 11px;
       font-weight: 800;
-      margin-bottom: 12px;
+      letter-spacing: 0.3px;
+    }
+    .cabecalho-passo h2 {
+      margin: 12px 0 4px;
+      font-size: 23px;
+      font-weight: 850;
+      letter-spacing: -0.5px;
+    }
+    .cabecalho-passo p { margin: 0; font-size: 13.5px; color: var(--texto-2); }
+
+    .opcoes { display: flex; flex-direction: column; gap: 10px; }
+    .opcao {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 15px;
+      border-radius: 18px;
+      border: 1px solid var(--borda);
+      background: rgba(255, 255, 255, 0.03);
+      color: var(--texto);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease, transform 0.15s ease;
+      font: inherit;
+    }
+    .opcao:hover, .opcao:focus-visible { border-color: rgba(16, 185, 129, 0.55); background: rgba(16, 185, 129, 0.07); outline: none; }
+    .opcao:active { transform: scale(0.985); }
+    .opcao-icone {
+      flex-shrink: 0;
+      width: 48px;
+      height: 48px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(145deg, rgba(16, 185, 129, 0.2), rgba(56, 189, 248, 0.1));
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: var(--verde-claro);
+    }
+    .opcao-icone svg { width: 24px; height: 24px; }
+    .opcao-texto { flex: 1; min-width: 0; }
+    .opcao-texto strong { display: block; font-size: 15px; font-weight: 800; }
+    .opcao-texto small { display: block; margin-top: 3px; font-size: 12px; color: var(--texto-2); line-height: 1.35; }
+    .opcao-seta { color: var(--texto-3); flex-shrink: 0; }
+    .opcao-seta svg { width: 18px; height: 18px; display: block; }
+
+    .voltar {
+      display: block;
+      margin: 14px auto 0;
+      background: none;
+      border: none;
+      color: var(--texto-3);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 8px 12px;
+    }
+
+    .pontos {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 18px;
+    }
+    .pontos span {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      transition: all 0.35s var(--curva);
+    }
+    .pontos span.ativo { width: 22px; background: var(--verde); }
+
+    .rodape {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 10.5px;
+      color: var(--texto-3);
+    }
+    .rodape a { color: var(--texto-2); text-decoration: none; font-weight: 700; }
+
+    /* ================= ABERTURA ANIMADA ================= */
+    .abertura {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: var(--fundo);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: opacity 0.6s var(--curva), visibility 0.6s;
+      cursor: pointer;
+    }
+    .abertura.saindo { opacity: 0; visibility: hidden; }
+    .abertura svg.cena {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .abertura .grade { opacity: 0; animation: aparecer 0.8s ease 0.05s forwards; }
+    .abertura .rota-abertura {
+      fill: none;
+      stroke: var(--verde);
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+      filter: url(#brilhoForte);
+    }
+    .abertura.rodando .rota-abertura,
+    .abertura.rodando .rota-sombra {
+      animation: desenharRota 1.6s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+    }
+    .abertura .rota-sombra {
+      fill: none;
+      stroke: rgba(16, 185, 129, 0.18);
+      stroke-width: 14;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 1;
+      stroke-dashoffset: 1;
+    }
+    @keyframes desenharRota { to { stroke-dashoffset: 0; } }
+    @keyframes aparecer { to { opacity: 1; } }
+
+    .abertura .pino {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: center bottom;
+      animation: pinoCai 0.55s var(--curva) 1.85s forwards;
+    }
+    @keyframes pinoCai {
+      0% { opacity: 0; transform: translateY(-14px) scale(0.6); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .abertura .onda {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: center;
+      animation: onda 1.4s ease-out 2s 2;
+    }
+    @keyframes onda {
+      0% { opacity: 0.7; transform: scale(0.4); }
+      100% { opacity: 0; transform: scale(2.6); }
+    }
+    .abertura .carro { opacity: 0; }
+    .abertura.rodando .carro { animation: aparecer 0.25s ease forwards; }
+
+    .abertura-marca {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      margin-top: 46vh;
+    }
+    .abertura-marca .letras {
+      display: inline-flex;
+      font-size: 54px;
+      font-weight: 900;
+      letter-spacing: -2.5px;
+      line-height: 1;
+    }
+    .abertura-marca .letras b {
+      display: inline-block;
+      font-weight: 900;
+      opacity: 0;
+      transform: translateY(22px);
+      filter: blur(6px);
+      animation: letraSobe 0.7s var(--curva) forwards;
+    }
+    .abertura-marca .letras b:nth-child(1) { animation-delay: 1.75s; }
+    .abertura-marca .letras b:nth-child(2) { animation-delay: 1.83s; }
+    .abertura-marca .letras b:nth-child(3) { animation-delay: 1.91s; }
+    .abertura-marca .letras b:nth-child(4) { animation-delay: 1.99s; color: var(--verde); }
+    @keyframes letraSobe { to { opacity: 1; transform: translateY(0); filter: blur(0); } }
+    .abertura-marca small {
+      display: block;
+      margin-top: 10px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--texto-3);
+      opacity: 0;
+      animation: aparecer 0.8s ease 2.25s forwards;
+    }
+
+    .pular {
+      position: absolute;
+      z-index: 3;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
+      left: 0;
+      right: 0;
+      text-align: center;
+      font-size: 11px;
+      color: var(--texto-3);
+      opacity: 0;
+      animation: aparecer 0.6s ease 1s forwards;
+    }
+
+    /* Quem prefere menos movimento: sem abertura e sem tráfego animado */
+    @media (prefers-reduced-motion: reduce) {
+      .abertura { display: none; }
+      .trafego, .botao-principal::after { display: none; }
+      .cartao, .marca-topo { transition: none; }
+      .passo.ativo { animation: none; }
     }
   </style>
 </head>
-<body class="auth-body">
+<body>
 
-  <div class="auth-ambient-glow"></div>
+  <!-- ================= ABERTURA ANIMADA (só na 1ª vez de cada sessão) ================= -->
+  <div class="abertura" id="abertura" aria-hidden="true">
+    <svg class="cena" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <filter id="brilhoForte" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="b" />
+          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+        <radialGradient id="luzCentro" cx="50%" cy="38%" r="60%">
+          <stop offset="0%" stop-color="#10B981" stop-opacity="0.16" />
+          <stop offset="100%" stop-color="#10B981" stop-opacity="0" />
+        </radialGradient>
+      </defs>
 
-  <main class="auth-container">
-    <div class="auth-card">
+      <rect width="400" height="800" fill="url(#luzCentro)" />
 
-      <!-- PASSO 1: APRESENTAÇÃO INICIAL -->
-      <section id="step1" class="onboarding-step active">
-        <header class="auth-header">
-          <div class="auth-badge">Mobilidade Inteligente</div>
-          <h1 class="auth-brand">HUB<span>y</span></h1>
-          <p class="auth-desc" style="font-size: 14px; line-height: 1.4; margin-top: 10px;">
-            A sua plataforma integrada para viagens diárias, entregas rápidas e fretes com máxima conveniência e segurança.
-          </p>
-        </header>
+      <g class="grade">
+        <path class="rua-larga" d="M-20 150 L420 110 M-20 520 L420 480 M90 -20 L70 820 M300 -20 L320 820" />
+        <path class="rua" d="M-20 60 L420 30 M-20 250 L420 215 M-20 360 L420 330 M-20 650 L420 610 M-20 740 L420 710
+                             M20 -20 L0 820 M180 -20 L170 820 M230 -20 L230 820 M380 -20 L400 820" />
+      </g>
 
-        <div style="text-align: center; margin: 24px 0;">
-          <div style="font-size: 60px; margin-bottom: 10px;">🏙️⚡</div>
-          <p style="color: #64748B; font-size: 13px; margin: 0;">Prático, moderno e transparente.</p>
+      <path class="rota-sombra" pathLength="1" d="M80 640 L82 525 Q84 505 104 503 L205 494 Q228 492 228 470 L229 360 Q229 338 250 336 L307 331 Q318 330 318 318 L316 230" />
+      <path class="rota-abertura" id="rotaAbertura" pathLength="1" d="M80 640 L82 525 Q84 505 104 503 L205 494 Q228 492 228 470 L229 360 Q229 338 250 336 L307 331 Q318 330 318 318 L316 230" />
+
+      <!-- carro (visto de cima) percorrendo a rota -->
+      <g class="carro">
+        <g>
+          <rect x="-13" y="-7.5" width="26" height="15" rx="5" fill="#F8FAFC" />
+          <rect x="1" y="-6" width="7" height="12" rx="2" fill="#0F172A" />
+          <rect x="-10" y="-5.5" width="5" height="11" rx="1.5" fill="#0F172A" opacity="0.8" />
+          <rect x="11" y="-6" width="2.2" height="3" rx="1" fill="#FDE68A" />
+          <rect x="11" y="3" width="2.2" height="3" rx="1" fill="#FDE68A" />
+          <animateMotion id="movimentoCarro" dur="1.6s" begin="indefinite" fill="freeze" rotate="auto" calcMode="spline"
+            keyTimes="0;1" keySplines="0.65 0 0.35 1"
+            path="M80 640 L82 525 Q84 505 104 503 L205 494 Q228 492 228 470 L229 360 Q229 338 250 336 L307 331 Q318 330 318 318 L316 230" />
+        </g>
+      </g>
+
+      <!-- destino -->
+      <circle class="onda" cx="316" cy="228" r="16" fill="none" stroke="#10B981" stroke-width="2" />
+      <g class="pino">
+        <path d="M316 196 C303 196 294 205 294 217 C294 232 316 250 316 250 C316 250 338 232 338 217 C338 205 329 196 316 196 Z" fill="#10B981" />
+        <circle cx="316" cy="217" r="7" fill="#06090F" />
+      </g>
+    </svg>
+
+    <div class="abertura-marca">
+      <div class="letras"><b>H</b><b>U</b><b>B</b><b>y</b></div>
+      <small>Mobilidade urbana</small>
+    </div>
+    <div class="pular">Toque para pular</div>
+  </div>
+
+  <!-- ================= MAPA DE FUNDO ANIMADO ================= -->
+  <div class="mapa-fundo" aria-hidden="true">
+    <svg viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <filter id="brilho" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.2" result="b" />
+          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+
+      <!-- quadras -->
+      <path class="quadra" d="M100 160 L165 155 L165 240 L98 246 Z M240 150 L292 146 L295 210 L242 214 Z M100 262 L165 256 L168 345 L96 352 Z M240 228 L296 224 L298 318 L240 322 Z M30 268 L76 264 L74 355 L26 360 Z M330 222 L375 218 L380 312 L334 315 Z" />
+
+      <!-- ruas -->
+      <path class="rua-larga" d="M-20 150 L420 110 M-20 520 L420 480 M90 -20 L70 820 M300 -20 L320 820" />
+      <path class="rua" d="M-20 60 L420 30 M-20 250 L420 215 M-20 360 L420 330 M-20 650 L420 610 M-20 740 L420 710
+                           M20 -20 L0 820 M180 -20 L170 820 M230 -20 L230 820 M380 -20 L400 820" />
+
+      <!-- rota em destaque -->
+      <path class="rota-fundo" d="M84 450 L86 352 Q87 336 104 334 L205 326 Q228 324 228 302 L229 240 Q229 222 250 220 L307 216" />
+      <circle cx="84" cy="450" r="5" fill="#10B981" />
+      <circle cx="307" cy="216" r="5" fill="#38BDF8" />
+
+      <!-- tráfego: pontos de luz andando pelas ruas -->
+      <g class="trafego">
+        <circle r="2.6" fill="#34D399">
+          <animateMotion dur="9s" repeatCount="indefinite" path="M-20 150 L420 110" />
+        </circle>
+        <circle r="2.2" fill="#38BDF8">
+          <animateMotion dur="12s" begin="-4s" repeatCount="indefinite" path="M420 480 L-20 520" />
+        </circle>
+        <circle r="2.4" fill="#F8FAFC" opacity="0.85">
+          <animateMotion dur="10s" begin="-2s" repeatCount="indefinite" path="M90 -20 L70 820" />
+        </circle>
+        <circle r="2.2" fill="#34D399">
+          <animateMotion dur="14s" begin="-7s" repeatCount="indefinite" path="M320 820 L300 -20" />
+        </circle>
+        <circle r="2" fill="#38BDF8">
+          <animateMotion dur="11s" begin="-5s" repeatCount="indefinite" path="M-20 250 L420 215" />
+        </circle>
+        <circle r="2" fill="#F8FAFC" opacity="0.7">
+          <animateMotion dur="13s" begin="-9s" repeatCount="indefinite" path="M230 820 L230 -20" />
+        </circle>
+        <circle r="2.8" fill="#10B981">
+          <animateMotion dur="6s" repeatCount="indefinite" path="M84 450 L86 352 Q87 336 104 334 L205 326 Q228 324 228 302 L229 240 Q229 222 250 220 L307 216" />
+        </circle>
+      </g>
+    </svg>
+  </div>
+
+  <!-- ================= CONTEÚDO ================= -->
+  <main class="pagina">
+    <div class="marca-topo">
+      <div class="selo-ao-vivo"><i></i> Motoristas ativos na sua região</div>
+    </div>
+
+    <div class="cartao" role="dialog" aria-labelledby="tituloBoasVindas">
+
+      <!-- PASSO 1: APRESENTAÇÃO -->
+      <section class="passo ativo" id="passo1">
+        <h1 class="logo">HUB<span>y</span></h1>
+        <span class="logo-legenda">Mobilidade urbana</span>
+
+        <h2 class="titulo" id="tituloBoasVindas">Sua cidade,<br><em>no seu ritmo.</em></h2>
+        <p class="subtitulo">Peça uma viagem ou uma entrega em segundos e acompanhe o motorista no mapa, ao vivo.</p>
+
+        <div class="vantagens">
+          <div class="vantagem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <strong>Preço justo</strong>
+            <small>Valor antes de pedir</small>
+          </div>
+          <div class="vantagem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            <strong>Ao vivo</strong>
+            <small>Carro no mapa</small>
+          </div>
+          <div class="vantagem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+            <strong>Seguro</strong>
+            <small>Motoristas verificados</small>
+          </div>
         </div>
 
-        <button type="button" id="btnAvancar" class="btn-primary-action">
-          <span>Começar Agora →</span>
+        <button type="button" class="botao-principal" id="btnComecar">
+          Começar agora
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
         </button>
 
-        <div class="indicator-dots">
-          <div class="dot active"></div>
-          <div class="dot"></div>
-          <div class="dot"></div>
-        </div>
+        <div class="pontos"><span class="ativo"></span><span></span><span></span></div>
       </section>
 
-      <!-- PASSO 2: ESCOLHA DO PERFIL -->
-      <section id="step2" class="onboarding-step">
-        <header class="auth-header">
-          <div class="auth-badge">Personalização</div>
-          <h2 style="font-size: 22px; font-weight: 900; margin: 6px 0 0; color: #FFF;">Como quer usar o HUBy?</h2>
-          <p class="auth-desc">Selecione o seu perfil para prosseguir</p>
-        </header>
-
-        <div class="role-selection-grid">
-          <div class="card-choice" data-role="cliente">
-            <div class="card-choice-icon">👤</div>
-            <div class="card-choice-info">
-              <h3>Sou Passageiro</h3>
-              <p>Viagens rápidas e transporte seguro na palma da mão.</p>
-            </div>
-          </div>
-
-          <div class="card-choice" data-role="motorista">
-            <div class="card-choice-icon">🚘</div>
-            <div class="card-choice-info">
-              <h3>Quero ser Motorista Parceiro</h3>
-              <p>Conduza no seu ritmo e comece com liberação automática.</p>
-            </div>
-          </div>
+      <!-- PASSO 2: PERFIL -->
+      <section class="passo" id="passo2">
+        <div class="cabecalho-passo">
+          <span class="etiqueta">Passo 1 de 2</span>
+          <h2>Como você quer usar o HUBy?</h2>
+          <p>Escolha o seu perfil para continuar.</p>
         </div>
 
-        <div style="text-align: center; margin-top: 8px;">
-          <button type="button" id="btnVoltarStep1" style="background: none; border: none; color: #64748B; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 12px;">
-            ← Voltar
+        <div class="opcoes">
+          <button type="button" class="opcao" data-perfil="cliente">
+            <span class="opcao-icone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+            </span>
+            <span class="opcao-texto">
+              <strong>Sou passageiro</strong>
+              <small>Viagens e entregas com rapidez e segurança.</small>
+            </span>
+            <span class="opcao-seta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+          </button>
+
+          <button type="button" class="opcao" data-perfil="motorista">
+            <span class="opcao-icone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14v-5l-2-5H7l-2 5v5Z"/><path d="M5 12h14"/><circle cx="8" cy="17" r="2"/><circle cx="16" cy="17" r="2"/></svg>
+            </span>
+            <span class="opcao-texto">
+              <strong>Quero ser motorista parceiro</strong>
+              <small>Dirija no seu horário e ganhe com cada corrida.</small>
+            </span>
+            <span class="opcao-seta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
           </button>
         </div>
 
-        <div class="indicator-dots">
-          <div class="dot"></div>
-          <div class="dot active"></div>
-          <div class="dot"></div>
-        </div>
+        <button type="button" class="voltar" data-voltar="passo1">← Voltar</button>
+        <div class="pontos"><span></span><span class="ativo"></span><span></span></div>
       </section>
 
-      <!-- PASSO 3: ESCOLHA ENTRE ENTRAR OU CRIAR CONTA -->
-      <section id="step3" class="onboarding-step">
-        <header class="auth-header">
-          <div id="badgePerfilSelecionado" class="selected-role-badge">👤 Passageiro</div>
-          <h2 style="font-size: 22px; font-weight: 900; margin: 6px 0 0; color: #FFF;">O que deseja fazer?</h2>
-          <p class="auth-desc">Escolha uma das opções abaixo para continuar</p>
-        </header>
-
-        <div class="action-choice-grid">
-          <div class="card-choice" id="opcaoLogin">
-            <div class="card-choice-icon">🔑</div>
-            <div class="card-choice-info">
-              <h3>Já tenho uma conta</h3>
-              <p>Iniciar sessão com as suas credenciais cadastradas.</p>
-            </div>
-          </div>
-
-          <div class="card-choice" id="opcaoCadastro">
-            <div class="card-choice-icon">✨</div>
-            <div class="card-choice-info">
-              <h3>Criar uma nova conta</h3>
-              <p>Registe-se agora para começar a usar a plataforma.</p>
-            </div>
-          </div>
+      <!-- PASSO 3: ENTRAR OU CRIAR CONTA -->
+      <section class="passo" id="passo3">
+        <div class="cabecalho-passo">
+          <span class="etiqueta" id="etiquetaPerfil">Passageiro</span>
+          <h2>Vamos começar</h2>
+          <p>Entre na sua conta ou crie uma nova.</p>
         </div>
 
-        <div style="text-align: center; margin-top: 8px;">
-          <button type="button" id="btnVoltarStep2" style="background: none; border: none; color: #64748B; font-size: 13px; font-weight: 700; cursor: pointer; padding: 6px 12px;">
-            ← Voltar e trocar perfil
+        <div class="opcoes">
+          <button type="button" class="opcao" id="opcaoEntrar">
+            <span class="opcao-icone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/></svg>
+            </span>
+            <span class="opcao-texto">
+              <strong>Já tenho conta</strong>
+              <small>Entrar com meu e-mail ou telefone.</small>
+            </span>
+            <span class="opcao-seta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
+          </button>
+
+          <button type="button" class="opcao" id="opcaoCadastrar">
+            <span class="opcao-icone">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="4"/><path d="M2 21a8 8 0 0 1 13-6.2"/><path d="M19 16v6M16 19h6"/></svg>
+            </span>
+            <span class="opcao-texto">
+              <strong>Criar conta</strong>
+              <small>Leva menos de um minuto.</small>
+            </span>
+            <span class="opcao-seta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span>
           </button>
         </div>
 
-        <div class="indicator-dots">
-          <div class="dot"></div>
-          <div class="dot"></div>
-          <div class="dot active"></div>
-        </div>
+        <button type="button" class="voltar" data-voltar="passo2">← Trocar perfil</button>
+        <div class="pontos"><span></span><span></span><span class="ativo"></span></div>
       </section>
 
+      <div class="rodape">Ao continuar, você concorda com os <a href="./termos.html">Termos de Uso</a>.</div>
     </div>
   </main>
 
   <script>
-    const step1 = document.getElementById('step1');
-    const step2 = document.getElementById('step2');
-    const step3 = document.getElementById('step3');
+    (function () {
+      // ---------- ABERTURA ----------
+      var abertura = document.getElementById('abertura');
+      var menosMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var jaViu = false;
+      try { jaViu = sessionStorage.getItem('huby_abertura_vista') === '1'; } catch (e) {}
 
-    const btnAvancar = document.getElementById('btnAvancar');
-    const btnVoltarStep1 = document.getElementById('btnVoltarStep1');
-    const btnVoltarStep2 = document.getElementById('btnVoltarStep2');
-
-    const badgePerfil = document.getElementById('badgePerfilSelecionado');
-    const opcaoLogin = document.getElementById('opcaoLogin');
-    const opcaoCadastro = document.getElementById('opcaoCadastro');
-
-    const token = localStorage.getItem('huby_token');
-    const roleGuardado = (localStorage.getItem('huby_user_role') || localStorage.getItem('huby_tipo_acesso') || '').toLowerCase();
-
-    if (token && roleGuardado) {
-      if (roleGuardado === 'admin' || roleGuardado === 'administrador') {
-        window.location.replace('./admin.html');
-      } else if (roleGuardado === 'motorista') {
-        window.location.replace('./motorista.html');
-      } else {
-        window.location.replace('./index.html');
+      function mostrarPagina() {
+        document.body.classList.add('pronto');
       }
-    }
 
-    let perfilEscolhido = roleGuardado === 'motorista' ? 'motorista' : 'cliente';
+      function encerrarAbertura() {
+        if (!abertura || abertura.classList.contains('saindo')) return;
+        abertura.classList.add('saindo');
+        try { sessionStorage.setItem('huby_abertura_vista', '1'); } catch (e) {}
+        setTimeout(mostrarPagina, 120);
+        setTimeout(function () { abertura.remove(); }, 700);
+      }
 
-    btnAvancar.onclick = () => {
-      step1.classList.remove('active');
-      step2.classList.add('active');
-    };
+      if (menosMovimento || jaViu) {
+        if (abertura) abertura.remove();
+        requestAnimationFrame(mostrarPagina);
+      } else {
+        abertura.addEventListener('click', encerrarAbertura);
+        // A linha acende e o carro vai logo atrás
+        setTimeout(function () {
+          abertura.classList.add('rodando');
+          var mov = document.getElementById('movimentoCarro');
+          // o carro sai um instante depois, sempre em cima da linha que vai acendendo
+          setTimeout(function () { try { mov && mov.beginElement(); } catch (e) {} }, 140);
+        }, 350);
+        setTimeout(encerrarAbertura, 3300);
+      }
 
-    btnVoltarStep1.onclick = () => {
-      step2.classList.remove('active');
-      step1.classList.add('active');
-    };
+      // ---------- PASSOS ----------
+      var ordem = ['passo1', 'passo2', 'passo3'];
+      var atual = 'passo1';
 
-    btnVoltarStep2.onclick = () => {
-      step3.classList.remove('active');
-      step2.classList.add('active');
-    };
+      function irPara(id) {
+        if (id === atual) return;
+        var voltando = ordem.indexOf(id) < ordem.indexOf(atual);
+        var de = document.getElementById(atual);
+        var para = document.getElementById(id);
+        de.classList.remove('ativo', 'voltando');
+        para.classList.toggle('voltando', voltando);
+        para.classList.add('ativo');
+        atual = id;
+        var primeiro = para.querySelector('button.opcao, .botao-principal');
+        if (primeiro && !voltando) setTimeout(function () { primeiro.focus({ preventScroll: true }); }, 50);
+      }
 
-    document.querySelectorAll('.card-choice[data-role]').forEach((card) => {
-      card.addEventListener('click', () => {
-        perfilEscolhido = card.getAttribute('data-role');
-        localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
+      var perfilEscolhido = 'cliente';
+      try {
+        if (localStorage.getItem('huby_tipo_acesso') === 'motorista') perfilEscolhido = 'motorista';
+      } catch (e) {}
 
-        if (perfilEscolhido === 'motorista') {
-          badgePerfil.innerHTML = '🚘 Motorista Parceiro';
-        } else {
-          badgePerfil.innerHTML = '👤 Passageiro';
-        }
+      document.getElementById('btnComecar').addEventListener('click', function () { irPara('passo2'); });
 
-        step2.classList.remove('active');
-        step3.classList.add('active');
+      document.querySelectorAll('[data-voltar]').forEach(function (btn) {
+        btn.addEventListener('click', function () { irPara(btn.getAttribute('data-voltar')); });
       });
-    });
 
-    opcaoLogin.onclick = () => {
-      localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
-      window.location.href = `./login.html?perfil=${encodeURIComponent(perfilEscolhido)}`;
-    };
+      document.querySelectorAll('.opcao[data-perfil]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          perfilEscolhido = btn.getAttribute('data-perfil') === 'motorista' ? 'motorista' : 'cliente';
+          try { localStorage.setItem('huby_tipo_acesso', perfilEscolhido); } catch (e) {}
+          document.getElementById('etiquetaPerfil').textContent =
+            perfilEscolhido === 'motorista' ? 'Motorista parceiro' : 'Passageiro';
+          irPara('passo3');
+        });
+      });
 
-    opcaoCadastro.onclick = () => {
-      localStorage.setItem('huby_tipo_acesso', perfilEscolhido);
-      window.location.href = `./cadastro.html?perfil=${encodeURIComponent(perfilEscolhido)}`;
-    };
+      function seguir(pagina) {
+        try { localStorage.setItem('huby_tipo_acesso', perfilEscolhido); } catch (e) {}
+        window.location.href = './' + pagina + '?perfil=' + encodeURIComponent(perfilEscolhido);
+      }
+
+      document.getElementById('opcaoEntrar').addEventListener('click', function () { seguir('login.html'); });
+      document.getElementById('opcaoCadastrar').addEventListener('click', function () { seguir('cadastro.html'); });
+    })();
   </script>
 </body>
 </html>
