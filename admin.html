@@ -50,11 +50,11 @@
       <div id="metricBruto" class="metric-value">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Caixa Empresa HUBy (15%)</div>
+      <div class="metric-title">Caixa Empresa HUBy (taxas)</div>
       <div id="metricLiquido" class="metric-value text-blue">R$ 0,00</div>
     </div>
     <div class="metric-card">
-      <div class="metric-title">Repasse Motoristas (85%)</div>
+      <div class="metric-title">Repasse Motoristas</div>
       <div id="metricRepasse" class="metric-value text-amber">R$ 0,00</div>
     </div>
     <div class="metric-card">
@@ -125,7 +125,8 @@
           <form id="formNovaDespesaAdmin">
             <div class="form-group">
               <label>Descrição da Saída</label>
-              <input type="text" id="despDescricao" placeholder="Ex: DAS Simples Nacional / Render / Pró-labore" required>
+              <input type="text" id="despDescricao" placeholder="Ex: DAS Simples Nacional / Render / Pró-labore"
+                required>
             </div>
             <div class="flex-row-gap">
               <div class="form-group flex-1">
@@ -164,7 +165,9 @@
               </tr>
             </thead>
             <tbody id="tabelaDespesasBody">
-              <tr><td colspan="5" class="table-empty-row">Nenhuma despesa registrada.</td></tr>
+              <tr>
+                <td colspan="5" class="table-empty-row">Nenhuma despesa registrada.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -188,7 +191,9 @@
           </tr>
         </thead>
         <tbody id="tabelaAgendamentosAdminBody">
-          <tr><td colspan="6" class="table-empty-row">Carregando agendamentos...</td></tr>
+          <tr>
+            <td colspan="6" class="table-empty-row">Carregando agendamentos...</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -223,7 +228,9 @@
             </tr>
           </thead>
           <tbody id="tabelaDemandaBairroBody">
-            <tr><td colspan="3" class="table-empty-row">Sem registros de demanda não atendida.</td></tr>
+            <tr>
+              <td colspan="3" class="table-empty-row">Sem registros de demanda não atendida.</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -239,7 +246,9 @@
             </tr>
           </thead>
           <tbody id="tabelaDemandaHorarioBody">
-            <tr><td colspan="3" class="table-empty-row">Sem registros de horário crítico.</td></tr>
+            <tr>
+              <td colspan="3" class="table-empty-row">Sem registros de horário crítico.</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -258,7 +267,9 @@
           </tr>
         </thead>
         <tbody id="tabelaDemandaRecentesBody">
-          <tr><td colspan="5" class="table-empty-row">Nenhuma ocorrência recente.</td></tr>
+          <tr>
+            <td colspan="5" class="table-empty-row">Nenhuma ocorrência recente.</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -267,19 +278,24 @@
   <!-- ABA DEDICADA: CLUBE HUBY PRO / MEDALHAS (BRONZE, PRATA E OURO) -->
   <section id="tabClubePro" class="tab-pane">
     <div class="card-panel max-w-600" style="margin: 0 auto;">
-      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
-        <div style="width: 48px; height: 48px; background: rgba(245, 158, 11, 0.16); border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px;">🏆</div>
+      <div
+        style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+        <div
+          style="width: 48px; height: 48px; background: rgba(245, 158, 11, 0.16); border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px;">
+          🏆</div>
         <div>
           <h3 class="panel-primary-title" style="margin: 0; font-size: 18px;">Clube HUBy Pro • Regras das Medalhas</h3>
           <p class="panel-subtitle" style="margin: 4px 0 0 0; font-size: 12px;">
-            Defina quantas corridas e qual nota mínima o motorista precisa para conquistar cada medalha, além da taxa (%) cobrada pela HUBy.
+            Defina quantas corridas e qual nota mínima o motorista precisa para conquistar cada medalha, além da taxa
+            (%) cobrada pela HUBy.
           </p>
         </div>
       </div>
 
       <form id="formClubeProMedalhas">
         <!-- BRONZE -->
-        <div style="background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
+        <div
+          style="background: rgba(217, 119, 6, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <strong style="color: #FBBF24; font-size: 14px;">🥉 Medalha Bronze (Nível Inicial)</strong>
             <small style="color: #94A3B8; font-size: 11px;">Fila padrão de chamadas</small>
@@ -301,7 +317,8 @@
         </div>
 
         <!-- PRATA -->
-        <div style="background: rgba(148, 163, 184, 0.10); border: 1px solid rgba(203, 213, 225, 0.35); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
+        <div
+          style="background: rgba(148, 163, 184, 0.10); border: 1px solid rgba(203, 213, 225, 0.35); border-radius: 12px; padding: 14px; margin-bottom: 12px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <strong style="color: #E2E8F0; font-size: 14px;">🥈 Medalha Prata (Intermediário)</strong>
             <small style="color: #38BDF8; font-size: 11px;">⚡ Recebe chamadas 4s antes do Bronze</small>
@@ -323,7 +340,8 @@
         </div>
 
         <!-- OURO -->
-        <div style="background: rgba(245, 158, 11, 0.14); border: 1px solid rgba(250, 204, 21, 0.5); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+        <div
+          style="background: rgba(245, 158, 11, 0.14); border: 1px solid rgba(250, 204, 21, 0.5); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <strong style="color: #FDE047; font-size: 14px;">🥇 Medalha Ouro (Elite)</strong>
             <small style="color: #10B981; font-size: 11px;">⚡ Prioridade máxima imediata (0s)</small>
@@ -357,7 +375,8 @@
       <div class="card-panel">
         <h3 class="panel-primary-title">🌟 Novo Banner de Patrocinador</h3>
         <p class="panel-subtitle">
-          Escolha a arte diretamente da sua galeria. Você controla se o banner aparece no Pop-up ao abrir o app e na Vitrine de Parceiros.
+          Escolha a arte diretamente da sua galeria. Você controla se o banner aparece no Pop-up ao abrir o app e na
+          Vitrine de Parceiros.
         </p>
 
         <form id="formNovoPatrocinador">
@@ -366,7 +385,8 @@
             <label for="inputBannerGaleria"
               style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(16, 185, 129, 0.08); border: 2px dashed rgba(16, 185, 129, 0.45); border-radius: 14px; padding: 16px; cursor: pointer; text-align: center; transition: all 0.2s;">
               <span style="font-size: 26px;">🖼️</span>
-              <strong style="color: #10B981; font-size: 13px;" id="lblStatusUploadBanner">Toque para escolher imagem da Galeria</strong>
+              <strong style="color: #10B981; font-size: 13px;" id="lblStatusUploadBanner">Toque para escolher imagem da
+                Galeria</strong>
               <small style="color: #94A3B8; font-size: 11px;">Otimização automática em Alta Definição</small>
               <img id="imgPreviewBannerAdmin" src="" alt="Prévia do Banner"
                 style="display: none; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin-top: 8px; border: 1px solid rgba(255,255,255,0.15);" />
@@ -403,7 +423,8 @@
 
           <div class="form-group">
             <label>Descrição Curta / Endereço</label>
-            <textarea id="patDescricao" rows="2" placeholder="Ex: Praça Honório Santos, Centro. Entregas rápidas!"></textarea>
+            <textarea id="patDescricao" rows="2"
+              placeholder="Ex: Praça Honório Santos, Centro. Entregas rápidas!"></textarea>
           </div>
 
           <div class="flex-row-gap">
@@ -421,10 +442,13 @@
             </div>
           </div>
 
-          <div class="form-group" style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 10px 12px; border-radius: 10px; margin-bottom: 14px;">
-            <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin: 0; color: #FFF; font-size: 13px;">
+          <div class="form-group"
+            style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); padding: 10px 12px; border-radius: 10px; margin-bottom: 14px;">
+            <label
+              style="display: flex; align-items: center; justify-content: space-between; cursor: pointer; margin: 0; color: #FFF; font-size: 13px;">
               <span>🚀 Exibir no <strong>Pop-up de Entrada</strong> quando o cliente abrir o app</span>
-              <input type="checkbox" id="patExibirPopup" checked style="width: 20px; height: 20px; accent-color: #10B981;">
+              <input type="checkbox" id="patExibirPopup" checked
+                style="width: 20px; height: 20px; accent-color: #10B981;">
             </label>
           </div>
 
@@ -474,7 +498,8 @@
       <div class="card-panel">
         <h3 class="panel-primary-title">🎁 Programa Indique e Ganhe</h3>
         <p class="panel-subtitle">
-          Defina livremente os valores de recompensa para passageiros e motoristas que trouxerem novos usuários para o HUBy.
+          Defina livremente os valores de recompensa para passageiros e motoristas que trouxerem novos usuários para o
+          HUBy.
         </p>
         <form id="formConfigIndicacao">
           <div class="form-group">
@@ -516,7 +541,8 @@
       <div class="card-panel">
         <h3 class="panel-blue-title">⚡ Tarifa Dinâmica (Alta Demanda)</h3>
         <p class="panel-subtitle">
-          Multiplica o valor da corrida automaticamente quando há poucos motoristas na região ou em horários de chuva/pico.
+          Multiplica o valor da corrida automaticamente quando há poucos motoristas na região ou em horários de
+          chuva/pico.
         </p>
         <form id="formConfigDinamica">
           <div class="form-group">
@@ -705,44 +731,58 @@
   <!-- ABA BROADCAST (REGIÕES DINÂMICAS REAIS DOS MOTORISTAS E USUÁRIOS) -->
   <section id="tabBroadcast" class="tab-pane">
     <div class="card-panel max-w-600" style="margin: 0 auto;">
-      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
-        <div style="width: 48px; height: 48px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px;">📢</div>
+      <div
+        style="display: flex; align-items: center; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 14px;">
+        <div
+          style="width: 48px; height: 48px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+          📢</div>
         <div>
           <h3 class="panel-blue-title" style="margin: 0; font-size: 18px;">Disparo de Alerta Push</h3>
-          <p class="panel-subtitle" style="margin: 4px 0 0 0; font-size: 12px;">Envie notificações direcionadas para as cidades onde há motoristas e passageiros ativos.</p>
+          <p class="panel-subtitle" style="margin: 4px 0 0 0; font-size: 12px;">Envie notificações direcionadas para as
+            cidades onde há motoristas e passageiros ativos.</p>
         </div>
       </div>
 
       <form id="formBroadcast">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px;">
           <div class="form-group">
-            <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Público Alvo</label>
-            <select id="broadPublico" class="drawer-input" style="margin-top: 4px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(0,0,0,0.4);">
+            <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Público
+              Alvo</label>
+            <select id="broadPublico" class="drawer-input"
+              style="margin-top: 4px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(0,0,0,0.4);">
               <option value="todos">🌍 Todos (Frota e Clientes)</option>
               <option value="motoristas">🚕 Apenas Motoristas</option>
               <option value="passageiros">👤 Apenas Passageiros</option>
             </select>
           </div>
           <div class="form-group">
-            <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Região / Cidade Ativa</label>
-            <select id="broadRegiao" class="drawer-input" style="margin-top: 4px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(0,0,0,0.4);">
+            <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Região
+              / Cidade Ativa</label>
+            <select id="broadRegiao" class="drawer-input"
+              style="margin-top: 4px; border: 1px solid rgba(16, 185, 129, 0.4); background: rgba(0,0,0,0.4);">
               <option value="todas">🌐 Todas as Regiões (Global)</option>
             </select>
-            <input type="text" id="broadRegiaoCustom" class="drawer-input" style="margin-top: 6px; display: none;" placeholder="Digite o nome da cidade (Ex: São Raimundo Nonato)">
+            <input type="text" id="broadRegiaoCustom" class="drawer-input" style="margin-top: 6px; display: none;"
+              placeholder="Digite o nome da cidade (Ex: São Raimundo Nonato)">
           </div>
         </div>
 
         <div class="form-group" style="margin-bottom: 14px;">
-          <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Título do Alerta</label>
-          <input type="text" id="broadTitulo" class="drawer-input" style="margin-top: 4px;" placeholder="Ex: ⚡ Bônus de Alta Demanda Ativo!" required>
+          <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Título do
+            Alerta</label>
+          <input type="text" id="broadTitulo" class="drawer-input" style="margin-top: 4px;"
+            placeholder="Ex: ⚡ Bônus de Alta Demanda Ativo!" required>
         </div>
 
         <div class="form-group" style="margin-bottom: 20px;">
-          <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Mensagem da Notificação</label>
-          <textarea id="broadMensagem" class="drawer-input" rows="4" style="margin-top: 4px; resize: none;" placeholder="Escreva a mensagem detalhada aqui..." required></textarea>
+          <label style="color: var(--text-sec); font-size: 11px; text-transform: uppercase; font-weight: 800;">Mensagem
+            da Notificação</label>
+          <textarea id="broadMensagem" class="drawer-input" rows="4" style="margin-top: 4px; resize: none;"
+            placeholder="Escreva a mensagem detalhada aqui..." required></textarea>
         </div>
 
-        <button type="submit" class="btn-action btn-blue-full" style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px; font-size: 14px; border-radius: 12px; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);">
+        <button type="submit" class="btn-action btn-blue-full"
+          style="display: flex; justify-content: center; align-items: center; gap: 8px; padding: 14px; font-size: 14px; border-radius: 12px; box-shadow: 0 4px 15px rgba(56, 189, 248, 0.4);">
           🚀 Disparar Notificação Push
         </button>
       </form>
@@ -756,7 +796,8 @@
       <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:260px;">
         <span class="callout-icon">⚡</span>
         <div class="callout-text">
-          <strong>Central de Repasses Pix (Frota):</strong> Os saques dos motoristas são processados automaticamente no pedido
+          <strong>Central de Repasses Pix (Frota):</strong> Os saques dos motoristas são processados automaticamente no
+          pedido
           ou podem ser liquidados em lote com 1 clique.
         </div>
       </div>
@@ -1003,15 +1044,22 @@
               <option value="saude">Saúde / Odonto</option>
             </select>
           </div>
-          <div class="form-group"><label>Título da Oferta</label><input type="text" id="mkpTitulo" placeholder="Ex: Lavagem Completa" required></div>
-          <div class="form-group"><label>Nome da Empresa</label><input type="text" id="mkpEmpresa" placeholder="Ex: Lava Jato do Zé" required></div>
-          <div class="form-group"><label>Descrição Curta</label><textarea id="mkpDescricao" rows="2" placeholder="Descreva os detalhes da parceria..." required></textarea></div>
+          <div class="form-group"><label>Título da Oferta</label><input type="text" id="mkpTitulo"
+              placeholder="Ex: Lavagem Completa" required></div>
+          <div class="form-group"><label>Nome da Empresa</label><input type="text" id="mkpEmpresa"
+              placeholder="Ex: Lava Jato do Zé" required></div>
+          <div class="form-group"><label>Descrição Curta</label><textarea id="mkpDescricao" rows="2"
+              placeholder="Descreva os detalhes da parceria..." required></textarea></div>
           <div class="flex-row-gap">
-            <div class="form-group flex-1"><label>Preço Original (R$)</label><input type="number" step="0.50" id="mkpPrecoDe" placeholder="40.00" required></div>
-            <div class="form-group flex-1"><label>Preço P/ Motorista (R$)</label><input type="number" step="0.50" id="mkpPrecoPor" placeholder="20.00" required></div>
+            <div class="form-group flex-1"><label>Preço Original (R$)</label><input type="number" step="0.50"
+                id="mkpPrecoDe" placeholder="40.00" required></div>
+            <div class="form-group flex-1"><label>Preço P/ Motorista (R$)</label><input type="number" step="0.50"
+                id="mkpPrecoPor" placeholder="20.00" required></div>
           </div>
-          <div class="form-group"><label>WhatsApp Comercial</label><input type="tel" id="mkpWhatsapp" placeholder="Apenas números com DDD" required></div>
-          <div class="form-group"><label>URL da Imagem de Capa (opcional)</label><input type="url" id="mkpImagemUrl" placeholder="https://..."></div>
+          <div class="form-group"><label>WhatsApp Comercial</label><input type="tel" id="mkpWhatsapp"
+              placeholder="Apenas números com DDD" required></div>
+          <div class="form-group"><label>URL da Imagem de Capa (opcional)</label><input type="url" id="mkpImagemUrl"
+              placeholder="https://..."></div>
           <button type="submit" class="btn-action btn-full-center">Publicar Parceria no App</button>
         </form>
       </div>
@@ -1104,19 +1152,21 @@
       </div>
 
       <div class="modal-actions-row" style="margin-top: 14px;">
-        <button type="button" id="btnCancelarModalAcaoAdmin" class="btn-action secondary" style="flex: 1; justify-content: center;">Cancelar</button>
-        <button type="button" id="btnConfirmarModalAcaoAdmin" class="btn-action" style="flex: 1.5; justify-content: center;">Confirmar</button>
+        <button type="button" id="btnCancelarModalAcaoAdmin" class="btn-action secondary"
+          style="flex: 1; justify-content: center;">Cancelar</button>
+        <button type="button" id="btnConfirmarModalAcaoAdmin" class="btn-action"
+          style="flex: 1.5; justify-content: center;">Confirmar</button>
       </div>
     </div>
   </div>
 
   <!-- SCRIPTS GLOBAIS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
   <!-- MÓDULO PRINCIPAL DO ADMIN -->
-  <script type="module" src="./js/admin.js?v=12.1.0"></script>
+  <script type="module" src="./js/admin.js?v=13.0.0"></script>
 </body>
 
 </html>

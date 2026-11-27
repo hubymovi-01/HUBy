@@ -260,16 +260,8 @@
 
 <body class="client-viewport">
 
-  <!-- SPLASH SCREEN -->
-  <div id="hubySplash" class="splash-screen" onclick="this.style.display='none'">
-    <div class="splash-content">
-      <div class="splash-logo">
-        <span class="s-hub">HUB</span><span class="s-y">y</span>
-      </div>
-      <div class="splash-spinner"></div>
-      <span class="splash-tagline">Mobilidade urbana inteligente</span>
-    </div>
-  </div>
+  <!-- ABERTURA ANIMADA (uma vez por sessão; o app carrega por trás) -->
+  <script src="./js/abertura-huby.js?v=1.0.0" data-legenda="Mobilidade urbana"></script>
 
   <!-- MAPA PRINCIPAL 3D -->
   <div id="mapaCliente"></div>
@@ -559,13 +551,9 @@
       <input type="text" id="inputCupomDesconto" class="huby-field-dark" placeholder="Ex: HUBY10"
         style="text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;" />
 
-      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
-        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="HUBY10">✨ HUBY10 (10%)</button>
-        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="PRIMEIRA10">🎁 PRIMEIRA10
-          (10%)</button>
-        <button type="button" class="huby-chip-suggestion chip-cupom-rapido" data-code="HUBYVIP">👑 HUBYVIP
-          (15%)</button>
-      </div>
+      <p style="margin: 0 0 14px; font-size: 11px; color: #64748B;">
+        O desconto é conferido na hora pelo servidor antes de entrar no preço.
+      </p>
 
       <div style="display: flex; gap: 8px;">
         <button type="button" id="btnCancelarModalCupom"
@@ -778,11 +766,8 @@
       <p id="txtDescricaoModalIndique" style="font-size: 13px; color: #94A3B8; margin: 8px 0 14px;">
         Compartilhe seu código! Seu amigo ganha desconto na 1ª viagem e você recebe bônus.
       </p>
-      <div
-        style="background: rgba(16, 185, 129, 0.12); border: 1.5px dashed #10B981; border-radius: 14px; padding: 14px; text-align: center; margin-bottom: 14px;">
-        <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px;">
-          HUBY-VIP</div>
-      </div>
+      <div id="lblMeuCodigoIndicacao" style="font-size: 24px; font-weight: 900; color: #10B981; letter-spacing: 2px;">
+        ...</div>
       <div style="display: flex; gap: 8px;">
         <button type="button" id="btnCopiarCodigoInd" class="btn-secondary-modal" style="flex: 1;">📋 Copiar</button>
         <button type="button" id="btnCompartilharCodigoZap" class="btn-primary-modal" style="flex: 1.5;">📲 Enviar
@@ -825,55 +810,27 @@
       </div>
     </div>
   </div>
-
-  <!-- CONTROLES ESSENCIAIS DO MENU LATERAL & SINCRONIZAÇÃO INDIQUE E GANHE -->
+  <!-- INDIQUE E GANHE (SINCRONIZADO COM O ADMIN) -->
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    function checarAdminInstantaneo() {
-      const token = localStorage.getItem('huby_token');
-      const role = String(localStorage.getItem('huby_user_role') || '').toLowerCase().trim();
-      const btnAdmin = document.getElementById('menuItemAdmin');
+    // Avisos do app (com reserva caso a biblioteca de alertas ainda não tenha carregado)
+    const avisar = (msg, tipo = 'info') => {
+      if (typeof window.hubyNotificar === 'function') window.hubyNotificar(msg, tipo);
+      else alert(msg);
+    };
 
-      let ehAdmin = role === 'admin' || role === 'administrador';
-      if (!ehAdmin && token && token.includes('.')) {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          const cargoToken = String(payload.role || payload.funcao || payload['função'] || '').toLowerCase().trim();
-          if (cargoToken === 'admin' || cargoToken === 'administrador') {
-            ehAdmin = true;
-            localStorage.setItem('huby_user_role', 'admin');
-          }
-        } catch (e) { }
-      }
-      if (btnAdmin && token && ehAdmin) btnAdmin.style.display = 'flex';
-    }
+    // Obs.: cabeçalho do menu, botão do painel e "Sair" ficam em js/cliente/cliente-ui-menu.js
 
-    document.getElementById('btnAcaoConta')?.addEventListener('click', () => {
-      localStorage.clear();
-      window.location.replace('./login.html');
-    });
-
-    function atualizarMenuLateral() {
-      const nomeLocal = localStorage.getItem('huby_user_name') || 'Utilizador';
-      const fotoLocal = localStorage.getItem('huby_user_foto');
-      const roleLocal = String(localStorage.getItem('huby_user_role') || '').toLowerCase();
-      const drawerBox = document.getElementById('drawerPerfilBox');
-      const badgeTexto = (roleLocal === 'admin' || roleLocal === 'administrador') ? 'Administrador Master' : (roleLocal === 'motorista' ? 'Motorista Parceiro' : 'Conta verificada');
-
-      if (drawerBox) {
-        let avatarHTML = (fotoLocal && fotoLocal !== 'null' && fotoLocal !== 'undefined')
-          ? `<img src="${fotoLocal}" style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 2px solid #10B981;" />`
-          : `<div style="width: 52px; height: 52px; border-radius: 50%; background: #121826; border: 2px solid #10B981; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 900; color: #10B981;">${nomeLocal.charAt(0).toUpperCase()}</div>`;
-        drawerBox.innerHTML = `
-          <div style="display: flex; align-items: center; gap: 14px; padding: 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); background: linear-gradient(180deg, rgba(16, 185, 129, 0.05) 0%, transparent 100%);">
-            ${avatarHTML}
-            <div style="display: flex; flex-direction: column;">
-              <span style="font-size: 17px; font-weight: 800; color: #FFF; letter-spacing: -0.3px;">${nomeLocal}</span>
-              <span style="font-size: 12px; color: ${roleLocal === 'admin' ? '#F87171' : '#94A3B8'}; font-weight: 600;">${badgeTexto}</span>
-            </div>
-          </div>
-        `;
+    // Texto do Indique e Ganhe (só números entram no HTML)
+    function escreverDescricaoIndique(descontoAmigo, bonusIndicador) {
+      const descFmt = Number(descontoAmigo ?? 5).toFixed(2).replace('.', ',');
+      const bonusFmt = Number(bonusIndicador ?? 5).toFixed(2).replace('.', ',');
+      const subMenu = document.getElementById('txtSubtituloIndiqueMenu');
+      if (subMenu) subMenu.textContent = `Ganhe R$ ${bonusFmt} por amigo indicado`;
+      const descModal = document.getElementById('txtDescricaoModalIndique');
+      if (descModal) {
+        descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
       }
     }
 
@@ -882,55 +839,64 @@
         const res = await fetch(`${API_URL}/api/indicacoes/regras?t=${Date.now()}`, { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
-        const bonusFmt = Number(data.bonusPorIndicacao ?? 5).toFixed(2).replace('.', ',');
-        const descFmt = Number(data.descontoAmigo ?? 5).toFixed(2).replace('.', ',');
-
-        const subMenu = document.getElementById('txtSubtituloIndiqueMenu');
-        if (subMenu) {
-          subMenu.textContent = `Ganhe R$ ${bonusFmt} por amigo indicado`;
-        }
-
-        const descModal = document.getElementById('txtDescricaoModalIndique');
-        if (descModal) {
-          descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
-        }
+        escreverDescricaoIndique(data.descontoAmigo, data.bonusPorIndicacao);
       } catch (e) { }
     }
+
+    // O código só pode ser copiado/compartilhado depois que o código REAL chegar do servidor
+    let codigoIndicacaoReal = '';
+    const CODIGO_VALIDO = /^[A-Za-z0-9_-]{3,30}$/;
 
     document.getElementById('menuItemIndique')?.addEventListener('click', async (e) => {
       e.preventDefault();
       document.getElementById('menuBackdrop')?.click();
       document.getElementById('modalIndiqueGanhe').style.display = 'flex';
+
+      const lbl = document.getElementById('lblMeuCodigoIndicacao');
+      if (!codigoIndicacaoReal && lbl) lbl.textContent = 'Carregando...';
+
       await sincronizarRegrasIndicacaoUI();
       const token = localStorage.getItem('huby_token');
-      if (token) {
-        try {
-          const res = await fetch(`${API_URL}/api/indicacoes/meu-codigo?t=${Date.now()}`, {
-            cache: 'no-store',
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          const data = await res.json();
-          if (data.codigo) document.getElementById('lblMeuCodigoIndicacao').textContent = data.codigo;
-          const bonusFmt = Number(data.bonusPorIndicacao ?? 5).toFixed(2).replace('.', ',');
-          const descFmt = Number(data.descontoAmigo ?? 5).toFixed(2).replace('.', ',');
-          const descModal = document.getElementById('txtDescricaoModalIndique');
-          if (descModal) {
-            descModal.innerHTML = `Compartilhe seu código! Seu amigo ganha <strong style="color:#10B981;">R$ ${descFmt} de desconto</strong> na 1ª viagem e você ganha <strong style="color:#38BDF8;">R$ ${bonusFmt}</strong> de bônus!`;
-          }
-        } catch (e) { }
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_URL}/api/indicacoes/meu-codigo?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && CODIGO_VALIDO.test(String(data.codigo || ''))) {
+          codigoIndicacaoReal = String(data.codigo);
+          if (lbl) lbl.textContent = codigoIndicacaoReal;
+          escreverDescricaoIndique(data.descontoAmigo, data.bonusPorIndicacao);
+        } else if (!codigoIndicacaoReal && lbl) {
+          lbl.textContent = 'Indisponível';
+        }
+      } catch (e) {
+        if (!codigoIndicacaoReal && lbl) lbl.textContent = 'Sem conexão';
       }
     });
 
-    document.getElementById('btnCopiarCodigoInd')?.addEventListener('click', () => {
-      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || 'HUBY-VIP';
-      navigator.clipboard?.writeText(cod);
-      alert(`Código ${cod} copiado!`);
+    document.getElementById('btnCopiarCodigoInd')?.addEventListener('click', async () => {
+      if (!codigoIndicacaoReal) {
+        avisar('Aguarde seu código carregar para copiar.', 'alerta');
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(codigoIndicacaoReal);
+        avisar(`Código ${codigoIndicacaoReal} copiado!`, 'sucesso');
+      } catch (e) {
+        avisar(`Seu código é ${codigoIndicacaoReal}`, 'info');
+      }
     });
 
     document.getElementById('btnCompartilharCodigoZap')?.addEventListener('click', () => {
-      const cod = document.getElementById('lblMeuCodigoIndicacao')?.textContent || 'HUBY-VIP';
+      if (!codigoIndicacaoReal) {
+        avisar('Aguarde seu código carregar para compartilhar.', 'alerta');
+        return;
+      }
       const txtDesc = document.getElementById('txtDescricaoModalIndique')?.textContent || 'Use meu código no HUBy para ganhar desconto na 1ª viagem!';
-      const msg = encodeURIComponent(`🚘 Baixe o HUBy e use meu código *${cod}*! ${txtDesc}`);
+      const msg = encodeURIComponent(`🚘 Baixe o HUBy e use meu código *${codigoIndicacaoReal}*! ${txtDesc}`);
       window.open(`https://wa.me/?text=${msg}`, '_blank', 'noopener');
     });
 
@@ -938,17 +904,8 @@
       document.getElementById('modalIndiqueGanhe').style.display = 'none';
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
-      checarAdminInstantaneo();
-      atualizarMenuLateral();
-      sincronizarRegrasIndicacaoUI();
-    });
-
-    document.getElementById('btnAbrirMenu')?.addEventListener('click', () => {
-      checarAdminInstantaneo();
-      atualizarMenuLateral();
-      sincronizarRegrasIndicacaoUI();
-    });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', sincronizarRegrasIndicacaoUI);
+    else sincronizarRegrasIndicacaoUI();
   </script>
 
   <!-- ORQUESTRADOR CENTRAL -->
