@@ -8,21 +8,22 @@ export const estado = {
   linhaRota: null,
   markerOrigem: null,
   markerDestino: null,
-  coords: [-8.3580, -42.2460],
+  coords: [-8.3580, -42.2460], // só o ponto inicial do mapa; o GPS substitui logo ao abrir
 
   isOnline: false,
   statusOnline: false,
   modoUltimaViagem: false,
-  
-  // Dados do parceiro e autenticação
+
+  // Dados do parceiro e autenticação (o servidor confirma tudo pelo token)
   token: localStorage.getItem('huby_token') || null,
   motoristaId: localStorage.getItem('huby_motorista_id') || localStorage.getItem('huby_user_id') || null,
-  motoristaNome: 'Carol',
+  motoristaNome: 'Motorista',
   saldoCarteira: 0,
   dadosMotorista: {},
   novaFotoBase64Temp: null,
   categoriaMotorista: 'carro',
-  statusAprovacaoAtual: 'aprovado',
+  statusAprovacaoAtual: 'pendente', // só vira 'aprovado' quando o servidor confirmar
+  taxaHubyMotorista: undefined,     // taxa do nível (Bronze/Prata/Ouro), vem do perfil
 
   // Preferências de pagamento do condutor
   aceitaDinheiro: true,
@@ -59,8 +60,8 @@ export const estado = {
 
 export function obterHeaders() {
   const headers = { 'Content-Type': 'application/json' };
-  const token = estado.token || localStorage.getItem('huby_token');
-  if (token && token !== 'null') {
+  const token = localStorage.getItem('huby_token') || estado.token;
+  if (token && token !== 'null' && token !== 'undefined') {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
