@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import * as Sentry from '@sentry/node';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sql, JWT_SECRET } from './db.js';
+import { salaUsuario, salaMotorista, SALA_MOTORISTAS } from './services/salas-socket.js';
 
 import authRoutes from './routes/auth.routes.js';
 import pedidosRouter, { iniciarDespachanteAgendamentos } from './routes/pedidos.routes.js';
@@ -176,10 +177,46 @@ async function dadosDaCorrida(pedidoIdBruto) {
   return dados;
 }
 
-io.on('connection', (socket) => {
-  if (ehAdminSocket(socket.data.usuario)) {
-    socket.join(SALA_ADMINS);
+// Ao conectar, cada um entra nas suas salas: admins, motoristas, a sua própria
+// e a da corrida que estiver em andamento (assim um app reaberto continua recebendo tudo).
+const STATUS_CORRIDA_ABERTA = [
+  'pendente', 'aguardando', 'buscando', 'criado', 'agendado',
+  ...STATUS_RASTREAVEIS
+];
+
+async function entrarNasSalasIniciais(socket) {
+  const usuario = socket.data.usuario;
+  if (!usuario) return; // sem login: só recebe avisos públicos (tarifas, banners)
+
+  if (ehAdminSocket(usuario)) socket.join(SALA_ADMINS);
+  if (usuario.id !== undefined && usuario.id !== null) socket.join(salaUsuario(String(usuario.id)));
+
+  try {
+    const motoristaId = await motoristaIdDoSocket(socket);
+    if (motoristaId) {
+      socket.join(SALA_MOTORISTAS);
+      socket.join(salaMotorista(motoristaId));
+    }
+
+    const corridas = await sql`
+      SELECT id FROM pedidos
+      WHERE LOWER(status) = ANY(${STATUS_CORRIDA_ABERTA})
+        AND (
+          cliente_id::text = ${String(usuario.id ?? '')}
+          OR (${motoristaId || ''} <> '' AND motorista_id::text = ${motoristaId || ''})
+        )
+        AND criado_em > NOW() - INTERVAL '2 days'
+      ORDER BY criado_em DESC
+      LIMIT 3;
+    `;
+    corridas.forEach((c) => socket.join(salaCorrida(String(c.id))));
+  } catch (err) {
+    // Se o banco falhar aqui, o app ainda recebe tudo pelo "entrar_corrida" e pelas consultas de status
   }
+}
+
+io.on('connection', (socket) => {
+  entrarNasSalasIniciais(socket);
 
   // Passageiro ou motorista pede para acompanhar UMA corrida (o servidor confere se é dele)
   socket.on('entrar_corrida', async (dados, ack) => {

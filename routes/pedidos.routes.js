@@ -9,6 +9,10 @@ import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
 import { dispararPushParaMotoristas } from './push.routes.js';
 import { liquidarBonusIndicacaoPrimeiraCorrida } from './indicacoes.routes.js';
 import { calcularCotacao, chaveCategoriaPreco, CATEGORIAS_PRECO } from '../services/precificacao.service.js';
+import {
+  avisarCorrida, avisarAdmins, avisarMotoristas,
+  colocarPassageiroNaCorrida, colocarMotoristaNaCorrida
+} from '../services/salas-socket.js';
 
 const TEMPO_TOLERANCIA_ESPERA_SEG = 180; // 3 minutos de tolerância após motorista chegar
 const VALOR_TAXA_CANCELAMENTO = 5.00;

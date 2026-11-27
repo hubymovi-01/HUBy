@@ -3,6 +3,7 @@ import express from 'express';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 import { lerTarifasDoBanco } from './admin.routes.js';
+import { avisarAdmins } from '../services/salas-socket.js';
 
 const router = express.Router();
 
@@ -305,7 +306,8 @@ router.put('/perfil', ...doMotorista, async (req, res) => {
       sucesso: true,
       motorista: mot,
       aviso: tentouTrocarVeiculo
-        ? 'Os dados do veículo (placa, modelo, cor e ano) não foram alterados. Para mudar, fale com o suporte HUBy e envie o novo CRLV.'        : undefined
+        ? 'Os dados do veículo (placa, modelo, cor e ano) não foram alterados. Para mudar, fale com o suporte HUBy e envie o novo CRLV.'
+        : undefined
     });
   } catch (err) {
     console.error('Erro ao atualizar perfil do motorista:', err);
@@ -467,8 +469,9 @@ router.post('/saque', ...doMotorista, async (req, res) => {
         VALUES (${debitado.id}, 'motorista', 'solicitacao_saque_pix', ${-valorNum}, ${String(saque.id)});
       `;
 
+      // Aviso de saque só para os admins
       const io = req.io || req.app.get('io');
-      io?.emit('novo_saque_solicitado', { saqueId: saque.id, motorista_nome: debitado.nome, valor: valorNum });
+      avisarAdmins(io, 'novo_saque_solicitado', { saqueId: saque.id, motorista_nome: debitado.nome, valor: valorNum });
 
       res.json({
         sucesso: true,

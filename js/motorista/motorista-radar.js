@@ -647,7 +647,8 @@ export function iniciarRadarChamadas() {
     const ioClient = getSocketIO();
     if (ioClient) {
       const token = localStorage.getItem('huby_token');
-      estado.socketRadar = ioClient(API_URL, {
+      // Usa a conexão principal (a do mapa) quando ela já existe: uma conexão só por motorista
+      estado.socketRadar = estado.socket || ioClient(API_URL, {
         auth: { token: token || '' }
       });
 
