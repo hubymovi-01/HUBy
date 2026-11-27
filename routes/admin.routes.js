@@ -137,80 +137,6 @@ export async function lerTarifasDoBanco() {
   }
 }
 
-export const CONFIG_INDICACAO_PADRAO = {
-  ativo: true,
-  desconto_indicado: 5.00,
-  bonus_indicador: 5.00,
-  bonus_motorista: 25.00,
-  meta_corridas_motorista: 15
-};
-
-export const CONFIG_DINAMICA_PADRAO = {
-  ativa: true,
-  gatilho_chamadas: 3,
-  multiplicador_maximo: 1.8,
-  multiplicador_manual: 1.0
-};
-
-export async function lerTarifasDoBanco() {
-  try {
-    const config = await sql`
-      SELECT valor::text AS valor_txt FROM configuracoes_plataforma 
-      WHERE chave = 'tarifas' LIMIT 1;
-    `;
-    if (!config.length || !config[0].valor_txt) {
-      return TARIFAS_PADRAO_SISTEMA;
-    }
-    const obj = extrairObjetoJSONB(config[0].valor_txt, TARIFAS_PADRAO_SISTEMA);
-    const niveisBruto = obj.niveis_motorista || {};
-    const taxaBronze = Number(niveisBruto.bronze?.taxa_huby ?? obj.taxa_plataforma ?? 15);
-
-    return {
-      taxa_plataforma: taxaBronze,
-      taxa_parada: Number(obj.taxa_parada ?? 2.50),
-      taxa_espera: Number(obj.taxa_espera ?? 0.50),
-      niveis_motorista: {
-        bronze: {
-          nome: 'Bronze',
-          corridas_min: Number(niveisBruto.bronze?.corridas_min ?? 0),
-          nota_min: Number(niveisBruto.bronze?.nota_min ?? 0.0),
-          taxa_huby: taxaBronze
-        },
-        prata: {
-          nome: 'Prata',
-          corridas_min: Number(niveisBruto.prata?.corridas_min ?? 50),
-          nota_min: Number(niveisBruto.prata?.nota_min ?? 4.8),
-          taxa_huby: Number(niveisBruto.prata?.taxa_huby ?? 12)
-        },
-        ouro: {
-          nome: 'Ouro',
-          corridas_min: Number(niveisBruto.ouro?.corridas_min ?? 150),
-          nota_min: Number(niveisBruto.ouro?.nota_min ?? 4.9),
-          taxa_huby: Number(niveisBruto.ouro?.taxa_huby ?? 10)
-        }
-      },
-      carro: {
-        base: Number(obj.carro?.base ?? 6.0),
-        km: Number(obj.carro?.km ?? 2.2),
-        min: Number(obj.carro?.min ?? 0.30)
-      },
-      moto: {
-        base: Number(obj.moto?.base ?? 4.0),
-        km: Number(obj.moto?.km ?? 1.4),
-        min: Number(obj.moto?.min ?? 0.20)
-      },
-      entrega: {
-        base: Number(obj.entrega?.base ?? 5.0),
-        km: Number(obj.entrega?.km ?? 1.8),
-        min: Number(obj.entrega?.min ?? 0.25)
-      }
-    };
-  } catch (err) {
-    console.warn('Erro ao ler tarifas do banco:', err.message);
-    return TARIFAS_PADRAO_SISTEMA;
-  }
-}
-
 export async function lerConfigIndicacaoDoBanco() {
   try {
     const config = await sql`
@@ -734,7 +660,7 @@ export default function adminRoutes(io) {
     res.json(tarifas);
   });
 
-   router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
+  router.put('/tarifas', autenticarToken, verificarAdmin, async (req, res) => {
     try {
       const body = req.body || {};
       const atuais = await lerTarifasDoBanco();
