@@ -1,4 +1,5 @@
 // js/motorista/motorista-radar.js - Radar Sincronizado + Cancelamento Instantâneo + Aba de Agendamentos
+// Segurança: todo texto vindo do passageiro (endereços, observação, cupom) é exibido como texto puro.
 import { API_URL, sonsHUBy, calcularPreco, aplicarObjetoTarifas, TAXA_PLATAFORMA_ATUAL } from '../config.js';
 import { estado } from './motorista-estado.js';
 import { preVisualizarRotaPedido } from './motorista-corrida.js';
@@ -7,14 +8,56 @@ import { notificar } from '../util/alertas-huby.js';
 let intervalAlertaChamada = null;
 let wakeLockSentinela = null;
 let gpsFallbackEmAndamento = false;
+let alternandoOnline = false;
 let abaRadarAtual = 'agora'; // 'agora' | 'agendados'
 let ultimosPedidosAgora = [];
 let ultimosPedidosAgendados = [];
 
+// Dados completos de cada chamada na tela (o botão guarda só o id)
+const pedidosNaTela = new Map();
+
 const VALIDADE_SELFIE_MS = 12 * 60 * 60 * 1000;
 const TEMPO_EXPIRACAO_TELA_MS = 30 * 1000;
+const STATUS_AINDA_DISPONIVEL = ['pendente', 'aguardando', 'buscando', 'criado', 'agendado'];
 
 const getSocketIO = () => (typeof io !== 'undefined' ? io : (window.io || null));
+
+// ============================================================================
+// AJUDANTES DE SEGURANÇA E DE VALORES
+// ============================================================================
+function escaparHTML(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function numeroOuNulo(valor) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : null;
+}
+
+function coordsValidas(lat, lng) {
+  const a = numeroOuNulo(lat);
+  const b = numeroOuNulo(lng);
+  if (a === null || b === null || (a === 0 && b === 0)) return null;
+  if (Math.abs(a) > 90 || Math.abs(b) > 180) return null;
+  return [a, b];
+}
+
+// Taxa do NÍVEL do motorista (Bronze/Prata/Ouro); cai na taxa geral só se ainda não carregou
+export function taxaDoMotorista() {
+  const taxaNivel = numeroOuNulo(estado.taxaHubyMotorista);
+  if (taxaNivel !== null) return taxaNivel;
+  return Number(TAXA_PLATAFORMA_ATUAL ?? 15);
+}
+
+function fatorRepasseMotorista() {
+  return Math.max(0.1, (100 - taxaDoMotorista()) / 100);
+}
 
 function limparPreVisualizacaoPresaNoMapa() {
   estado.pedidoEmAnalise = null;
@@ -36,14 +79,67 @@ function extrairMetadadosSincronizados(p) {
     for (const item of p.paradas) {
       if (item?.nota && !obs) obs = String(item.nota).trim();
       if (item?.cupom && !cupom) cupom = String(item.cupom).trim();
-      if (item?.desconto_pct) descontoPct = Number(item.desconto_pct);
+      if (item?.desconto_pct) descontoPct = Number(item.desconto_pct) || 0;
       if (item?.agendado_para && !agendadoPara) agendadoPara = item.agendado_para;
     }
   }
 
-  return { obs, cupom, descontoPct, agendadoPara };
+  return {
+    obs: obs.slice(0, 300),
+    cupom: cupom.slice(0, 40),
+    descontoPct,
+    agendadoPara
+  };
 }
 
+// Junta num objeto só tudo o que a tela da corrida precisa (sem passar pelo HTML)
+function montarDadosPedido(p) {
+  const categoria = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
+  const distKm = Number.parseFloat(p.distancia_km ?? p.distanciaKm) || 0;
+  const durMin = Math.max(1, Math.round(Number(p.duracao_min) || distKm * 2.2 || 5));
+
+  let valorBruto = Number(p.valor_total || 0);
+  if (!(valorBruto > 0) && distKm > 0) {
+    valorBruto = calcularPreco(categoria, distKm).valorTotal;
+  }
+
+  const repasseNum = Number((valorBruto * fatorRepasseMotorista()).toFixed(2));
+
+  const coordsOrig = Array.isArray(p.coordsOrigem)
+    ? coordsValidas(p.coordsOrigem[0], p.coordsOrigem[1])
+    : coordsValidas(p.origem_lat, p.origem_lng);
+  const coordsDest = Array.isArray(p.coordsDestino)
+    ? coordsValidas(p.coordsDestino[0], p.coordsDestino[1])
+    : coordsValidas(p.destino_lat, p.destino_lng);
+
+  const meta = extrairMetadadosSincronizados(p);
+
+  return {
+    id: String(p.id),
+    categoria,
+    preco: valorBruto,
+    valorTotal: valorBruto,
+    repasse: repasseNum.toFixed(2).replace('.', ','),
+    origem: String(p.origem_endereco || 'Local do passageiro').slice(0, 200),
+    destino: String(p.destino_endereco || 'Destino informado').slice(0, 200),
+    dist: distKm > 0 ? distKm.toFixed(1) : '--',
+    dur: durMin,
+    coordsOrig,
+    coordsDest,
+    agendadoPara: meta.agendadoPara || null
+  };
+}
+
+// Compatibilidade: devolve os dados da chamada a partir do botão (que só guarda o id)
+export function extrairDadosDoBotao(btn) {
+  const id = btn?.getAttribute?.('data-id');
+  const p = id ? pedidosNaTela.get(String(id)) : null;
+  return p ? montarDadosPedido(p) : null;
+}
+
+// ============================================================================
+// BOTÃO ONLINE / OFFLINE
+// ============================================================================
 function aplicarEstadoVisualOnline(online) {
   const ativo = Boolean(online);
   estado.isOnline = ativo;
@@ -185,7 +281,7 @@ function solicitarSelfieVerificacaoOnline() {
           <img id="previewSelfieCapturada" alt="Prévia Selfie" style="display: none; width: 100%; height: 100%; object-fit: cover;">
           <div id="placeholderCameraNativa" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px; color: #94A3B8;">
             <span style="font-size: 44px; margin-bottom: 6px;">🤳</span>
-            <small style="font-size: 11px; font-weight: 700; color: #CBD5E1;">Toque no botão verde abaixo para abrir a câmara</small>
+            <small style="font-size: 11px; font-weight: 700; color: #CBD5E1;">Toque no botão verde abaixo para abrir a câmera</small>
           </div>
         </div>
 
@@ -229,15 +325,21 @@ function solicitarSelfieVerificacaoOnline() {
       if (video) video.style.display = 'none';
       if (placeholderNativo) placeholderNativo.style.display = 'flex';
       if (statusTxt) {
-        statusTxt.textContent = 'Pronto para capturar selfie pela câmara do telemóvel';
+        statusTxt.textContent = 'Pronto para tirar a selfie pela câmera do celular';
         statusTxt.style.color = '#10B981';
       }
       btnCapturar.disabled = false;
       btnCapturar.style.opacity = '1';
-      btnCapturar.textContent = '📸 Abrir Câmara';
+      btnCapturar.textContent = '📸 Abrir Câmera';
     };
 
     const enviarSelfieParaServidor = async (selfieBase64) => {
+      // Só aceita imagem JPEG/PNG em base64
+      if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(String(selfieBase64 || ''))) {
+        notificar('Imagem inválida. Tente tirar a selfie novamente.', 'erro');
+        return;
+      }
+
       btnCapturar.disabled = true;
       btnCapturar.textContent = 'Validando...';
       if (previewImg) {
@@ -357,42 +459,6 @@ function solicitarSelfieVerificacaoOnline() {
   });
 }
 
-export function extrairDadosDoBotao(btn) {
-  const km = btn.getAttribute('data-dist') || btn.getAttribute('data-km') || '1.0';
-  const dur = btn.getAttribute('data-dur') || Math.round(Number(km) * 2.2);
-  const cat = btn.getAttribute('data-cat') || 'carro';
-
-  let precoTotal = parseFloat(btn.getAttribute('data-preco')) || 0;
-  if (!precoTotal || precoTotal <= 0) {
-    precoTotal = calcularPreco(cat, parseFloat(km) || 1.0).valorTotal;
-  }
-
-  const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
-  const repasse = btn.getAttribute('data-repasse') || (precoTotal * fatorMotorista).toFixed(2).replace('.', ',');
-
-  const latOrig = parseFloat(btn.getAttribute('data-lat-orig'));
-  const lngOrig = parseFloat(btn.getAttribute('data-lng-orig'));
-  const latDest = parseFloat(btn.getAttribute('data-lat-dest'));
-  const lngDest = parseFloat(btn.getAttribute('data-lng-dest'));
-
-  const coordsOrig = (!isNaN(latOrig) && !isNaN(lngOrig)) ? [latOrig, lngOrig] : null;
-  const coordsDest = (!isNaN(latDest) && !isNaN(lngDest)) ? [latDest, lngDest] : null;
-
-  return {
-    id: btn.getAttribute('data-id'),
-    categoria: cat,
-    preco: precoTotal,
-    valorTotal: precoTotal,
-    repasse,
-    origem: btn.getAttribute('data-origem') || 'Local do passageiro',
-    destino: btn.getAttribute('data-destino') || 'Destino informado',
-    dist: km,
-    dur,
-    coordsOrig,
-    coordsDest
-  };
-}
-
 export function iniciarAlertaSonoroChamada() {
   if (intervalAlertaChamada) return;
   sonsHUBy.tocarAlertaChamada();
@@ -408,13 +474,16 @@ export function pararAlertaSonoroChamada() {
   }
 }
 
+// Liga/desliga o online: PRIMEIRO o servidor confirma, DEPOIS a tela muda
 export async function alternarStatusOnline(forcarEstado = null) {
-  const token = localStorage.getItem('huby_token');
-  const btn = document.getElementById('btnToggleStatusOnline');
+  if (alternandoOnline) return estado.isOnline;
 
-  const textoBotao = btn ? btn.textContent || '' : '';
-  const visualmenteOnline = Boolean(estado.isOnline) || (textoBotao.includes('Online') && !textoBotao.includes('Ficar Online'));
-  const novoStatus = typeof forcarEstado === 'boolean' ? forcarEstado : !visualmenteOnline;
+  const novoStatus = typeof forcarEstado === 'boolean' ? forcarEstado : !estado.isOnline;
+
+  if (!novoStatus && estado.pedidoAceitoAtual) {
+    notificar('Finalize ou cancele a corrida atual antes de ficar offline.', 'alerta');
+    return estado.isOnline;
+  }
 
   if (novoStatus && !selfieTurnoValida()) {
     const selfieAprovada = await solicitarSelfieVerificacaoOnline();
@@ -425,27 +494,16 @@ export async function alternarStatusOnline(forcarEstado = null) {
     }
   }
 
-  aplicarEstadoVisualOnline(novoStatus);
-
-  if (novoStatus) {
-    if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
-    await requisitarWakeLock();
-    capturarGPSFallbackSilencioso();
-    renderizarRadar([]);
-    iniciarRadarChamadas();
-    notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
-  } else {
-    libertarWakeLock();
-    pararRadarChamadas();
-    if (!estado.pedidoAceitoAtual) {
-      limparPreVisualizacaoPresaNoMapa();
-    }
-    renderizarRadarOffline();
-    notificar('⚪ Você ficou offline para corridas.', 'info');
+  const btn = document.getElementById('btnToggleStatusOnline');
+  alternandoOnline = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
   }
 
   try {
-    await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
+    const token = localStorage.getItem('huby_token');
+    const resp = await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -453,19 +511,63 @@ export async function alternarStatusOnline(forcarEstado = null) {
       },
       body: JSON.stringify({ online: novoStatus })
     });
-  } catch (err) {}
+    const data = await resp.json().catch(() => ({}));
 
-  return novoStatus;
+    if (!resp.ok) {
+      notificar(data.erro || 'Não foi possível alterar seu status agora.', 'erro', 5000);
+      return estado.isOnline;
+    }
+
+    const confirmado = typeof data.online === 'boolean' ? data.online : novoStatus;
+    aplicarEstadoVisualOnline(confirmado);
+
+    if (confirmado) {
+      if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
+      await requisitarWakeLock();
+      capturarGPSFallbackSilencioso();
+      renderizarRadar([]);
+      iniciarRadarChamadas();
+      notificar('🟢 Você está online! Aguardando corridas na região.', 'sucesso');
+    } else {
+      libertarWakeLock();
+      pararRadarChamadas();
+      if (!estado.pedidoAceitoAtual) {
+        limparPreVisualizacaoPresaNoMapa();
+      }
+      renderizarRadarOffline();
+      notificar('⚪ Você ficou offline para corridas.', 'info');
+    }
+    return confirmado;
+  } catch (err) {
+    notificar('Sem conexão. Seu status NÃO foi alterado.', 'erro', 5000);
+    return estado.isOnline;
+  } finally {
+    alternandoOnline = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.style.opacity = '1';
+    }
+  }
+}
+
+function lerAgendaLocal() {
+  try {
+    const lista = JSON.parse(localStorage.getItem('huby_motorista_agenda') || '[]');
+    return Array.isArray(lista) ? lista : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 function verificarAlertasAgendamentosAceitos() {
-  const agenda = JSON.parse(localStorage.getItem('huby_motorista_agenda') || '[]');
+  const agenda = lerAgendaLocal();
   if (!agenda.length) return;
   const agora = Date.now();
   let alterou = false;
 
   for (const item of agenda) {
     const ts = new Date(item.agendado_para).getTime();
+    if (!Number.isFinite(ts)) continue;
     const diffMin = (ts - agora) / 60000;
     if (!item.notificado && diffMin <= 15 && diffMin >= -30) {
       item.notificado = true;
@@ -475,20 +577,27 @@ function verificarAlertasAgendamentosAceitos() {
     }
   }
 
-  if (alterou) {
-    localStorage.setItem('huby_motorista_agenda', JSON.stringify(agenda));
+  // Limpa agendamentos que já passaram há mais de 2 horas
+  const limpa = agenda.filter((item) => {
+    const ts = new Date(item.agendado_para).getTime();
+    return Number.isFinite(ts) && ts > agora - 2 * 60 * 60 * 1000;
+  });
+
+  if (alterou || limpa.length !== agenda.length) {
+    localStorage.setItem('huby_motorista_agenda', JSON.stringify(limpa));
   }
 }
 
 // ============================================================================
 // REMOVER CHAMADA INSTANTANEAMENTE QUANDO PASSAGEIRO CANCELA
 // ============================================================================
-function removerChamadaCanceladaInstantaneamente(pedidoId) {
+function removerChamadaCanceladaInstantaneamente(pedidoId, avisar = true) {
   if (!pedidoId) return;
   const idStr = String(pedidoId);
 
   if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
   estado.pedidosIgnorados.add(idStr);
+  pedidosNaTela.delete(idStr);
 
   if (estado.temposPedidosTela) {
     delete estado.temposPedidosTela[idStr];
@@ -500,12 +609,12 @@ function removerChamadaCanceladaInstantaneamente(pedidoId) {
   ultimosPedidosAgora = ultimosPedidosAgora.filter(p => String(p.id) !== idStr);
   ultimosPedidosAgendados = ultimosPedidosAgendados.filter(p => String(p.id) !== idStr);
 
-  // Se o motorista estava com a pré-visualização aberta exatamente desta corrida cancelada, limpa o mapa na hora
+  // Se o motorista estava com a pré-visualização aberta desta corrida, limpa o mapa na hora
   if (estado.pedidoEmAnalise && String(estado.pedidoEmAnalise.id) === idStr) {
     limparPreVisualizacaoPresaNoMapa();
-    notificar('O passageiro cancelou a solicitação.', 'alerta');
-  } else if (antesAgora !== ultimosPedidosAgora.length || antesAgendados !== ultimosPedidosAgendados.length) {
-    notificar('Chamada cancelada pelo passageiro.', 'info');
+    if (avisar) notificar('Esta chamada não está mais disponível.', 'alerta');
+  } else if (avisar && (antesAgora !== ultimosPedidosAgora.length || antesAgendados !== ultimosPedidosAgendados.length)) {
+    notificar('Uma chamada saiu do radar (cancelada ou já atendida).', 'info');
   }
 
   if (ultimosPedidosAgora.length === 0) {
@@ -513,13 +622,16 @@ function removerChamadaCanceladaInstantaneamente(pedidoId) {
   }
 
   estado.ultimoRenderIds = null;
-  if (estado.isOnline && !estado.pedidoAceitoAtual) {
+  if (estado.isOnline && !estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
     renderizarRadar();
   }
 }
 
 export function iniciarRadarChamadas() {
   solicitarPermissaoNotificacoes();
+
+  // Botão sempre igual ao status real (ex.: ao reabrir o app, o servidor diz se está online)
+  aplicarEstadoVisualOnline(estado.isOnline);
 
   if (!estado.isOnline) {
     renderizarRadarOffline();
@@ -546,7 +658,7 @@ export function iniciarRadarChamadas() {
         }
       });
 
-      // ESCUTA IMEDIATA DO CANCELAMENTO PELO PASSAGEIRO
+      // Passageiro cancelou: some do radar na hora
       estado.socketRadar.on('corrida_cancelada', (dados) => {
         const idCancelado = dados?.pedidoId || dados?.id;
         if (idCancelado) {
@@ -554,24 +666,25 @@ export function iniciarRadarChamadas() {
         }
       });
 
-      // SE OUTRO MOTORISTA ACEITAR ANTES, TAMBÉM REMOVE DA TELA NA HORA
+      // Outro motorista aceitou antes: some do radar na hora
       estado.socketRadar.on('corrida_aceita', (dados) => {
         const idAceito = dados?.pedidoId || dados?.id;
         if (idAceito && (!estado.pedidoAceitoAtual || String(estado.pedidoAceitoAtual.id) !== String(idAceito))) {
-          removerChamadaCanceladaInstantaneamente(idAceito);
+          removerChamadaCanceladaInstantaneamente(idAceito, false);
         }
       });
 
       estado.socketRadar.on('tarifas_atualizadas', (novasTarifas) => {
         aplicarObjetoTarifas(novasTarifas);
         if (estado.isOnline && !estado.pedidoAceitoAtual && !estado.pedidoEmAnalise) {
+          estado.ultimoRenderIds = null;
           buscarChamadasPendentes(false);
         }
       });
 
       estado.socketRadar.on('alerta_broadcast_geral', (dados) => {
-        if (dados.publico === 'todos' || dados.publico === 'motoristas') {
-          notificar(`📢 COMUNICADO: ${dados.titulo} - ${dados.mensagem}`, 'alerta', 6000);
+        if (dados?.publico === 'todos' || dados?.publico === 'motoristas') {
+          notificar(`📢 COMUNICADO: ${dados.titulo || ''} - ${dados.mensagem || ''}`, 'alerta', 6000);
         }
       });
     }
@@ -632,14 +745,18 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
     const { lat, lng } = obterCoordenadasAtuaisMotorista();
 
     const resp = await fetch(
-      `${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&aceitaEntrega=${aceitaEntrega}&lat=${lat}&lng=${lng}&t=${Date.now()}`,
+      `${API_URL}/api/pedidos/pendentes?categoria=${encodeURIComponent(cat)}&aceitaEntrega=${aceitaEntrega}&lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}&t=${Date.now()}`,
       {
         cache: 'no-store',
         headers: { 'Authorization': `Bearer ${token}` }
       }
     );
 
-    if (resp.status === 403 || !resp.ok) {
+    if (!resp.ok) {
+      ultimosPedidosAgora = [];
+      ultimosPedidosAgendados = [];
+      pedidosNaTela.clear();
+      pararAlertaSonoroChamada();
       renderizarRadar([]);
       return;
     }
@@ -653,7 +770,9 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     if (Array.isArray(pedidos)) {
       for (const p of pedidos) {
-        if (estado.pedidosIgnorados?.has(String(p.id))) continue;
+        if (!p || p.id === undefined || p.id === null) continue;
+        const idStr = String(p.id);
+        if (estado.pedidosIgnorados?.has(idStr)) continue;
 
         const meta = extrairMetadadosSincronizados(p);
         if (meta.agendadoPara) {
@@ -665,14 +784,14 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
           if (!window.pedidoCompativelComRotaCasa(p)) continue;
         }
 
-        if (!estado.temposPedidosTela[p.id]) {
-          estado.temposPedidosTela[p.id] = agora;
+        if (!estado.temposPedidosTela[idStr]) {
+          estado.temposPedidosTela[idStr] = agora;
         }
 
-        const tempoQuePassou = agora - estado.temposPedidosTela[p.id];
+        const tempoQuePassou = agora - estado.temposPedidosTela[idStr];
         if (tempoQuePassou >= TEMPO_EXPIRACAO_TELA_MS) {
           if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
-          estado.pedidosIgnorados.add(String(p.id));
+          estado.pedidosIgnorados.add(idStr);
           continue;
         }
 
@@ -682,6 +801,9 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
 
     ultimosPedidosAgora = agoraList;
     ultimosPedidosAgendados = agendadosList;
+
+    pedidosNaTela.clear();
+    [...agoraList, ...agendadosList].forEach((p) => pedidosNaTela.set(String(p.id), p));
 
     const idsCombinados = `${abaRadarAtual}|${agoraList.map(p => p.id).join(',')}|${agendadosList.map(p => p.id).join(',')}`;
 
@@ -697,80 +819,65 @@ export async function buscarChamadasPendentes(tocarSomForcado = false) {
       renderizarRadar();
     }
   } catch (err) {
-    renderizarRadar([]);
+    // Sem rede: mantém o que já está na tela em vez de apagar tudo
   }
 }
 
 function renderizarCardPedidoMotorista(p, ehAgendado = false) {
-  const fatorMotorista = Math.max(0.1, (100 - Number(TAXA_PLATAFORMA_ATUAL ?? 15)) / 100);
   const agora = Date.now();
   const meta = extrairMetadadosSincronizados(p);
+  const dados = montarDadosPedido(p);
 
-  const catPedido = String(p.sub_tipo_id || p.tipo || 'carro').toLowerCase();
-  const distKm = parseFloat(p.distancia_km || p.distanciaKm || 1.0);
-
-  let valorBruto = Number(p.valor_total || 0);
-  if (!valorBruto || valorBruto <= 0) {
-    valorBruto = calcularPreco(catPedido, distKm).valorTotal;
-  }
-
-  const repasseBruto = valorBruto * fatorMotorista;
-  const repasseFormat = repasseBruto.toFixed(2).replace('.', ',');
-  const valorDisplay = `R$ ${repasseFormat}`;
-
-  const latOrig = p.coordsOrigem ? p.coordsOrigem[0] : (p.origem_lat || '');
-  const lngOrig = p.coordsOrigem ? p.coordsOrigem[1] : (p.origem_lng || '');
-  const latDest = p.coordsDestino ? p.coordsDestino[0] : (p.destino_lat || '');
-  const lngDest = p.coordsDestino ? p.coordsDestino[1] : (p.destino_lng || '');
+  const idAttr = escaparHTML(dados.id);
+  const idCurto = escaparHTML(dados.id.slice(-4));
+  const valorDisplay = `R$ ${escaparHTML(dados.repasse)}`;
+  const rotuloCategoria = escaparHTML(String(p.sub_tipo_label || 'HUBy').slice(0, 40));
+  const origem = escaparHTML(dados.origem);
+  const destino = escaparHTML(dados.destino);
+  const distTxt = escaparHTML(dados.dist);
+  const durTxt = escaparHTML(dados.dur);
 
   const dataAgObj = meta.agendadoPara ? new Date(meta.agendadoPara) : null;
-  const agendadoDisponivelAgora = dataAgObj ? (dataAgObj.getTime() - agora <= 15 * 60 * 1000) : false;
+  const dataAgValida = dataAgObj && Number.isFinite(dataAgObj.getTime()) ? dataAgObj : null;
+  const agendadoDisponivelAgora = dataAgValida ? (dataAgValida.getTime() - agora <= 15 * 60 * 1000) : false;
 
-  const agendamentoHTML = dataAgObj
+  const agendamentoHTML = dataAgValida
     ? `<div style="background: rgba(245, 158, 11, 0.16); border: 1px solid rgba(245, 158, 11, 0.45); border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 11.5px; color: #FBBF24; font-weight: 800;">
-        ⏰ Agendado: ${dataAgObj.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+        ⏰ Agendado: ${escaparHTML(dataAgValida.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}
         ${agendadoDisponivelAgora ? '<span style="background:#10B981;color:#02261C;padding:2px 6px;border-radius:6px;margin-left:6px;font-size:10px;">DISPONÍVEL AGORA</span>' : ''}
       </div>`
     : '';
 
+  const descontoTxt = meta.descontoPct > 0 ? ` (-${escaparHTML(Math.round(meta.descontoPct))}%)` : '';
   const cupomHTML = meta.cupom
     ? `<div style="background: rgba(16, 185, 129, 0.14); border-left: 2.5px solid #10B981; padding: 5px 8px; margin-bottom: 6px; font-size: 11px; color: #34D399; font-weight: 800;">
-        🏷️ Cupom aplicado: ${meta.cupom}${meta.descontoPct ? ` (-${meta.descontoPct}%)` : ''}
+        🏷️ Cupom aplicado: ${escaparHTML(meta.cupom)}${descontoTxt}
       </div>`
     : '';
 
   const obsHTML = meta.obs
-    ? `<div style="background: rgba(56, 189, 248, 0.14); border-left: 2.5px solid #38BDF8; padding: 6px 8px; margin-bottom: 6px; font-size: 11.5px; color: #BAE6FD; font-weight: 700;">
-        📝 Obs do passageiro: ${meta.obs}
+    ? `<div style="background: rgba(56, 189, 248, 0.14); border-left: 2.5px solid #38BDF8; padding: 6px 8px; margin-bottom: 6px; font-size: 11.5px; color: #BAE6FD; font-weight: 700; word-break: break-word;">
+        📝 Obs do passageiro: ${escaparHTML(meta.obs)}
       </div>`
     : '';
 
-  const inicio = estado.temposPedidosTela?.[p.id] || agora;
-  const tempoRestanteSeg = Math.max(0, (TEMPO_EXPIRACAO_TELA_MS - (agora - inicio)) / 1000);
+  const inicio = estado.temposPedidosTela?.[dados.id] || agora;
+  const tempoRestanteSeg = Math.max(0, (TEMPO_EXPIRACAO_TELA_MS - (agora - inicio)) / 1000).toFixed(1);
 
   const botaoAcaoHTML = ehAgendado
-    ? `<button type="button" class="btn-accept-scheduled"
-        style="width: 100%; background: ${agendadoDisponivelAgora ? '#10B981' : '#F59E0B'}; border: none; border-radius: 10px; padding: 13px; font-weight: 900; font-size: 14px; color: #090D16; cursor: pointer; text-transform: uppercase;"
-        data-id="${p.id}" data-cat="${catPedido}" data-preco="${valorBruto}" data-repasse="${repasseFormat}"
-        data-origem="${p.origem_endereco || 'Local do passageiro'}" data-destino="${p.destino_endereco || 'Destino'}"
-        data-dist="${distKm}" data-dur="${p.duracao_min || 5}" data-lat-orig="${latOrig}"
-        data-lng-orig="${lngOrig}" data-lat-dest="${latDest}" data-lng-dest="${lngDest}"
-        data-agendado="${meta.agendadoPara || ''}">
+    ? `<button type="button" class="btn-accept-scheduled" data-id="${idAttr}"
+        style="width: 100%; background: ${agendadoDisponivelAgora ? '#10B981' : '#F59E0B'}; border: none; border-radius: 10px; padding: 13px; font-weight: 900; font-size: 14px; color: #090D16; cursor: pointer; text-transform: uppercase;">
         ${agendadoDisponivelAgora ? '🚀 Iniciar Corrida Agendada' : '📅 Aceitar Agendamento'}
       </button>`
-    : `<button type="button" class="btn-accept-order"
-        style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);"
-        data-id="${p.id}" data-cat="${catPedido}" data-preco="${valorBruto}" data-repasse="${repasseFormat}"
-        data-origem="${p.origem_endereco || 'Local do passageiro'}" data-destino="${p.destino_endereco}"
-        data-dist="${distKm}" data-dur="${p.duracao_min || 5}" data-lat-orig="${latOrig}"
-        data-lng-orig="${lngOrig}" data-lat-dest="${latDest}" data-lng-dest="${lngDest}">
+    : `<button type="button" class="btn-accept-order" data-id="${idAttr}"
+        style="position: relative; width: 100%; background: #10B981; border: none; border-radius: 10px; padding: 14px; font-weight: 900; font-size: 15px; color: #022C22; cursor: pointer; overflow: hidden; display: flex; justify-content: center; align-items: center; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 15px rgba(16,185,129,0.3);">
         <div class="huby-progress-bar" style="position: absolute; top: 0; left: 0; bottom: 0; width: 100%; background: #059669; z-index: 1; transform-origin: left; animation-duration: ${tempoRestanteSeg}s;"></div>
         <span style="position: relative; z-index: 2; text-shadow: 0 1px 2px rgba(255,255,255,0.3);">🚀 Aceitar Corrida</span>
       </button>`;
 
   return `
-    <div class="order-card" data-pedido-card-id="${p.id}" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid ${ehAgendado ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255,255,255,0.08)'};">
-      <button type="button" class="btn-dispensar-pedido" data-id="${p.id}" title="Recusar"
+    <div class="order-card" data-pedido-card-id="${idAttr}" style="position: relative; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); border-radius: 12px; padding: 14px; margin-bottom: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.6); border: 1px solid ${ehAgendado ? 'rgba(245, 158, 11, 0.35)' : 'rgba(255,255,255,0.08)'};">
+      <button type="button" class="btn-dispensar-pedido" data-id="${idAttr}" title="Recusar"
         style="position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.06); border: none; color: #94A3B8; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; cursor: pointer; z-index: 10;">
         ✕
       </button>
@@ -778,10 +885,10 @@ function renderizarCardPedidoMotorista(p, ehAgendado = false) {
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; padding-right: 35px;">
         <div>
           <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-weight: 800; font-size: 11px; padding: 4px 8px; border-radius: 6px; display: inline-block; margin-bottom: 4px;">
-            ${p.sub_tipo_label || 'HUBy'} #${String(p.id).slice(-4)}
+            ${rotuloCategoria} #${idCurto}
           </span>
           <div style="font-size: 12px; color: #94A3B8; font-weight: 600;">
-            📏 ${distKm.toFixed(1)} km • ⏱️ ${p.duracao_min || 5} min
+            📏 ${distTxt} km • ⏱️ ${durTxt} min
           </div>
         </div>
         <div style="text-align: right;">
@@ -792,9 +899,9 @@ function renderizarCardPedidoMotorista(p, ehAgendado = false) {
         </div>
       </div>
 
-      <div style="font-size: 13px; line-height: 1.4; color: #E2E8F0; padding-left: 10px; border-left: 2px solid rgba(255,255,255,0.1); margin-bottom: 8px;">
-        <span style="display: block; margin-bottom: 5px;"><strong style="color: #10B981;">A</strong> ${p.origem_endereco || 'Local do passageiro'}</span>
-        <span style="display: block;"><strong style="color: #EF4444;">B</strong> ${p.destino_endereco || 'Destino no mapa'}</span>
+      <div style="font-size: 13px; line-height: 1.4; color: #E2E8F0; padding-left: 10px; border-left: 2px solid rgba(255,255,255,0.1); margin-bottom: 8px; word-break: break-word;">
+        <span style="display: block; margin-bottom: 5px;"><strong style="color: #10B981;">A</strong> ${origem}</span>
+        <span style="display: block;"><strong style="color: #EF4444;">B</strong> ${destino}</span>
       </div>
 
       ${agendamentoHTML}
@@ -806,6 +913,25 @@ function renderizarCardPedidoMotorista(p, ehAgendado = false) {
   `;
 }
 
+// Confere no servidor se a chamada ainda está livre antes de abrir a prévia
+async function chamadaAindaDisponivel(pedidoId) {
+  try {
+    const token = localStorage.getItem('huby_token') || '';
+    const chk = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(pedidoId)}/status?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
+    });
+    if (chk.status === 404) return false;
+    if (!chk.ok) return true; // na dúvida, deixa abrir: o aceite final é sempre conferido pelo servidor
+    const st = await chk.json();
+    const s = String(st.status || '').toLowerCase();
+    if (!s) return true;
+    return STATUS_AINDA_DISPONIVEL.includes(s) && !st.motorista_id;
+  } catch (e) {
+    return true;
+  }
+}
+
 function renderizarRadar(listaForcada = null) {
   const feedEl = document.getElementById('listaChamadasPendentes');
   if (!feedEl) return;
@@ -815,6 +941,9 @@ function renderizarRadar(listaForcada = null) {
     renderizarRadarOffline();
     return;
   }
+
+  // Durante uma corrida (ou prévia) o painel pertence à tela da corrida
+  if (estado.pedidoAceitoAtual || estado.pedidoEmAnalise) return;
 
   if (Array.isArray(listaForcada) && listaForcada.length === 0 && ultimosPedidosAgora.length === 0 && ultimosPedidosAgendados.length === 0) {
     estado.ultimoRenderIds = null;
@@ -856,11 +985,13 @@ function renderizarRadar(listaForcada = null) {
 
   feedEl.querySelector('#tabRadarAgora')?.addEventListener('click', () => {
     abaRadarAtual = 'agora';
+    estado.ultimoRenderIds = null;
     renderizarRadar();
   });
 
   feedEl.querySelector('#tabRadarAgendados')?.addEventListener('click', () => {
     abaRadarAtual = 'agendados';
+    estado.ultimoRenderIds = null;
     renderizarRadar();
   });
 
@@ -870,31 +1001,30 @@ function renderizarRadar(listaForcada = null) {
       const id = btn.getAttribute('data-id');
       if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
       estado.pedidosIgnorados.add(String(id));
+      pedidosNaTela.delete(String(id));
       buscarChamadasPendentes(false);
     });
   });
 
   feedEl.querySelectorAll('.btn-accept-order').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      pararAlertaSonoroChamada();
+      if (btn.disabled) return;
       const dadosExtraidos = extrairDadosDoBotao(btn);
+      if (!dadosExtraidos) {
+        notificar('Esta chamada não está mais disponível.', 'alerta');
+        buscarChamadasPendentes(false);
+        return;
+      }
 
-      // Validação instantânea no servidor antes de abrir pré-visualização, evitando abrir corrida recém-cancelada
-      try {
-        const token = localStorage.getItem('huby_token') || '';
-        const chk = await fetch(`${API_URL}/api/pedidos/${dadosExtraidos.id}/status`, {
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) }
-        });
-        if (chk.ok) {
-          const st = await chk.json();
-          const s = String(st.status || '').toLowerCase();
-          if (['cancelado', 'concluido', 'a_caminho', 'em_viagem', 'em_andamento'].includes(s)) {
-            removerChamadaCanceladaInstantaneamente(dadosExtraidos.id);
-            notificar('Esta chamada já foi cancelada ou atendida.', 'alerta');
-            return;
-          }
-        }
-      } catch (e) {}
+      btn.disabled = true;
+      pararAlertaSonoroChamada();
+
+      const disponivel = await chamadaAindaDisponivel(dadosExtraidos.id);
+      if (!disponivel) {
+        removerChamadaCanceladaInstantaneamente(dadosExtraidos.id, false);
+        notificar('Esta chamada já foi cancelada ou atendida.', 'alerta');
+        return;
+      }
 
       sonsHUBy.tocarSucessoAceite();
       preVisualizarRotaPedido(dadosExtraidos);
@@ -902,34 +1032,51 @@ function renderizarRadar(listaForcada = null) {
   });
 
   feedEl.querySelectorAll('.btn-accept-scheduled').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
       const dadosExtraidos = extrairDadosDoBotao(btn);
-      const agendadoStr = btn.getAttribute('data-agendado');
-      const dataAg = agendadoStr ? new Date(agendadoStr) : null;
-      const disponivelAgora = dataAg ? (dataAg.getTime() - Date.now() <= 15 * 60 * 1000) : true;
+      if (!dadosExtraidos) {
+        notificar('Este agendamento não está mais disponível.', 'alerta');
+        buscarChamadasPendentes(false);
+        return;
+      }
+
+      const dataAg = dadosExtraidos.agendadoPara ? new Date(dadosExtraidos.agendadoPara) : null;
+      const dataValida = dataAg && Number.isFinite(dataAg.getTime()) ? dataAg : null;
+      const disponivelAgora = dataValida ? (dataValida.getTime() - Date.now() <= 15 * 60 * 1000) : true;
 
       if (disponivelAgora) {
+        btn.disabled = true;
+        const disponivel = await chamadaAindaDisponivel(dadosExtraidos.id);
+        if (!disponivel) {
+          removerChamadaCanceladaInstantaneamente(dadosExtraidos.id, false);
+          notificar('Este agendamento já foi cancelado ou atendido.', 'alerta');
+          return;
+        }
         sonsHUBy.tocarSucessoAceite();
         preVisualizarRotaPedido(dadosExtraidos);
         return;
       }
 
-      const agenda = JSON.parse(localStorage.getItem('huby_motorista_agenda') || '[]');
+      // Lembrete local: o motorista é avisado 15 min antes (a corrida só é dele quando aceitar de fato)
+      const agenda = lerAgendaLocal();
       if (!agenda.some(a => String(a.id) === String(dadosExtraidos.id))) {
         agenda.push({
-          ...dadosExtraidos,
-          agendado_para: agendadoStr,
+          id: dadosExtraidos.id,
+          origem: dadosExtraidos.origem,
+          destino: dadosExtraidos.destino,
+          agendado_para: dadosExtraidos.agendadoPara,
           notificado: false
         });
-        localStorage.setItem('huby_motorista_agenda', JSON.stringify(agenda));
+        localStorage.setItem('huby_motorista_agenda', JSON.stringify(agenda.slice(-30)));
       }
 
       if (!estado.pedidosIgnorados) estado.pedidosIgnorados = new Set();
       estado.pedidosIgnorados.add(String(dadosExtraidos.id));
 
       sonsHUBy.tocarSucessoAceite();
-      const horaFmt = dataAg ? dataAg.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
-      notificar(`📅 Agendamento confirmado para ${horaFmt}! Avisaremos quando estiver na hora.`, 'sucesso', 5000);
+      const horaFmt = dataValida ? dataValida.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+      notificar(`📅 Lembrete salvo para ${horaFmt}! Avisaremos 15 min antes para você aceitar a corrida.`, 'sucesso', 5000);
       buscarChamadasPendentes(false);
     });
   });
@@ -937,7 +1084,7 @@ function renderizarRadar(listaForcada = null) {
 
 export function solicitarPermissaoNotificacoes() {
   if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
+    Notification.requestPermission().catch?.(() => {});
   }
 }
 
@@ -946,22 +1093,21 @@ export function dispararNotificacaoNovaChamada(qtd) {
   if (!estado.isOnline) return;
 
   if (document.visibilityState === 'hidden') {
-    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-      navigator.serviceWorker.ready.then((reg) => {
-        reg.showNotification('🚘 HUBy: Nova corrida disponível!', {
-          body: `${qtd} chamada(s) aguardando atendimento. Toque para aceitar.`,
-          icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=192&q=80',
-          vibrate: [300, 150, 300],
-          tag: 'nova-chamada-huby',
-          renotify: true,
-          data: { url: './motorista.html' }
-        });
-      });
-    } else {
-      new Notification('🚘 HUBy: Nova corrida disponível!', {
-        body: `${qtd} chamada(s) aguardando atendimento. Toque para aceitar.`,
-        icon: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=192&q=80'
-      });
-    }
+    const titulo = '🚘 HUBy: Nova corrida disponível!';
+    const opcoes = {
+      body: `${Number(qtd) || 1} chamada(s) aguardando atendimento. Toque para aceitar.`,
+      icon: './assets/icons/icon-192.png',
+      vibrate: [300, 150, 300],
+      tag: 'nova-chamada-huby',
+      renotify: true,
+      data: { url: './motorista.html' }
+    };
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then((reg) => reg.showNotification(titulo, opcoes)).catch(() => {});
+      } else {
+        new Notification(titulo, opcoes);
+      }
+    } catch (e) {}
   }
 }

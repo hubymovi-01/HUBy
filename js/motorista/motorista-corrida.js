@@ -1,8 +1,9 @@
 // js/motorista/motorista-corrida.js - Gestão de Corridas, Fila Offline/Reconexão Automática e Navegação 3D
-import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor, TAXA_PLATAFORMA_ATUAL } from '../config.js';
+// Segurança: endereços do passageiro são exibidos como texto puro; o aceite SEMPRE depende da confirmação do servidor.
+import { API_URL, sonsHUBy, calcularPreco, sincronizarTarifasServidor } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { tracarRotaRealRuas, limparRotasMapa } from './motorista-mapa.js';
-import { iniciarRadarChamadas, pararRadarChamadas } from './motorista-radar.js';
+import { iniciarRadarChamadas, pararRadarChamadas, taxaDoMotorista } from './motorista-radar.js';
 import { carregarPerfil } from './motorista-perfil.js';
 import { carregarGanhosHoje, carregarExtratoFinanceiro } from './motorista-ganhos.js';
 import { iniciarMonitoramentoDesvios, pararMonitoramentoDesvios } from './motorista-rotas.js';
@@ -10,13 +11,72 @@ import { fecharChat } from './motorista-chat.js';
 import { notificar, confirmarAcao } from '../util/alertas-huby.js';
 
 let processandoPagamento = false;
+let aceitandoAgora = false;
 let intervalPollingPixMotorista = null;
 let sincronizandoFilaOffline = false;
 
 const CHAVE_FILA_OFFLINE = 'huby_offline_queue_mot_v1';
+const MAX_ITENS_FILA = 20;
 
 // ============================================================================
-// MOTOR DE FILA OFFLINE / RECONEXÃO AUTOMÁTICA (PARA REDE 4G INSTÁVEL)
+// AJUDANTES
+// ============================================================================
+function escaparHTML(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function coordsValidas(c) {
+  if (!Array.isArray(c) || c.length < 2) return null;
+  const lat = Number(c[0]);
+  const lng = Number(c[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if ((lat === 0 && lng === 0) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return [lat, lng];
+}
+
+function textoDistDur(dados) {
+  const dist = Number.parseFloat(dados?.dist);
+  const dur = Number.parseInt(dados?.dur, 10);
+  const partes = [];
+  partes.push(Number.isFinite(dist) && dist > 0 ? `📏 ${dist.toFixed(1)} km` : '📏 -- km');
+  partes.push(Number.isFinite(dur) && dur > 0 ? `⏱️ ~${dur} min` : '⏱️ -- min');
+  return escaparHTML(partes.join(' • '));
+}
+
+function botoesNavegacaoHTML(coords, sufixo = '') {
+  if (!coords) {
+    return `
+      <div style="font-size: 12px; color: #FBBF24; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.35); padding: 9px 10px; border-radius: 10px; text-align: center; font-weight: 700;">
+        📍 Localização exata indisponível. Confira o endereço acima ou fale com o passageiro pelo chat.
+      </div>
+    `;
+  }
+  const [lat, lng] = coords;
+  const urlWaze = `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`;
+  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  return `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      <a href="${urlWaze}" target="_blank" rel="noopener noreferrer"
+        style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        🧭 Waze${sufixo}
+      </a>
+      <a href="${urlGoogle}" target="_blank" rel="noopener noreferrer"
+        style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+        🗺️ Maps${sufixo}
+      </a>
+    </div>
+  `;
+}
+
+// ============================================================================
+// FILA OFFLINE (SÓ PARA AÇÕES DE UMA CORRIDA QUE JÁ É DO MOTORISTA)
+// Chegada ao embarque, embarque e finalização presencial podem esperar o sinal voltar.
+// O ACEITE nunca entra na fila: só vale quando o servidor confirma.
 // ============================================================================
 function lerFilaOffline() {
   try {
@@ -29,7 +89,7 @@ function lerFilaOffline() {
 }
 
 function salvarFilaOffline(lista) {
-  localStorage.setItem(CHAVE_FILA_OFFLINE, JSON.stringify(lista));
+  localStorage.setItem(CHAVE_FILA_OFFLINE, JSON.stringify(lista.slice(-MAX_ITENS_FILA)));
   atualizarBannerReconexao();
 }
 
@@ -64,18 +124,18 @@ function atualizarBannerReconexao() {
   }
 
   banner.textContent = offlineAgora
-    ? `📡 Sem sinal 4G • Ações salvas localmente (${fila.length} na fila)`
-    : `🔄 Reconectando e sincronizando ${fila.length} atualização(ões) pendente(s)...`;
+    ? `📡 Sem sinal • ${fila.length} ação(ões) aguardando para enviar`
+    : `🔄 Reconectando e enviando ${fila.length} ação(ões) pendente(s)...`;
 }
 
-function enfileirarRequisicaoOffline(url, method, bodyObj = null, descricao = 'Atualização de corrida') {
+function enfileirarRequisicaoOffline(caminho, method, bodyObj = null, descricao = 'Atualização de corrida') {
   const fila = lerFilaOffline();
   fila.push({
     id: Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    url,
+    caminho,            // só o caminho (ex.: /api/pedidos/12/embarque); o endereço do servidor é sempre o oficial
     method,
     body: bodyObj,
-    descricao,
+    descricao: String(descricao).slice(0, 80),
     criadoEm: new Date().toISOString()
   });
   salvarFilaOffline(fila);
@@ -98,31 +158,57 @@ export async function processarFilaOfflineMotorista() {
   atualizarBannerReconexao();
 
   const restantes = [];
-  let sincronizados = 0;
+  const recusadas = [];
+  let enviadas = 0;
+  let parar = false;
 
   for (const item of fila) {
+    if (parar) {
+      restantes.push(item);
+      continue;
+    }
+
+    const caminho = String(item.caminho || '');
+    // Só aceita caminhos da própria API de pedidos (ignora itens estranhos ou de versões antigas)
+    if (!/^\/api\/pedidos\/[A-Za-z0-9_-]+\/(status|embarque|finalizar-liquidacao)$/.test(caminho)) {
+      continue;
+    }
+
     try {
-      const resp = await fetch(item.url, {
+      const resp = await fetch(`${API_URL}${caminho}`, {
         method: item.method,
         headers: obterHeaders(),
         ...(item.body ? { body: JSON.stringify(item.body) } : {})
       });
-      if (resp.ok || resp.status === 400 || resp.status === 404 || resp.status === 409) {
-        sincronizados++;
+
+      if (resp.ok) {
+        enviadas++;
+      } else if (resp.status === 401) {
+        // Sessão expirou: guarda tudo até o motorista entrar de novo
+        restantes.push(item);
+        parar = true;
+      } else if (resp.status >= 400 && resp.status < 500) {
+        // O servidor recusou (ex.: corrida já cancelada): não adianta repetir, mas o motorista PRECISA saber
+        const json = await resp.json().catch(() => ({}));
+        recusadas.push(`${item.descricao}: ${json.erro || 'recusada pelo servidor'}`);
       } else {
         restantes.push(item);
       }
     } catch (e) {
       restantes.push(item);
-      break;
+      parar = true; // sem rede de novo: tenta depois
     }
   }
 
   salvarFilaOffline(restantes);
   sincronizandoFilaOffline = false;
 
-  if (sincronizados > 0 && restantes.length === 0) {
-    notificar(`✅ Conexão restabelecida! ${sincronizados} atualização(ões) sincronizada(s).`, 'sucesso');
+  if (recusadas.length > 0) {
+    notificar(`⚠️ Não foi possível registrar: ${recusadas.join(' | ')}. Se precisar, fale com o suporte.`, 'erro', 12000);
+  }
+
+  if (enviadas > 0 && restantes.length === 0) {
+    notificar(`✅ Conexão restabelecida! ${enviadas} ação(ões) enviada(s).`, 'sucesso');
     try {
       await carregarPerfil();
       await carregarGanhosHoje();
@@ -167,16 +253,18 @@ export function reajustarMapa() {
   }, 300);
 }
 
+// Valores da corrida com a taxa do NÍVEL do motorista
 export function obterValoresSincronizadosPedido(dados = {}) {
-  const distKm = parseFloat(dados.dist || dados.distancia_km || dados.distanciaKm || 0);
+  const distKm = parseFloat(dados.dist || dados.distancia_km || dados.distanciaKm || 0) || 0;
   const categoria = String(dados.categoria || dados.tipo || estado.categoriaMotorista || 'carro').toLowerCase();
   let valorBruto = Number(dados.preco || dados.valor_total || dados.valorTotal || 0);
 
   if (distKm > 0 && (!valorBruto || valorBruto <= 0)) {
     valorBruto = calcularPreco(categoria, distKm).valorTotal;
   }
+  if (!Number.isFinite(valorBruto) || valorBruto < 0) valorBruto = 0;
 
-  const taxaPct = Number(TAXA_PLATAFORMA_ATUAL ?? 15);
+  const taxaPct = taxaDoMotorista();
   const fatorMotorista = Math.max(0.1, (100 - taxaPct) / 100);
   const repasseNum = Number((valorBruto * fatorMotorista).toFixed(2));
 
@@ -198,7 +286,7 @@ export async function executarCancelamentoCorridaMotorista(dados) {
 
   const confirmar = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/pedidos/${pedidoId}/cancelar`, {
+      const res = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(pedidoId)}/cancelar`, {
         method: 'PUT',
         headers: obterHeaders(),
         body: JSON.stringify({ motivo: 'Cancelado pelo motorista parceiro' })
@@ -207,29 +295,11 @@ export async function executarCancelamentoCorridaMotorista(dados) {
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.erro || 'Não foi possível cancelar a corrida.');
 
-      if (estado.socket) {
-        estado.socket.emit('corrida_cancelada_motorista', { pedidoId: pedidoId });
-      }
-
-      pararMonitoramentoDesvios();
-      limparRotasMapa();
-      fecharChat();
-
-      const btnChat = document.getElementById('btnAbrirChat');
-      if (btnChat) btnChat.style.display = 'none';
-
-      estado.pedidoAceitoAtual = null;
-      estado.pedidoAtivo = null;
-      estado.pedidoEmAnalise = null;
-      estado.etapaCorridaAtual = 'a_caminho';
-      localStorage.removeItem('huby_corrida_ativa_mot_id');
-
       notificar(json.mensagem || 'Corrida cancelada com sucesso.', 'alerta');
-      await carregarPerfil();
-      iniciarRadarChamadas();
-      reajustarMapa();
+      await concluirLimpezaPosCorrida();
     } catch (err) {
-      notificar(err.message || 'Erro ao cancelar corrida.', 'erro');
+      const semRede = err instanceof TypeError;
+      notificar(semRede ? 'Sem conexão. A corrida NÃO foi cancelada.' : (err.message || 'Erro ao cancelar corrida.'), 'erro');
     }
   };
 
@@ -238,6 +308,7 @@ export async function executarCancelamentoCorridaMotorista(dados) {
       titulo: 'Cancelar Corrida?',
       mensagem: 'Tem certeza que deseja cancelar esta viagem? O passageiro será notificado na hora.',
       textoConfirmar: 'Sim, Cancelar Corrida',
+      perigo: true,
       onConfirmar: confirmar
     });
   } else if (window.confirm('Tem certeza que deseja cancelar esta corrida?')) {
@@ -245,15 +316,27 @@ export async function executarCancelamentoCorridaMotorista(dados) {
   }
 }
 
+// ============================================================================
+// PRÉ-VISUALIZAÇÃO DA CHAMADA (ANTES DE ACEITAR)
+// ============================================================================
+function voltarAoRadar() {
+  limparRotasMapa();
+  pararMonitoramentoDesvios();
+  estado.pedidoEmAnalise = null;
+  iniciarRadarChamadas();
+  reajustarMapa();
+}
+
 export async function preVisualizarRotaPedido(dados) {
+  if (!dados || !dados.id) return;
   await sincronizarTarifasServidor();
   estado.pedidoEmAnalise = dados;
   pararRadarChamadas();
   pararMonitoramentoDesvios();
   limparRotasMapa();
 
-  const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
-  const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
+  const coordsOrigem = coordsValidas(dados.coordsOrig);
+  const coordsDestino = coordsValidas(dados.coordsDest);
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
@@ -267,16 +350,16 @@ export async function preVisualizarRotaPedido(dados) {
           🔍 ROTA EM ANÁLISE
         </span>
         <div style="text-align: right;">
-          <strong style="color: var(--emerald); font-size: 22px; font-weight: 900; display: block; letter-spacing: -0.5px;">R$ ${repasseFmt}</strong>
+          <strong style="color: var(--emerald); font-size: 22px; font-weight: 900; display: block; letter-spacing: -0.5px;">R$ ${escaparHTML(repasseFmt)}</strong>
           <small style="color: #94A3B8; font-size: 10px; font-weight: 600;">Ganhos Limpos</small>
         </div>
       </div>
 
-      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
-        <div style="color: #94A3B8; margin-bottom: 4px;"><strong style="color:#10B981;">A</strong> ${dados.origem}</div>
-        <div><strong style="color:#EF4444;">B</strong> ${dados.destino}</div>
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px; word-break: break-word;">
+        <div style="color: #94A3B8; margin-bottom: 4px;"><strong style="color:#10B981;">A</strong> ${escaparHTML(dados.origem)}</div>
+        <div><strong style="color:#EF4444;">B</strong> ${escaparHTML(dados.destino)}</div>
         <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
-          📏 <span id="lblPreviaDistKm">${dados.dist || '1.0'} km</span> • ⏱️ ~<span id="lblPreviaDurMin">${dados.dur || 5} min</span>
+          ${textoDistDur(dados)}
         </div>
       </div>
 
@@ -293,34 +376,33 @@ export async function preVisualizarRotaPedido(dados) {
     </div>
   `;
 
-  if (estado.mapa && window.L) {
-    estado.markerOrigem = window.L.marker(coordsOrigem, {
-      icon: window.L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
-    }).addTo(estado.mapa);
-
-    estado.markerDestino = window.L.marker(coordsDestino, {
-      icon: window.L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
-    }).addTo(estado.mapa);
-
-    await tracarRotaRealRuas(coordsOrigem, coordsDestino, '#F59E0B');
-  }
-
-  reajustarMapa();
-
-  document.getElementById('btnCancelarPreviaRota')?.addEventListener('click', () => {
-    limparRotasMapa();
-    pararMonitoramentoDesvios();
-    estado.pedidoEmAnalise = null;
-    iniciarRadarChamadas();
-    reajustarMapa();
-  });
+  document.getElementById('btnCancelarPreviaRota')?.addEventListener('click', voltarAoRadar);
 
   document.getElementById('btnConfirmarAceiteViagem')?.addEventListener('click', (e) => {
     const btn = e.currentTarget;
+    if (btn.disabled) return;
     btn.disabled = true;
-    btn.innerHTML = '⏳ Confirmando...';
+    btn.textContent = '⏳ Confirmando...';
     aceitarCorrida(dados);
   });
+
+  if (estado.mapa && window.L) {
+    if (coordsOrigem) {
+      estado.markerOrigem = window.L.marker(coordsOrigem, {
+        icon: window.L.divIcon({ html: '<div style="font-size:24px;">🟢</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+      }).addTo(estado.mapa);
+    }
+    if (coordsDestino) {
+      estado.markerDestino = window.L.marker(coordsDestino, {
+        icon: window.L.divIcon({ html: '<div style="font-size:24px;">🏁</div>', iconSize: [26, 26], iconAnchor: [13, 24] })
+      }).addTo(estado.mapa);
+    }
+    if (coordsOrigem && coordsDestino) {
+      await tracarRotaRealRuas(coordsOrigem, coordsDestino, '#F59E0B');
+    }
+  }
+
+  reajustarMapa();
 }
 
 export async function aceitarPedidoPrevia() {
@@ -329,72 +411,56 @@ export async function aceitarPedidoPrevia() {
   }
 }
 
+// O aceite SÓ vale com a confirmação do servidor (outro motorista pode ter pego a corrida)
 export async function aceitarCorrida(dados) {
+  if (aceitandoAgora || !dados?.id) return;
+  aceitandoAgora = true;
+
   try {
-    const res = await fetch(`${API_URL}/api/pedidos/${dados.id}/aceitar`, {
+    const res = await fetch(`${API_URL}/api/pedidos/${encodeURIComponent(dados.id)}/aceitar`, {
       method: 'PUT',
       headers: obterHeaders(),
-      body: JSON.stringify({
-        motoristaId: estado.motoristaId || localStorage.getItem('huby_motorista_id'),
-        motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Motorista'
-      })
+      body: JSON.stringify({})
     });
 
     const resJson = await res.json().catch(() => ({}));
 
-    if (res.ok || resJson.sucesso) {
+    if (res.ok) {
       if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
-
-      if (estado.socket) {
-        estado.socket.emit('motorista_aceitou', {
-          pedidoId: dados.id,
-          motoristaId: estado.motoristaId
-        });
-      }
-
-      iniciarFaseBuscarPassageiro(dados);
+      await iniciarFaseBuscarPassageiro(dados);
     } else {
       notificar(resJson.erro || 'Esta corrida já não está disponível.', 'alerta');
-      limparRotasMapa();
-      pararMonitoramentoDesvios();
-      estado.pedidoEmAnalise = null;
-      iniciarRadarChamadas();
-      reajustarMapa();
+      voltarAoRadar();
     }
   } catch (err) {
-    enfileirarRequisicaoOffline(
-      `${API_URL}/api/pedidos/${dados.id}/aceitar`,
-      'PUT',
-      {
-        motoristaId: estado.motoristaId || localStorage.getItem('huby_motorista_id'),
-        motoristaNome: estado.motoristaNome || localStorage.getItem('huby_user_name') || 'Motorista'
-      },
-      'Aceitar corrida'
-    );
-    iniciarFaseBuscarPassageiro(dados);
+    notificar('Sem conexão. A corrida NÃO foi aceita. Verifique o sinal e tente de novo.', 'erro', 6000);
+    voltarAoRadar();
+  } finally {
+    aceitandoAgora = false;
   }
 }
 
+// ============================================================================
+// FASE 1: INDO BUSCAR O PASSAGEIRO
+// ============================================================================
 async function iniciarFaseBuscarPassageiro(dados) {
   estado.pedidoAceitoAtual = dados;
   estado.pedidoAtivo = dados;
   estado.pedidoEmAnalise = null;
   estado.etapaCorridaAtual = 'a_caminho';
-  localStorage.setItem('huby_corrida_ativa_mot_id', dados.id);
+  localStorage.setItem('huby_corrida_ativa_mot_id', String(dados.id));
   pararRadarChamadas();
 
   const btnChat = document.getElementById('btnAbrirChat');
   if (btnChat) btnChat.style.display = 'flex';
 
   limparRotasMapa();
-  const coordsOrigem = dados.coordsOrig || [estado.coords[0] + 0.003, estado.coords[1] + 0.003];
+  const coordsOrigem = coordsValidas(dados.coordsOrig);
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
   const { repasseFmt } = obterValoresSincronizadosPedido(dados);
-  const urlWaze = `https://waze.com/ul?ll=${coordsOrigem[0]},${coordsOrigem[1]}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsOrigem[0]},${coordsOrigem[1]}`;
 
   container.innerHTML = `
     <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--blue); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
@@ -402,26 +468,17 @@ async function iniciarFaseBuscarPassageiro(dados) {
         <span style="font-size: 11px; font-weight: 800; color: #38BDF8; background: rgba(56,189,248,0.15); padding: 4px 10px; border-radius: 8px;">
           🚗 A CAMINHO DO PASSAGEIRO
         </span>
-        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; letter-spacing: -0.5px;">R$ ${repasseFmt}</strong>
+        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; letter-spacing: -0.5px;">R$ ${escaparHTML(repasseFmt)}</strong>
       </div>
 
-      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
-        <div style="color: #94A3B8;"><strong style="color:#10B981;">A</strong> ${dados.origem}</div>
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px; word-break: break-word;">
+        <div style="color: #94A3B8;"><strong style="color:#10B981;">A</strong> ${escaparHTML(dados.origem)}</div>
         <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
-          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
+          ${textoDistDur(dados)}
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <a href="${urlWaze}" target="_blank" rel="noopener"
-          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          🧭 Waze
-        </a>
-        <a href="${urlGoogle}" target="_blank" rel="noopener"
-          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          🗺️ Maps
-        </a>
-      </div>
+      ${botoesNavegacaoHTML(coordsOrigem)}
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
         <button type="button" id="btnChegueiLocalEmbarque"
@@ -441,73 +498,102 @@ async function iniciarFaseBuscarPassageiro(dados) {
     </div>
   `;
 
-  if (estado.mapa && window.L) {
-    estado.markerOrigem = window.L.marker(coordsOrigem, {
-      icon: window.L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
-    }).addTo(estado.mapa);
-
-    await tracarRotaRealRuas(estado.coords, coordsOrigem, '#38BDF8');
-  }
-
-  iniciarMonitoramentoDesvios(coordsOrigem);
-  reajustarMapa();
-
   document.getElementById('btnChegueiLocalEmbarque')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
-    btn.innerHTML = '⏳ Avisando...';
-    const url = `${API_URL}/api/pedidos/${dados.id}/status`;
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '⏳ Avisando...';
+
+    const caminho = `/api/pedidos/${encodeURIComponent(dados.id)}/status`;
     const bodyObj = { status: 'chegou_local' };
+    let avisado = false;
 
     try {
-      const resp = await fetch(url, {
+      const resp = await fetch(`${API_URL}${caminho}`, {
         method: 'PUT',
         headers: obterHeaders(),
         body: JSON.stringify(bodyObj)
       });
-      if (!resp.ok) throw new Error();
-      if (estado.socket) estado.socket.emit('motorista_chegou', { pedidoId: dados.id });
-      notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
+      if (resp.ok) {
+        avisado = true;
+        if (estado.socket) estado.socket.emit('motorista_chegou', { pedidoId: dados.id });
+        notificar('📍 Passageiro avisado que você chegou ao local de embarque!', 'sucesso');
+      } else {
+        const json = await resp.json().catch(() => ({}));
+        notificar(json.erro || 'Não foi possível avisar a chegada agora.', 'erro');
+        btn.disabled = false;
+        btn.textContent = '📍 Cheguei Aqui';
+        return;
+      }
     } catch (err) {
-      enfileirarRequisicaoOffline(url, 'PUT', bodyObj, 'Chegada ao embarque');
-      notificar('📡 Sinal fraco: chegada salva e será enviada assim que reconectar.', 'aviso');
+      enfileirarRequisicaoOffline(caminho, 'PUT', bodyObj, 'Chegada ao embarque');
+      notificar('📡 Sinal fraco: o aviso de chegada será enviado assim que a internet voltar.', 'aviso');
     }
 
-    btn.innerHTML = '✅ Passageiro Avisado';
-    btn.style.background = 'rgba(16, 185, 129, 0.2)';
-    btn.style.borderColor = '#10B981';
-    btn.style.color = '#10B981';
+    btn.textContent = avisado ? '✅ Passageiro Avisado' : '⏳ Aviso na fila';
+    btn.style.background = avisado ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.18)';
+    btn.style.borderColor = avisado ? '#10B981' : '#F59E0B';
+    btn.style.color = avisado ? '#10B981' : '#FBBF24';
   });
 
-  document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', () => confirmarEmbarqueEIrAoDestino(dados));
+  document.getElementById('btnIniciarCorridaAtiva')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = '⏳ Iniciando...';
+    confirmarEmbarqueEIrAoDestino(dados).finally(() => {
+      if (document.body.contains(btn)) {
+        btn.disabled = false;
+        btn.textContent = '🚀 Iniciar Viagem';
+      }
+    });
+  });
   document.getElementById('btnCancelarCorridaMotoristaAtiva')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
+
+  if (estado.mapa && window.L && coordsOrigem) {
+    estado.markerOrigem = window.L.marker(coordsOrigem, {
+      icon: window.L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #38BDF8);">👤</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
+    }).addTo(estado.mapa);
+
+    const partida = coordsValidas(estado.coords);
+    if (partida) await tracarRotaRealRuas(partida, coordsOrigem, '#38BDF8');
+    iniciarMonitoramentoDesvios(coordsOrigem);
+  }
+
+  reajustarMapa();
 }
 
+// ============================================================================
+// FASE 2: PASSAGEIRO A BORDO, INDO AO DESTINO
+// ============================================================================
 export async function confirmarEmbarqueEIrAoDestino(dados) {
-  const urlEmbarque = `${API_URL}/api/pedidos/${dados.id}/embarque`;
+  const caminho = `/api/pedidos/${encodeURIComponent(dados.id)}/embarque`;
   try {
-    const resp = await fetch(urlEmbarque, {
+    const resp = await fetch(`${API_URL}${caminho}`, {
       method: 'PUT',
       headers: obterHeaders()
     });
-    if (!resp.ok) throw new Error();
-    if (estado.socket) estado.socket.emit('corrida_iniciada', { pedidoId: dados.id });
+    if (!resp.ok) {
+      const json = await resp.json().catch(() => ({}));
+      notificar(json.erro || 'Não foi possível iniciar a viagem agora.', 'erro');
+      return;
+    }
   } catch (e) {
-    enfileirarRequisicaoOffline(urlEmbarque, 'PUT', null, 'Embarque do passageiro');
-    notificar('📡 Modo offline: embarque registrado na fila de sincronização.', 'aviso');
+    enfileirarRequisicaoOffline(caminho, 'PUT', null, 'Embarque do passageiro');
+    notificar('📡 Sem sinal: o embarque será enviado assim que a internet voltar.', 'aviso');
   }
 
   estado.etapaCorridaAtual = 'em_viagem';
   if (sonsHUBy?.tocarSucessoAceite) sonsHUBy.tocarSucessoAceite();
 
+  pararMonitoramentoDesvios();
   limparRotasMapa();
-  const coordsDestino = dados.coordsDest || [estado.coords[0] + 0.009, estado.coords[1] + 0.009];
+  const coordsDestino = coordsValidas(dados.coordsDest);
 
   const container = document.getElementById('listaChamadasPendentes');
   if (!container) return;
 
   const { repasseFmt } = obterValoresSincronizadosPedido(dados);
-  const urlWaze = `https://waze.com/ul?ll=${coordsDestino[0]},${coordsDestino[1]}&navigate=yes`;
-  const urlGoogle = `https://www.google.com/maps/dir/?api=1&destination=${coordsDestino[0]},${coordsDestino[1]}`;
 
   container.innerHTML = `
     <div style="background: rgba(18, 24, 38, 0.98); border: 1.5px solid var(--emerald); border-radius: 16px; padding: 14px; display: flex; flex-direction: column; gap: 11px; box-shadow: 0 8px 30px rgba(0,0,0,0.6);">
@@ -515,26 +601,17 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
         <span style="font-size: 11px; font-weight: 800; color: var(--emerald); background: rgba(16,185,129,0.15); padding: 4px 10px; border-radius: 8px;">
           🚀 EM VIAGEM
         </span>
-        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; letter-spacing: -0.5px;">R$ ${repasseFmt}</strong>
+        <strong style="color: var(--emerald); font-size: 21px; font-weight: 900; letter-spacing: -0.5px;">R$ ${escaparHTML(repasseFmt)}</strong>
       </div>
 
-      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px;">
-        <div style="color: #94A3B8;"><strong style="color:#EF4444;">B</strong> ${dados.destino}</div>
+      <div style="font-size: 13px; color: #FFF; line-height: 1.4; background: rgba(255,255,255,0.03); padding: 10px; border-radius: 10px; word-break: break-word;">
+        <div style="color: #94A3B8;"><strong style="color:#EF4444;">B</strong> ${escaparHTML(dados.destino)}</div>
         <div style="font-size: 11px; color: #38BDF8; font-weight: 700; margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.05);">
-          📏 ${dados.dist || '1.0'} km • ⏱️ ~${dados.dur || 5} min
+          ${textoDistDur(dados)}
         </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <a href="${urlWaze}" target="_blank" rel="noopener"
-          style="background: #33CCFF; color: #000; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          🧭 Waze (Destino)
-        </a>
-        <a href="${urlGoogle}" target="_blank" rel="noopener"
-          style="background: #EA4335; color: #FFF; font-weight: 900; text-align: center; padding: 12px; border-radius: 12px; text-decoration: none; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px;">
-          🗺️ Maps (Destino)
-        </a>
-      </div>
+      ${botoesNavegacaoHTML(coordsDestino, ' (Destino)')}
 
       <button type="button" id="btnConcluirCorrida"
         style="width: 100%; background: var(--emerald); border: none; color: #02261C; font-weight: 900; padding: 14px; border-radius: 12px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
@@ -548,29 +625,41 @@ export async function confirmarEmbarqueEIrAoDestino(dados) {
     </div>
   `;
 
-  if (estado.mapa && window.L) {
+  document.getElementById('btnConcluirCorrida')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
+  document.getElementById('btnCancelarCorridaMotoristaViagem')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
+
+  if (estado.mapa && window.L && coordsDestino) {
     estado.markerDestino = window.L.marker(coordsDestino, {
       icon: window.L.divIcon({ html: '<div style="font-size:28px;filter:drop-shadow(0 0 10px #10B981);">🏁</div>', iconSize: [28, 28], iconAnchor: [14, 26] })
     }).addTo(estado.mapa);
 
-    await tracarRotaRealRuas(estado.coords, coordsDestino, '#10B981');
+    const partida = coordsValidas(estado.coords);
+    if (partida) await tracarRotaRealRuas(partida, coordsDestino, '#10B981');
+    iniciarMonitoramentoDesvios(coordsDestino);
   }
 
-  iniciarMonitoramentoDesvios(coordsDestino);
   reajustarMapa();
-
-  document.getElementById('btnConcluirCorrida')?.addEventListener('click', () => abrirModalOpcoesPagamento(dados));
-  document.getElementById('btnCancelarCorridaMotoristaViagem')?.addEventListener('click', () => executarCancelamentoCorridaMotorista(dados));
 }
 
+// ============================================================================
+// PAGAMENTO E FINALIZAÇÃO
+// ============================================================================
 export function abrirModalOpcoesPagamento(dados) {
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
   const lblValor = document.getElementById('lblValorTotalPagamentoMotorista');
 
-  const { valorBrutoFmt } = obterValoresSincronizadosPedido(dados);
+  const { valorBrutoFmt, taxaPct } = obterValoresSincronizadosPedido(dados);
   if (lblValor) {
     lblValor.textContent = `R$ ${valorBrutoFmt}`;
   }
+
+  // Textos de taxa sempre com a taxa do nível do motorista
+  const lblTaxaModal = document.getElementById('lblTaxaModalPagamento');
+  if (lblTaxaModal) lblTaxaModal.textContent = `Taxa HUBy: ${taxaPct}% retidos pela plataforma`;
+  const lblTaxaDin = document.getElementById('lblTaxaDinheiroDesc');
+  if (lblTaxaDin) lblTaxaDin.textContent = `Você recebe 100% em mãos. A taxa de ${taxaPct}% é descontada da carteira.`;
+  const lblTaxaMaq = document.getElementById('lblTaxaMaquininhaDesc');
+  if (lblTaxaMaq) lblTaxaMaq.textContent = `Passou no seu cartão. A taxa de ${taxaPct}% é descontada da sua carteira.`;
 
   const btnDinheiro = document.getElementById('btnPagarDinheiro');
   const btnMaquininha = document.getElementById('btnPagarMaquininha');
@@ -605,104 +694,106 @@ export async function processarLiquidacao(pedidoId, formaPagamento) {
 
   const modal = document.getElementById('modalEscolhaPagamentoMotorista');
   const botoes = modal ? modal.querySelectorAll('.btn-metodo-pagto') : [];
-  botoes.forEach(b => b.style.opacity = '0.5');
+  botoes.forEach(b => { b.style.opacity = '0.5'; b.disabled = true; });
 
-  const urlLiquidar = `${API_URL}/api/pedidos/${pedidoId}/finalizar-liquidacao`;
+  const caminho = `/api/pedidos/${encodeURIComponent(pedidoId)}/finalizar-liquidacao`;
+  const presencial = formaPagamento === 'dinheiro' || formaPagamento === 'cartao_maquininha';
 
   try {
-    const res = await fetch(urlLiquidar, {
-      method: 'POST',
-      headers: obterHeaders(),
-      body: JSON.stringify({ forma_pagamento: formaPagamento })
-    });
-
-    const textoResposta = await res.text();
-    let data;
+    let res;
     try {
-      data = JSON.parse(textoResposta);
-    } catch (eJson) {
-      throw new Error('Falha ao processar pagamento com o servidor.');
+      res = await fetch(`${API_URL}${caminho}`, {
+        method: 'POST',
+        headers: obterHeaders(),
+        body: JSON.stringify({ forma_pagamento: formaPagamento })
+      });
+    } catch (erroRede) {
+      // Sem internet: pagamento presencial pode esperar na fila; Pix precisa de sinal
+      if (presencial) {
+        enfileirarRequisicaoOffline(caminho, 'POST', { forma_pagamento: formaPagamento }, 'Finalização da corrida');
+        if (modal) modal.style.display = 'none';
+        notificar('📡 Sem internet: a finalização será enviada assim que o sinal voltar. Não feche o app.', 'aviso', 7000);
+        await concluirLimpezaPosCorrida();
+      } else {
+        notificar('Sem sinal para gerar o QR Code Pix agora. Tente novamente ou receba presencialmente.', 'erro');
+      }
+      return;
     }
 
+    const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.erro || `Falha na liquidação (HTTP: ${res.status})`);
+      throw new Error(data.erro || `Falha ao finalizar a corrida (código ${res.status}).`);
     }
 
     if (modal) modal.style.display = 'none';
 
     if (formaPagamento === 'pix_mp') {
-      exibirQrCodePixMotorista(data.pix);
+      exibirQrCodePixMotorista(data.pix, pedidoId);
     } else {
-      if (estado.socket) {
-        estado.socket.emit('corrida_finalizada_motorista', {
-          pedidoId: pedidoId,
-          formaPagamento: formaPagamento
-        });
-      }
-
-      const taxa = Number(TAXA_PLATAFORMA_ATUAL || 15);
-      notificar(`✅ Corrida encerrada com sucesso! Taxa de ${taxa}% atualizada na carteira.`, 'sucesso');
+      notificar(`✅ Corrida encerrada! A taxa de ${taxaDoMotorista()}% foi registrada na sua carteira.`, 'sucesso');
       if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
       await concluirLimpezaPosCorrida();
     }
   } catch (err) {
-    // Se caiu a internet na finalização presencial (Dinheiro ou Maquininha), salva na fila offline e libera o motorista sem travar!
-    if (formaPagamento === 'dinheiro' || formaPagamento === 'cartao_maquininha') {
-      enfileirarRequisicaoOffline(urlLiquidar, 'POST', { forma_pagamento: formaPagamento }, 'Finalização de corrida');
-      if (modal) modal.style.display = 'none';
-      notificar('📡 Sem internet: conclusão salva localmente e será sincronizada ao voltar o sinal!', 'aviso', 5000);
-      await concluirLimpezaPosCorrida();
-    } else {
-      notificar(err.message || 'Sem sinal para gerar QR Code Pix agora. Tente novamente ou receba presencialmente.', 'erro');
-    }
+    notificar(err.message || 'Não foi possível finalizar a corrida.', 'erro');
   } finally {
-    botoes.forEach(b => b.style.opacity = '1');
+    botoes.forEach(b => { b.style.opacity = '1'; b.disabled = false; });
     processandoPagamento = false;
   }
 }
 
-export function exibirQrCodePixMotorista(pix) {
+export function exibirQrCodePixMotorista(pixBruto, pedidoIdInformado = null) {
   const modalPix = document.getElementById('modalExibicaoPixMotorista');
   const imgQr = document.getElementById('imgQrCodePixMotorista');
   const lblValor = document.getElementById('lblValorPixMotorista');
   const btnFechar = document.getElementById('btnFecharPixMotorista');
 
-  if (lblValor) lblValor.textContent = `R$ ${Number(pix.valor).toFixed(2).replace('.', ',')}`;
-  if (imgQr) imgQr.src = `data:image/png;base64,${pix.qr_code_base64}`;
+  const pix = pixBruto || {};
+  const valor = Number(pix.valor || 0);
+  const qrBase64 = String(pix.qr_code_base64 || '').replace(/[^A-Za-z0-9+/=]/g, '');
+
+  if (!qrBase64) {
+    notificar('O QR Code Pix não foi gerado. Tente novamente ou receba presencialmente.', 'erro');
+    return;
+  }
+
+  if (lblValor) {
+    lblValor.style.color = '';
+    lblValor.textContent = `R$ ${valor.toFixed(2).replace('.', ',')}`;
+  }
+  if (imgQr) imgQr.src = `data:image/png;base64,${qrBase64}`;
 
   if (modalPix) modalPix.style.display = 'flex';
 
-  const txid = pix.txid || pix.transacao_id;
-  const pedidoId = pix.pedido_id || estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id || '';
+  const txid = pix.txid || pix.transacao_id || '';
+  const pedidoId = String(pix.pedido_id || pedidoIdInformado || estado.pedidoAtivo?.id || estado.pedidoAceitoAtual?.id || '');
   let jaConfirmado = false;
+
+  const socketAtivo = estado.socket || estado.socketRadar;
+  const eventosSocket = pedidoId ? [`corrida_finalizada_${pedidoId}`, `pix_confirmado_${pedidoId}`] : [];
 
   const limparMonitoramento = () => {
     if (intervalPollingPixMotorista) {
       clearInterval(intervalPollingPixMotorista);
       intervalPollingPixMotorista = null;
     }
+    if (socketAtivo) eventosSocket.forEach((ev) => socketAtivo.off(ev, concluirAoConfirmarPix));
   };
 
-  const concluirAoConfirmarPix = async () => {
+  async function concluirAoConfirmarPix() {
     if (jaConfirmado) return;
     jaConfirmado = true;
     limparMonitoramento();
 
-    const taxaPct = Number(TAXA_PLATAFORMA_ATUAL ?? 15);
-    const repasse = Number((Number(pix.valor || 0) * ((100 - taxaPct) / 100)).toFixed(2));
+    const taxaPct = taxaDoMotorista();
+    const repasse = Number((valor * ((100 - taxaPct) / 100)).toFixed(2));
     const repasseFmt = repasse.toFixed(2).replace('.', ',');
 
     if (sonsHUBy?.tocarMetaBatida) sonsHUBy.tocarMetaBatida();
 
     if (lblValor) {
-      lblValor.innerHTML = `<span style="color:#10B981;">✅ PIX CONFIRMADO! (+R$ ${repasseFmt})</span>`;
-    }
-
-    if (estado.socket) {
-      estado.socket.emit('corrida_finalizada_motorista', {
-        pedidoId: pedidoId,
-        formaPagamento: 'pix_mp'
-      });
+      lblValor.style.color = '#10B981';
+      lblValor.textContent = `✅ PIX CONFIRMADO! (+R$ ${repasseFmt})`;
     }
 
     notificar(`🎉 Pagamento Pix confirmado! +R$ ${repasseFmt} (${100 - taxaPct}%) creditados na sua carteira!`, 'sucesso', 5000);
@@ -711,15 +802,11 @@ export function exibirQrCodePixMotorista(pix) {
       if (modalPix) modalPix.style.display = 'none';
       await concluirLimpezaPosCorrida();
     }, 1500);
-  };
-
-  const socketAtivo = estado.socket || estado.socketRadar;
-  if (socketAtivo && pedidoId) {
-    socketAtivo.once(`corrida_finalizada_${pedidoId}`, concluirAoConfirmarPix);
-    socketAtivo.once(`pix_confirmado_${pedidoId}`, concluirAoConfirmarPix);
   }
 
   limparMonitoramento();
+  if (socketAtivo) eventosSocket.forEach((ev) => socketAtivo.once(ev, concluirAoConfirmarPix));
+
   intervalPollingPixMotorista = setInterval(async () => {
     try {
       if (txid) {
@@ -745,11 +832,14 @@ export function exibirQrCodePixMotorista(pix) {
     } catch (e) {}
   }, 2500);
 
+  // "Voltar" NÃO encerra a corrida: volta para a escolha da forma de pagamento
   if (btnFechar) {
-    btnFechar.onclick = async () => {
+    btnFechar.textContent = 'Voltar (escolher outra forma de pagamento)';
+    btnFechar.onclick = () => {
       limparMonitoramento();
       if (modalPix) modalPix.style.display = 'none';
-      await concluirLimpezaPosCorrida();
+      const dadosCorrida = estado.pedidoAtivo || estado.pedidoAceitoAtual || { id: pedidoId };
+      abrirModalOpcoesPagamento(dadosCorrida);
     };
   }
 }
@@ -766,6 +856,7 @@ export function fecharModaisPagamento() {
 }
 
 export async function concluirLimpezaPosCorrida() {
+  fecharModaisPagamento();
   pararMonitoramentoDesvios();
   limparRotasMapa();
   fecharChat();
@@ -774,6 +865,7 @@ export async function concluirLimpezaPosCorrida() {
 
   estado.pedidoAceitoAtual = null;
   estado.pedidoAtivo = null;
+  estado.pedidoEmAnalise = null;
   estado.etapaCorridaAtual = 'a_caminho';
   localStorage.removeItem('huby_corrida_ativa_mot_id');
 
