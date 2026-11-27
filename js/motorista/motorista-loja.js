@@ -1,8 +1,40 @@
-// js/motorista/motorista-loja.js - Módulo HUBy Clube / Loja
+// js/motorista/motorista-loja.js - HUBy Clube de Vantagens (ofertas de parceiros)
+// Todo texto e imagem vindos do cadastro de ofertas são tratados antes de aparecer.
 import { API_URL } from '../config.js';
 import { estado } from './motorista-estado.js';
 
 let categoriaAtiva = 'todos';
+let requisicaoAtual = 0;
+
+function escaparHTML(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Só imagem https ou base64 de imagem
+function imagemSegura(url) {
+  const s = String(url || '').trim();
+  if (/^https:\/\/[^\s"'<>]{5,600}$/.test(s)) return s;
+  if (/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(s)) return s;
+  return '';
+}
+
+function reais(valor) {
+  const n = Number(valor);
+  return Number.isFinite(n) && n > 0 ? `R$ ${n.toFixed(2).replace('.', ',')}` : '';
+}
+
+function linkWhatsApp(numero, titulo) {
+  let digitos = String(numero || '').replace(/\D/g, '');
+  if (digitos.length < 10 || digitos.length > 13) return '';
+  if (!digitos.startsWith('55')) digitos = `55${digitos}`;
+  const msg = `Olá! Sou motorista parceiro HUBy (${estado.motoristaNome || 'Motorista'}) e tenho interesse no benefício: "${String(titulo || '').slice(0, 80)}".`;
+  return `https://wa.me/${digitos}?text=${encodeURIComponent(msg)}`;
+}
 
 export function configurarMarketplace() {
   const modal = document.getElementById('modalMarketplace');
@@ -12,10 +44,9 @@ export function configurarMarketplace() {
   const filtros = document.querySelectorAll('#filtrosMarketplace button');
 
   const abrir = () => {
-    if (modal) {
-      modal.style.display = 'flex';
-      carregarItens(categoriaAtiva);
-    }
+    if (!modal) return;
+    modal.style.display = 'flex';
+    carregarItens(categoriaAtiva);
   };
 
   const fechar = () => {
@@ -34,9 +65,9 @@ export function configurarMarketplace() {
     if (e.target === modal) fechar();
   });
 
-  filtros.forEach(btn => {
+  filtros.forEach((btn) => {
     btn.addEventListener('click', () => {
-      filtros.forEach(b => {
+      filtros.forEach((b) => {
         b.style.background = 'rgba(255,255,255,0.06)';
         b.style.borderColor = 'rgba(255,255,255,0.1)';
       });
@@ -48,48 +79,64 @@ export function configurarMarketplace() {
   });
 }
 
+function mensagemFeed(texto, cor = '#94A3B8') {
+  return `<div style="text-align:center;color:${cor};padding:20px;font-size:12px;">${escaparHTML(texto)}</div>`;
+}
+
 async function carregarItens(categoria = 'todos') {
   const feed = document.getElementById('feedItensMarketplace');
   if (!feed) return;
 
+  const minhaRequisicao = ++requisicaoAtual; // evita lista trocada se o motorista mudar de filtro rápido
+  feed.innerHTML = mensagemFeed('Carregando benefícios...');
+
   try {
     const res = await fetch(`${API_URL}/api/marketplace/itens?categoria=${encodeURIComponent(categoria)}`);
-    if (!res.ok) throw new Error('Falha na requisição');
-    const itens = await res.json();
+    if (!res.ok) throw new Error('falha');
+    const dados = await res.json();
+    if (minhaRequisicao !== requisicaoAtual) return;
 
+    const itens = Array.isArray(dados) ? dados.slice(0, 60) : [];
     if (!itens.length) {
-      feed.innerHTML = '<div style="text-align:center;color:#94A3B8;padding:20px;font-size:12px;">Nenhum parceiro encontrado nesta categoria.</div>';
+      feed.innerHTML = mensagemFeed('Nenhum parceiro encontrado nesta categoria.');
       return;
     }
 
-    feed.innerHTML = itens.map(item => {
-      const msg = encodeURIComponent(`Olá! Sou parceiro HUBy (${estado.motoristaNome || 'Carol'}) e tenho interesse no benefício: "${item.titulo}".`);
-      const link = `https://wa.me/${item.whatsapp_contato.replace(/\D/g, '')}?text=${msg}`;
+    feed.innerHTML = itens.map((item) => {
+      const titulo = escaparHTML(String(item.titulo || 'Benefício').slice(0, 80));
+      const empresa = escaparHTML(String(item.empresa_nome || 'Parceiro').slice(0, 60));
+      const descricao = escaparHTML(String(item.descricao || '').slice(0, 240));
+      const imagem = imagemSegura(item.imagem_url);
+      const desconto = Math.round(Number(item.desconto_percentual) || 0);
+      const precoOriginal = reais(item.preco_original);
+      const precoParceiro = reais(item.preco_parceiro);
+      const link = linkWhatsApp(item.whatsapp_contato, item.titulo);
 
       return `
         <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; overflow: hidden; margin-bottom: 10px;">
-          ${item.imagem_url ? `
-            <div style="height: 110px; width: 100%; position: relative;">
-              <img src="${item.imagem_url}" alt="${item.titulo}" style="width: 100%; height: 100%; object-fit: cover;">
-              <span style="position: absolute; top: 6px; right: 6px; background: #10B981; color: #022017; font-size: 10px; font-weight: 900; padding: 2px 7px; border-radius: 12px;">-${item.desconto_percentual}% OFF</span>
+          ${imagem ? `
+            <div style="height: 110px; width: 100%; position: relative; background: #090D16;">
+              <img src="${escaparHTML(imagem)}" alt="${titulo}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
+              ${desconto > 0 && desconto < 100 ? `<span style="position: absolute; top: 6px; right: 6px; background: #10B981; color: #022017; font-size: 10px; font-weight: 900; padding: 2px 7px; border-radius: 12px;">-${desconto}% OFF</span>` : ''}
             </div>
           ` : ''}
           <div style="padding: 10px;">
-            <strong style="color: #FFF; font-size: 13px; display: block;">${item.titulo}</strong>
-            <small style="color: #C084FC; font-weight: 700; font-size: 11px;">🏢 ${item.empresa_nome}</small>
-            <p style="color: #94A3B8; font-size: 11px; margin: 4px 0 8px;">${item.descricao}</p>
-            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;">
+            <strong style="color: #FFF; font-size: 13px; display: block;">${titulo}</strong>
+            <small style="color: #C084FC; font-weight: 700; font-size: 11px;">🏢 ${empresa}</small>
+            ${descricao ? `<p style="color: #94A3B8; font-size: 11px; margin: 4px 0 8px; word-break: break-word;">${descricao}</p>` : ''}
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; gap: 8px;">
               <div>
-                ${item.preco_original ? `<span style="color:#64748B;text-decoration:line-through;font-size:10px;display:block;">R$ ${Number(item.preco_original).toFixed(2).replace('.', ',')}</span>` : ''}
-                <strong style="color: #10B981; font-size: 15px;">R$ ${Number(item.preco_parceiro).toFixed(2).replace('.', ',')}</strong>
+                ${precoOriginal ? `<span style="color:#64748B;text-decoration:line-through;font-size:10px;display:block;">${precoOriginal}</span>` : ''}
+                ${precoParceiro ? `<strong style="color: #10B981; font-size: 15px;">${precoParceiro}</strong>` : ''}
               </div>
-              <a href="${link}" target="_blank" style="background: #10B981; color: #022017; font-weight: 800; font-size: 11px; padding: 6px 10px; border-radius: 6px; text-decoration: none;">Chamar no Whats</a>
+              ${link ? `<a href="${escaparHTML(link)}" target="_blank" rel="noopener noreferrer" style="background: #10B981; color: #022017; font-weight: 800; font-size: 11px; padding: 6px 10px; border-radius: 6px; text-decoration: none; flex-shrink: 0;">Chamar no Whats</a>` : ''}
             </div>
           </div>
         </div>
       `;
     }).join('');
   } catch (e) {
-    feed.innerHTML = '<div style="text-align:center;color:#EF4444;padding:20px;font-size:12px;">Erro ao carregar ofertas.</div>';
+    if (minhaRequisicao !== requisicaoAtual) return;
+    feed.innerHTML = mensagemFeed('Erro ao carregar ofertas. Tente novamente.', '#EF4444');
   }
 }
