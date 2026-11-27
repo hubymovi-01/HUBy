@@ -1844,7 +1844,21 @@ function conectarSocketAdmin() {
   const ioClient = getSocketIO();
   if (!ioClient) return;
 
-  const socket = ioClient(API_URL);
+    // O login (token) vai junto: só assim o servidor coloca o admin na sala que recebe o GPS dos motoristas
+  const token = localStorage.getItem('huby_token') || '';
+  const socket = ioClient(API_URL, {
+    auth: { token },
+    transports: ['websocket', 'polling']
+  });
+
+  let avisouSessao = false;
+  socket.on('connect_error', (err) => {
+    if (!avisouSessao && /sess[aã]o inv[aá]lida|login/i.test(String(err?.message || ''))) {
+      avisouSessao = true;
+      notificarAdmin('Sua sessão expirou. Entre de novo para ver o radar ao vivo.', 'erro');
+    }
+  });
+
   socket.on('posicao_motorista', (dados) => {
     atualizarPosicaoCondutorNoMapa(dados);
   });

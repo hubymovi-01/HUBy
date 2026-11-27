@@ -1,9 +1,44 @@
 // js/admin-radar.js - Radar Master e Telemetria GPS no Admin HUBy
+// Textos vindos do banco (nome da zona) são exibidos como texto puro.
 import { API_URL } from './config.js';
 
 let mapaAdmin = null;
 let camadasZonas = [];
-let marcadoresMotoristas = {};
+const marcadoresMotoristas = {}; // motoristaId -> { marcador, emCorrida, visto }
+
+const SUMIR_APOS_MS = 2 * 60 * 1000; // motorista sem sinal há 2 min sai do radar
+
+function atualizarContadorOnline() {
+  const lblOnline = document.getElementById('txtCondutoresOnline');
+  if (!lblOnline) return;
+  const total = Object.keys(marcadoresMotoristas).length;
+  lblOnline.textContent = `${total} ${total === 1 ? 'parceiro ativo' : 'parceiros ativos'}`;
+}
+
+// Remove do mapa quem parou de mandar posição (ficou offline ou fechou o app)
+setInterval(() => {
+  const agora = Date.now();
+  let mudou = false;
+  Object.keys(marcadoresMotoristas).forEach((id) => {
+    const item = marcadoresMotoristas[id];
+    if (agora - item.visto > SUMIR_APOS_MS) {
+      try { mapaAdmin?.removeLayer(item.marcador); } catch (e) {}
+      delete marcadoresMotoristas[id];
+      mudou = true;
+    }
+  });
+  if (mudou) atualizarContadorOnline();
+}, 30000);
+
+function iconeMotorista(emCorrida) {
+  const cor = emCorrida ? '#F59E0B' : '#10B981';
+  return L.divIcon({
+    className: 'driver-marker',
+    html: `<div style="width:24px;height:24px;background:#0B0F19;border:2px solid ${cor};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px ${cor};font-size:11px;">🚖</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12]
+  });
+}
 
 export function inicializarRadarMaster(token) {
   const container = document.getElementById('mapaRadarContainer');
@@ -14,7 +49,6 @@ export function inicializarRadarMaster(token) {
     return;
   }
 
-  // 1. Limpa instância antiga do Leaflet para evitar o erro de container duplicado
   if (!mapaAdmin) {
     if (container._leaflet_id) {
       delete container._leaflet_id;
@@ -39,22 +73,29 @@ export function inicializarRadarMaster(token) {
         const multInput = prompt('Multiplicador de Tarifa Dinâmica (ex: 1.20):', '1.20');
         if (!multInput) return;
         const multiplicador = Number(multInput.replace(',', '.'));
-        if (isNaN(multiplicador) || multiplicador <= 0) return alert('Multiplicador inválido.');
+        if (!Number.isFinite(multiplicador) || multiplicador < 1 || multiplicador > 5) {
+          alert('Multiplicador inválido (use entre 1.00 e 5.00).');
+          return;
+        }
 
         const raioInput = prompt('Raio em metros (ex: 1500):', '2000');
         if (!raioInput) return;
-        const raio_metros = Number(raioInput);
-        if (isNaN(raio_metros) || raio_metros <= 0) return alert('Raio inválido.');
+        const raio_metros = Math.round(Number(raioInput));
+        if (!Number.isFinite(raio_metros) || raio_metros < 100 || raio_metros > 50000) {
+          alert('Raio inválido (use entre 100 e 50000 metros).');
+          return;
+        }
 
         try {
+          const tokenAtual = localStorage.getItem('huby_token') || token;
           const res = await fetch(`${API_URL}/api/dinamica`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
+              'Authorization': `Bearer ${tokenAtual}`
             },
             body: JSON.stringify({
-              nome: nome.trim(),
+              nome: nome.trim().slice(0, 80),
               multiplicador,
               centro_lat: e.latlng.lat,
               centro_lng: e.latlng.lng,
@@ -64,9 +105,10 @@ export function inicializarRadarMaster(token) {
 
           if (res.ok) {
             alert('✅ Zona Dinâmica criada com sucesso!');
-            carregarZonasDinamicas(token);
+            carregarZonasDinamicas(tokenAtual);
           } else {
-            alert('❌ Falha ao criar zona.');
+            const data = await res.json().catch(() => ({}));
+            alert(`❌ ${data.erro || 'Falha ao criar zona.'}`);
           }
         } catch (err) {
           alert('Erro ao conectar ao servidor.');
@@ -77,12 +119,24 @@ export function inicializarRadarMaster(token) {
     }
   }
 
-  // 2. Força o redesenho do mapa (necessário para abas que estavam ocultas)
+  // Força o redesenho do mapa (necessário para abas que estavam ocultas)
   setTimeout(() => {
     if (mapaAdmin) mapaAdmin.invalidateSize();
   }, 300);
 
   carregarZonasDinamicas(token);
+}
+
+// Balão da zona montado com texto puro
+function popupZona(z) {
+  const caixa = document.createElement('div');
+  const titulo = document.createElement('strong');
+  titulo.textContent = String(z.nome || 'Zona dinâmica').slice(0, 80);
+  const linha = document.createElement('div');
+  const mult = Number(z.multiplicador);
+  linha.textContent = `Dinâmica: ${Number.isFinite(mult) ? mult.toFixed(2) : '--'}x`;
+  caixa.append(titulo, linha);
+  return caixa;
 }
 
 export async function carregarZonasDinamicas(token) {
@@ -100,16 +154,19 @@ export async function carregarZonasDinamicas(token) {
 
     (Array.isArray(zonas) ? zonas : []).forEach(z => {
       if (!z.ativa && z.ativo === false) return;
+      const lat = Number(z.centro_lat);
+      const lng = Number(z.centro_lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-      const circulo = L.circle([Number(z.centro_lat), Number(z.centro_lng)], {
+      const circulo = L.circle([lat, lng], {
         color: '#F59E0B',
         fillColor: '#F59E0B',
         fillOpacity: 0.20,
         weight: 2,
-        radius: Number(z.raio_metros) || 2000
+        radius: Math.min(50000, Math.max(100, Number(z.raio_metros) || 2000))
       }).addTo(mapaAdmin);
 
-      circulo.bindPopup(`<strong>${z.nome}</strong><br>Dinâmica: ${Number(z.multiplicador).toFixed(2)}x`);
+      circulo.bindPopup(popupZona(z));
       camadasZonas.push(circulo);
     });
   } catch (err) {
@@ -118,26 +175,29 @@ export async function carregarZonasDinamicas(token) {
 }
 
 export function atualizarPosicaoCondutorNoMapa(dado) {
-  if (!mapaAdmin || !dado || !dado.lat || !dado.lng) return;
-  const { motoristaId, lat, lng, emCorrida } = dado;
-  const cor = emCorrida ? '#F59E0B' : '#10B981';
+  if (!mapaAdmin || !dado || typeof L === 'undefined') return;
 
-  if (marcadoresMotoristas[motoristaId]) {
-    marcadoresMotoristas[motoristaId].setLatLng([Number(lat), Number(lng)]);
+  const lat = Number(dado.lat);
+  const lng = Number(dado.lng);
+  const id = String(dado.motoristaId || '');
+  if (!id || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+  const emCorrida = Boolean(dado.emCorrida);
+  const item = marcadoresMotoristas[id];
+
+  if (item) {
+    item.marcador.setLatLng([lat, lng]);
+    item.visto = Date.now();
+    if (item.emCorrida !== emCorrida) {
+      item.marcador.setIcon(iconeMotorista(emCorrida)); // verde = livre, laranja = em corrida
+      item.emCorrida = emCorrida;
+    }
   } else {
-    const iconDiv = L.divIcon({
-      className: 'driver-marker',
-      html: `<div style="width:24px;height:24px;background:#0B0F19;border:2px solid ${cor};border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 8px ${cor};font-size:11px;">🚖</div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
-    });
-    marcadoresMotoristas[motoristaId] = L.marker([Number(lat), Number(lng)], { icon: iconDiv }).addTo(mapaAdmin);
-  }
-
-  // Atualiza contador de motoristas online no topo do radar
-  const lblOnline = document.getElementById('txtCondutoresOnline');
-  if (lblOnline) {
-    const total = Object.keys(marcadoresMotoristas).length;
-    lblOnline.textContent = `${total} ${total === 1 ? 'parceiro ativo' : 'parceiros ativos'}`;
+    marcadoresMotoristas[id] = {
+      marcador: L.marker([lat, lng], { icon: iconeMotorista(emCorrida) }).addTo(mapaAdmin),
+      emCorrida,
+      visto: Date.now()
+    };
+    atualizarContadorOnline();
   }
 }
