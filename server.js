@@ -606,7 +606,7 @@ app.post('/api/patrocinadores/checkout-pix', async (req, res) => {
         INSERT INTO cobrancas_pix (txid, transacao_id, pedido_id, valor, status, pix_copia_cola, qr_code, qr_code_base64)
         VALUES (${txid}, ${txid}, ${referenciaBanner}, ${valorPlano}, 'pendente', ${pixInfo.qr_code}, ${pixInfo.qr_code}, ${pixInfo.qr_code_base64});
       `;
-    } catch (ePix) {}
+    } catch (ePix) { }
 
     return res.json({
       sucesso: true,
@@ -658,7 +658,7 @@ app.get('/api/patrocinadores/status/:id', async (req, res) => {
             io.emit('patrocinadores_atualizados', { bannerId: id, ativo: true });
             return res.json(ativado || banner);
           }
-        } catch (eMp) {}
+        } catch (eMp) { }
       }
     }
 
@@ -791,7 +791,8 @@ app.use([
   '/api/auth/enviar-codigo', '/api/auth/verificar-codigo', '/api/usuarios/enviar-codigo', '/api/usuarios/verificar-codigo'
 ], limitarCadastro);
 app.use('/api/auth', authRoutes);
-app.use('/api/usuarios', authRoutes); // nome antigo: aponta para as mesmas rotas segurasapp.use('/api/pedidos', pedidosRouter(io));
+app.use('/api/usuarios', authRoutes); // nome antigo: aponta para as mesmas rotas seguras
+app.use('/api/pedidos', pedidosRouter(io));
 app.use('/api/admin', typeof adminRoutes === 'function' ? adminRoutes(io) : adminRoutes);
 app.use('/api/carteira', carteiraRoutes);
 app.use('/api/dinamica', dinamicaRoutes);
@@ -826,7 +827,7 @@ app.use(async (err, req, res, next) => {
       INSERT INTO logs_erros_sistema (origem, rota, mensagem, stack)
       VALUES ('backend', ${String(req.originalUrl || '').slice(0, 140)}, ${String(err.message || 'Erro desconhecido').slice(0, 500)}, ${String(err.stack || '').slice(0, 2000)});
     `;
-  } catch (eLog) {}
+  } catch (eLog) { }
 
   const status = err.status || 500;
   res.status(status).json({
