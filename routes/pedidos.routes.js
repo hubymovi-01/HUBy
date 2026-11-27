@@ -1804,37 +1804,26 @@ export default function pedidosRouter(io) {
         fFoto = fotoBruta;
       }
 
-      // Cor e ano do veículo podem ser ajustados
-      const fCor = textoLimpo(veiculo_cor, 30);
-      let fAno = null;
-      if (veiculo_ano !== undefined && String(veiculo_ano).trim() !== '') {
-        const anoNum = parseInt(String(veiculo_ano).trim(), 10);
-        const anoMax = new Date().getFullYear() + 1;
-        if (!Number.isInteger(anoNum) || anoNum < 1980 || anoNum > anoMax) {
-          return res.status(400).json({ erro: 'Ano do veículo inválido.' });
-        }
-        fAno = String(anoNum);
-      }
-
       const fPix = textoLimpo(chave_pix_padrao, 120);
       const fCodVoz = textoLimpo(codigo_voz, 30);
       const fEntrega = typeof aceita_entrega === 'boolean' ? aceita_entrega : null;
 
-      // Placa, modelo e categoria: ignorados aqui
+      // Placa, modelo, cor, ano e categoria: ignorados aqui (só a equipe HUBy altera)
       const normalizar = (v) => String(v ?? '').trim().toUpperCase();
+      const mudou = (enviado, atual) =>
+        enviado !== undefined && normalizar(enviado) !== '' && normalizar(enviado) !== normalizar(atual);
       const tentouMudarVeiculo =
-        (veiculo_placa !== undefined && normalizar(veiculo_placa) !== '' && normalizar(veiculo_placa) !== normalizar(mot.veiculo_placa)) ||
-        (veiculo_modelo !== undefined && normalizar(veiculo_modelo) !== '' && normalizar(veiculo_modelo) !== normalizar(mot.veiculo_modelo)) ||
-        (categoria !== undefined && normalizar(categoria) !== '' && normalizar(categoria) !== normalizar(mot.categoria));
-
+        mudou(veiculo_placa, mot.veiculo_placa) ||
+        mudou(veiculo_modelo, mot.veiculo_modelo) ||
+        mudou(veiculo_cor, mot.veiculo_cor) ||
+        mudou(veiculo_ano, mot.veiculo_ano) ||
+        mudou(categoria, mot.categoria);
       const atualizado = await sql`
         UPDATE motoristas
         SET
           nome = COALESCE(${fNome}, nome),
           telefone = COALESCE(${fTel}, telefone),
           foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
-          veiculo_cor = COALESCE(${fCor}, veiculo_cor),
-          veiculo_ano = COALESCE(${fAno}, veiculo_ano),
           chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
           codigo_voz = COALESCE(${fCodVoz}, codigo_voz),
           aceita_entrega = COALESCE(${fEntrega}, aceita_entrega)
@@ -1860,8 +1849,7 @@ export default function pedidosRouter(io) {
         sucesso: true,
         motorista: atualizado[0] || {},
         aviso: tentouMudarVeiculo
-          ? 'Placa, modelo e categoria só podem ser alterados pela equipe HUBy. Fale com o suporte.'
-          : undefined
+          ? 'Os dados do veículo (placa, modelo, cor e ano) só podem ser alterados pela equipe HUBy. Fale com o suporte.' : undefined
       });
     } catch (err) {
       return res.status(500).json({ erro: 'Falha ao salvar dados do perfil.' });

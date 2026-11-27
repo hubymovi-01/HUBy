@@ -261,9 +261,6 @@ router.put('/perfil', ...doMotorista, async (req, res) => {
     const fTel = b.telefone ? String(b.telefone).replace(/\D/g, '').slice(0, 13) || null : null;
     const fotoBruta = b.foto_base64 || b.foto_perfil_url || null;
     const fFoto = fotoBruta && ehImagemBase64(fotoBruta, MAX_FOTO_CHARS) ? fotoBruta : null;
-    const fCor = textoOuNull(b.veiculo_cor, 30);
-    const anoNum = parseInt(b.veiculo_ano, 10);
-    const fAno = Number.isInteger(anoNum) && anoNum >= 1995 && anoNum <= new Date().getFullYear() + 1 ? String(anoNum) : null;
     const fPix = textoOuNull(b.chave_pix_padrao, 150);
     const fCodVoz = textoOuNull(b.codigo_voz, 30);
 
@@ -276,17 +273,19 @@ router.put('/perfil', ...doMotorista, async (req, res) => {
 
     const placaPedida = b.veiculo_placa ? String(b.veiculo_placa).replace(/[^a-zA-Z0-9]/g, '').toUpperCase() : null;
     const modeloPedido = textoOuNull(b.veiculo_modelo, 80);
+    const corPedida = textoOuNull(b.veiculo_cor, 30);
+    const anoPedido = b.veiculo_ano !== undefined && b.veiculo_ano !== null ? String(b.veiculo_ano).trim() : '';
     const tentouTrocarVeiculo =
       (placaPedida && placaPedida !== String(req.motorista.veiculo_placa || '').toUpperCase()) ||
-      (modeloPedido && modeloPedido !== req.motorista.veiculo_modelo);
+      (modeloPedido && modeloPedido !== req.motorista.veiculo_modelo) ||
+      (corPedida && corPedida.toUpperCase() !== String(req.motorista.veiculo_cor || '').trim().toUpperCase()) ||
+      (anoPedido && anoPedido !== String(req.motorista.veiculo_ano || '').trim());
 
     const [mot] = await sql`
       UPDATE motoristas
       SET nome = COALESCE(${fNome}, nome),
           telefone = COALESCE(${fTel}, telefone),
           foto_perfil_url = COALESCE(${fFoto}, foto_perfil_url),
-          veiculo_cor = COALESCE(${fCor}, veiculo_cor),
-          veiculo_ano = COALESCE(${fAno}, veiculo_ano),
           chave_pix_padrao = COALESCE(${fPix}, chave_pix_padrao),
           codigo_voz = COALESCE(${fCodVoz}, codigo_voz)
       WHERE id = ${req.motorista.id}
@@ -306,8 +305,7 @@ router.put('/perfil', ...doMotorista, async (req, res) => {
       sucesso: true,
       motorista: mot,
       aviso: tentouTrocarVeiculo
-        ? 'Placa e modelo não foram alterados. Para trocar de veículo, fale com o suporte HUBy e envie o novo CRLV.'
-        : undefined
+        ? 'Os dados do veículo (placa, modelo, cor e ano) não foram alterados. Para mudar, fale com o suporte HUBy e envie o novo CRLV.'        : undefined
     });
   } catch (err) {
     console.error('Erro ao atualizar perfil do motorista:', err);

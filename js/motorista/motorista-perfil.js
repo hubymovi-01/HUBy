@@ -1,13 +1,30 @@
-// js/motorista/motorista-perfil.js - Perfil do Motorista, Foto Base64, Modo Entrega Extra e Sincronização de Estado
+// js/motorista/motorista-perfil.js - Perfil do Motorista, Foto, Modo Entrega Extra e Sincronização de Estado
+// Dados do veículo (placa, modelo, cor e ano) são só leitura: quem altera é a equipe HUBy.
 import { API_URL } from '../config.js';
 import { estado, obterHeaders } from './motorista-estado.js';
 import { notificar } from '../util/alertas-huby.js';
 import { carregarGanhosHoje, carregarExtratoFinanceiro } from './motorista-ganhos.js';
-import { 
-  obterCodigoAtivacaoMotorista, 
-  definirCodigoAtivacaoMotorista, 
-  falarTexto 
+import {
+  obterCodigoAtivacaoMotorista,
+  definirCodigoAtivacaoMotorista,
+  falarTexto
 } from '../ia/motorista-ia.js';
+
+const FOTO_PADRAO = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80';
+const CAMPOS_VEICULO = ['editCarroModelo', 'editCarroPlaca', 'editCarroCor', 'editCarroAno'];
+
+// Só aceita foto em base64 (imagem) ou link https
+function fotoSegura(url) {
+  const s = String(url || '').trim();
+  if (/^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(s)) return s;
+  if (/^https:\/\/[^\s"'<>]{5,500}$/.test(s)) return s;
+  return FOTO_PADRAO;
+}
+
+function texto(valor, padrao = '--') {
+  const s = String(valor ?? '').trim();
+  return s || padrao;
+}
 
 function garantirToggleEntregaNoDrawer(aceitaEntregaAtual) {
   const chkDinheiro = document.getElementById('chkAceitaDinheiro');
@@ -31,6 +48,27 @@ function garantirToggleEntregaNoDrawer(aceitaEntregaAtual) {
   }
 }
 
+// Deixa os campos do veículo travados no modal de edição, com aviso
+function travarCamposVeiculo() {
+  CAMPOS_VEICULO.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.readOnly = true;
+    el.setAttribute('aria-readonly', 'true');
+    el.style.opacity = '0.6';
+    el.style.cursor = 'not-allowed';
+  });
+
+  const campoAno = document.getElementById('editCarroAno');
+  if (campoAno && !document.getElementById('avisoVeiculoTravado')) {
+    const aviso = document.createElement('small');
+    aviso.id = 'avisoVeiculoTravado';
+    aviso.style.cssText = 'display: block; color: #FBBF24; font-size: 11px; font-weight: 700; margin: -4px 0 8px; line-height: 1.35;';
+    aviso.textContent = '🔒 Os dados do veículo só podem ser alterados pela equipe HUBy. Para trocar de carro, fale com o suporte.';
+    campoAno.closest('.form-group-driver')?.insertAdjacentElement('afterend', aviso);
+  }
+}
+
 export async function carregarPerfil() {
   try {
     const resp = await fetch(`${API_URL}/api/pedidos/motoristas/perfil?t=${Date.now()}`, {
@@ -43,31 +81,31 @@ export async function carregarPerfil() {
     if (!motorista) return null;
 
     estado.motoristaId = motorista.id;
-    estado.motoristaNome = motorista.nome || 'Carol';
+    estado.motoristaNome = texto(motorista.nome, 'Motorista');
     estado.categoriaMotorista = String(motorista.categoria || 'carro').toLowerCase();
     estado.aceitaEntrega = Boolean(motorista.aceita_entrega);
-    estado.statusAprovacaoAtual = motorista.status_aprovacao || 'aprovado';
+    estado.statusAprovacaoAtual = motorista.status_aprovacao || 'pendente';
     estado.saldoCarteira = Number(motorista.saldo_carteira || 0);
     estado.aceitaDinheiro = motorista.aceita_dinheiro !== false;
     estado.aceitaCartao = motorista.aceita_cartao !== false;
     estado.aceitaPix = motorista.aceita_pix !== false;
     estado.dadosMotorista = motorista;
 
-    const btnOnline = document.getElementById('btnToggleStatusOnline');
-    const botaoJaMarcadoOnline = Boolean(
-      estado.isOnline ||
-      (btnOnline && (btnOnline.textContent || '').includes('Online') && !(btnOnline.textContent || '').includes('Ficar Online'))
-    );
-    if (!botaoJaMarcadoOnline && typeof motorista.status_online === 'boolean') {
+    if (motorista.taxa_huby_atual !== undefined && Number.isFinite(Number(motorista.taxa_huby_atual))) {
+      estado.taxaHubyMotorista = Number(motorista.taxa_huby_atual);
+    }
+
+    // O servidor é quem diz se o motorista está online
+    if (typeof motorista.status_online === 'boolean') {
       estado.isOnline = motorista.status_online;
       estado.statusOnline = motorista.status_online;
     }
 
     const inVoz = document.getElementById('drawerInputCodigoVoz');
     if (inVoz) {
-      if (motorista.codigo_voz && motorista.codigo_voz.trim()) {
-        localStorage.setItem('huby_codigo_voz_motorista', motorista.codigo_voz.trim());
-        inVoz.value = motorista.codigo_voz.trim();
+      if (motorista.codigo_voz && String(motorista.codigo_voz).trim()) {
+        localStorage.setItem('huby_codigo_voz_motorista', String(motorista.codigo_voz).trim());
+        inVoz.value = String(motorista.codigo_voz).trim();
       } else {
         inVoz.value = obterCodigoAtivacaoMotorista();
       }
@@ -75,14 +113,15 @@ export async function carregarPerfil() {
 
     const avaliacaoVal = Number(motorista.avaliacao_media || motorista.avaliacao || 5.0).toFixed(1);
     const totalCorridasVal = Number(motorista.total_corridas || 0);
+    const foto = fotoSegura(motorista.foto_perfil_url);
 
     const topNome = document.getElementById('topNomeMotorista');
     const topNota = document.getElementById('topNotaMotorista');
     const topAvatar = document.getElementById('topAvatarImg');
 
-    if (topNome) topNome.textContent = motorista.nome || 'Carol';
+    if (topNome) topNome.textContent = estado.motoristaNome;
     if (topNota) topNota.textContent = `⭐ ${avaliacaoVal}`;
-    if (topAvatar && motorista.foto_perfil_url) topAvatar.src = motorista.foto_perfil_url;
+    if (topAvatar) topAvatar.src = foto;
 
     const drawerNome = document.getElementById('drawerNomeCondutor');
     const drawerCat = document.getElementById('drawerCategoriaBadge');
@@ -90,23 +129,24 @@ export async function carregarPerfil() {
     const drawerViagens = document.getElementById('drawerTotalViagensTxt');
     const drawerFoto = document.getElementById('drawerFotoImg');
 
+    const catTxt = estado.categoriaMotorista.toUpperCase().replace(/[^A-Z]/g, '') || 'CARRO';
     const catExibicao = estado.aceitaEntrega && estado.categoriaMotorista !== 'entrega'
-      ? `HUBY ${estado.categoriaMotorista.toUpperCase()} + ENTREGA`
-      : `HUBY ${estado.categoriaMotorista.toUpperCase()}`;
+      ? `HUBY ${catTxt} + ENTREGA`
+      : `HUBY ${catTxt}`;
 
-    if (drawerNome) drawerNome.textContent = motorista.nome || 'Carol';
+    if (drawerNome) drawerNome.textContent = estado.motoristaNome;
     if (drawerCat) drawerCat.textContent = catExibicao;
     if (drawerNota) drawerNota.textContent = `⭐ ${avaliacaoVal}`;
-    if (drawerViagens) drawerViagens.textContent = `${totalCorridasVal} viagens`;
-    if (drawerFoto && motorista.foto_perfil_url) drawerFoto.src = motorista.foto_perfil_url;
+    if (drawerViagens) drawerViagens.textContent = `${totalCorridasVal} ${totalCorridasVal === 1 ? 'viagem' : 'viagens'}`;
+    if (drawerFoto) drawerFoto.src = foto;
 
     const drawerCarroModelo = document.getElementById('drawerCarroModelo');
     const drawerCarroDetalhes = document.getElementById('drawerCarroDetalhes');
     const drawerCarroPlaca = document.getElementById('drawerCarroPlaca');
 
-    if (drawerCarroModelo) drawerCarroModelo.textContent = motorista.veiculo_modelo || 'Onix';
-    if (drawerCarroDetalhes) drawerCarroDetalhes.textContent = `Cor: ${motorista.veiculo_cor || 'Prata'} • Ano: ${motorista.veiculo_ano || '2023'}`;
-    if (drawerCarroPlaca) drawerCarroPlaca.textContent = (motorista.veiculo_placa || 'ABC1D23').toUpperCase();
+    if (drawerCarroModelo) drawerCarroModelo.textContent = texto(motorista.veiculo_modelo, 'Veículo não informado');
+    if (drawerCarroDetalhes) drawerCarroDetalhes.textContent = `Cor: ${texto(motorista.veiculo_cor)} • Ano: ${texto(motorista.veiculo_ano)}`;
+    if (drawerCarroPlaca) drawerCarroPlaca.textContent = texto(motorista.veiculo_placa, '-------').toUpperCase();
 
     const saldoTxt = `R$ ${estado.saldoCarteira.toFixed(2).replace('.', ',')}`;
     const elSaldo = document.getElementById('saldoCarteiraValor');
@@ -125,7 +165,7 @@ export async function carregarPerfil() {
     garantirToggleEntregaNoDrawer(estado.aceitaEntrega);
 
     const inputPixDrawer = document.getElementById('drawerInputChavePix');
-    if (inputPixDrawer && motorista.chave_pix_padrao) {
+    if (inputPixDrawer && motorista.chave_pix_padrao && document.activeElement !== inputPixDrawer) {
       inputPixDrawer.value = motorista.chave_pix_padrao;
       localStorage.setItem('huby_motorista_pix', motorista.chave_pix_padrao);
     }
@@ -144,7 +184,8 @@ export async function carregarPerfil() {
     if (editPlaca) editPlaca.value = motorista.veiculo_placa || '';
     if (editCor) editCor.value = motorista.veiculo_cor || '';
     if (editAno) editAno.value = motorista.veiculo_ano || '';
-    if (prevFoto && motorista.foto_perfil_url) prevFoto.src = motorista.foto_perfil_url;
+    if (prevFoto) prevFoto.src = foto;
+    travarCamposVeiculo();
 
     carregarGanhosHoje();
     carregarExtratoFinanceiro();
@@ -170,7 +211,7 @@ export function configurarCodigoVozCopiloto() {
       e.preventDefault();
       e.stopPropagation();
 
-      const novoComando = inputComando?.value?.trim();
+      const novoComando = inputComando?.value?.trim().slice(0, 30);
       if (!novoComando) {
         notificar('Digite uma palavra-chave para ativar seu copiloto (ex: Zank, Falcão).', 'alerta');
         inputComando?.focus();
@@ -196,7 +237,45 @@ export function configurarCodigoVozCopiloto() {
   }
 }
 
+// Botão "Salvar" da chave Pix no menu (antes não fazia nada)
+function configurarSalvarChavePix() {
+  const btn = document.getElementById('btnSalvarChavePix');
+  const input = document.getElementById('drawerInputChavePix');
+  if (!btn || !input) return;
+
+  btn.onclick = async (e) => {
+    e.preventDefault();
+    const chavePix = String(input.value || '').trim();
+    if (chavePix.length < 5 || chavePix.length > 150) {
+      notificar('Informe uma chave Pix válida (CPF, telefone, e-mail ou chave aleatória).', 'alerta');
+      return;
+    }
+
+    btn.disabled = true;
+    const textoOriginal = btn.textContent;
+    btn.textContent = '...';
+    try {
+      const resp = await fetch(`${API_URL}/api/motoristas/chave-pix`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify({ chavePix })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.erro || 'Não foi possível salvar a chave Pix.');
+      localStorage.setItem('huby_motorista_pix', chavePix);
+      notificar(data.mensagem || 'Chave Pix atualizada!', 'sucesso');
+    } catch (err) {
+      notificar(err instanceof TypeError ? 'Sem conexão. A chave Pix NÃO foi salva.' : err.message, 'erro');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+    }
+  };
+}
+
 export function configurarSalvarPreferenciasPagto() {
+  configurarSalvarChavePix();
+
   const btnSalvar = document.getElementById('btnSalvarPreferenciasPagto');
   if (!btnSalvar) return;
 
@@ -212,11 +291,7 @@ export function configurarSalvarPreferenciasPagto() {
       return;
     }
 
-    estado.aceitaDinheiro = aceita_dinheiro;
-    estado.aceitaCartao = aceita_cartao;
-    estado.aceitaPix = aceita_pix;
-    estado.aceitaEntrega = aceita_entrega;
-
+    btnSalvar.disabled = true;
     try {
       const resp = await fetch(`${API_URL}/api/pedidos/motoristas/preferencias-pagamento`, {
         method: 'PUT',
@@ -225,11 +300,18 @@ export function configurarSalvarPreferenciasPagto() {
       });
 
       if (resp.ok) {
+        // Só muda o estado local depois que o servidor confirmou
+        estado.aceitaDinheiro = aceita_dinheiro;
+        estado.aceitaCartao = aceita_cartao;
+        estado.aceitaPix = aceita_pix;
+        estado.aceitaEntrega = aceita_entrega;
+
         const drawerCat = document.getElementById('drawerCategoriaBadge');
         if (drawerCat) {
+          const catTxt = String(estado.categoriaMotorista || 'carro').toUpperCase().replace(/[^A-Z]/g, '') || 'CARRO';
           drawerCat.textContent = aceita_entrega && estado.categoriaMotorista !== 'entrega'
-            ? `HUBY ${estado.categoriaMotorista.toUpperCase()} + ENTREGA`
-            : `HUBY ${estado.categoriaMotorista.toUpperCase()}`;
+            ? `HUBY ${catTxt} + ENTREGA`
+            : `HUBY ${catTxt}`;
         }
         notificar(
           aceita_entrega
@@ -238,15 +320,63 @@ export function configurarSalvarPreferenciasPagto() {
           'sucesso'
         );
       } else {
-        notificar('Erro ao salvar preferências.', 'erro');
+        const data = await resp.json().catch(() => ({}));
+        notificar(data.erro || 'Erro ao salvar preferências.', 'erro');
       }
     } catch (err) {
-      notificar('Falha de conexão ao salvar preferências.', 'erro');
+      notificar('Sem conexão. As preferências NÃO foram salvas.', 'erro');
+    } finally {
+      btnSalvar.disabled = false;
     }
   };
 }
 
+// Sair da conta: fica offline no servidor, desconecta e apaga só os dados de login
+function configurarSairDaConta() {
+  const btnSair = document.getElementById('btnLogoutMotorista');
+  if (!btnSair || btnSair.dataset.configurado) return;
+  btnSair.dataset.configurado = '1';
+
+  btnSair.addEventListener('click', async (e) => {
+    e.preventDefault();
+
+    if (estado.pedidoAceitoAtual || estado.pedidoAtivo) {
+      notificar('Finalize ou cancele a corrida atual antes de sair da conta.', 'alerta');
+      return;
+    }
+
+    btnSair.style.pointerEvents = 'none';
+    btnSair.textContent = 'Saindo...';
+
+    try {
+      const controle = new AbortController();
+      const timer = setTimeout(() => controle.abort(), 4000);
+      await fetch(`${API_URL}/api/pedidos/motoristas/meu-status-online`, {
+        method: 'PUT',
+        headers: obterHeaders(),
+        body: JSON.stringify({ online: false }),
+        signal: controle.signal
+      }).catch(() => {});
+      clearTimeout(timer);
+    } catch (err) {}
+
+    try { estado.socket?.disconnect(); } catch (err) {}
+    try { estado.socketRadar?.disconnect(); } catch (err) {}
+
+    // Guarda só preferências do aparelho (meta diária, endereços favoritos, voz do copiloto); o resto da sessão é apagado
+    const manter = /^huby_(meta_diaria|endereco_|coords_|mot_casa_nome|ia_|regiao)/;
+    Object.keys(localStorage)
+      .filter((chave) => chave.startsWith('huby_') && !manter.test(chave))
+      .forEach((chave) => localStorage.removeItem(chave));
+    try { sessionStorage.clear(); } catch (err) {}
+
+    window.location.replace('./welcome.html');
+  });
+}
+
 export function configurarEdicaoPerfil() {
+  configurarSairDaConta();
+
   const btnAbrir = document.getElementById('btnAbrirModalEdicaoPerfil');
   const modal = document.getElementById('modalEdicaoPerfil');
   const btnFechar = document.getElementById('btnFecharModalEdicao');
@@ -257,6 +387,7 @@ export function configurarEdicaoPerfil() {
   const previewFoto = document.getElementById('previewFotoModal');
 
   let novaFotoBase64 = null;
+  travarCamposVeiculo();
 
   if (btnAbrir) {
     btnAbrir.onclick = (e) => {
@@ -286,10 +417,16 @@ export function configurarEdicaoPerfil() {
     inputFoto.onchange = () => {
       const file = inputFoto.files?.[0];
       if (!file) return;
+      if (!/^image\//.test(file.type)) {
+        notificar('Escolha um arquivo de imagem.', 'alerta');
+        inputFoto.value = '';
+        return;
+      }
 
       const reader = new FileReader();
       reader.onload = (ev) => {
         const img = new Image();
+        img.onerror = () => notificar('Não foi possível ler esta imagem.', 'erro');
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const MAX_SIZE = 360;
@@ -301,11 +438,9 @@ export function configurarEdicaoPerfil() {
               height *= MAX_SIZE / width;
               width = MAX_SIZE;
             }
-          } else {
-            if (height > MAX_SIZE) {
-              width *= MAX_SIZE / height;
-              height = MAX_SIZE;
-            }
+          } else if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
           }
 
           canvas.width = width;
@@ -322,6 +457,7 @@ export function configurarEdicaoPerfil() {
         img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
+      inputFoto.value = '';
     };
   }
 
@@ -329,26 +465,20 @@ export function configurarEdicaoPerfil() {
     btnSalvar.onclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (btnSalvar.disabled) return;
 
-      const nome = document.getElementById('editNome')?.value?.trim();
-      const telefone = document.getElementById('editTelefone')?.value?.trim();
-      const veiculo_modelo = document.getElementById('editCarroModelo')?.value?.trim();
-      const veiculo_placa = document.getElementById('editCarroPlaca')?.value?.trim();
-      const veiculo_cor = document.getElementById('editCarroCor')?.value?.trim();
-      const veiculo_ano = document.getElementById('editCarroAno')?.value?.trim();
+      const nome = document.getElementById('editNome')?.value?.trim().slice(0, 80);
+      const telefone = document.getElementById('editTelefone')?.value?.trim().slice(0, 20);
 
-      const payload = {
-        nome,
-        telefone,
-        veiculo_modelo,
-        veiculo_placa,
-        veiculo_cor,
-        veiculo_ano
-      };
+      if (!nome || nome.length < 2) {
+        notificar('Informe seu nome completo.', 'alerta');
+        return;
+      }
 
+      // Só nome, telefone e foto: os dados do veículo não são enviados
+      const payload = { nome, telefone };
       if (novaFotoBase64) {
         payload.foto_perfil_url = novaFotoBase64;
-        payload.foto_base64 = novaFotoBase64;
       }
 
       btnSalvar.disabled = true;
@@ -360,24 +490,18 @@ export function configurarEdicaoPerfil() {
           headers: obterHeaders(),
           body: JSON.stringify(payload)
         });
+        const data = await resp.json().catch(() => ({}));
 
         if (resp.ok) {
-          const fotoSalva = novaFotoBase64;
-          notificar('Perfil e foto atualizados com sucesso!', 'sucesso');
+          notificar('Perfil atualizado com sucesso!', 'sucesso');
+          if (data.aviso) notificar(data.aviso, 'alerta', 7000);
           fecharModal();
           await carregarPerfil();
-
-          if (fotoSalva) {
-            const topAvatar = document.getElementById('topAvatarImg');
-            const drawerFoto = document.getElementById('drawerFotoImg');
-            if (topAvatar) topAvatar.src = fotoSalva;
-            if (drawerFoto) drawerFoto.src = fotoSalva;
-          }
         } else {
-          notificar('Não foi possível salvar os dados.', 'erro');
+          notificar(data.erro || 'Não foi possível salvar os dados.', 'erro');
         }
       } catch (err) {
-        notificar('Erro de conexão ao salvar perfil.', 'erro');
+        notificar('Sem conexão. O perfil NÃO foi salvo.', 'erro');
       } finally {
         btnSalvar.disabled = false;
         btnSalvar.textContent = 'Salvar Alterações';
