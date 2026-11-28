@@ -975,4 +975,178 @@ router.post('/redefinir-senha', async (req, res) => {
   }
 });
 
+// ============================================================================
+// EXCLUIR MINHA CONTA (LGPD + exigência da Google Play)
+// Apaga os dados pessoais e mantém o histórico de corridas e pagamentos SEM nome,
+// pelo prazo exigido por lei (fiscal / consumidor).
+// ============================================================================
+const STATUS_CORRIDA_EM_ABERTO = [
+  'pendente', 'aguardando', 'buscando', 'criado', 'agendado',
+  'aceito', 'a_caminho', 'chegou_local', 'aguardando_passageiro', 'no_local', 'motorista_no_local',
+  'em_andamento', 'em_viagem'
+];
+const NOME_CONTA_EXCLUIDA = 'Conta excluída';
+
+async function garantirColunasExclusao() {
+  try {
+    await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS excluido_em TIMESTAMP WITH TIME ZONE;`;
+    await sql`ALTER TABLE motoristas ADD COLUMN IF NOT EXISTS excluido_em TIMESTAMP WITH TIME ZONE;`;
+  } catch (err) {
+    console.warn('Aviso ao preparar colunas de exclusão de conta:', err.message);
+  }
+}
+garantirColunasExclusao();
+
+router.post('/excluir-conta', autenticarToken, async (req, res) => {
+  try {
+    const senha = String(req.body?.senha || '');
+    if (!senha) {
+      return res.status(400).json({ erro: 'Digite sua senha para confirmar.' });
+    }
+
+    const role = extrairRoleLimpa(req.usuario);
+    if (role === 'admin') {
+      return res.status(403).json({ erro: 'Conta de administrador não pode ser excluída pelo aplicativo.' });
+    }
+
+    const ids = [req.usuario?.id, req.usuario?.motoristaId]
+      .filter((v) => v !== undefined && v !== null && String(v).trim() !== '')
+      .map(String);
+    if (!ids.length) {
+      return res.status(400).json({ erro: 'Conta não identificada.' });
+    }
+
+    const [usuario] = await sql`
+      SELECT id, email, telefone, senha_hash, COALESCE(saldo_carteira, 0) AS saldo_carteira
+      FROM usuarios
+      WHERE id::text = ANY(${ids}) AND excluido_em IS NULL
+      LIMIT 1;
+    `;
+    const [mot] = await sql`
+      SELECT id, usuario_id, email, telefone, senha_hash, COALESCE(saldo_carteira, 0) AS saldo_carteira
+      FROM motoristas
+      WHERE (id::text = ANY(${ids}) OR usuario_id::text = ANY(${ids})) AND excluido_em IS NULL
+      LIMIT 1;
+    `;
+
+    if (!usuario && !mot) {
+      return res.status(404).json({ erro: 'Conta não encontrada ou já excluída.' });
+    }
+
+    // Confirma a senha (403, e não 401, para o app não confundir com "sessão vencida")
+    const hashes = [usuario?.senha_hash, mot?.senha_hash].filter(Boolean);
+    let senhaOk = false;
+    for (const h of hashes) {
+      try {
+        if (await bcrypt.compare(senha, String(h))) { senhaOk = true; break; }
+      } catch (e) {}
+    }
+    if (!senhaOk) {
+      return res.status(403).json({ erro: 'Senha incorreta.' });
+    }
+
+    // Nada de corrida em aberto (passageiro ou motorista)
+    const idUsuario = usuario ? String(usuario.id) : '';
+    const idMot = mot ? String(mot.id) : '';
+    const emAberto = await sql`
+      SELECT id FROM pedidos
+      WHERE LOWER(COALESCE(status, '')) = ANY(${STATUS_CORRIDA_EM_ABERTO})
+        AND (
+          (${idUsuario} <> '' AND cliente_id::text = ${idUsuario})
+          OR (${idMot} <> '' AND motorista_id::text = ${idMot})
+        )
+      LIMIT 1;
+    `;
+    if (emAberto.length) {
+      return res.status(409).json({ erro: 'Você tem uma corrida em andamento ou agendada. Finalize ou cancele antes de excluir a conta.' });
+    }
+
+    // Dinheiro: ninguém perde saldo e ninguém sai devendo
+    if (mot) {
+      const saldoMot = Number(mot.saldo_carteira || 0);
+      if (saldoMot > 0.009) {
+        return res.status(409).json({ erro: `Você ainda tem R$ ${saldoMot.toFixed(2).replace('.', ',')} na carteira. Faça o saque antes de excluir a conta.` });
+      }
+      if (saldoMot < -0.009) {
+        return res.status(409).json({ erro: `Há taxas pendentes de R$ ${Math.abs(saldoMot).toFixed(2).replace('.', ',')}. Regularize com o suporte HUBy antes de excluir a conta.` });
+      }
+      const saquesPendentes = await sql`
+        SELECT id FROM saques_motoristas
+        WHERE motorista_id::text = ${idMot} AND status = 'pendente'
+        LIMIT 1;
+      `;
+      if (saquesPendentes.length) {
+        return res.status(409).json({ erro: 'Você tem um saque aguardando pagamento. Espere ele ser pago antes de excluir a conta.' });
+      }
+    }
+    if (usuario && Number(usuario.saldo_carteira || 0) > 0.009) {
+      return res.status(409).json({ erro: 'Você ainda tem saldo na carteira HUBy. Fale com o suporte para receber o reembolso antes de excluir a conta.' });
+    }
+
+    const emailsAntigos = [usuario?.email, mot?.email].filter(Boolean).map((e) => String(e).trim().toLowerCase());
+    const telefonesAntigos = [usuario?.telefone, mot?.telefone].filter(Boolean).map((t) => String(t).replace(/\D/g, ''));
+
+    // ---------- MOTORISTA ----------
+    if (mot) {
+      await sql`
+        UPDATE motoristas
+        SET nome = ${NOME_CONTA_EXCLUIDA},
+            email = NULL, telefone = NULL, cpf = NULL, data_nascimento = NULL,
+            senha_hash = NULL, cnh_numero = NULL,
+            doc_cnh_url = NULL, doc_crlv_url = NULL, foto_perfil_url = NULL,
+            ultima_selfie_url = NULL, chave_pix_padrao = NULL, veiculo_placa = NULL,
+            destino_casa_lat = NULL, destino_casa_lng = NULL, destino_casa_ativo = FALSE,
+            status_online = FALSE, status_aprovacao = 'excluido',
+            excluido_em = CURRENT_TIMESTAMP
+        WHERE id::text = ${idMot};
+      `;
+      await sql`DELETE FROM verificacoes_selfie_motorista WHERE motorista_id::text = ${idMot};`;
+      await sql`
+        UPDATE pedidos
+        SET motorista_nome = 'Motorista (conta excluída)', motorista_telefone = NULL, motorista_placa = NULL
+        WHERE motorista_id::text = ${idMot};
+      `;
+    }
+
+    // ---------- CADASTRO GERAL (passageiro, e também o do motorista) ----------
+    const idsUsuarioApagar = [idUsuario, mot?.usuario_id ? String(mot.usuario_id) : ''].filter(Boolean);
+    if (idsUsuarioApagar.length) {
+      await sql`
+        UPDATE usuarios
+        SET nome = ${NOME_CONTA_EXCLUIDA},
+            email = NULL, telefone = NULL, cpf = NULL, data_nascimento = NULL,
+            contato_emergencia_nome = NULL, contato_emergencia_tel = NULL,
+            foto_perfil_url = NULL, indicado_por_codigo = NULL,
+            senha_hash = 'conta_excluida',
+            excluido_em = CURRENT_TIMESTAMP
+        WHERE id::text = ANY(${idsUsuarioApagar});
+      `;
+      // Observações das corridas podem ter dados pessoais (ex.: "portão azul, casa da Maria")
+      await sql`UPDATE pedidos SET observacao = NULL WHERE cliente_id::text = ANY(${idsUsuarioApagar});`;
+    }
+
+    // Mensagens enviadas por esta conta no chat das corridas
+    const remetentes = [...idsUsuarioApagar, idMot].filter(Boolean);
+    if (remetentes.length) {
+      await sql`DELETE FROM mensagens_chat WHERE remetente_id::text = ANY(${remetentes});`;
+    }
+
+    // Códigos de recuperação de senha e de verificação de telefone
+    if (emailsAntigos.length) {
+      try { await sql`DELETE FROM codigos_recuperacao_senha WHERE email = ANY(${emailsAntigos});`; } catch (e) {}
+    }
+    if (telefonesAntigos.length) {
+      try { await sql`DELETE FROM codigos_verificacao WHERE telefone = ANY(${telefonesAntigos});`; } catch (e) {}
+    }
+
+    return res.json({
+      sucesso: true,
+      mensagem: 'Sua conta foi excluída e seus dados pessoais foram apagados. Obrigado por ter usado o HUBy.'
+    });
+  } catch (err) {
+    console.error('Erro ao excluir conta:', err);
+    return res.status(500).json({ erro: 'Não foi possível excluir a conta agora. Tente novamente.' });
+  }
+});
+
 export default router;

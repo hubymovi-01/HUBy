@@ -985,8 +985,11 @@ app.delete('/api/patrocinadores/admin/:id', autenticarAdminLocal, async (req, re
 // ============================================================================
 app.use([
   '/api/auth/login', '/api/auth/login-motorista', '/api/usuarios/login', '/api/usuarios/login-motorista',
-  '/api/auth/esqueci-senha', '/api/auth/redefinir-senha', '/api/usuarios/esqueci-senha', '/api/usuarios/redefinir-senha'
-], limitarLogin);app.use([
+   '/api/auth/esqueci-senha', '/api/auth/redefinir-senha', '/api/usuarios/esqueci-senha', '/api/usuarios/redefinir-senha',
+  '/api/auth/excluir-conta', '/api/usuarios/excluir-conta'
+], limitarLogin);
+
+app.use([
   '/api/auth/cadastro', '/api/auth/registo', '/api/usuarios/cadastro', '/api/usuarios/registo',
   '/api/auth/enviar-codigo', '/api/auth/verificar-codigo', '/api/usuarios/enviar-codigo', '/api/usuarios/verificar-codigo'
 ], limitarCadastro);
