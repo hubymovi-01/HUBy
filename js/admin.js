@@ -955,8 +955,15 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
 
       const seloNivelHTML = renderizarSeloNivelAdmin(m.nivel, m.total_corridas);
 
-      const seloDocsAutoHTML = m.docs_validados_auto
-        ? `<div style="margin-top:4px;"><span title="CNH, CRLV, Placa e datas validados automaticamente no cadastro" style="display:inline-block; font-size:10px; font-weight:800; color:#38BDF8; background:rgba(56,189,248,0.14); border:1px solid rgba(56,189,248,0.35); padding:2px 7px; border-radius:999px;">⚡ Docs Validados</span></div>`
+            // O sistema confere só o FORMATO no cadastro (não olha o documento de verdade)
+      const seloFormatoHTML = m.docs_validados_auto
+        ? `<span title="Conferido automaticamente só o formato: CNH com 11 dígitos, datas no futuro, placa válida e fotos enviadas. Abra as fotos da CNH e do CRLV para conferir o documento de verdade." style="display:inline-block; font-size:10px; font-weight:800; color:#94A3B8; background:rgba(148,163,184,0.12); border:1px solid rgba(148,163,184,0.3); padding:2px 7px; border-radius:999px;">📋 Formato OK</span>`
+        : '';
+      const avisoConferirHTML = statusLimpo === 'pendente'
+        ? `<span title="Antes de aprovar, abra as fotos da CNH e do CRLV e confira nome, validade e placa." style="display:inline-block; font-size:10px; font-weight:800; color:#FBBF24; background:rgba(245,158,11,0.14); border:1px solid rgba(245,158,11,0.35); padding:2px 7px; border-radius:999px;">👀 Conferir fotos antes de aprovar</span>`
+        : '';
+      const seloDocsAutoHTML = (seloFormatoHTML || avisoConferirHTML)
+        ? `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">${seloFormatoHTML}${avisoConferirHTML}</div>`
         : '';
 
       return `
