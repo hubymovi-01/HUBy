@@ -519,8 +519,58 @@ export default function adminRoutes(io) {
     }
   });
 
-  router.put('/motoristas/:id/triagem', autenticarToken, verificarAdmin, async (req, res) => {
+  // Troca de veículo do motorista (só o admin; o app do motorista não altera placa, modelo, cor, ano nem categoria)
+  const CATEGORIAS_VEICULO = ['carro', 'moto', 'flash_moto', 'cargo_pickup'];
+
+  router.put('/motoristas/:id/veiculo', autenticarToken, verificarAdmin, async (req, res) => {
     try {
+      const { id } = req.params;
+      const b = req.body || {};
+
+      const modelo = String(b.veiculo_modelo || '').replace(/[<>]/g, '').trim().slice(0, 100);
+      const placa = String(b.veiculo_placa || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const cor = String(b.veiculo_cor || '').replace(/[<>]/g, '').trim().slice(0, 30);
+      const anoTxt = String(b.veiculo_ano ?? '').trim();
+      const categoria = String(b.categoria || '').trim().toLowerCase();
+
+      if (modelo.length < 2) {
+        return res.status(400).json({ erro: 'Informe o modelo do veículo.' });
+      }
+      if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa)) {
+        return res.status(400).json({ erro: 'Placa inválida. Use o padrão Mercosul (ABC1D23) ou antigo (ABC1234).' });
+      }
+      const anoAtual = new Date().getFullYear();
+      const anoNum = parseInt(anoTxt, 10);
+      if (anoTxt && (!Number.isFinite(anoNum) || anoNum < 1995 || anoNum > anoAtual + 1)) {
+        return res.status(400).json({ erro: `Ano inválido (entre 1995 e ${anoAtual + 1}).` });
+      }
+      if (!CATEGORIAS_VEICULO.includes(categoria)) {
+        return res.status(400).json({ erro: 'Categoria inválida.' });
+      }
+
+      const atualizado = await sql`
+        UPDATE motoristas
+        SET veiculo_modelo = ${modelo},
+            veiculo_placa = ${placa},
+            veiculo_cor = ${cor || 'Não informada'},
+            veiculo_ano = ${anoTxt ? String(anoNum) : null},
+            categoria = ${categoria}
+        WHERE id::text = ${String(id)}::text
+        RETURNING id, nome, veiculo_modelo, veiculo_placa, veiculo_cor, veiculo_ano, categoria;
+      `;
+
+      if (!atualizado.length) {
+        return res.status(404).json({ erro: 'Motorista não encontrado.' });
+      }
+
+      res.json({ sucesso: true, motorista: atualizado[0] });
+    } catch (err) {
+      console.error('Erro ao atualizar veículo do motorista:', err);
+      res.status(500).json({ erro: 'Falha ao atualizar o veículo.' });
+    }
+  });
+
+  router.put('/motoristas/:id/triagem', autenticarToken, verificarAdmin, async (req, res) => {    try {
       const { id } = req.params;
       const { acao, motivo } = req.body;
 

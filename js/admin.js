@@ -990,7 +990,8 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
                 ${m.doc_cnh_url ? `<button type="button" class="btn-tbl alt btn-doc-zoom" data-url="${escaparHTML(m.doc_cnh_url)}" data-titulo="CNH - ${nomeSeguro}" data-mot-id="${idSeguro}">CNH</button>` : ''}
                 ${m.ultima_selfie_url ? `<button type="button" class="btn-tbl app btn-doc-zoom" data-url="${escaparHTML(m.ultima_selfie_url)}" data-titulo="Selfie Turno - ${nomeSeguro}" data-mot-id="${idSeguro}">🤳 Selfie</button>` : ''}
                 <button type="button" class="btn-tbl alt btn-edit-validade" data-mot-id="${idSeguro}" data-nome="${nomeSeguro}" data-cnh="${escaparHTML(m.cnh_validade || '')}" data-crlv="${escaparHTML(m.crlv_validade || '')}">📅 Validades</button>
-              </div>
+                <button type="button" class="btn-tbl alt btn-edit-veiculo" data-mot-id="${idSeguro}" data-nome="${nomeSeguro}" data-modelo="${escaparHTML(m.veiculo_modelo || '')}" data-placa="${escaparHTML(m.veiculo_placa || '')}" data-cor="${escaparHTML(m.veiculo_cor || '')}" data-ano="${escaparHTML(m.veiculo_ano || '')}" data-cat="${escaparHTML(m.categoria_veiculo || m.categoria || 'carro')}">🚗 Veículo</button>
+                </div>
               <div style="display:flex; gap:4px; flex-wrap:wrap;">
                 ${valCnh.html}
                 ${valCrlv.html}
@@ -1034,8 +1035,21 @@ async function carregarTabelaFrota(token, emitirAlertaVencimento = false) {
       });
     });
 
-    const tabBtnFrota = document.querySelector('[data-tab="tabFrota"]');
-    if (tabBtnFrota) {
+    tbody.querySelectorAll('.btn-edit-veiculo').forEach(btn => {
+      btn.addEventListener('click', () => {
+        window.editarVeiculoMotorista({
+          id: btn.getAttribute('data-mot-id'),
+          nome: btn.getAttribute('data-nome'),
+          modelo: btn.getAttribute('data-modelo'),
+          placa: btn.getAttribute('data-placa'),
+          cor: btn.getAttribute('data-cor'),
+          ano: btn.getAttribute('data-ano'),
+          categoria: btn.getAttribute('data-cat')
+        });
+      });
+    });
+
+    const tabBtnFrota = document.querySelector('[data-tab="tabFrota"]');    if (tabBtnFrota) {
       const totalCriticos = qtdVencidos + qtdVencendoEmBreve;
       tabBtnFrota.innerHTML = totalCriticos > 0
         ? `🚗 Condutores <span style="background:${qtdVencidos > 0 ? '#EF4444' : '#F59E0B'}; color:#000; font-weight:900; padding:1px 6px; border-radius:10px; font-size:10px; margin-left:4px;">${totalCriticos}</span>`
@@ -1099,7 +1113,100 @@ window.editarValidadeDocumentos = (motoristaId, cnhAtual, crlvAtual, nomeConduto
     }
   });
 };
+// ============================================================================
+// TROCA DE VEÍCULO DO MOTORISTA (modelo, placa, cor, ano e categoria)
+// ============================================================================
+window.editarVeiculoMotorista = (dados) => {
+  const token = localStorage.getItem('huby_token');
+  document.getElementById('modalVeiculoAdmin')?.remove();
 
+  const criar = (tag, estilo, texto) => {
+    const el = document.createElement(tag);
+    if (estilo) el.style.cssText = estilo;
+    if (texto !== undefined) el.textContent = texto;
+    return el;
+  };
+  const estiloCampo = 'width:100%;box-sizing:border-box;background:#0B0F19;border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:10px;color:#FFF;font-size:13px;';
+  const estiloRotulo = 'display:block;font-size:11px;font-weight:800;color:#94A3B8;margin:10px 0 4px;text-transform:uppercase;';
+
+  const fundo = criar('div', 'position:fixed;inset:0;z-index:9999;background:rgba(6,10,18,0.85);display:flex;align-items:center;justify-content:center;padding:16px;');
+  fundo.id = 'modalVeiculoAdmin';
+  const caixa = criar('div', 'background:#111827;border:1px solid rgba(255,255,255,0.12);border-radius:16px;width:100%;max-width:420px;padding:20px;color:#E5E7EB;');
+
+  caixa.appendChild(criar('h3', 'margin:0 0 4px;font-size:16px;font-weight:900;', `🚗 Veículo • ${dados.nome || 'Motorista'}`));
+  caixa.appendChild(criar('p', 'margin:0 0 6px;font-size:12px;color:#94A3B8;', 'Confira o novo CRLV antes de salvar. O motorista vê os dados novos ao abrir o perfil.'));
+
+  const campo = (rotulo, valor, extra = {}) => {
+    caixa.appendChild(criar('label', estiloRotulo, rotulo));
+    const input = criar('input', estiloCampo);
+    input.value = valor || '';
+    Object.assign(input, extra);
+    caixa.appendChild(input);
+    return input;
+  };
+
+  const inModelo = campo('Modelo', dados.modelo, { maxLength: 100, placeholder: 'Ex: Chevrolet Onix 1.0' });
+  const inPlaca = campo('Placa', dados.placa, { maxLength: 8, placeholder: 'ABC1D23' });
+  inPlaca.style.textTransform = 'uppercase';
+  inPlaca.addEventListener('input', () => {
+    inPlaca.value = inPlaca.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 7);
+  });
+  const inCor = campo('Cor', dados.cor, { maxLength: 30, placeholder: 'Ex: Prata' });
+  const inAno = campo('Ano', dados.ano, { type: 'number', min: 1995, max: new Date().getFullYear() + 1, placeholder: '2022' });
+
+  caixa.appendChild(criar('label', estiloRotulo, 'Categoria'));
+  const selCat = criar('select', estiloCampo);
+  [['carro', 'Carro Padrão'], ['moto', 'Moto Passageiro'], ['flash_moto', 'Flash (Entregas)'], ['cargo_pickup', 'Frete / Picape']]
+    .forEach(([valor, texto]) => {
+      const op = criar('option', '', texto);
+      op.value = valor;
+      selCat.appendChild(op);
+    });
+  selCat.value = ['carro', 'moto', 'flash_moto', 'cargo_pickup'].includes(dados.categoria) ? dados.categoria : 'carro';
+  caixa.appendChild(selCat);
+
+  const linha = criar('div', 'display:flex;gap:8px;margin-top:16px;');
+  const btnCancelar = criar('button', 'flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.14);color:#CBD5E1;font-weight:800;padding:11px;border-radius:10px;cursor:pointer;', 'Cancelar');
+  const btnSalvar = criar('button', 'flex:1.4;background:#10B981;border:none;color:#02261C;font-weight:900;padding:11px;border-radius:10px;cursor:pointer;', '💾 Salvar veículo');
+  btnCancelar.type = 'button';
+  btnSalvar.type = 'button';
+  linha.append(btnCancelar, btnSalvar);
+  caixa.appendChild(linha);
+  fundo.appendChild(caixa);
+  document.body.appendChild(fundo);
+
+  const fechar = () => fundo.remove();
+  btnCancelar.addEventListener('click', fechar);
+  fundo.addEventListener('click', (e) => { if (e.target === fundo) fechar(); });
+
+  btnSalvar.addEventListener('click', async () => {
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando...';
+    try {
+      const res = await fetch(`${API_URL}/api/admin/motoristas/${encodeURIComponent(dados.id)}/veiculo`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          veiculo_modelo: inModelo.value.trim(),
+          veiculo_placa: inPlaca.value.trim(),
+          veiculo_cor: inCor.value.trim(),
+          veiculo_ano: inAno.value.trim(),
+          categoria: selCat.value
+        })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.erro || 'Erro ao salvar o veículo.');
+
+      fechar();
+      notificarAdmin('🚗 Veículo do motorista atualizado!', 'sucesso');
+      await carregarTabelaFrota(token, false);
+    } catch (err) {
+      notificarAdmin(err.message, 'erro');
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = '💾 Salvar veículo';
+    }
+  });
+};
 // ============================================================================
 // ZONAS DE RISCO
 // ============================================================================
