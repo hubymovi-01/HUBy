@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import { sql, JWT_SECRET } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 import { registrarIndicacaoNoCadastro } from './indicacoes.routes.js';
-
+import { enviarEmail, emailConfigurado } from '../services/email.service.js';
 const router = express.Router();
 
 const MSG_CREDENCIAIS = 'Credenciais inválidas.';
@@ -786,6 +786,192 @@ router.put('/perfil', autenticarToken, async (req, res) => {
       return res.status(409).json({ erro: 'Este e-mail ou telefone já está em uso.' });
     }
     res.status(500).json({ erro: 'Erro ao salvar alterações.' });
+  }
+});
+// ============================================================================
+// ESQUECI MINHA SENHA (código de 6 dígitos por e-mail, válido por 15 minutos)
+// A resposta é sempre a mesma, exista ou não a conta (ninguém descobre quais e-mails têm cadastro).
+// ============================================================================
+const MSG_RECUPERACAO = 'Se este e-mail estiver cadastrado, você vai receber um código em instantes. Confira também a caixa de spam.';
+const MSG_CODIGO_INVALIDO = 'Código expirado ou inválido. Peça um novo código.';
+
+async function garantirTabelaRecuperacao() {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS codigos_recuperacao_senha (
+        id SERIAL PRIMARY KEY,
+        email TEXT NOT NULL,
+        codigo_hash TEXT NOT NULL,
+        tentativas INT DEFAULT 0,
+        usado BOOLEAN DEFAULT FALSE,
+        expira_em TIMESTAMP WITH TIME ZONE NOT NULL,
+        criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `;
+  } catch (err) {
+    console.warn('Aviso ao criar tabela de recuperação de senha:', err.message);
+  }
+}
+garantirTabelaRecuperacao();
+
+// O código nunca fica salvo puro no banco, só o "resumo" dele
+function hashCodigoRecuperacao(email, codigo) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`${email}:${codigo}`).digest('hex');
+}
+
+function escaparTextoEmail(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function montarEmailRecuperacao(nome, codigo) {
+  const primeiroNome = escaparTextoEmail(String(nome || '').trim().split(' ')[0] || 'tudo bem');
+  const texto = `Olá, ${primeiroNome}!\n\nSeu código para criar uma nova senha no HUBy é: ${codigo}\n\nEle vale por 15 minutos.\nSe não foi você que pediu, ignore este e-mail: sua senha continua a mesma.`;
+  const html = `
+    <div style="font-family:Arial,Helvetica,sans-serif;background:#0B0F19;padding:24px;">
+      <div style="max-width:440px;margin:0 auto;background:#111827;border-radius:16px;padding:28px;color:#E5E7EB;">
+        <div style="font-size:26px;font-weight:900;color:#FFFFFF;margin-bottom:18px;">HUB<span style="color:#10B981;">y</span></div>
+        <p style="margin:0 0 10px;font-size:15px;">Olá, ${primeiroNome}!</p>
+        <p style="margin:0 0 18px;font-size:14px;color:#9CA3AF;">Use o código abaixo para criar uma nova senha:</p>
+        <div style="font-size:34px;font-weight:900;letter-spacing:8px;text-align:center;background:#0B0F19;border:1px solid #10B981;border-radius:12px;padding:16px;color:#10B981;">${codigo}</div>
+        <p style="margin:18px 0 0;font-size:13px;color:#9CA3AF;">O código vale por <strong>15 minutos</strong>.</p>
+        <p style="margin:8px 0 0;font-size:13px;color:#9CA3AF;">Se não foi você que pediu, ignore este e-mail: sua senha continua a mesma.</p>
+      </div>
+    </div>`;
+  return { texto, html };
+}
+
+router.post('/esqueci-senha', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 254);
+    if (!validarEmail(email)) {
+      return res.status(400).json({ erro: 'Informe um e-mail válido.' });
+    }
+
+    if (!emailConfigurado()) {
+      return res.status(503).json({ erro: 'Recuperação de senha indisponível no momento. Fale com o suporte HUBy.' });
+    }
+
+    // No máximo 3 pedidos por e-mail a cada 15 minutos (vale para qualquer e-mail, com ou sem conta)
+    const recentes = await sql`
+      SELECT COUNT(*)::int AS qtd FROM codigos_recuperacao_senha
+      WHERE email = ${email} AND criado_em >= NOW() - INTERVAL '15 minutes';
+    `;
+    if (Number(recentes[0]?.qtd || 0) >= 3) {
+      return res.status(429).json({ erro: 'Muitos pedidos para este e-mail. Aguarde 15 minutos e tente de novo.' });
+    }
+
+    const contas = await sql`
+      SELECT nome FROM usuarios WHERE LOWER(TRIM(email)) = ${email}
+      UNION ALL
+      SELECT nome FROM motoristas WHERE LOWER(TRIM(email)) = ${email}
+      LIMIT 1;
+    `;
+
+    const codigo = String(crypto.randomInt(100000, 1000000));
+
+    // Só o código mais novo vale
+    await sql`UPDATE codigos_recuperacao_senha SET usado = TRUE WHERE email = ${email} AND usado = FALSE;`;
+    await sql`
+      INSERT INTO codigos_recuperacao_senha (email, codigo_hash, expira_em)
+      VALUES (${email}, ${hashCodigoRecuperacao(email, codigo)}, ${new Date(Date.now() + 15 * 60 * 1000)});
+    `;
+
+    if (contas.length) {
+      const { texto, html } = montarEmailRecuperacao(contas[0].nome, codigo);
+      const envio = await enviarEmail({
+        para: email,
+        nomePara: contas[0].nome || undefined,
+        assunto: `${codigo} é o seu código para criar uma nova senha • HUBy`,
+        texto,
+        html
+      });
+      if (!envio.enviado) {
+        console.warn('[recuperacao] E-mail de recuperação não foi enviado:', envio.motivo);
+      }
+    }
+
+    return res.json({ sucesso: true, mensagem: MSG_RECUPERACAO });
+  } catch (err) {
+    console.error('Erro em esqueci-senha:', err);
+    return res.status(500).json({ erro: 'Não foi possível processar o pedido agora. Tente novamente.' });
+  }
+});
+
+router.post('/redefinir-senha', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').trim().toLowerCase().slice(0, 254);
+    const codigo = String(req.body?.codigo || '').replace(/\D/g, '');
+    const novaSenha = req.body?.novaSenha;
+
+    if (!validarEmail(email) || codigo.length !== 6) {
+      return res.status(400).json({ erro: 'Informe o e-mail e o código de 6 dígitos.' });
+    }
+
+    const erroSenha = validarSenha(novaSenha);
+    if (erroSenha) {
+      return res.status(400).json({ erro: erroSenha });
+    }
+
+    const [reg] = await sql`
+      SELECT id, codigo_hash, tentativas FROM codigos_recuperacao_senha
+      WHERE email = ${email} AND usado = FALSE AND expira_em > NOW()
+      ORDER BY id DESC
+      LIMIT 1;
+    `;
+    if (!reg) {
+      return res.status(400).json({ erro: MSG_CODIGO_INVALIDO });
+    }
+
+    if (Number(reg.tentativas || 0) >= 5) {
+      await sql`UPDATE codigos_recuperacao_senha SET usado = TRUE WHERE id = ${reg.id};`;
+      return res.status(429).json({ erro: 'Muitas tentativas erradas. Peça um novo código.' });
+    }
+
+    const esperado = Buffer.from(String(reg.codigo_hash), 'hex');
+    const recebido = Buffer.from(hashCodigoRecuperacao(email, codigo), 'hex');
+    const codigoOk = esperado.length === recebido.length && crypto.timingSafeEqual(esperado, recebido);
+
+    if (!codigoOk) {
+      await sql`UPDATE codigos_recuperacao_senha SET tentativas = tentativas + 1 WHERE id = ${reg.id};`;
+      return res.status(400).json({ erro: 'Código incorreto. Confira os 6 dígitos do e-mail.' });
+    }
+
+    // Marca como usado ANTES de trocar a senha (o mesmo código não funciona duas vezes)
+    const marcado = await sql`
+      UPDATE codigos_recuperacao_senha SET usado = TRUE
+      WHERE id = ${reg.id} AND usado = FALSE
+      RETURNING id;
+    `;
+    if (!marcado.length) {
+      return res.status(400).json({ erro: MSG_CODIGO_INVALIDO });
+    }
+
+    const senhaHash = await bcrypt.hash(String(novaSenha), 10);
+
+    // A senha fica igual nas duas tabelas (o motorista também tem cadastro em "usuarios")
+    const usuariosAtualizados = await sql`
+      UPDATE usuarios SET senha_hash = ${senhaHash}
+      WHERE LOWER(TRIM(email)) = ${email}
+      RETURNING id;
+    `;
+    const motoristasAtualizados = await sql`
+      UPDATE motoristas SET senha_hash = ${senhaHash}
+      WHERE LOWER(TRIM(email)) = ${email}
+      RETURNING id;
+    `;
+
+    if (!usuariosAtualizados.length && !motoristasAtualizados.length) {
+      return res.status(400).json({ erro: MSG_CODIGO_INVALIDO });
+    }
+
+    return res.json({ sucesso: true, mensagem: 'Senha alterada! Agora é só entrar com a senha nova.' });
+  } catch (err) {
+    console.error('Erro em redefinir-senha:', err);
+    return res.status(500).json({ erro: 'Não foi possível alterar a senha agora. Tente novamente.' });
   }
 });
 

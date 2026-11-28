@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Recuperar Senha • HUBy</title>
+
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#0B0F19">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HUBy">
+
+  <link rel="apple-touch-icon" sizes="192x192" href="./img/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="./img/icon-192.png">
+
+  <link rel="stylesheet" href="./css/base.css?v=2.2.1">
+  <link rel="stylesheet" href="./css/auth.css?v=2.3.0">
+  <style>
+    .senha-wrapper { position: relative; }
+    .senha-wrapper input { padding-right: 70px; }
+    .btn-ver-senha {
+      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: #94A3B8; font-size: 11px; font-weight: 800; padding: 6px 9px;
+      border-radius: 8px; cursor: pointer;
+    }
+    .campo-codigo {
+      text-align: center; font-size: 26px !important; font-weight: 900;
+      letter-spacing: 10px;
+    }
+    .texto-ajuda { font-size: 12px; color: #94A3B8; line-height: 1.5; margin: 0 0 14px; }
+    .link-secundario {
+      display: block; text-align: center; margin-top: 14px;
+      font-size: 12px; color: #94A3B8; text-decoration: underline; cursor: pointer;
+      background: none; border: none; width: 100%;
+    }
+    .link-secundario:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+  </style>
+</head>
+<body class="auth-body">
+
+  <div class="auth-ambient-glow"></div>
+
+  <main class="auth-container">
+    <div class="auth-card">
+      <header class="auth-header">
+        <div class="auth-badge" style="margin-bottom: 12px; display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; background: rgba(245, 158, 11, 0.15); color: #FBBF24;">🔑 Recuperar senha</div>
+        <h1 class="auth-brand">HUB<span>y</span></h1>
+        <p id="txtSubtitulo" class="auth-desc">Vamos criar uma senha nova para você</p>
+      </header>
+
+      <div id="alertaBox" class="auth-alert" style="display: none; padding: 10px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; white-space: pre-line;"></div>
+
+      <!-- ETAPA 1: E-MAIL -->
+      <form id="formEmail" class="auth-form" novalidate>
+        <p class="texto-ajuda">Digite o e-mail do seu cadastro. Vamos enviar um código de 6 dígitos para ele.</p>
+        <div class="input-group">
+          <label for="campoEmail">E-mail</label>
+          <input type="email" id="campoEmail" placeholder="seuemail@exemplo.com" autocomplete="email" maxlength="254" required>
+        </div>
+        <button type="submit" id="btnEnviarCodigo" class="btn-primary-action">
+          <span>Enviar código</span>
+        </button>
+      </form>
+
+      <!-- ETAPA 2: CÓDIGO + SENHA NOVA -->
+      <form id="formNovaSenha" class="auth-form" style="display: none;" novalidate>
+        <p id="txtEnviadoPara" class="texto-ajuda"></p>
+
+        <div class="input-group">
+          <label for="campoCodigo">Código de 6 dígitos</label>
+          <input type="text" id="campoCodigo" class="campo-codigo" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" required>
+        </div>
+
+        <div class="input-group">
+          <label for="campoSenha">Nova senha</label>
+          <div class="senha-wrapper">
+            <input type="password" id="campoSenha" placeholder="Mínimo 8 caracteres, com letras e números" autocomplete="new-password" maxlength="72" required>
+            <button type="button" class="btn-ver-senha" data-alvo="campoSenha">Ver</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="campoSenha2">Repita a nova senha</label>
+          <div class="senha-wrapper">
+            <input type="password" id="campoSenha2" placeholder="Digite a mesma senha" autocomplete="new-password" maxlength="72" required>
+            <button type="button" class="btn-ver-senha" data-alvo="campoSenha2">Ver</button>
+          </div>
+        </div>
+
+        <button type="submit" id="btnSalvarSenha" class="btn-primary-action">
+          <span>Salvar nova senha</span>
+        </button>
+
+        <button type="button" id="btnReenviar" class="link-secundario" disabled>Reenviar código</button>
+        <button type="button" id="btnTrocarEmail" class="link-secundario">Usar outro e-mail</button>
+      </form>
+
+      <footer class="auth-footer-nav" style="margin-top: 20px;">
+        <span>Lembrou a senha?</span>
+        <a href="./login.html" id="linkVoltarLogin">Voltar para o login</a>
+      </footer>
+    </div>
+  </main>
+
+  <script type="module">
+    import { API_URL } from './js/config.js';
+
+    const params = new URLSearchParams(window.location.search);
+    const perfil = params.get('perfil') === 'motorista' ? 'motorista' : 'cliente';
+    const urlLogin = `./login.html?perfil=${perfil}`;
+    document.getElementById('linkVoltarLogin').href = urlLogin;
+
+    const formEmail = document.getElementById('formEmail');
+    const formNovaSenha = document.getElementById('formNovaSenha');
+    const campoEmail = document.getElementById('campoEmail');
+    const campoCodigo = document.getElementById('campoCodigo');
+    const campoSenha = document.getElementById('campoSenha');
+    const campoSenha2 = document.getElementById('campoSenha2');
+    const btnEnviar = document.getElementById('btnEnviarCodigo');
+    const btnSalvar = document.getElementById('btnSalvarSenha');
+    const btnReenviar = document.getElementById('btnReenviar');
+    const btnTrocarEmail = document.getElementById('btnTrocarEmail');
+    const txtEnviadoPara = document.getElementById('txtEnviadoPara');
+    const alertaBox = document.getElementById('alertaBox');
+
+    const ESPERA_REENVIO_SEG = 60;
+    let emailAtual = '';
+    let timerReenvio = null;
+
+    function exibirAlerta(msg, tipo) {
+      const cores = {
+        error: { bg: 'rgba(239, 68, 68, 0.15)', borda: 'rgba(239, 68, 68, 0.3)', txt: '#F87171' },
+        warning: { bg: 'rgba(245, 158, 11, 0.15)', borda: 'rgba(245, 158, 11, 0.35)', txt: '#FBBF24' },
+        success: { bg: 'rgba(16, 185, 129, 0.15)', borda: 'rgba(16, 185, 129, 0.3)', txt: '#10B981' }
+      };
+      const c = cores[tipo] || cores.success;
+      alertaBox.textContent = String(msg || '').slice(0, 300);
+      alertaBox.style.display = 'block';
+      alertaBox.style.background = c.bg;
+      alertaBox.style.border = `1px solid ${c.borda}`;
+      alertaBox.style.color = c.txt;
+    }
+
+    function esconderAlerta() {
+      alertaBox.style.display = 'none';
+    }
+
+    function emailValido(email) {
+      return /^[^\s@<>"']{1,64}@[^\s@<>"']{1,190}\.[a-z]{2,}$/i.test(email);
+    }
+
+    function erroDaSenha(s) {
+      if (s.length < 8) return 'A senha precisa ter pelo menos 8 caracteres.';
+      if (s.length > 72) return 'A senha pode ter no máximo 72 caracteres.';
+      if (!/[A-Za-z]/.test(s) || !/[0-9]/.test(s)) return 'A senha precisa ter letras e números.';
+      return null;
+    }
+
+    async function postar(caminho, corpo) {
+      const resp = await fetch(`${API_URL}${caminho}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corpo)
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.status === 429) {
+        throw new Error(data.erro || 'Muitas tentativas. Aguarde alguns minutos e tente novamente.');
+      }
+      if (!resp.ok) throw new Error(data.erro || 'Não foi possível concluir agora. Tente novamente.');
+      return data;
+    }
+
+    function iniciarEsperaReenvio() {
+      let restante = ESPERA_REENVIO_SEG;
+      btnReenviar.disabled = true;
+      btnReenviar.textContent = `Reenviar código (${restante}s)`;
+      clearInterval(timerReenvio);
+      timerReenvio = setInterval(() => {
+        restante -= 1;
+        if (restante <= 0) {
+          clearInterval(timerReenvio);
+          btnReenviar.disabled = false;
+          btnReenviar.textContent = 'Reenviar código';
+        } else {
+          btnReenviar.textContent = `Reenviar código (${restante}s)`;
+        }
+      }, 1000);
+    }
+
+    async function pedirCodigo() {
+      const data = await postar('/api/auth/esqueci-senha', { email: emailAtual });
+      exibirAlerta(data.mensagem || 'Se este e-mail estiver cadastrado, você vai receber um código em instantes.', 'success');
+      iniciarEsperaReenvio();
+    }
+
+    // ETAPA 1: pedir o código
+    formEmail.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      esconderAlerta();
+
+      const email = campoEmail.value.trim().toLowerCase();
+      if (!emailValido(email)) return exibirAlerta('Informe um e-mail válido.', 'error');
+
+      btnEnviar.disabled = true;
+      btnEnviar.querySelector('span').textContent = 'Enviando...';
+
+      try {
+        emailAtual = email;
+        await pedirCodigo();
+        txtEnviadoPara.textContent = `Enviamos um código para ${email}. Ele vale por 15 minutos. Se não chegar, confira a caixa de spam.`;
+        formEmail.style.display = 'none';
+        formNovaSenha.style.display = 'block';
+        campoCodigo.focus();
+      } catch (err) {
+        exibirAlerta(err.message, 'error');
+      } finally {
+        btnEnviar.disabled = false;
+        btnEnviar.querySelector('span').textContent = 'Enviar código';
+      }
+    });
+
+    // Só números no campo do código
+    campoCodigo.addEventListener('input', () => {
+      campoCodigo.value = campoCodigo.value.replace(/\D/g, '').slice(0, 6);
+    });
+
+    // ETAPA 2: código + senha nova
+    formNovaSenha.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      esconderAlerta();
+
+      const codigo = campoCodigo.value.replace(/\D/g, '');
+      const senha = campoSenha.value;
+      const senha2 = campoSenha2.value;
+
+      if (codigo.length !== 6) return exibirAlerta('Digite os 6 dígitos do código que chegou no e-mail.', 'error');
+      const erroSenha = erroDaSenha(senha);
+      if (erroSenha) return exibirAlerta(erroSenha, 'error');
+      if (senha !== senha2) return exibirAlerta('As duas senhas não são iguais.', 'error');
+
+      btnSalvar.disabled = true;
+      btnSalvar.querySelector('span').textContent = 'Salvando...';
+
+      try {
+        const data = await postar('/api/auth/redefinir-senha', { email: emailAtual, codigo, novaSenha: senha });
+        clearInterval(timerReenvio);
+        exibirAlerta(`${data.mensagem || 'Senha alterada!'}\nLevando você para o login...`, 'success');
+        formNovaSenha.style.display = 'none';
+        setTimeout(() => window.location.replace(urlLogin), 2500);
+      } catch (err) {
+        exibirAlerta(err.message, 'error');
+        btnSalvar.disabled = false;
+        btnSalvar.querySelector('span').textContent = 'Salvar nova senha';
+      }
+    });
+
+    btnReenviar.addEventListener('click', async () => {
+      if (btnReenviar.disabled || !emailAtual) return;
+      esconderAlerta();
+      btnReenviar.disabled = true;
+      try {
+        await pedirCodigo();
+        campoCodigo.value = '';
+        campoCodigo.focus();
+      } catch (err) {
+        exibirAlerta(err.message, 'error');
+        btnReenviar.disabled = false;
+      }
+    });
+
+    btnTrocarEmail.addEventListener('click', () => {
+      clearInterval(timerReenvio);
+      esconderAlerta();
+      emailAtual = '';
+      campoCodigo.value = '';
+      campoSenha.value = '';
+      campoSenha2.value = '';
+      formNovaSenha.style.display = 'none';
+      formEmail.style.display = 'block';
+      campoEmail.focus();
+    });
+
+    // Mostrar / esconder senha
+    document.querySelectorAll('.btn-ver-senha').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const alvo = document.getElementById(btn.getAttribute('data-alvo'));
+        if (!alvo) return;
+        const mostrar = alvo.type === 'password';
+        alvo.type = mostrar ? 'text' : 'password';
+        btn.textContent = mostrar ? 'Ocultar' : 'Ver';
+      });
+    });
+  </script>
+</body>
+</html>

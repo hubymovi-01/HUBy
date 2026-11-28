@@ -92,6 +92,7 @@
         </button>
       </form>
 
+      <a id="linkEsqueciSenha" class="link-trocar-perfil" href="./esqueci-senha.html">Esqueci minha senha</a>
       <a id="linkTrocarPerfil" class="link-trocar-perfil"></a>
 
       <footer class="auth-footer-nav" style="margin-top: 20px;">
@@ -116,7 +117,8 @@
     const linkCriarConta = document.getElementById('linkCriarConta');
     const linkTrocarPerfil = document.getElementById('linkTrocarPerfil');
     const alertaBox = document.getElementById('alertaLoginBox');
-
+    document.getElementById('linkEsqueciSenha').href = `./esqueci-senha.html?perfil=${perfil}`;
+    
     if (perfil === 'motorista') {
       formMotorista.style.display = 'block';
       txtSubtitulo.textContent = 'Acesso exclusivo para Motoristas Parceiros';
