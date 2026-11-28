@@ -17,13 +17,14 @@ export const sql = neon(process.env.DATABASE_URL);
 // ============================================================================
 // CHAVE SECRETA DO LOGIN (JWT) - CORRIGIDA E BLINDADA
 // ============================================================================
-// Lógica atualizada: Lê a chave do Render. Se falhar ou estiver ausente, 
-// usa uma chave fixa e longa em vez de gerar uma aleatória.
-// Isto impede que o Render invalide os tokens ao reiniciar a instância gratuita.
-export const JWT_SECRET = (process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32)
-  ? process.env.JWT_SECRET
-  : 'huby_chave_fixa_de_seguranca_absoluta_2026_para_nao_cair_sessao_nunca_mais';
-
+// A chave de login vem SEMPRE do Render (variável JWT_SECRET, com 32+ caracteres).
+// Sem ela o servidor não liga: uma chave escrita aqui ficaria pública no GitHub.
+// (Os logins continuam valendo depois de reiniciar, porque a chave do Render é sempre a mesma.)
+const segredoJwt = process.env.JWT_SECRET;
+if (!segredoJwt || segredoJwt.length < 32) {
+  throw new Error('JWT_SECRET ausente ou curto (mínimo 32 caracteres). Configure no Render e no .env.local.');
+}
+export const JWT_SECRET = segredoJwt;
 // ============================================================================
 // ESTRUTURA BASE (colunas de apoio)
 // ============================================================================

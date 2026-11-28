@@ -315,15 +315,7 @@ io.on('connection', (socket) => {
       }
     } catch (err) {}
   });
-
-  // Os avisos abaixo eram repassados para TODO mundo sem conferir quem mandou
-  // (dava para cancelar ou "finalizar" corrida dos outros na tela).
-  // Agora esses avisos saem só do servidor, pelas rotas oficiais (aceitar, embarque,
-  // finalizar e cancelar). Os nomes continuam escutados para não gerar erro no app antigo.
-  ['motorista_aceitou', 'corrida_iniciada', 'corrida_finalizada_motorista',
-    'corrida_cancelada_motorista', 'cliente_cancelou_busca'].forEach((evento) => {
-    socket.on(evento, () => {});
-  });
+  // Aceite, embarque, finalização e cancelamento só saem do servidor, pelas rotas oficiais.
 });
 
 app.use((req, res, next) => {
