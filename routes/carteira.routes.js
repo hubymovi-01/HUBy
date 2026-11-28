@@ -5,6 +5,7 @@ import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 import { lerTarifasDoBanco, extrairObjetoJSONB } from './admin.routes.js';
+import { avisarCorrida, avisarAdmins } from '../services/salas-socket.js';
 
 const router = express.Router();
 const EM_PRODUCAO = process.env.NODE_ENV === 'production';
@@ -233,6 +234,7 @@ export async function ativarBannerPatrocinadorPorReferencia(referencia, txid, io
       } catch (e) {}
     }
 
+    // Banner é público: o aviso vai para todos
     if (atualizado && io) {
       io.emit('patrocinadores_atualizados', { bannerId: atualizado.id, ativo: true });
     }
@@ -408,9 +410,10 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
           nivelAtual: nivelMot,
           taxaPercentualAplicada: taxaPct
         };
-        io.emit(`corrida_finalizada_${idLimpo}`, payload);
-        io.emit(`pix_confirmado_${idLimpo}`, payload);
-        io.emit('corrida_finalizada', payload);
+        // Só o passageiro e o motorista da corrida (o aviso geral também vai para os admins)
+        avisarCorrida(io, idLimpo, `corrida_finalizada_${idLimpo}`, payload, { admins: false });
+        avisarCorrida(io, idLimpo, `pix_confirmado_${idLimpo}`, payload, { admins: false });
+        avisarCorrida(io, idLimpo, 'corrida_finalizada', payload);
       }
       return { jaEstavaConcluido: true, valorFinal: vTotal, repasseLiquido: repasse };
     }
@@ -493,9 +496,10 @@ export async function liquidarCorridaPixPorPedidoId(pedidoId, valorPagoMP, txid,
   };
 
   if (io) {
-    io.emit(`corrida_finalizada_${idLimpo}`, payloadEvento);
-    io.emit(`pix_confirmado_${idLimpo}`, payloadEvento);
-    io.emit('corrida_finalizada', payloadEvento);
+    // Só o passageiro e o motorista da corrida (o aviso geral também vai para os admins)
+    avisarCorrida(io, idLimpo, `corrida_finalizada_${idLimpo}`, payloadEvento, { admins: false });
+    avisarCorrida(io, idLimpo, `pix_confirmado_${idLimpo}`, payloadEvento, { admins: false });
+    avisarCorrida(io, idLimpo, 'corrida_finalizada', payloadEvento);
   }
 
   return payloadEvento;
@@ -898,7 +902,7 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
         `;
 
         if (io) {
-          io.emit('saque_atualizado', { saqueId, status: 'pago', valor: valorNum, motorista: mot.nome });
+          avisarAdmins(io, 'saque_atualizado', { saqueId, status: 'pago', valor: valorNum, motorista: mot.nome });
         }
 
         return res.json({
@@ -910,8 +914,9 @@ router.post('/motorista/:id/saque', autenticarToken, async (req, res) => {
         });
       }
 
+      // Aviso com a chave Pix: SÓ para os admins (antes ia para todo mundo)
       if (io) {
-        io.emit('novo_saque_solicitado', {
+        avisarAdmins(io, 'novo_saque_solicitado', {
           saqueId,
           motorista_nome: mot.nome,
           valor: valorNum,
@@ -1017,7 +1022,7 @@ router.post('/admin/saques/pagar-lote', autenticarToken, verificarAdmin, async (
 
     const io = obterIo(req);
     if (io) {
-      io.emit('saque_atualizado', { lote: true, total: marcadosPagos });
+      avisarAdmins(io, 'saque_atualizado', { lote: true, total: marcadosPagos });
     }
 
     return res.json({
@@ -1115,7 +1120,7 @@ router.put('/admin/saques/:id', autenticarToken, verificarAdmin, async (req, res
 
     const io = obterIo(req);
     if (io) {
-      io.emit('saque_atualizado', { saqueId: id, status });
+      avisarAdmins(io, 'saque_atualizado', { saqueId: id, status });
     }
 
     res.json({

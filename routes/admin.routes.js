@@ -4,6 +4,7 @@ import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
 import { executarTransferenciaPixMercadoPago } from './carteira.routes.js';
 import { dispararPushBroadcast } from './push.routes.js';
+import { avisarMotoristas, avisarAdmins } from '../services/salas-socket.js';
 
 function verificarAdmin(req, res, next) {
   const role = String(req.usuario?.role || req.usuario?.funcao || '').toLowerCase().trim();
@@ -549,7 +550,10 @@ export default function adminRoutes(io) {
   // =========================================================================
   // 3. SAQUE AUTOMÁTICO BLINDADO CONTRA DUPLO CLIQUE + DISPARO PIX API
   // =========================================================================
-  router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
+    router.post('/motoristas/saque/automatico', autenticarToken, async (req, res) => {
+    if (String(req.usuario?.role || '').toLowerCase() !== 'motorista') {
+      return res.status(403).json({ erro: 'Área exclusiva para motoristas parceiros.' });
+    }
     const motoristaId = String(req.usuario?.id || '');
     const { valor, chavePix, tipoChave } = req.body;
     const valorSaque = Math.round((Number(valor) || 0) * 100) / 100;
@@ -584,13 +588,21 @@ export default function adminRoutes(io) {
 
       const saqueId = reg[0].id;
 
-      const disp = await executarTransferenciaPixMercadoPago({
-        saqueId,
-        valor: valorSaque,
-        chavePix: String(chavePix).trim(),
-        tipoChave: String(tipoChave || 'cpf').slice(0, 20),
-        motoristaNome: mot.nome
-      });
+            // Mesma regra das outras rotas de saque: envio automático só se estiver ligado
+      // no Render (SAQUE_AUTOMATICO=true) e o valor estiver dentro do limite.
+      const saqueAutoLigado = process.env.SAQUE_AUTOMATICO === 'true';
+      const limiteAuto = Number(process.env.SAQUE_AUTOMATICO_LIMITE || 100);
+      const podeAutomatico = saqueAutoLigado && valorSaque <= limiteAuto;
+
+      const disp = podeAutomatico
+        ? await executarTransferenciaPixMercadoPago({
+            saqueId,
+            valor: valorSaque,
+            chavePix: String(chavePix).trim(),
+            tipoChave: String(tipoChave || 'cpf').slice(0, 20),
+            motoristaNome: mot.nome
+          })
+        : { enviado: false };
 
       if (disp.enviado) {
         await sql`
@@ -598,6 +610,13 @@ export default function adminRoutes(io) {
           SET status = 'pago', comprovante_url = ${disp.comprovanteId}, pago_em = CURRENT_TIMESTAMP
           WHERE id = ${saqueId};
         `;
+      } else {
+        // Ficou pendente: avisa só os admins para conferirem
+        avisarAdmins(req.app.get('io') || io, 'novo_saque_solicitado', {
+          saqueId,
+          motorista_nome: mot.nome,
+          valor: valorSaque
+        });
       }
 
       res.json({
@@ -731,6 +750,7 @@ export default function adminRoutes(io) {
         SET valor = (${jsonTexto}::text)::jsonb, atualizado_em = CURRENT_TIMESTAMP;
       `;
 
+      // Tarifas são públicas: o aviso vai para todos
       const socket = req.io || io;
       if (socket) {
         socket.emit('tarifas_atualizadas', novasTarifas);
@@ -1083,6 +1103,7 @@ export default function adminRoutes(io) {
         criado_em: new Date().toISOString()
       };
 
+      // Comunicado é público: o aviso vai para todos
       const socket = req.app.get('io') || io;
       if (socket) {
         socket.emit('nova_notificacao_push', payload);
@@ -1249,9 +1270,10 @@ export default function adminRoutes(io) {
       `;
       if (!pedido) return res.status(404).json({ erro: 'Agendamento não localizado.' });
 
+      // A chamada vai só para os motoristas logados (e admins), não para qualquer conexão
       const socket = req.io || io;
       if (socket) {
-        socket.emit('nova_chamada', {
+        avisarMotoristas(socket, 'nova_chamada', {
           id: pedido.id,
           clienteId: pedido.cliente_id,
           tipo: pedido.tipo || 'carro',
@@ -1417,7 +1439,7 @@ export default function adminRoutes(io) {
         recentes
       });
     } catch (err) {
-      res.status(500).json({ erro: 'Falha ao consultar demanda não atendida.' });
+      res.status(500).json({ erro: 'Falha ao consultar demanda não atendida.' })
     }
   });
 

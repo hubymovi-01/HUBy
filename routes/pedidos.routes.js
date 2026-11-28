@@ -93,7 +93,7 @@ async function registrarDemandaNaoAtendida({
     `;
 
     if (io && reg) {
-      io.emit('demanda_nao_atendida_registrada', reg);
+      avisarAdmins(io, 'demanda_nao_atendida_registrada', reg);
     }
   } catch (err) {
     console.warn('Aviso ao registrar demanda não atendida:', err.message);
@@ -353,7 +353,7 @@ export function iniciarDespachanteAgendamentos(io) {
       for (const p of prontas) {
         const valorNum = Number(p.valor_total || 0);
         if (io) {
-          io.emit('nova_chamada', {
+          avisarMotoristas(io, 'nova_chamada', {
             id: p.id,
             tipo: p.tipo || 'carro',
             subTipoLabel: `${p.sub_tipo_label || 'HUBy'} (Agendada)`,
@@ -586,8 +586,11 @@ export default function pedidosRouter(io) {
         return res.status(409).json({ erro: 'Já existe uma corrida com este código.' });
       }
 
+      // O passageiro já entra na sala da corrida (recebe o aceite e o mapa ao vivo)
+      colocarPassageiroNaCorrida(io, clienteId, idPedido);
+
       if (io) {
-        io.emit('nova_chamada', {
+        avisarMotoristas(io, 'nova_chamada', {
           id: idPedido,
           tipo: tipo || 'carro',
           subTipoLabel: subTipoLabelFinal,
@@ -680,8 +683,9 @@ export default function pedidosRouter(io) {
         return res.status(400).json({ erro: 'Coordenadas inválidas.' });
       }
 
+      // GPS dos motoristas só para o radar do admin
       if (io) {
-        io.emit('posicao_motorista', {
+        avisarAdmins(io, 'posicao_motorista', {
           motoristaId: mot.id,
           lat,
           lng,
@@ -981,12 +985,9 @@ export default function pedidosRouter(io) {
 
       const mot = await buscarMotoristaDoToken(req.usuario);
       const papel = papelNoPedido(pedidos[0], req.usuario, mot);
-      // Passageiro pode cancelar enquanto procura motorista OU enquanto o motorista vem buscá-lo.
-      // Depois do embarque (em viagem) não dá mais para cancelar pelo app.
-      // Por enquanto sem taxa para o passageiro (ainda não existe cobrança de cancelamento).
-      const passageiroPodeCancelar = aindaBuscando || STATUS_A_CAMINHO.includes(statusAtual);
-      if (papel === 'cliente' && !passageiroPodeCancelar) {
-        return res.status(403).json({ erro: 'A viagem já começou. Para encerrar, fale com o motorista ou com o suporte.' });
+      // Só o motorista desta corrida (ou o admin) avisa que chegou
+      if (papel !== 'motorista' && papel !== 'admin') {
+        return res.status(403).json({ erro: 'Apenas o motorista desta corrida pode atualizar o status.' });
       }
 
       const ehChegadaNoLocal = STATUS_CHEGADA.includes(novoStatus);
@@ -1013,7 +1014,7 @@ export default function pedidosRouter(io) {
       }
 
       if (io) {
-        io.emit('status_corrida_atualizado', {
+        avisarCorrida(io, id, 'status_corrida_atualizado', {
           pedidoId: id,
           status: novoStatus,
           chegouOrigemEm: ehChegadaNoLocal ? atualizado[0].chegou_origem_em : undefined
@@ -1061,7 +1062,7 @@ export default function pedidosRouter(io) {
       }
 
       if (io) {
-        io.emit('passageiro_a_bordo', { pedidoId: id, status: 'em_viagem' });
+        avisarCorrida(io, id, 'passageiro_a_bordo', { pedidoId: id, status: 'em_viagem' });
       }
 
       res.json({ sucesso: true, status: 'em_viagem' });
@@ -1137,8 +1138,9 @@ export default function pedidosRouter(io) {
         RETURNING id, pedido_id, remetente_id, remetente_nome, mensagem, criado_em;
       `;
 
+      // Mensagem só para o passageiro e o motorista desta corrida
       if (io) {
-        io.emit(`nova_mensagem_chat_${id}`, nova[0]);
+        avisarCorrida(io, id, `nova_mensagem_chat_${id}`, nova[0], { admins: false });
       }
 
       res.status(201).json(nova[0]);
@@ -1223,8 +1225,11 @@ export default function pedidosRouter(io) {
         aceita_pix: mot.aceita_pix !== false
       };
 
+      // As conexões do motorista entram na sala da corrida
+      colocarMotoristaNaCorrida(io, mot.id, id);
+
       if (io) {
-        io.emit('corrida_aceita', {
+        avisarCorrida(io, id, 'corrida_aceita', {
           pedidoId: id,
           status: 'a_caminho',
           motorista: {
@@ -1242,6 +1247,8 @@ export default function pedidosRouter(io) {
             aceita_pix: mot.aceita_pix !== false
           }
         });
+        // Os outros motoristas só ficam sabendo que a chamada saiu do radar (sem dados do motorista)
+        avisarMotoristas(io, 'corrida_aceita', { pedidoId: id }, { admins: false });
       }
 
       res.json({ sucesso: true, pedido: payloadResposta });
@@ -1319,7 +1326,7 @@ export default function pedidosRouter(io) {
       }
 
       if (io) {
-        io.emit('corrida_finalizada', {
+        avisarCorrida(io, id, 'corrida_finalizada', {
           pedidoId: id,
           status: 'concluido',
           valorFinal: valorBruto
@@ -1431,14 +1438,14 @@ export default function pedidosRouter(io) {
         }
 
         if (io) {
-          io.emit(`corrida_finalizada_${id}`, {
+          avisarCorrida(io, id, `corrida_finalizada_${id}`, {
             sucesso: true,
             pedidoId: id,
             forma_pagamento: formaPagamento,
             valorTotal,
             mensagem: 'Viagem finalizada e acertada com o motorista!'
           });
-          io.emit('corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
+          avisarCorrida(io, id, 'corrida_finalizada', { pedidoId: id, status: 'concluido', valorFinal: valorTotal });
         }
 
         return res.json({
@@ -1524,8 +1531,9 @@ export default function pedidosRouter(io) {
         qr_code_base64: pixData.qr_code_base64
       };
 
+      // QR Code do Pix só para o passageiro e o motorista desta corrida
       if (io) {
-        io.emit(`exibir_pix_corrida_${id}`, payloadPix);
+        avisarCorrida(io, id, `exibir_pix_corrida_${id}`, payloadPix, { admins: false });
       }
 
       return res.json({ sucesso: true, status: 'aguardando_pix', pix: payloadPix });
@@ -1537,7 +1545,7 @@ export default function pedidosRouter(io) {
 
   // =========================================================================
   // 9. CANCELAR VIAGEM
-  //    Passageiro: só enquanto procura motorista. Motorista: só a corrida dele.
+  //    Passageiro: até o embarque, sem taxa. Motorista: só a corrida dele.
   // =========================================================================
   router.put('/:id/cancelar', autenticarToken, async (req, res) => {
     try {
@@ -1567,8 +1575,12 @@ export default function pedidosRouter(io) {
       if (!papel) {
         return res.status(403).json({ erro: 'Você não tem permissão para cancelar esta corrida.' });
       }
-      if (papel === 'cliente' && !aindaBuscando) {
-        return res.status(403).json({ erro: 'Corrida já aceita. Apenas o motorista parceiro pode cancelar agora.' });
+      // Passageiro pode cancelar enquanto procura motorista OU enquanto o motorista vem buscá-lo.
+      // Depois do embarque (em viagem) não dá mais para cancelar pelo app.
+      // Por enquanto sem taxa para o passageiro (ainda não existe cobrança de cancelamento).
+      const passageiroPodeCancelar = aindaBuscando || STATUS_A_CAMINHO.includes(statusAtual);
+      if (papel === 'cliente' && !passageiroPodeCancelar) {
+        return res.status(403).json({ erro: 'A viagem já começou. Para encerrar, fale com o motorista ou com o suporte.' });
       }
 
       const canceladoPor = papel === 'cliente' ? 'cliente' : papel; // 'motorista' | 'admin' | 'cliente'
@@ -1586,7 +1598,7 @@ export default function pedidosRouter(io) {
 
       const motivoFinal = taxaCancelamentoAplicada > 0
         ? `${motivo || 'Cancelado pelo motorista'} (Taxa de espera aplicada: R$ ${taxaCancelamentoAplicada.toFixed(2).replace('.', ',')})`
-        : (motivo || (canceladoPor === 'cliente' ? 'Cancelado pelo passageiro durante a busca' : (canceladoPor === 'admin' ? 'Cancelado pela administração' : 'Cancelado pelo motorista')));
+        : (motivo || (canceladoPor === 'cliente' ? (aindaBuscando ? 'Cancelado pelo passageiro durante a busca' : 'Cancelado pelo passageiro antes do embarque') : (canceladoPor === 'admin' ? 'Cancelado pela administração' : 'Cancelado pelo motorista')));
 
       // Cancelamento atômico: se duas requisições chegarem juntas, só uma vale
       const atualizado = await sql`
@@ -1631,12 +1643,14 @@ export default function pedidosRouter(io) {
       }
 
       if (io) {
-        io.emit('corrida_cancelada', {
+        avisarCorrida(io, id, 'corrida_cancelada', {
           pedidoId: id,
           canceladoPor,
           taxaCancelamento: taxaCancelamentoAplicada,
           repasseMotorista: repasseEsperaMotorista
         });
+        // Para os outros motoristas: só o aviso para tirar a chamada do radar
+        avisarMotoristas(io, 'corrida_cancelada', { pedidoId: id, canceladoPor }, { admins: false });
       }
 
       res.json({
@@ -1975,8 +1989,9 @@ export default function pedidosRouter(io) {
         RETURNING id;
       `;
 
+      // SOS com GPS só para os admins
       if (io) {
-        io.emit('alerta_sos_admin', {
+        avisarAdmins(io, 'alerta_sos_admin', {
           incidenteId: alerta[0].id,
           pedidoId: id,
           origem: papel,
