@@ -43,6 +43,42 @@ async function garantirColunasSuporte() {
 garantirColunasSuporte();
 
 // ============================================================================
+// LIMPEZA DE SELFIES ANTIGAS (LGPD: dado biométrico não fica guardado para sempre)
+// - Histórico de verificações: a FOTO é apagada após o prazo; fica só o registro
+//   de que houve verificação (data e IP), útil para apurar incidentes.
+// - Última selfie do motorista: apagada se ele não verifica há mais do que o prazo.
+// Prazo padrão: 90 dias (dá para mudar no Render com SELFIE_RETENCAO_DIAS).
+// ============================================================================
+const SELFIE_RETENCAO_DIAS = Math.min(365, Math.max(7, Number(process.env.SELFIE_RETENCAO_DIAS) || 90));
+
+async function limparSelfiesAntigas() {
+  try {
+    const historico = await sql`
+      UPDATE verificacoes_selfie_motorista
+      SET selfie_url = 'removida'
+      WHERE criado_em < NOW() - (${SELFIE_RETENCAO_DIAS} * INTERVAL '1 day')
+        AND selfie_url <> 'removida'
+      RETURNING id;
+    `;
+    const ultimas = await sql`
+      UPDATE motoristas
+      SET ultima_selfie_url = NULL
+      WHERE ultima_selfie_url IS NOT NULL
+        AND ultima_selfie_em < NOW() - (${SELFIE_RETENCAO_DIAS} * INTERVAL '1 day')
+      RETURNING id;
+    `;
+    if (historico.length || ultimas.length) {
+      console.log(`[lgpd] Selfies antigas apagadas: ${historico.length} do histórico, ${ultimas.length} de perfis (prazo: ${SELFIE_RETENCAO_DIAS} dias).`);
+    }
+  } catch (err) {
+    console.warn('[lgpd] Falha ao limpar selfies antigas:', err.message);
+  }
+}
+
+// Roda 1 minuto depois de ligar e depois 1 vez por dia
+setTimeout(limparSelfiesAntigas, 60 * 1000).unref();
+setInterval(limparSelfiesAntigas, 24 * 60 * 60 * 1000).unref();
+// ============================================================================
 // AUXILIARES DE SEGURANÇA
 // ============================================================================
 const textoOuNull = (v, max = 100) => {
