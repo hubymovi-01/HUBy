@@ -16,4 +16,4 @@ yarn-error.log*
 
 # Ficheiros de Sistema (OS)
 .DS_Store
-Thumbs.db
+Thumbs.db.env*
