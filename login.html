@@ -137,6 +137,30 @@
       linkTrocarPerfil.href = './login.html?perfil=motorista';
     }
 
+    // Aviso de sessão expirada (deixado pelo js/sessao-expirada.js)
+    (() => {
+      let aviso = '';
+      try {
+        aviso = sessionStorage.getItem('huby_aviso_login') || '';
+        sessionStorage.removeItem('huby_aviso_login');
+      } catch (e) {}
+
+      if (!aviso && urlParams.get('expirou') === '1') {
+        aviso = 'Sua sessão expirou. Entre novamente.';
+      }
+
+      if (aviso) {
+        exibirAlerta(`⏳ ${aviso.slice(0, 200)}`, 'warning');
+      }
+
+      // Tira o "expirou=1" do endereço (recarregar a página não mostra o aviso de novo)
+      if (urlParams.has('expirou')) {
+        urlParams.delete('expirou');
+        const resto = urlParams.toString();
+        history.replaceState(null, '', `${location.pathname}${resto ? `?${resto}` : ''}`);
+      }
+    })();
+
     // Mostrar / esconder senha
     document.querySelectorAll('.btn-ver-senha').forEach((btn) => {
       btn.addEventListener('click', () => {

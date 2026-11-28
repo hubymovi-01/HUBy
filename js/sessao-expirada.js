@@ -9,8 +9,7 @@
   if (pagina === 'login.html' || pagina === 'cadastro.html') return;
 
   // Dados que continuam salvos ao sair (favoritos, endereços, meta, agenda, IA, região)
-  var MANTER = /^huby_(meta_diaria|endereco_|coords_|mot_casa_nome|ia_|regiao|meus_agendamentos)/;
-
+  var MANTER = /^huby_(meta_diaria|endereco_|coords_|mot_casa_nome|ia_|regiao|meus_agendamentos|tipo_acesso)/;
   var redirecionando = false;
 
   function pedidoTinhaLogin(init) {
@@ -48,8 +47,8 @@
     redirecionando = true;
     limparSessao();
     try { sessionStorage.setItem('huby_aviso_login', 'Sua sessão expirou. Entre novamente.'); } catch (e) {}
-    location.replace('./login.html?expirou=1');
-  }
+    var perfilLogin = pagina === 'motorista.html' ? 'motorista' : 'cliente';
+    location.replace('./login.html?perfil=' + perfilLogin + '&expirou=1');  }
 
   var fetchOriginal = window.fetch;
   if (typeof fetchOriginal !== 'function') return;
