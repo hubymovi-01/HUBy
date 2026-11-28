@@ -359,10 +359,10 @@ async function carregarDemandaNaoAtendida(token, periodo = 'total') {
       const listaR = Array.isArray(data.recentes) ? data.recentes : [];
       tbodyRecentes.innerHTML = listaR.length
         ? listaR.map((r) => {
-            const dt = r.criado_em
-              ? new Date(r.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-              : '--';
-            return `
+          const dt = r.criado_em
+            ? new Date(r.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : '--';
+          return `
               <tr>
                 <td>${dt}</td>
                 <td><strong>${escaparHTML(r.bairro)}</strong></td>
@@ -371,10 +371,10 @@ async function carregarDemandaNaoAtendida(token, periodo = 'total') {
                 <td><span class="badge badge-recusado">${escaparHTML(r.motivo || 'sem_aceite')}</span></td>
               </tr>
             `;
-          }).join('')
+        }).join('')
         : '<tr><td colspan="5" class="table-empty-row">Nenhuma ocorrência recente.</td></tr>';
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 // ============================================================================
@@ -419,7 +419,7 @@ async function carregarDespesasCorporativas(token) {
         <td><button type="button" class="btn-tbl rej" onclick="excluirDespesaCorporativa(${Number(d.id)})">Excluir</button></td>
       </tr>
     `).join('');
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function configurarFormDespesasAdmin(token) {
@@ -466,7 +466,7 @@ window.excluirDespesaCorporativa = async (id) => {
       notificarAdmin('Despesa removida.', 'aviso');
       await carregarDespesasCorporativas(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 // ============================================================================
@@ -510,8 +510,8 @@ async function carregarTabelaAgendamentosAdmin(token) {
           <td style="font-weight:800; color:#10B981;">R$ ${Number(a.valor_total || 0).toFixed(2).replace('.', ',')}</td>
           <td>
             ${temMotorista
-              ? `<span class="badge badge-aprovado">🚘 ${escaparHTML(a.motorista_nome)}</span>`
-              : `<span class="badge badge-pendente">⏳ Sem Condutor</span>`}
+          ? `<span class="badge badge-aprovado">🚘 ${escaparHTML(a.motorista_nome)}</span>`
+          : `<span class="badge badge-pendente">⏳ Sem Condutor</span>`}
           </td>
           <td>
             <div style="display:flex; gap:6px;">
@@ -538,7 +538,7 @@ window.liberarAgendamentoAgora = async (pedidoId) => {
       notificarAdmin('🚀 Agendamento liberado imediatamente no radar dos motoristas!', 'sucesso');
       await carregarTabelaAgendamentosAdmin(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.cancelarAgendamentoAdmin = async (pedidoId) => {
@@ -554,7 +554,7 @@ window.cancelarAgendamentoAdmin = async (pedidoId) => {
       notificarAdmin('Agendamento cancelado.', 'aviso');
       await carregarTabelaAgendamentosAdmin(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 // ============================================================================
@@ -583,7 +583,7 @@ async function carregarConfigGrowthEDinamica(token) {
       if (document.getElementById('dinMultiplicadorMax')) document.getElementById('dinMultiplicadorMax').value = Number(din.multiplicador_maximo ?? 1.8).toFixed(1);
       if (document.getElementById('dinMultiplicadorManual')) document.getElementById('dinMultiplicadorManual').value = Number(din.multiplicador_manual ?? 1.0).toFixed(1);
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function configurarFormGrowthEDinamica(token) {
@@ -889,7 +889,7 @@ window.alternarStatusMarketplace = async (id) => {
       notificarAdmin('Visibilidade da oferta atualizada.', 'sucesso');
       carregarTabelaMarketplace(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.excluirItemMarketplace = async (id) => {
@@ -904,7 +904,7 @@ window.excluirItemMarketplace = async (id) => {
       notificarAdmin('Oferta removida do Clube HUBy.', 'aviso');
       carregarTabelaMarketplace(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 // ============================================================================
@@ -1528,7 +1528,7 @@ async function carregarTarifasConfig(token) {
   try {
     const cacheLocal = localStorage.getItem('huby_tarifas_cache');
     if (cacheLocal) preencherInputs(JSON.parse(cacheLocal));
-  } catch (e) {}
+  } catch (e) { }
 
   try {
     const res = await fetch(`${API_URL}/api/admin/tarifas?t=${Date.now()}`, {
@@ -1544,7 +1544,7 @@ async function carregarTarifasConfig(token) {
       aplicarObjetoTarifas(cfg);
       preencherInputs(cfg);
     }
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function configurarFormTarifas(token) {
@@ -1634,7 +1634,7 @@ async function carregarGatewayConfig(token) {
     }
     if (data.public_key) document.getElementById('mpPublicKey').value = data.public_key;
     if (data.taxa_percentual) document.getElementById('mpTaxaPercentual').value = data.taxa_percentual;
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function configurarFormMercadoPago(token) {
@@ -1699,7 +1699,7 @@ async function carregarRegioesAtivasPush(token) {
         if (select.value === '__outra__') inputCustom.focus();
       }
     };
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function configurarFormBroadcast(token) {
@@ -1844,7 +1844,7 @@ function conectarSocketAdmin() {
   const ioClient = getSocketIO();
   if (!ioClient) return;
 
-    // O login (token) vai junto: só assim o servidor coloca o admin na sala que recebe o GPS dos motoristas
+  // O login (token) vai junto: só assim o servidor coloca o admin na sala que recebe o GPS dos motoristas
   const token = localStorage.getItem('huby_token') || '';
   const socket = ioClient(API_URL, {
     auth: { token },
@@ -1855,7 +1855,12 @@ function conectarSocketAdmin() {
   socket.on('connect_error', (err) => {
     if (!avisouSessao && /sess[aã]o inv[aá]lida|login/i.test(String(err?.message || ''))) {
       avisouSessao = true;
-      notificarAdmin('Sua sessão expirou. Entre de novo para ver o radar ao vivo.', 'erro');
+      notificarAdmin(
+        data.enviadoPorEmail
+          ? '✅ Resposta enviada no app e por e-mail. Chamado encerrado!'
+          : '✅ Resposta enviada no app (o e-mail não pôde ser enviado). Chamado encerrado!',
+        'sucesso'
+      );
     }
   });
 
@@ -1929,7 +1934,7 @@ window.excluirZonaRisco = async (id) => {
       notificarAdmin('Zona de risco removida.', 'aviso');
       carregarTabelaZonasRisco(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.alternarCupom = async (id) => {
@@ -1943,7 +1948,7 @@ window.alternarCupom = async (id) => {
       notificarAdmin('Status do cupom alterado.', 'sucesso');
       carregarTabelaCupons(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.excluirCupom = async (id) => {
@@ -1958,7 +1963,7 @@ window.excluirCupom = async (id) => {
       notificarAdmin('Cupom excluído.', 'aviso');
       carregarTabelaCupons(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.alterarStatusCondutor = async (id, acao) => {
@@ -1974,7 +1979,7 @@ window.alterarStatusCondutor = async (id, acao) => {
       await carregarTabelaFrota(token, false);
       await carregarMetricasECards(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.processarSaqueMaster = async (id, status) => {
@@ -2035,7 +2040,7 @@ window.resolverIncidente = async (id) => {
       await carregarTabelaSeguranca(token);
       await carregarMetricasECards(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 function exportarRelatorioCSV(token) {
@@ -2077,9 +2082,9 @@ async function carregarTabelaSuporte(token) {
           <td><span class="badge ${badgeClass}">${escaparHTML(String(c.status).toUpperCase())}</span></td>
           <td>
             ${c.status === 'pendente'
-              ? `<button type="button" class="btn-tbl app btn-responder-ticket" data-ticket-id="${Number(c.id)}" data-autor="${nomeAutorSeguro}">Responder</button>`
-              : `<small style="color:var(--primary); font-weight:700;">✅ Respondido</small>`
-            }
+          ? `<button type="button" class="btn-tbl app btn-responder-ticket" data-ticket-id="${Number(c.id)}" data-autor="${nomeAutorSeguro}">Responder</button>`
+          : `<small style="color:var(--primary); font-weight:700;">✅ Respondido</small>`
+        }
           </td>
         </tr>
       `;
@@ -2313,7 +2318,7 @@ window.alternarStatusPatrocinador = async (id) => {
       notificarAdmin('Status do patrocinador atualizado!', 'sucesso');
       carregarTabelaPatrocinadores(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.alternarPopupPatrocinador = async (id) => {
@@ -2327,7 +2332,7 @@ window.alternarPopupPatrocinador = async (id) => {
       notificarAdmin('Destaque do Pop-up atualizado!', 'sucesso');
       carregarTabelaPatrocinadores(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };
 
 window.excluirPatrocinador = async (id) => {
@@ -2342,5 +2347,5 @@ window.excluirPatrocinador = async (id) => {
       notificarAdmin('Patrocinador removido.', 'aviso');
       carregarTabelaPatrocinadores(token);
     }
-  } catch (e) {}
+  } catch (e) { }
 };

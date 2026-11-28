@@ -1,24 +1,16 @@
 // routes/suporte.routes.js - Sistema de Tickets e Ajuda HUBy
+// A resposta do admin chega de 2 jeitos:
+//   1) na hora, no app (aviso em tempo real "resposta_suporte_admin", só para quem abriu o chamado);
+//   2) por e-mail (Brevo), para quem estiver com o app fechado.
 import express from 'express';
-import nodemailer from 'nodemailer';
 import { sql } from '../db.js';
 import { autenticarToken } from './pedidos.routes.js';
+import { enviarEmail } from '../services/email.service.js';
+import { salaUsuario, salaMotorista } from '../services/salas-socket.js';
 
 const router = express.Router();
 
-// =========================================================================
-// CONFIGURAÇÃO DO DISPARADOR DE E-MAIL (NODEMAILER)
-// =========================================================================
-// Utilize as mesmas credenciais que já usa no sistema de 2FA do admin
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com', // Exemplo com Gmail
-  port: 465,
-  secure: true,
-  auth: {
-    user: 'seu-email-da-huby@gmail.com', // Coloque o e-mail oficial da HUBy
-    pass: 'sua-senha-de-app-aqui'        // Coloque a Senha de Aplicação (App Password)
-  }
-});
+const LIMITE_CHAMADOS_POR_HORA = 5;
 
 // =========================================================================
 // INICIALIZAÇÃO DA TABELA NO BANCO DE DADOS
@@ -55,26 +47,47 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
+function escaparHTML(valor) {
+  return String(valor ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // =========================================================================
 // 1. ROTA PARA O APP (Passageiro ou Motorista abrindo um chamado)
 // =========================================================================
 router.post('/chamado', autenticarToken, async (req, res) => {
   try {
     const usuarioId = String(req.usuario.id);
-    const tipoUsuario = String(req.usuario.role || 'cliente');
-    const { pedido_id, assunto, mensagem } = req.body;
+    const tipoUsuario = String(req.usuario.role || 'cliente').toLowerCase().slice(0, 20);
+    const { pedido_id, assunto, mensagem } = req.body || {};
 
-    if (!mensagem) return res.status(400).json({ erro: 'A mensagem não pode estar vazia.' });
+    const mensagemLimpa = String(mensagem || '').trim().slice(0, 1000);
+    if (!mensagemLimpa) return res.status(400).json({ erro: 'A mensagem não pode estar vazia.' });
+
+    // Evita spam: no máximo 5 chamados por hora para cada conta
+    const recentes = await sql`
+      SELECT COUNT(*)::int AS qtd FROM suporte_tickets
+      WHERE usuario_id = ${usuarioId} AND criado_em >= NOW() - INTERVAL '1 hour';
+    `;
+    if (Number(recentes[0]?.qtd || 0) >= LIMITE_CHAMADOS_POR_HORA) {
+      return res.status(429).json({ erro: 'Você já abriu vários chamados na última hora. Aguarde a resposta da equipe HUBy.' });
+    }
+
+    const pedidoLimpo = pedido_id && /^[A-Za-z0-9_-]{4,64}$/.test(String(pedido_id)) ? String(pedido_id) : null;
 
     const novoTicket = await sql`
       INSERT INTO suporte_tickets (pedido_id, usuario_id, usuario_nome, tipo_usuario, assunto, mensagem)
       VALUES (
-        ${pedido_id || null}, 
-        ${usuarioId}, 
-        ${req.usuario.nome || 'Usuário'}, 
-        ${tipoUsuario}, 
-        ${String(assunto || 'Problema na Corrida').slice(0, 150)}, 
-        ${String(mensagem).slice(0, 1000)}
+        ${pedidoLimpo},
+        ${usuarioId},
+        ${String(req.usuario.nome || 'Usuário').slice(0, 100)},
+        ${tipoUsuario},
+        ${String(assunto || 'Problema na Corrida').slice(0, 150)},
+        ${mensagemLimpa}
       )
       RETURNING *;
     `;
@@ -93,8 +106,8 @@ router.get('/admin/chamados', autenticarToken, verificarAdmin, async (req, res) 
   try {
     const chamados = await sql`
       SELECT * FROM suporte_tickets
-      ORDER BY 
-        CASE WHEN status = 'pendente' THEN 1 ELSE 2 END ASC, 
+      ORDER BY
+        CASE WHEN status = 'pendente' THEN 1 ELSE 2 END ASC,
         criado_em DESC
       LIMIT 100;
     `;
@@ -105,19 +118,19 @@ router.get('/admin/chamados', autenticarToken, verificarAdmin, async (req, res) 
 });
 
 // =========================================================================
-// 3. ROTA PARA O PAINEL ADMIN (Responder e disparar e-mail)
+// 3. ROTA PARA O PAINEL ADMIN (Responder: aviso no app + e-mail)
 // =========================================================================
 router.put('/admin/chamados/:id/responder', autenticarToken, verificarAdmin, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { resposta } = req.body;
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ erro: 'Chamado inválido.' });
 
+    const resposta = String(req.body?.resposta || '').trim().slice(0, 1500);
     if (!resposta) return res.status(400).json({ erro: 'A resposta é obrigatória.' });
 
-    // Salva a resposta no banco de dados e muda o status
     const atualizado = await sql`
       UPDATE suporte_tickets
-      SET resposta_admin = ${String(resposta).slice(0, 1500)},
+      SET resposta_admin = ${resposta},
           status = 'respondido',
           respondido_em = CURRENT_TIMESTAMP
       WHERE id = ${id}
@@ -126,48 +139,69 @@ router.put('/admin/chamados/:id/responder', autenticarToken, verificarAdmin, asy
 
     if (!atualizado.length) return res.status(404).json({ erro: 'Chamado não encontrado.' });
     const ticket = atualizado[0];
+    const ehMotorista = String(ticket.tipo_usuario || '').toLowerCase() === 'motorista';
 
-    // Busca o E-mail do utilizador no banco (Motorista ou Passageiro)
+    // ---------- 1) Aviso na hora, só para quem abriu o chamado ----------
+    let avisadoNoApp = false;
+    try {
+      const io = req.app.get('io') || req.io;
+      if (io) {
+        const payload = {
+          ticketId: ticket.id,
+          pedidoId: ticket.pedido_id || null,
+          resposta,
+          data: Date.now()
+        };
+        let destino = io.to(salaUsuario(String(ticket.usuario_id)));
+        if (ehMotorista) destino = destino.to(salaMotorista(String(ticket.usuario_id)));
+        destino.emit('resposta_suporte_admin', payload);
+        avisadoNoApp = true;
+      }
+    } catch (e) {}
+
+    // ---------- 2) E-mail (para quem está com o app fechado) ----------
     let emailDestino = null;
-    if (ticket.tipo_usuario === 'motorista') {
-      const mot = await sql`SELECT email FROM motoristas WHERE id::text = ${ticket.usuario_id} OR usuario_id::text = ${ticket.usuario_id} LIMIT 1`;
+    if (ehMotorista) {
+      const mot = await sql`
+        SELECT email FROM motoristas
+        WHERE id::text = ${String(ticket.usuario_id)} OR usuario_id::text = ${String(ticket.usuario_id)}
+        LIMIT 1;
+      `;
       if (mot.length) emailDestino = mot[0].email;
     } else {
-      const cli = await sql`SELECT email FROM usuarios WHERE id::text = ${ticket.usuario_id} LIMIT 1`;
+      const cli = await sql`SELECT email FROM usuarios WHERE id::text = ${String(ticket.usuario_id)} LIMIT 1;`;
       if (cli.length) emailDestino = cli[0].email;
     }
 
-    // Dispara o e-mail de notificação se o endereço existir
+    let enviadoPorEmail = false;
     if (emailDestino) {
-      const emailHtml = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
-          <div style="background-color: #0B0F19; padding: 20px; text-align: center;">
-            <h2 style="color: #10B981; margin: 0;">Equipa de Suporte HUBy</h2>
+      const nome = escaparHTML(String(ticket.usuario_nome || '').split(' ')[0] || 'tudo bem');
+      const viagem = ticket.pedido_id ? ` sobre a viagem <strong>#${escaparHTML(String(ticket.pedido_id).slice(-6))}</strong>` : '';
+      const html = `
+        <div style="font-family:Arial,Helvetica,sans-serif;background:#0B0F19;padding:24px;">
+          <div style="max-width:520px;margin:0 auto;background:#111827;border-radius:16px;padding:26px;color:#E5E7EB;">
+            <div style="font-size:24px;font-weight:900;color:#FFFFFF;margin-bottom:14px;">HUB<span style="color:#10B981;">y</span> <span style="font-size:14px;color:#9CA3AF;font-weight:700;">Suporte</span></div>
+            <p style="margin:0 0 10px;font-size:15px;">Olá, ${nome}!</p>
+            <p style="margin:0 0 14px;font-size:14px;color:#9CA3AF;">A equipe HUBy respondeu ao seu chamado #${Number(ticket.id)}${viagem}:</p>
+            <div style="background:#0B0F19;border-left:4px solid #10B981;border-radius:8px;padding:14px;font-size:14px;line-height:1.55;white-space:pre-wrap;color:#E5E7EB;">${escaparHTML(resposta)}</div>
+            <p style="margin:16px 0 0;font-size:12px;color:#9CA3AF;">Se precisar de mais ajuda, abra um novo chamado pelo aplicativo.</p>
           </div>
-          <div style="padding: 20px; color: #333;">
-            <p>Olá, <strong>${ticket.usuario_nome}</strong>!</p>
-            <p>A nossa equipa analisou o seu relato${ticket.pedido_id ? ' referente à viagem <strong>#' + String(ticket.pedido_id).slice(-6) + '</strong>' : ''}.</p>
-            
-            <div style="background-color: #F8FAFC; border-left: 4px solid #38BDF8; padding: 15px; margin: 20px 0; border-radius: 4px;">
-              <h4 style="margin-top: 0; color: #0F172A;">Resposta da Central:</h4>
-              <p style="margin-bottom: 0; white-space: pre-wrap; font-size: 15px;">${resposta}</p>
-            </div>
-            
-            <p style="font-size: 13px; color: #64748B;">Se precisar de mais ajuda, pode relatar novamente pelo aplicativo.</p>
-          </div>
-        </div>
-      `;
+        </div>`;
+      const texto = `Olá!\n\nA equipe HUBy respondeu ao seu chamado #${ticket.id}:\n\n${resposta}\n\nSe precisar de mais ajuda, abra um novo chamado pelo aplicativo.`;
 
-      // Envio não bloqueante (em background)
-      transporter.sendMail({
-        from: '"Suporte HUBy" <seu-email-da-huby@gmail.com>',
-        to: emailDestino,
-        subject: `Retorno do Suporte HUBy (Ticket #${ticket.id})`,
-        html: emailHtml
-      }).catch(err => console.warn('Aviso: Falha ao enviar e-mail de suporte (verifique as credenciais SMTP):', err));
+      const envio = await enviarEmail({
+        para: emailDestino,
+        assunto: `Resposta do Suporte HUBy (chamado #${ticket.id})`,
+        texto,
+        html
+      });
+      enviadoPorEmail = envio.enviado;
+      if (!envio.enviado) {
+        console.warn(`[suporte] E-mail do chamado #${ticket.id} não foi enviado:`, envio.motivo);
+      }
     }
 
-    res.json({ sucesso: true, ticket });
+    res.json({ sucesso: true, ticket, avisadoNoApp, enviadoPorEmail });
   } catch (err) {
     console.error('Erro ao responder chamado:', err);
     res.status(500).json({ erro: 'Falha ao responder chamado.' });
