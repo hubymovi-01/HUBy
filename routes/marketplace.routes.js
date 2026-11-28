@@ -14,18 +14,55 @@ function verificarAdmin(req, res, next) {
   next();
 }
 
-// Inicialização segura da tabela no banco Neon
+const COLUNAS_NECESSARIAS = [
+  'id', 'categoria', 'titulo', 'empresa_nome', 'descricao', 'preco_original', 'preco_parceiro',
+  'desconto_percentual', 'imagem_url', 'whatsapp_contato', 'endereco', 'ativo', 'criado_em'
+];
+
+// Inicialização segura da tabela no banco Neon.
+// O banco tinha uma versão antiga da tabela, sem algumas colunas (ex.: empresa_nome).
+// - Tabela antiga e VAZIA: é recriada no formato certo.
+// - Tabela antiga COM itens: só ganha as colunas que faltam (nada é apagado).
 async function inicializarMarketplace() {
   try {
+    const colunas = await sql`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'marketplace_parceiros';
+    `;
+    const existentes = new Set(colunas.map((c) => c.column_name));
+    const faltando = COLUNAS_NECESSARIAS.filter((c) => !existentes.has(c));
+
+    if (existentes.size > 0 && faltando.length > 0) {
+      const [{ total }] = await sql`SELECT COUNT(*)::int AS total FROM marketplace_parceiros;`;
+      if (Number(total) === 0) {
+        await sql`DROP TABLE marketplace_parceiros;`;
+        console.log('Marketplace: tabela antiga (vazia) recriada no formato novo.');
+      } else {
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS categoria VARCHAR(50) DEFAULT 'oficina';`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS titulo VARCHAR(120);`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS empresa_nome VARCHAR(100);`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS descricao TEXT DEFAULT '';`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS preco_original NUMERIC(10,2);`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS preco_parceiro NUMERIC(10,2) DEFAULT 0;`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS desconto_percentual INT DEFAULT 0;`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS imagem_url TEXT;`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS whatsapp_contato VARCHAR(20);`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS endereco TEXT;`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS ativo BOOLEAN DEFAULT TRUE;`;
+        await sql`ALTER TABLE marketplace_parceiros ADD COLUMN IF NOT EXISTS criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;`;
+        console.log('Marketplace: colunas que faltavam foram adicionadas.');
+      }
+    }
+
     await sql`
       CREATE TABLE IF NOT EXISTS marketplace_parceiros (
         id SERIAL PRIMARY KEY,
         categoria VARCHAR(50) NOT NULL,
         titulo VARCHAR(120) NOT NULL,
         empresa_nome VARCHAR(100) NOT NULL,
-        descricao TEXT NOT NULL,
+        descricao TEXT NOT NULL DEFAULT '',
         preco_original NUMERIC(10,2),
-        preco_parceiro NUMERIC(10,2) NOT NULL,
+        preco_parceiro NUMERIC(10,2) NOT NULL DEFAULT 0,
         desconto_percentual INT DEFAULT 0,
         imagem_url TEXT,
         whatsapp_contato VARCHAR(20) NOT NULL,
@@ -34,20 +71,10 @@ async function inicializarMarketplace() {
         criado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `;
-
-    const qtd = await sql`SELECT COUNT(*)::int AS total FROM marketplace_parceiros;`;
-    if (qtd && qtd[0] && qtd[0].total === 0) {
-      await sql`
-        INSERT INTO marketplace_parceiros 
-          (categoria, titulo, empresa_nome, descricao, preco_original, preco_parceiro, desconto_percentual, imagem_url, whatsapp_contato, endereco)
-        VALUES
-          ('adesivos', 'Kit Oficial Adesivo HUBy + QR Code', 'HUBy Design', 'Kit de identificação para vidro e laterais. Ganhe prioridade de chamadas!', 120.00, 49.90, 58, 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=400&q=80', '5589999999999', 'Centro - São João do Piauí'),
-          ('oficina', 'Troca de Óleo + Filtro + Checkup Geral', 'Auto Center Parceiro', 'Revisão com óleo sintético e desconto para condutores ativos.', 190.00, 139.90, 26, 'https://images.unsplash.com/photo-1486006920555-c77dce18193b?auto=format&fit=crop&w=400&q=80', '5589999999999', 'Av. Cândido Coelho'),
-          ('guincho', 'Socorro Mecânico & Reboque 24h', 'Guincho Ágil', 'Atendimento emergencial na cidade e região com tarifa exclusiva HUBy.', 200.00, 120.00, 40, 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=400&q=80', '5589999999999', 'Base Central');
-      `;
-    }
+    // Sem itens de exemplo: parceiros de mentira (com WhatsApp falso) enganariam os motoristas.
+    // Cadastre os parceiros reais pelo painel admin.
   } catch (err) {
-    console.warn('Tabela marketplace já sincronizada:', err.message);
+    console.warn('Aviso ao preparar a tabela do marketplace:', err.message);
   }
 }
 inicializarMarketplace();
@@ -62,6 +89,11 @@ const formatarItens = (itens) => {
   }));
 };
 
+function idValido(valor) {
+  const n = Number(valor);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
 // ============================================================================
 // ROTAS PÚBLICAS (Aplicativo do Motorista)
 // ============================================================================
@@ -69,23 +101,23 @@ const formatarItens = (itens) => {
 // Listagem dos itens/benefícios para os motoristas
 router.get('/itens', autenticarToken, async (req, res) => {
   try {
-    const { categoria } = req.query;
+    const categoria = String(req.query.categoria || '').trim().slice(0, 50);
     let itens;
-    
+
     if (categoria && categoria !== 'todos') {
       itens = await sql`
-        SELECT * FROM marketplace_parceiros 
+        SELECT * FROM marketplace_parceiros
         WHERE ativo = TRUE AND categoria = ${categoria}
         ORDER BY id ASC;
       `;
     } else {
       itens = await sql`
-        SELECT * FROM marketplace_parceiros 
+        SELECT * FROM marketplace_parceiros
         WHERE ativo = TRUE
         ORDER BY id ASC;
       `;
     }
-    
+
     return res.json(formatarItens(itens || []));
   } catch (err) {
     console.error('Erro ao buscar marketplace:', err);
@@ -120,31 +152,43 @@ router.post('/admin/itens', autenticarToken, verificarAdmin, async (req, res) =>
       imagem_url,
       whatsapp_contato,
       endereco
-    } = req.body;
+    } = req.body || {};
 
-    if (!titulo || !empresa_nome || !whatsapp_contato) {
+    const tituloLimpo = String(titulo || '').trim().slice(0, 120);
+    const empresaLimpa = String(empresa_nome || '').trim().slice(0, 100);
+    const whatsSeguro = String(whatsapp_contato || '').replace(/\D/g, '').slice(0, 13);
+
+    if (!tituloLimpo || !empresaLimpa || !whatsSeguro) {
       return res.status(400).json({ erro: 'Título, empresa e WhatsApp são obrigatórios.' });
     }
+    if (whatsSeguro.length < 10) {
+      return res.status(400).json({ erro: 'WhatsApp inválido. Use DDD + número (ex.: 89999999999).' });
+    }
 
-    const precoOrigNum = Number(preco_original) || 0;
-    const precoParcNum = Number(preco_parceiro) || 0;
+    const precoOrigNum = Math.max(0, Number(String(preco_original ?? '').replace(',', '.')) || 0);
+    const precoParcNum = Math.max(0, Number(String(preco_parceiro ?? '').replace(',', '.')) || 0);
 
     let desconto = 0;
     if (precoOrigNum > 0 && precoParcNum < precoOrigNum) {
       desconto = Math.round(((precoOrigNum - precoParcNum) / precoOrigNum) * 100);
     }
 
-    const imgSegura = imagem_url && String(imagem_url).trim() ? String(imagem_url).trim() : null;
-    const endSeguro = endereco && String(endereco).trim() ? String(endereco).trim() : 'Atendimento Local';
-    const catSegura = String(categoria || 'oficina').trim();
-    const descSegura = String(descricao || '').trim();
-    const whatsSeguro = String(whatsapp_contato).replace(/\D/g, '');
+    // Imagem: só link https (ou nenhuma)
+    const imgBruta = String(imagem_url || '').trim();
+    if (imgBruta && !/^https:\/\/[^\s"'<>]{5,500}$/.test(imgBruta)) {
+      return res.status(400).json({ erro: 'A imagem precisa ser um link que comece com https://' });
+    }
+    const imgSegura = imgBruta || null;
+
+    const endSeguro = String(endereco || '').trim().slice(0, 200) || 'Atendimento Local';
+    const catSegura = String(categoria || 'oficina').trim().toLowerCase().slice(0, 50) || 'oficina';
+    const descSegura = String(descricao || '').trim().slice(0, 1000);
 
     const novo = await sql`
-      INSERT INTO marketplace_parceiros 
+      INSERT INTO marketplace_parceiros
         (categoria, titulo, empresa_nome, descricao, preco_original, preco_parceiro, desconto_percentual, imagem_url, whatsapp_contato, endereco)
       VALUES
-        (${catSegura}, ${String(titulo).trim()}, ${String(empresa_nome).trim()}, ${descSegura}, ${precoOrigNum}, ${precoParcNum}, ${desconto}, ${imgSegura}, ${whatsSeguro}, ${endSeguro})
+        (${catSegura}, ${tituloLimpo}, ${empresaLimpa}, ${descSegura}, ${precoOrigNum}, ${precoParcNum}, ${desconto}, ${imgSegura}, ${whatsSeguro}, ${endSeguro})
       RETURNING *;
     `;
     res.status(201).json({ sucesso: true, item: formatarItens(novo)[0] });
@@ -157,9 +201,13 @@ router.post('/admin/itens', autenticarToken, verificarAdmin, async (req, res) =>
 // Ocultar/Exibir item
 router.put('/admin/itens/:id/toggle', autenticarToken, verificarAdmin, async (req, res) => {
   try {
+    const id = idValido(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Item inválido.' });
+
     const atualizado = await sql`
-      UPDATE marketplace_parceiros SET ativo = NOT ativo WHERE id = ${req.params.id} RETURNING id, ativo;
+      UPDATE marketplace_parceiros SET ativo = NOT ativo WHERE id = ${id} RETURNING id, ativo;
     `;
+    if (!atualizado.length) return res.status(404).json({ erro: 'Item não encontrado.' });
     res.json({ sucesso: true, item: atualizado[0] });
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao alternar status do item.' });
@@ -169,7 +217,10 @@ router.put('/admin/itens/:id/toggle', autenticarToken, verificarAdmin, async (re
 // Remover benefício
 router.delete('/admin/itens/:id', autenticarToken, verificarAdmin, async (req, res) => {
   try {
-    await sql`DELETE FROM marketplace_parceiros WHERE id = ${req.params.id};`;
+    const id = idValido(req.params.id);
+    if (!id) return res.status(400).json({ erro: 'Item inválido.' });
+
+    await sql`DELETE FROM marketplace_parceiros WHERE id = ${id};`;
     res.json({ sucesso: true, mensagem: 'Item excluído com sucesso.' });
   } catch (err) {
     res.status(500).json({ erro: 'Erro ao deletar item.' });
