@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <title>Criar Conta • HUBy</title>
   <link rel="manifest" href="./manifest.json">
@@ -11,8 +13,21 @@
   <link rel="stylesheet" href="./css/base.css?v=2.2.1">
   <link rel="stylesheet" href="./css/auth.css?v=2.3.0">
   <style>
-    .upload-group { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
-    .upload-group > span { font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .upload-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .upload-group>span {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
     .upload-box {
       border: 2px dashed rgba(16, 185, 129, 0.4);
       background: rgba(16, 185, 129, 0.05);
@@ -24,34 +39,96 @@
       font-size: 13px;
       font-weight: 700;
     }
-    .upload-box.has-file { border-style: solid; background: rgba(16, 185, 129, 0.15); color: #FFF; }
-    .file-input { display: none; }
-    .dica-campo { font-size: 11px; color: #64748B; margin-top: 2px; }
-    .linha-dupla { display: flex; gap: 8px; }
-    .linha-dupla .input-group { flex: 1; min-width: 0; }
+
+    .upload-box.has-file {
+      border-style: solid;
+      background: rgba(16, 185, 129, 0.15);
+      color: #FFF;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    .dica-campo {
+      font-size: 11px;
+      color: #64748B;
+      margin-top: 2px;
+    }
+
+    .linha-dupla {
+      display: flex;
+      gap: 8px;
+    }
+
+    .linha-dupla .input-group {
+      flex: 1;
+      min-width: 0;
+    }
+
     .termos-box {
-      display: flex; align-items: flex-start; gap: 10px;
-      background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px; padding: 10px 12px; margin-top: 6px;
-      font-size: 12px; color: #CBD5E1; line-height: 1.45;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-top: 6px;
+      font-size: 12px;
+      color: #CBD5E1;
+      line-height: 1.45;
     }
-    .termos-box input { width: 18px; height: 18px; margin-top: 1px; accent-color: #10B981; flex-shrink: 0; }
-    .termos-box a { color: #38BDF8; font-weight: 800; }
-    .senha-wrapper { position: relative; }
-    .senha-wrapper input { padding-right: 70px; }
+
+    .termos-box input {
+      width: 18px;
+      height: 18px;
+      margin-top: 1px;
+      accent-color: #10B981;
+      flex-shrink: 0;
+    }
+
+    .termos-box a {
+      color: #38BDF8;
+      font-weight: 800;
+    }
+
+    .senha-wrapper {
+      position: relative;
+    }
+
+    .senha-wrapper input {
+      padding-right: 70px;
+    }
+
     .btn-ver-senha {
-      position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-      color: #94A3B8; font-size: 11px; font-weight: 800; padding: 6px 9px;
-      border-radius: 8px; cursor: pointer;
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: #94A3B8;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 9px;
+      border-radius: 8px;
+      cursor: pointer;
     }
+
     .aviso-analise {
-      background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3);
-      color: #FBBF24; border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.45;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #FBBF24;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.45;
       margin-bottom: 12px;
     }
   </style>
 </head>
+
 <body class="auth-body">
 
   <div class="auth-ambient-glow"></div>
@@ -73,7 +150,8 @@
       <form id="formCadastroHuby" class="auth-form" novalidate>
         <div class="input-group">
           <label for="cadNome">Nome completo</label>
-          <input type="text" id="cadNome" placeholder="Digite seu nome completo" autocomplete="name" maxlength="120" required>
+          <input type="text" id="cadNome" placeholder="Digite seu nome completo" autocomplete="name" maxlength="120"
+            required>
         </div>
 
         <div class="input-group">
@@ -94,7 +172,8 @@
         <div class="input-group">
           <label for="cadSenha">Senha</label>
           <div class="senha-wrapper">
-            <input type="password" id="cadSenha" placeholder="••••••••" autocomplete="new-password" maxlength="72" required>
+            <input type="password" id="cadSenha" placeholder="••••••••" autocomplete="new-password" maxlength="72"
+              required>
             <button type="button" class="btn-ver-senha" data-alvo="cadSenha">Ver</button>
           </div>
           <span class="dica-campo">Mínimo de 8 caracteres, com letras e números.</span>
@@ -102,20 +181,25 @@
 
         <div class="input-group">
           <label for="cadSenha2">Confirme a senha</label>
-          <input type="password" id="cadSenha2" placeholder="••••••••" autocomplete="new-password" maxlength="72" required>
+          <input type="password" id="cadSenha2" placeholder="••••••••" autocomplete="new-password" maxlength="72"
+            required>
         </div>
 
         <div class="input-group">
           <label for="cadConvite">Código de convite (opcional)</label>
-          <input type="text" id="cadConvite" placeholder="Ex: HUBY1234" maxlength="20" style="text-transform: uppercase;">
+          <input type="text" id="cadConvite" placeholder="Ex: HUBY1234" maxlength="20"
+            style="text-transform: uppercase;">
         </div>
 
         <!-- CAMPOS EXCLUSIVOS MOTORISTA -->
-        <div id="blocoMotorista" style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 8px;">
-          <h4 style="margin: 0 0 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do veículo e CNH</h4>
+        <div id="blocoMotorista"
+          style="display: none; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px; margin-top: 8px;">
+          <h4 style="margin: 0 0 12px; color: #10B981; font-size: 14px; text-transform: uppercase;">🚘 Dados do veículo
+            e CNH</h4>
 
           <div class="aviso-analise">
-            Depois de enviar, seus documentos passam por análise da equipe HUBy. Você poderá entrar no app, mas só fica online após a aprovação.
+            Depois de enviar, seus documentos passam por análise da equipe HUBy. Você poderá entrar no app, mas só fica
+            online após a aprovação.
           </div>
 
           <div class="linha-dupla">
@@ -183,7 +267,8 @@
 
         <label class="termos-box" for="cadTermos">
           <input type="checkbox" id="cadTermos">
-          <span>Li e aceito os <a href="./termos.html" target="_blank" rel="noopener">Termos de Uso e a Política de Privacidade</a> da HUBy.</span>
+          <span>Tenho <strong>18 anos ou mais</strong> e li e aceito os <a href="./termos.html" target="_blank"
+              rel="noopener">Termos de Uso e a Política de Privacidade</a> da HUBy.</span>
         </label>
 
         <button type="submit" id="btnSubmeterCadastro" class="btn-primary-action" style="margin-top: 16px;">
@@ -201,7 +286,7 @@
   <script type="module">
     import { API_URL } from './js/config.js';
 
-    const VERSAO_TERMOS = '1.0';
+    const VERSAO_TERMOS = '2.0';
 
     let roleAtual = 'cliente';
     let cnhBase64 = null;
@@ -514,4 +599,5 @@
     }
   </script>
 </body>
+
 </html>
